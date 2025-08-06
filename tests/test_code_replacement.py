@@ -13,7 +13,7 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent, get_code_block_splitter
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -43,12 +43,14 @@ class Args:
 def test_code_replacement_global_statements():
     project_root = Path(__file__).parent.parent.resolve()
     code_path = (project_root / "code_to_optimize/bubble_sort_optimized.py").resolve()
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(project_root))}
+    optimized_code = f"""```python:{code_path.relative_to(project_root)}
 import numpy as np
 
 inconsequential_var = '123'
 def sorter(arr):
-    return arr.sort()"""
+    return arr.sort()
+```
+"""
     original_code_str = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").read_text(
         encoding="utf-8"
     )
@@ -1684,7 +1686,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
     """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 import numpy as np
 
 def some_fn():
@@ -1699,7 +1701,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=2
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1760,7 +1763,7 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=1
 """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 a=2
 import numpy as np
 def some_fn():
@@ -1774,7 +1777,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
-        """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1837,7 +1841,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 import numpy as np
 a=2
 def some_fn():
@@ -1852,7 +1856,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=3
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1915,7 +1920,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 a=2
 import numpy as np
 def some_fn():
@@ -1929,7 +1934,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1992,7 +1998,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 import numpy as np
 a=2
 def some_fn():
@@ -2007,7 +2013,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=3
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -2073,7 +2080,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = f"""{get_code_block_splitter(code_path.relative_to(root_dir))}
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
 import numpy as np
 if 1<2:
     a=2
@@ -2091,6 +2098,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
+```
 """
     expected_code = """import numpy as np
 

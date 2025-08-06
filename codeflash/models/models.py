@@ -174,6 +174,15 @@ class CodeStringsMarkdown(BaseModel):
 
     @property
     def flat(self) -> str:
+        """Returns the combined Python module from all code blocks.
+
+        Each block is prefixed by a file path comment to indicate its origin.
+        This representation is syntactically valid Python code.
+
+        Returns:
+            str: The concatenated code of all blocks with file path annotations.
+
+        """
         if self._cache.get("flat") is not None:
             return self._cache["flat"]
         self._cache["flat"] = "\n".join(
@@ -183,7 +192,15 @@ class CodeStringsMarkdown(BaseModel):
 
     @property
     def markdown(self) -> str:
-        """Returns the markdown representation of the code, including the file path where possible."""
+        """Returns a Markdown-formatted string containing all code blocks.
+
+        Each block is enclosed in a triple-backtick code block with an optional
+        file path suffix (e.g., ```python:filename.py).
+
+        Returns:
+            str: Markdown representation of the code blocks.
+
+        """
         return "\n".join(
             [
                 f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
@@ -192,6 +209,12 @@ class CodeStringsMarkdown(BaseModel):
         )
 
     def file_to_path(self) -> dict[str, str]:
+        """Return a dictionary mapping file paths to their corresponding code blocks.
+
+        Returns:
+            dict[str, str]: Mapping from file path (as string) to code.
+
+        """
         if self._cache.get("file_to_path") is not None:
             return self._cache["file_to_path"]
         self._cache["file_to_path"] = {
@@ -201,6 +224,17 @@ class CodeStringsMarkdown(BaseModel):
 
     @staticmethod
     def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+        """Parse a Markdown string into a CodeStringsMarkdown object.
+
+        Extracts code blocks and their associated file paths and constructs a new CodeStringsMarkdown instance.
+
+        Args:
+            markdown_code (str): The Markdown-formatted string to parse.
+
+        Returns:
+            CodeStringsMarkdown: Parsed object containing code blocks.
+
+        """
         matches = markdown_pattern.findall(markdown_code)
         results = CodeStringsMarkdown()
         for file_path, code in matches:

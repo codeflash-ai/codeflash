@@ -89,7 +89,7 @@ def test_code_replacement10() -> None:
     hashing_context = code_ctx.hashing_code_context
 
     expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(file_path.parent))}
+```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 
 class HelperClass:
@@ -107,6 +107,7 @@ class MainClass:
     def main_method(self):
         self.name = HelperClass.NestedClass("test").nested_method()
         return HelperClass(self.name).helper_method()
+```
 """
     expected_read_only_context = """
     """
@@ -126,7 +127,7 @@ class MainClass:
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -147,7 +148,7 @@ def test_class_method_dependencies() -> None:
     hashing_context = code_ctx.hashing_code_context
 
     expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(file_path.parent))}
+```python:{file_path.relative_to(file_path.parent)}
 from __future__ import annotations
 from collections import defaultdict
 
@@ -175,7 +176,7 @@ class Graph:
 
         # Print contents of stack
         return stack
-
+```
 """
     expected_read_only_context = ""
 
@@ -200,7 +201,7 @@ class Graph:
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -227,7 +228,7 @@ def test_bubble_sort_helper() -> None:
     hashing_context = code_ctx.hashing_code_context
 
     expected_read_write_context = f"""
-{get_code_block_splitter("code_to_optimize/code_directories/retriever/bubble_sort_with_math.py")}
+```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
 def sorter(arr):
@@ -235,14 +236,14 @@ def sorter(arr):
     x = math.sqrt(2)
     print(x)
     return arr
-
-{get_code_block_splitter("code_to_optimize/code_directories/retriever/bubble_sort_imported.py")}
+```
+```python:code_to_optimize/code_directories/retriever/bubble_sort_imported.py
 from bubble_sort_with_math import sorter
 
 def sort_from_another_file(arr):
     sorted_arr = sorter(arr)
     return sorted_arr
-
+```
 """
     expected_read_only_context = ""
 
@@ -260,7 +261,7 @@ def sort_from_another_file(arr):
     return sorted_arr
 ```
 """
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -458,7 +459,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         hashing_context = code_ctx.hashing_code_context
         expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(opt.args.project_root))}
+```python:{file_path.relative_to(opt.args.project_root)}
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
     def __init__(self) -> None: ...
@@ -553,7 +554,8 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             kwargs=kwargs,
             lifespan=self.__duration__,
         )
-        """
+```
+"""
         expected_read_only_context = f'''
 ```python:{file_path.relative_to(opt.args.project_root)}
 _P = ParamSpec("_P")
@@ -647,7 +649,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         return self.__backend__.get_cache_or_call(func=self.__wrapped__, args=args, kwargs=kwargs, lifespan=self.__duration__)
 ```
 """
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -700,7 +702,7 @@ class HelperClass:
         hashing_context = code_ctx.hashing_code_context
 
         expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(opt.args.project_root))}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     def __init__(self):
         self.x = 1
@@ -713,7 +715,8 @@ class HelperClass:
         self.x = 1
     def helper_method(self):
         return self.x
-        """
+```
+"""
         expected_read_only_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
@@ -740,7 +743,7 @@ class HelperClass:
 ```
 """
 
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -798,7 +801,7 @@ class HelperClass:
         hashing_context = code_ctx.hashing_code_context
         # In this scenario, the read-only code context is too long, so the read-only docstrings are removed.
         expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(opt.args.project_root))}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     def __init__(self):
         self.x = 1
@@ -812,7 +815,8 @@ class HelperClass:
         self.x = 1
     def helper_method(self):
         return self.x
-        """
+```
+"""
         expected_read_only_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
@@ -836,7 +840,7 @@ class HelperClass:
         return self.x
 ```
 """
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -894,7 +898,7 @@ class HelperClass:
         hashing_context = code_ctx.hashing_code_context
         # In this scenario, the read-only code context is too long even after removing docstrings, hence we remove it completely.
         expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(opt.args.project_root))}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     def __init__(self):
         self.x = 1
@@ -908,7 +912,8 @@ class HelperClass:
         self.x = 1
     def helper_method(self):
         return self.x
-        """
+```
+"""
         expected_read_only_context = ""
         expected_hashing_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
@@ -923,7 +928,7 @@ class HelperClass:
         return self.x
 ```
 """
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1048,7 +1053,7 @@ def test_repo_helper() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_utils.relative_to(project_root))}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 
 class DataProcessor:
@@ -1065,8 +1070,8 @@ class DataProcessor:
     def add_prefix(self, data: str, prefix: str = "PREFIX_") -> str:
         \"\"\"Add a prefix to the processed data.\"\"\"
         return prefix + data
-
-{get_code_block_splitter(path_to_file.relative_to(project_root))}
+```
+```python:{path_to_file.relative_to(project_root)}
 import requests
 from globals import API_URL
 from utils import DataProcessor
@@ -1084,6 +1089,7 @@ def fetch_and_process_data():
     processed = processor.add_prefix(processed)
 
     return processed
+```
 """
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
@@ -1118,7 +1124,7 @@ def fetch_and_process_data():
     return processed
 ```
 """
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1140,7 +1146,7 @@ def test_repo_helper_of_helper() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_utils.relative_to(project_root))}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
 
@@ -1158,8 +1164,8 @@ class DataProcessor:
     def transform_data(self, data: str) -> str:
         \"\"\"Transform the processed data\"\"\"
         return DataTransformer().transform(data)
-
-{get_code_block_splitter(path_to_file.relative_to(project_root))}
+```
+```python:{path_to_file.relative_to(project_root)}
 import requests
 from globals import API_URL
 from utils import DataProcessor
@@ -1176,8 +1182,8 @@ def fetch_and_transform_data():
     transformed = processor.transform_data(processed)
 
     return transformed
-
-    """
+```
+"""
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
 class DataProcessor:
@@ -1217,7 +1223,7 @@ def fetch_and_transform_data():
     return transformed
 ```
 """
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1238,15 +1244,15 @@ def test_repo_helper_of_helper_same_class() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_transform_utils.relative_to(project_root))}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
 
     def transform_using_own_method(self, data):
         return self.transform(data)
-
-{get_code_block_splitter(path_to_utils.relative_to(project_root))}
+```
+```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
 
@@ -1260,7 +1266,7 @@ class DataProcessor:
     def transform_data_own_method(self, data: str) -> str:
         \"\"\"Transform the processed data using own method\"\"\"
         return DataTransformer().transform_using_own_method(data)
-
+```
 """
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
@@ -1297,7 +1303,7 @@ class DataProcessor:
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1318,15 +1324,15 @@ def test_repo_helper_of_helper_same_file() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_transform_utils.relative_to(project_root))}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
 
     def transform_using_same_file_function(self, data):
         return update_data(data)
-
-{get_code_block_splitter(path_to_utils.relative_to(project_root))}
+```
+```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
 
@@ -1340,7 +1346,8 @@ class DataProcessor:
     def transform_data_same_file_function(self, data: str) -> str:
         \"\"\"Transform the processed data using a function from the same file\"\"\"
         return DataTransformer().transform_using_same_file_function(data)
-    """
+```
+"""
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
 def update_data(data):
@@ -1372,7 +1379,7 @@ class DataProcessor:
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1392,7 +1399,7 @@ def test_repo_helper_all_same_file() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_transform_utils.relative_to(project_root))}
+```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
     def __init__(self):
         self.data = None
@@ -1407,7 +1414,8 @@ class DataTransformer:
 
 def update_data(data):
     return data + " updated"
-    """
+```
+"""
     expected_read_only_context = f"""
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
@@ -1434,7 +1442,7 @@ def update_data(data):
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1455,7 +1463,7 @@ def test_repo_helper_circular_dependency() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_utils.relative_to(project_root))}
+```python:{path_to_utils.relative_to(project_root)}
 import math
 from transform_utils import DataTransformer
 
@@ -1469,8 +1477,8 @@ class DataProcessor:
     def circular_dependency(self, data: str) -> str:
         \"\"\"Test circular dependency\"\"\"
         return DataTransformer().circular_dependency(data)
-
-{get_code_block_splitter(path_to_transform_utils.relative_to(project_root))}
+```
+```python:{path_to_transform_utils.relative_to(project_root)}
 from code_to_optimize.code_directories.retriever.utils import DataProcessor
 
 class DataTransformer:
@@ -1479,9 +1487,8 @@ class DataTransformer:
 
     def circular_dependency(self, data):
         return DataProcessor().circular_dependency(data)
-
-
-    """
+```
+"""
     expected_read_only_context = f"""
 ```python:{path_to_utils.relative_to(project_root)}
 class DataProcessor:
@@ -1510,7 +1517,7 @@ class DataTransformer:
 ```
 """
 
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1554,13 +1561,14 @@ def outside_method():
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         hashing_context = code_ctx.hashing_code_context
         expected_read_write_context = f"""
-{get_code_block_splitter(file_path.relative_to(opt.args.project_root))}
+```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
     def __init__(self):
         self.x = 1
         self.y = outside_method()
     def target_method(self):
         return self.x + self.y
+```
 """
         expected_read_only_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
@@ -1576,7 +1584,7 @@ class MyClass:
         return self.x + self.y
 ```
 """
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1634,7 +1642,7 @@ def function_to_optimize():
 ```
 """
     expected_read_write_context = f"""
-{get_code_block_splitter(path_to_main.relative_to(project_root))}
+```python:{path_to_main.relative_to(project_root)}
 import requests
 from globals import API_URL
 from utils import DataProcessor
@@ -1651,14 +1659,15 @@ def fetch_and_transform_data():
     transformed = processor.transform_data(processed)
 
     return transformed
-
-{get_code_block_splitter(path_to_fto.relative_to(project_root))}
+```
+```python:{path_to_fto.relative_to(project_root)}
 import code_to_optimize.code_directories.retriever.main
 
 def function_to_optimize():
     return code_to_optimize.code_directories.retriever.main.fetch_and_transform_data()
+```
 """
-    assert read_write_context.flat.strip() == expected_read_write_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
     assert read_only_context.strip() == expected_read_only_context.strip()
     assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -1818,7 +1827,7 @@ def get_system_details():
         hashing_context = code_ctx.hashing_code_context
         # The expected contexts
         expected_read_write_context = f"""
-{get_code_block_splitter(main_file_path.relative_to(opt.args.project_root))}
+```python:{main_file_path.relative_to(opt.args.project_root)}
 import utility_module
 
 class Calculator:
@@ -1845,6 +1854,7 @@ class Calculator:
             return self.subtract(x, y)
         else:
             return None
+```
 """
         expected_read_only_context = """
 ```python:utility_module.py
@@ -1902,7 +1912,7 @@ class Calculator:
 ```
 """
         # Verify the contexts match the expected values
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
         assert hashing_context.strip() == expected_hashing_context.strip()
 
@@ -2061,7 +2071,7 @@ def get_system_details():
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # The expected contexts
         expected_read_write_context = f"""
-{get_code_block_splitter("utility_module.py")}
+```python:utility_module.py
 # Function that will be used in the main code
 
 def select_precision(precision, fallback_precision):
@@ -2085,8 +2095,8 @@ def select_precision(precision, fallback_precision):
         return precision.lower()
     else:
         return DEFAULT_PRECISION
-
-{get_code_block_splitter(main_file_path.relative_to(opt.args.project_root))}
+```
+```python:{main_file_path.relative_to(opt.args.project_root)}
 import utility_module
 
 class Calculator:
@@ -2099,6 +2109,7 @@ class Calculator:
         self.backend = utility_module.CALCULATION_BACKEND
         self.system = utility_module.SYSTEM_TYPE
         self.default_precision = utility_module.DEFAULT_PRECISION
+```
 """
         expected_read_only_context = """
 ```python:utility_module.py
@@ -2113,7 +2124,7 @@ except ImportError:
     CALCULATION_BACKEND = "python"
 ```
 """
-        assert read_write_context.flat.strip() == expected_read_write_context.strip()
+        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
         assert read_only_context.strip() == expected_read_only_context.strip()
 
 

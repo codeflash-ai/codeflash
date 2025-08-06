@@ -1,6 +1,6 @@
 from pathlib import Path
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, get_code_block_splitter
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -50,7 +50,7 @@ def _get_string_usage(text: str) -> Usage:
 """
     main_file.write_text(original_main, encoding="utf-8")
 
-    optimized_code = f"""{get_code_block_splitter(helper_file.relative_to(root_dir))}
+    optimized_code = f"""```python:{helper_file.relative_to(root_dir)}
 import re
 from collections.abc import Sequence
 
@@ -83,14 +83,15 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
             tokens += len(part.data)
 
     return tokens
-
-{get_code_block_splitter(main_file.relative_to(root_dir))}
+```
+```python:{main_file.relative_to(root_dir)}
 from temp_helper import _estimate_string_tokens
 from pydantic_ai_slim.pydantic_ai.usage import Usage
 
 def _get_string_usage(text: str) -> Usage:
     response_tokens = _estimate_string_tokens(text)
     return Usage(response_tokens=response_tokens, total_tokens=response_tokens)
+```
 """
 
     

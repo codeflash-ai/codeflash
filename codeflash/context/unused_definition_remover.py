@@ -3,16 +3,14 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -530,7 +528,11 @@ def revert_unused_helper_functions(
                 helper_names = [helper.qualified_name for helper in helpers_in_file]
                 reverted_code = replace_function_definitions_in_module(
                     function_names=helper_names,
-                    optimized_code=original_code,  # Use original code as the "optimized" code to revert
+                    optimized_code=CodeStringsMarkdown(
+                        code_strings=[
+                            CodeString(code=original_code, file_path=Path(file_path).relative_to(project_root))
+                        ]
+                    ),  # Use original code as the "optimized" code to revert
                     module_abspath=file_path,
                     preexisting_objects=set(),  # Empty set since we're reverting
                     project_root_path=project_root,

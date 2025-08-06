@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeStringsMarkdown, get_code_block_splitter
+from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -56,8 +56,8 @@ def test_detect_unused_helper_functions(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that only calls one helper
-    optimized_code = f"""
-{get_code_block_splitter("main.py")}
+    optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -70,6 +70,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - MODIFIED VERSION should be reverted.\"\"\"
     return x * 4  # This change should be reverted to original x * 3
+```
 """
 
     # Create FunctionToOptimize instance
@@ -91,7 +92,7 @@ def helper_function_2(x):
     code_context = ctx_result.unwrap()
 
     # Test unused helper detection
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
     # Should detect helper_function_2 as unused
     unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -101,8 +102,8 @@ def helper_function_2(x):
 
     # Also test the complete replace_function_and_helpers_with_optimized_code workflow
     # First modify the optimized code to include a MODIFIED unused helper
-    optimized_code_with_modified_helper = f"""
-{get_code_block_splitter("main.py")}
+    optimized_code_with_modified_helper = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -115,6 +116,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - MODIFIED VERSION should be reverted.\"\"\"
     return x * 7  # This should be reverted to x * 3
+```
 """
 
     original_helper_code = {main_file: main_file.read_text()}
@@ -161,8 +163,8 @@ def test_revert_unused_helper_functions(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that only calls one helper and modifies the unused one
-    optimized_code = f"""
-{get_code_block_splitter("main.py") }
+    optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -175,6 +177,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Modified helper function - should be reverted.\"\"\"
     return x * 4  # This change should be reverted
+```
 """
 
     # Create FunctionToOptimize instance
@@ -224,8 +227,8 @@ def test_no_unused_helpers_no_revert(temp_project):
     temp_dir, main_file, test_cfg = temp_project
 
     # Optimized version that still calls both helpers
-    optimized_code = f"""
-{get_code_block_splitter("main.py")}
+    optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that still calls both helpers.\"\"\"
     result1 = helper_function_1(n)
@@ -239,6 +242,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - optimized.\"\"\"
     return x * 3
+```
 """
 
     # Create FunctionToOptimize instance
@@ -263,7 +267,7 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Test detection - should find no unused helpers
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
     assert len(unused_helpers) == 0, "No helpers should be detected as unused"
 
     # Apply optimization
@@ -307,14 +311,15 @@ def helper_function_2(x):
 """)
 
         # Optimized version that only calls one helper
-        optimized_code = f"""
-{get_code_block_splitter("main.py")}
+        optimized_code = """
+```python:main.py
 from helpers import helper_function_1
 
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
     return result1 + n * 3  # Inlined helper_function_2
+```
 """
 
         # Create test config
@@ -345,7 +350,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
         # Should detect helper_function_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -482,8 +487,8 @@ class Calculator:
 """)
 
         # Optimized version that only calls one helper method
-        optimized_code = f"""
-{get_code_block_splitter("main.py") }
+        optimized_code = """
+```python:main.py
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -497,6 +502,7 @@ class Calculator:
     def helper_method_2(self, x):
         \"\"\"Second helper method - should be reverted.\"\"\"
         return x * 4
+```
 """
 
         # Create test config
@@ -532,7 +538,7 @@ class Calculator:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
         # Should detect Calculator.helper_method_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -542,8 +548,8 @@ class Calculator:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = f"""
-{get_code_block_splitter("main.py")}
+        optimized_code_with_modified_helper = """
+```python:main.py
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -557,6 +563,7 @@ class Calculator:
     def helper_method_2(self, x):
         \"\"\"Second helper method - MODIFIED VERSION should be reverted.\"\"\"
         return x * 8  # This should be reverted to x * 3
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
@@ -625,8 +632,8 @@ class Processor:
 """)
 
         # Optimized version that only calls one external helper
-        optimized_code = f"""
-{get_code_block_splitter("main.py") }
+        optimized_code = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -640,6 +647,7 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         # Create test config
@@ -675,7 +683,7 @@ class Processor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
         # Should detect external_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -685,8 +693,8 @@ class Processor:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = f"""
-{get_code_block_splitter("main.py")}
+        optimized_code_with_modified_helper = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -700,6 +708,7 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
@@ -724,8 +733,8 @@ class Processor:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_code_with_modified_helper = f"""
-{get_code_block_splitter("main.py")}
+        optimized_code_with_modified_helper = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -739,6 +748,7 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
@@ -795,8 +805,8 @@ class OuterClass:
 """)
 
         # Optimized version that inlines one helper
-        optimized_code = f"""
-{get_code_block_splitter("main.py") }
+        optimized_code = """
+```python:main.py
 def global_helper_1(x):
     return x * 2
 
@@ -812,6 +822,7 @@ class OuterClass:
             
         def local_helper(self, x):
             return x + 1
+```
 """
 
         # Create test config
@@ -878,7 +889,7 @@ class OuterClass:
                     ]
                 },
             )(),
-            optimized_code,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code).flat,
         )
 
         # Should detect global_helper_2 as unused
@@ -964,8 +975,8 @@ def clean_data(x):
 """)
 
         # Optimized version that only uses some functions
-        optimized_code = f"""
-{get_code_block_splitter("main.py") }
+        optimized_code = """
+```python:main.py
 import utils
 from math_helpers import add
 
@@ -976,6 +987,7 @@ def entrypoint_function(n):
     # Inlined multiply: result3 = n * 2
     # Inlined process_data: result4 = n ** 2
     return result1 + result2 + (n * 2) + (n ** 2)
+```
 """
 
         # Create test config
@@ -1006,7 +1018,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
         # Should detect multiply, process_data as unused (at minimum)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1126,8 +1138,8 @@ def divide_numbers(x, y):
 """)
 
         # Optimized version that only uses add_numbers
-        optimized_code = f"""
-{get_code_block_splitter("main.py") }
+        optimized_code = """
+```python:main.py
 import calculator
 
 def entrypoint_function(n):
@@ -1135,6 +1147,7 @@ def entrypoint_function(n):
     result1 = calculator.add_numbers(n, 10)
     # Inlined: result2 = n * 5
     return result1 + (n * 5)
+```
 """
 
         # Create test config
@@ -1165,7 +1178,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
 
         # Should detect multiply_numbers and divide_numbers as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1329,8 +1342,8 @@ class MathUtils:
 """)
 
         # Optimized static method that inlines one utility
-        optimized_static_code = f"""
-{get_code_block_splitter("main.py")}
+        optimized_static_code = """
+```python:main.py
 def utility_function_1(x):
     return x * 2
 
@@ -1350,6 +1363,7 @@ class MathUtils:
         result1 = utility_function_1(n)
         result2 = utility_function_2(n)
         return result1 - result2
+```
 """
 
         # Create test config
@@ -1386,7 +1400,7 @@ class MathUtils:
 
         # Test unused helper detection for static method
         unused_helpers = detect_unused_helper_functions(
-            optimizer.function_to_optimize, code_context, optimized_static_code
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code).flat
         )
 
         # Should detect utility_function_2 as unused
@@ -1397,8 +1411,8 @@ class MathUtils:
 
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
-        optimized_static_code_with_modified_helper = f"""
-{get_code_block_splitter("main.py")}
+        optimized_static_code_with_modified_helper = """
+```python:main.py
 def utility_function_1(x):
     return x * 2
 
@@ -1418,6 +1432,7 @@ class MathUtils:
         result1 = utility_function_1(n)
         result2 = utility_function_2(n)
         return result1 - result2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
