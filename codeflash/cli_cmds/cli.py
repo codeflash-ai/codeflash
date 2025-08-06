@@ -77,6 +77,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
+    parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
         action="store_true",
@@ -234,7 +235,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 "I need a git repository to run --all and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
-        if not args.no_pr and not check_and_push_branch(git_repo):
+        if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
             exit_with_message("Branch is not pushed...", error_on_exit=True)
         owner, repo = get_repo_owner_and_name(git_repo)
         if not args.no_pr:

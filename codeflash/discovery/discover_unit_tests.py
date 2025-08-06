@@ -150,11 +150,13 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.imported_modules: set[str] = set()
         self.has_dynamic_imports: bool = False
         self.wildcard_modules: set[str] = set()
+        # Track aliases: alias_name -> original_name
+        self.alias_mapping: dict[str, str] = {}
 
         # Precompute function_names for prefix search
         # For prefix match, store mapping from prefix-root to candidates for O(1) matching
         self._exact_names = function_names_to_find
-        self._prefix_roots = {}
+        self._prefix_roots: dict[str, list[str]] = {}
         for name in function_names_to_find:
             if "." in name:
                 root = name.split(".", 1)[0]
@@ -206,6 +208,9 @@ class ImportAnalyzer(ast.NodeVisitor):
             imported_name = alias.asname if alias.asname else aname
             self.imported_modules.add(imported_name)
 
+            if alias.asname:
+                self.alias_mapping[imported_name] = aname
+
             # Fast check for dynamic import
             if mod == "importlib" and aname == "import_module":
                 self.has_dynamic_imports = True
@@ -222,7 +227,6 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.found_qualified_name = qname
                 return
 
-            # Fast prefix match: only for relevant roots
             prefix = qname + "."
             # Only bother if one of the targets startswith the prefix-root
             candidates = proots.get(qname, ())
@@ -246,6 +250,18 @@ class ImportAnalyzer(ast.NodeVisitor):
             self.found_any_target_function = True
             self.found_qualified_name = node.attr
             return
+
+        if isinstance(node.value, ast.Name) and node.value.id in self.imported_modules:
+            for target_func in self.function_names_to_find:
+                if "." in target_func:
+                    class_name, method_name = target_func.rsplit(".", 1)
+                    if node.attr == method_name:
+                        imported_name = node.value.id
+                        original_name = self.alias_mapping.get(imported_name, imported_name)
+                        if original_name == class_name:
+                            self.found_any_target_function = True
+                            self.found_qualified_name = target_func
+                            return
 
         # Check if this is accessing a target function through a dynamically imported module
         # Only if we've detected dynamic imports are being used
@@ -341,7 +357,7 @@ def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:
@@ -352,8 +368,10 @@ def discover_unit_tests(
     functions_to_optimize = None
     if file_to_funcs_to_optimize:
         functions_to_optimize = [func for funcs_list in file_to_funcs_to_optimize.values() for func in funcs_list]
-    function_to_tests, num_discovered_tests = strategy(cfg, discover_only_these_tests, functions_to_optimize)
-    return function_to_tests, num_discovered_tests
+    function_to_tests, num_discovered_tests, num_discovered_replay_tests = strategy(
+        cfg, discover_only_these_tests, functions_to_optimize
+    )
+    return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 
 def discover_tests_pytest(
@@ -515,6 +533,7 @@ def process_test_files(
 
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
+    num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
@@ -661,6 +680,9 @@ def process_test_files(
                                     position=CodePosition(line_no=name.line, col_no=name.column),
                                 )
                             )
+                            if test_func.test_type == TestType.REPLAY_TEST:
+                                num_discovered_replay_tests += 1
+
                             num_discovered_tests += 1
                 except Exception as e:
                     logger.debug(str(e))
@@ -668,4 +690,4 @@ def process_test_files(
 
             progress.advance(task_id)
 
-    return dict(function_to_test_map), num_discovered_tests
+    return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
