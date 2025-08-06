@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
+from codeflash.api.cfapi import send_completion_email
 from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
@@ -64,6 +65,7 @@ class Optimizer:
         from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
         from codeflash.benchmarking.utils import print_benchmark_table, validate_and_format_benchmark_table
 
+        console.rule()
         with progress_bar(
             f"Running benchmarks in {self.args.benchmarks_root}", transient=True, revert_to_print=bool(get_pr_number())
         ):
@@ -104,7 +106,7 @@ class Optimizer:
                 for file in file_path_to_source_code:
                     with file.open("w", encoding="utf8") as f:
                         f.write(file_path_to_source_code[file])
-
+        console.rule()
         return function_benchmark_timings, total_benchmark_timings
 
     def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
@@ -226,12 +228,12 @@ class Optimizer:
 
         console.rule()
         start_time = time.time()
-        function_to_tests, num_discovered_tests = discover_unit_tests(
+        function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(
             self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
         )
         console.rule()
         logger.info(
-            f"Discovered {num_discovered_tests} existing unit tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+            f"Discovered {num_discovered_tests} existing unit tests and {num_discovered_replay_tests} replay tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
         )
         console.rule()
         ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
@@ -342,6 +344,11 @@ class Optimizer:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
                 logger.info("✨ All functions have been optimized! ✨")
+                response = send_completion_email()  # TODO: Include more details in the email
+                if response.ok:
+                    logger.info("✅ Completion email sent successfully.")
+                else:
+                    logger.warning("⚠️ Failed to send completion email. Status")
         finally:
             if function_optimizer:
                 function_optimizer.cleanup_generated_files()

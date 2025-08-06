@@ -14,13 +14,15 @@ from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name, git_root_dir
+from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from requests import Response
 
-    from codeflash.github.PrComment import FileDiffContent, PrComment
+    from codeflash.result.explanation import Explanation
+
 from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
@@ -185,6 +187,59 @@ def create_pr(
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
+def create_staging(
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
+    explanation: Explanation,
+    existing_tests_source: str,
+    generated_original_test_source: str,
+    function_trace_id: str,
+    coverage_message: str,
+) -> Response:
+    """Create a staging pull request, targeting the specified branch. (usually 'staging').
+
+    :param original_code: A mapping of file paths to original source code.
+    :param new_code: A mapping of file paths to optimized source code.
+    :param explanation: An Explanation object with optimization details.
+    :param existing_tests_source: Existing test code.
+    :param generated_original_test_source: Generated tests for the original function.
+    :param function_trace_id: Unique identifier for this optimization trace.
+    :param coverage_message: Coverage report or summary.
+    :return: The response object from the backend.
+    """
+    relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+
+    build_file_changes = {
+        Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+            oldContent=original_code[p], newContent=new_code[p]
+        )
+        for p in original_code
+    }
+
+    payload = {
+        "baseBranch": get_current_branch(),
+        "diffContents": build_file_changes,
+        "prCommentFields": PrComment(
+            optimization_explanation=explanation.explanation_message(),
+            best_runtime=explanation.best_runtime_ns,
+            original_runtime=explanation.original_runtime_ns,
+            function_name=explanation.function_name,
+            relative_file_path=relative_path,
+            speedup_x=explanation.speedup_x,
+            speedup_pct=explanation.speedup_pct,
+            winning_behavior_test_results=explanation.winning_behavior_test_results,
+            winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+            benchmark_details=explanation.benchmark_details,
+        ).to_json(),
+        "existingTests": existing_tests_source,
+        "generatedTests": generated_original_test_source,
+        "traceId": function_trace_id,
+        "coverage_message": coverage_message,
+    }
+
+    return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
+
+
 def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: bool = False) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
 
@@ -264,3 +319,16 @@ def mark_optimization_success(trace_id: str, *, is_optimization_found: bool) -> 
     """
     payload = {"trace_id": trace_id, "is_optimization_found": is_optimization_found}
     return make_cfapi_request(endpoint="/mark-as-success", method="POST", payload=payload)
+
+
+def send_completion_email() -> Response:
+    """Send an email notification when codeflash --all completes."""
+    try:
+        owner, repo = get_repo_owner_and_name()
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        response = requests.Response()
+        response.status_code = 500
+        return response
+    payload = {"owner": owner, "repo": repo}
+    return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)

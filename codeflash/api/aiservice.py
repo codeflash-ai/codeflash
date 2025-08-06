@@ -12,7 +12,8 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
-from codeflash.models.models import OptimizedCandidate
+from codeflash.models.ExperimentMetadata import ExperimentMetadata
+from codeflash.models.models import AIServiceRefinerRequest, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
+    from codeflash.models.models import AIServiceRefinerRequest
 
 
 class AiServiceClient:
@@ -36,7 +38,11 @@ class AiServiceClient:
         return "https://app.codeflash.ai"
 
     def make_ai_service_request(
-        self, endpoint: str, method: str = "POST", payload: dict[str, Any] | None = None, timeout: float | None = None
+        self,
+        endpoint: str,
+        method: str = "POST",
+        payload: dict[str, Any] | list[dict[str, Any]] | None = None,
+        timeout: float | None = None,
     ) -> requests.Response:
         """Make an API request to the given endpoint on the AI service.
 
@@ -98,11 +104,7 @@ class AiServiceClient:
 
         """
         start_time = time.perf_counter()
-        try:
-            git_repo_owner, git_repo_name = get_repo_owner_and_name()
-        except Exception as e:
-            logger.warning(f"Could not determine repo owner and name: {e}")
-            git_repo_owner, git_repo_name = None, None
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
 
         payload = {
             "source_code": source_code,
@@ -219,6 +221,136 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Args:
+        request: A list of optimization candidate details for refinement
+
+        Returns:
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = [
+            {
+                "optimization_id": opt.optimization_id,
+                "original_source_code": opt.original_source_code,
+                "read_only_dependency_code": opt.read_only_dependency_code,
+                "original_line_profiler_results": opt.original_line_profiler_results,
+                "original_code_runtime": opt.original_code_runtime,
+                "optimized_source_code": opt.optimized_source_code,
+                "optimized_explanation": opt.optimized_explanation,
+                "optimized_line_profiler_results": opt.optimized_line_profiler_results,
+                "optimized_code_runtime": opt.optimized_code_runtime,
+                "speedup": opt.speedup,
+                "trace_id": opt.trace_id,
+            }
+            for opt in request
+        ]
+        logger.info(f"Refining {len(request)} optimizations…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization refinements: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            refined_optimizations = response.json()["refinements"]
+            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            console.rule()
+            return [
+                OptimizedCandidate(
+                    source_code=opt["source_code"],
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"][:-4] + "refi",
+                )
+                for opt in refined_optimizations
+            ]
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def get_new_explanation(  # noqa: D417
+        self,
+        source_code: str,
+        optimized_code: str,
+        dependency_code: str,
+        trace_id: str,
+        original_line_profiler_results: str,
+        optimized_line_profiler_results: str,
+        original_code_runtime: str,
+        optimized_code_runtime: str,
+        speedup: str,
+        annotated_tests: str,
+        optimization_id: str,
+        original_explanation: str,
+    ) -> str:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - optimized_code (str): The python code generated by the AI service.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - original_line_profiler_results: str - line profiler results for the baseline code
+        - optimized_line_profiler_results: str - line profiler results for the optimized code
+        - original_code_runtime: str - runtime for the baseline code
+        - optimized_code_runtime: str - runtime for the optimized code
+        - speedup: str - speedup of the optimized code
+        - annotated_tests: str - test functions annotated with runtime
+        - optimization_id: str - unique id of opt candidate
+        - original_explanation: str - original_explanation generated for the opt candidate
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = {
+            "trace_id": trace_id,
+            "source_code": source_code,
+            "optimized_code": optimized_code,
+            "original_line_profiler_results": original_line_profiler_results,
+            "optimized_line_profiler_results": optimized_line_profiler_results,
+            "original_code_runtime": original_code_runtime,
+            "optimized_code_runtime": optimized_code_runtime,
+            "speedup": speedup,
+            "annotated_tests": annotated_tests,
+            "optimization_id": optimization_id,
+            "original_explanation": original_explanation,
+            "dependency_code": dependency_code,
+        }
+        logger.info("Generating explanation")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating explanations: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return ""
+
+        if response.status_code == 200:
+            explanation: str = response.json()["explanation"]
+            logger.debug(f"New Explanation: {explanation}")
+            console.rule()
+            return explanation
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return ""
+
     def log_results(  # noqa: D417
         self,
         function_trace_id: str,
@@ -226,6 +358,8 @@ class AiServiceClient:
         original_runtime: float | None,
         optimized_runtime: dict[str, float | None] | None,
         is_correct: dict[str, bool] | None,
+        optimized_line_profiler_results: dict[str, str] | None,
+        metadata: dict[str, Any] | None,
     ) -> None:
         """Log features to the database.
 
@@ -236,6 +370,8 @@ class AiServiceClient:
         - original_runtime (Optional[Dict[str, float]]): The original runtime.
         - optimized_runtime (Optional[Dict[str, float]]): The optimized runtime.
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
+        - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
+        - metadata: contains the best optimization id
 
         """
         payload = {
@@ -245,6 +381,8 @@ class AiServiceClient:
             "optimized_runtime": optimized_runtime,
             "is_correct": is_correct,
             "codeflash_version": codeflash_version,
+            "optimized_line_profiler_results": optimized_line_profiler_results,
+            "metadata": metadata,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
@@ -331,3 +469,12 @@ class LocalAiServiceClient(AiServiceClient):
     def get_aiservice_base_url(self) -> str:
         """Get the base URL for the local AI service."""
         return "http://localhost:8000"
+
+
+def safe_get_repo_owner_and_name() -> tuple[str | None, str | None]:
+    try:
+        git_repo_owner, git_repo_name = get_repo_owner_and_name()
+    except Exception as e:
+        logger.warning(f"Could not determine repo owner and name: {e}")
+        git_repo_owner, git_repo_name = None, None
+    return git_repo_owner, git_repo_name

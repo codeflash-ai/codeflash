@@ -27,6 +27,22 @@ from codeflash.code_utils.code_utils import module_name_from_file_path, validate
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
+
+@dataclass(frozen=True)
+class AIServiceRefinerRequest:
+    optimization_id: str
+    original_source_code: str
+    read_only_dependency_code: str
+    original_code_runtime: str
+    optimized_source_code: str
+    optimized_explanation: str
+    optimized_code_runtime: str
+    speedup: str
+    trace_id: str
+    original_line_profiler_results: str
+    optimized_line_profiler_results: str
+
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
@@ -76,11 +92,13 @@ class FunctionSource:
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
     helper_functions: list[FunctionSource]
+    code_context: CodeOptimizationContext
     runtime: int
     replay_performance_gain: Optional[dict[BenchmarkKey, float]] = None
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
+    line_profiler_test_results: dict
 
 
 @dataclass(frozen=True)
@@ -462,7 +480,7 @@ class FunctionTestInvocation:
         return f"{self.loop_index}:{self.id.id()}"
 
 
-class TestResults(BaseModel):
+class TestResults(BaseModel):  # noqa: PLW1641
     # don't modify these directly, use the add method
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
@@ -497,6 +515,7 @@ class TestResults(BaseModel):
                 benchmark_replay_test_dir.resolve()
                 / f"test_{benchmark_key.module_path.replace('.', '_')}__replay_test_",
                 project_root,
+                traverse_up=True,
             )
         for test_result in self.test_results:
             if test_result.test_type == TestType.REPLAY_TEST:
