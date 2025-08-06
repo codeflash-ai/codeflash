@@ -36,7 +36,7 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
 def get_codeflash_api_key() -> str:
     if console.quiet:  # lsp
         # prefer shell config over env var in lsp mode
-        api_key = read_api_key_from_shell_config() or os.environ.get("CODEFLASH_API_KEY")
+        api_key = read_api_key_from_shell_config()
     else:
         api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
 

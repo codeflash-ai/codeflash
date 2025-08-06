@@ -130,6 +130,10 @@ def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str,
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
 
+    if user_id.startswith("Error: "):
+        error_msg = user_id[7:]
+        return {"status": "error", "message": error_msg}
+
     from codeflash.optimization.optimizer import Optimizer
 
     server.optimizer = Optimizer(server.args)

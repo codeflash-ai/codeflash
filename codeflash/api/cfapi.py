@@ -101,7 +101,7 @@ def get_user_id() -> Optional[str]:
                 console.print(f"[bold red]{msg}[/bold red]")
                 if console.quiet:  # lsp
                     logger.debug(msg)
-                    return None
+                    return f"Error: {msg}"
                 sys.exit(1)
             return userid
 
