@@ -143,9 +143,6 @@ class FunctionOptimizer:
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
-        self.valid_optimizations: list[BestOptimization] = (
-            list()  # TODO: Figure out the dataclass type for this  # noqa: C408
-        )
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=N_TESTS_TO_GENERATE + 2 if self.experiment_id is None else N_TESTS_TO_GENERATE + 3
         )
@@ -376,6 +373,7 @@ class FunctionOptimizer:
         refinement_done = False
         future_all_refinements: list[concurrent.futures.Future] = []
         ast_code_to_id = {}
+        valid_optimizations = []
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
@@ -514,7 +512,7 @@ class FunctionOptimizer:
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                         )
-                        self.valid_optimizations.append(best_optimization)
+                        valid_optimizations.append(best_optimization)
                         # queue corresponding refined optimization for best optimization
                         if not candidate.optimization_id.endswith("refi"):
                             future_all_refinements.append(
@@ -575,14 +573,14 @@ class FunctionOptimizer:
             logger.exception(f"Optimization interrupted: {e}")
             raise
 
-        if not len(self.valid_optimizations):
+        if not valid_optimizations:
             return None
         # need to figure out the best candidate here before we return best_optimization
         # reassign the shorter code here
         valid_candidates_with_shorter_code = []
         diff_lens_list = []  # character level diff
         runtimes_list = []
-        for valid_opt in self.valid_optimizations:
+        for valid_opt in valid_optimizations:
             valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.strip()))
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
@@ -1046,7 +1044,6 @@ class FunctionOptimizer:
             if candidates is None:
                 continue
 
-            self.valid_optimizations = []  # reset for each experiment
             best_optimization = self.determine_best_candidate(
                 candidates=candidates,
                 code_context=code_context,
