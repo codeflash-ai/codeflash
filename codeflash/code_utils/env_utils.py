@@ -40,7 +40,6 @@ def get_codeflash_api_key() -> str:
     else:
         api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
 
-    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
         msg = (
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
@@ -134,3 +133,6 @@ def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
     event = get_cached_gh_event_data()
     return bool(event.get("pull_request", {}).get("draft", False))
+
+
+api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."

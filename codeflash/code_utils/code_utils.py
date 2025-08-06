@@ -277,3 +277,6 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
+
+
+api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."

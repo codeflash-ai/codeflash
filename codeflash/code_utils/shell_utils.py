@@ -79,3 +79,6 @@ def save_api_key_to_rc(api_key: str) -> Result[str, str]:
             f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:{LF}"
             f"{LF}{api_key_line}{LF}"
         )
+
+
+api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."
