@@ -73,6 +73,8 @@ class InjectPerfOnly(ast.NodeTransformer):
         self, test_node: ast.stmt, node_name: str, index: str, test_class_name: str | None = None
     ) -> Iterable[ast.stmt] | None:
         call_node = None
+        await_node = None
+        
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call) and node_in_call_position(node, self.call_positions):
                 call_node = node
@@ -121,6 +123,60 @@ class InjectPerfOnly(ast.NodeTransformer):
                         ]
                         node.keywords = call_node.keywords
                         break
+            
+            # Check for awaited function calls
+            elif isinstance(node, ast.Await) and isinstance(node.value, ast.Call) and node_in_call_position(node.value, self.call_positions):
+                call_node = node.value
+                await_node = node
+                if isinstance(call_node.func, ast.Name):
+                    function_name = call_node.func.id
+                    call_node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                    call_node.args = [
+                        ast.Name(id=function_name, ctx=ast.Load()),
+                        ast.Constant(value=self.module_path),
+                        ast.Constant(value=test_class_name or None),
+                        ast.Constant(value=node_name),
+                        ast.Constant(value=self.function_object.qualified_name),
+                        ast.Constant(value=index),
+                        ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
+                        *(
+                            [ast.Name(id="codeflash_cur", ctx=ast.Load()), ast.Name(id="codeflash_con", ctx=ast.Load())]
+                            if self.mode == TestingMode.BEHAVIOR
+                            else []
+                        ),
+                        *call_node.args,
+                    ]
+                    call_node.keywords = call_node.keywords
+                    # Keep the await wrapper around the modified call
+                    await_node.value = call_node
+                    break
+                if isinstance(call_node.func, ast.Attribute):
+                    function_to_test = call_node.func.attr
+                    if function_to_test == self.function_object.function_name:
+                        function_name = ast.unparse(call_node.func)
+                        call_node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                        call_node.args = [
+                            ast.Name(id=function_name, ctx=ast.Load()),
+                            ast.Constant(value=self.module_path),
+                            ast.Constant(value=test_class_name or None),
+                            ast.Constant(value=node_name),
+                            ast.Constant(value=self.function_object.qualified_name),
+                            ast.Constant(value=index),
+                            ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
+                            *(
+                                [
+                                    ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_con", ctx=ast.Load()),
+                                ]
+                                if self.mode == TestingMode.BEHAVIOR
+                                else []
+                            ),
+                            *call_node.args,
+                        ]
+                        call_node.keywords = call_node.keywords
+                        # Keep the await wrapper around the modified call
+                        await_node.value = call_node
+                        break
 
         if call_node is None:
             return None
@@ -131,9 +187,35 @@ class InjectPerfOnly(ast.NodeTransformer):
         for inner_node in ast.walk(node):
             if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node, node.name)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node, node.name)
 
         return node
 
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef, test_class_name: str | None = None) -> ast.AsyncFunctionDef:
+        """Handle async function definitions by converting to sync and back."""
+        # Convert to sync FunctionDef, process it, then convert back
+        sync_node = ast.FunctionDef(
+            name=node.name,
+            args=node.args,
+            body=node.body,
+            decorator_list=node.decorator_list,
+            returns=node.returns,
+            lineno=node.lineno,
+            col_offset=node.col_offset if hasattr(node, 'col_offset') else 0
+        )
+        processed_sync = self.visit_FunctionDef(sync_node, test_class_name)
+        # Convert back to AsyncFunctionDef
+        return ast.AsyncFunctionDef(
+            name=processed_sync.name,
+            args=processed_sync.args,
+            body=processed_sync.body,
+            decorator_list=processed_sync.decorator_list,
+            returns=processed_sync.returns,
+            lineno=processed_sync.lineno,
+            col_offset=processed_sync.col_offset if hasattr(processed_sync, 'col_offset') else 0
+        )
+        
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
