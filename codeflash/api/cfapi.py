@@ -101,6 +101,9 @@ def get_user_id() -> Optional[str]:
             if min_version and version.parse(min_version) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
+                if console.quiet:  # lsp
+                    logger.debug(msg)
+                    return f"Error: {msg}"
                 sys.exit(1)
             return userid
 
