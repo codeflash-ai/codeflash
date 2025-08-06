@@ -255,6 +255,86 @@ result: [0, 1, 2, 3, 4, 5]
         test_path_perf.unlink(missing_ok=True)
 
 
+def test_async_function_behavior_results() -> None:
+    """Test that async_codeflash_wrap_string is used for async functions."""
+    code = """import asyncio
+from code_to_optimize.async_adder import async_add
+
+
+async def test_async_add():
+    result = await async_add(2, 3)
+    assert result == 5"""
+
+    expected = (
+        """import gc
+import os
+import sqlite3
+import time
+
+import dill as pickle
+
+import asyncio
+from code_to_optimize.async_adder import async_add
+
+
+"""
+        + async_codeflash_wrap_string
+        + """
+async def test_async_add():
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+    result = await codeflash_wrap(async_add, '{module_path}', None, 'test_async_add', 'async_add', '1', codeflash_loop_index, codeflash_cur, codeflash_con, 2, 3)
+    assert result == 5
+    codeflash_con.close()
+"""
+    )
+
+    test_path = (
+        Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_async_adder_behavior_temp.py"
+    ).resolve()
+    test_path_perf = (
+        Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_async_adder_perf_temp.py"
+    ).resolve()
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/async_adder.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    
+    try:
+        with test_path.open("w") as f:
+            f.write(code)
+
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+        project_root_path = (Path(__file__).parent / "..").resolve()
+        original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        func = FunctionToOptimize(function_name="async_add", parents=[], file_path=Path(fto_path), is_async=True)
+        os.chdir(run_cwd)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            [CodePosition(6, 19)],
+            func,
+            project_root_path,
+            "pytest",
+            mode=TestingMode.BEHAVIOR,
+            is_async=True,
+        )
+        os.chdir(original_cwd)
+        assert success
+        assert new_test is not None
+        assert "await wrapped(*args, **kwargs)" in new_test
+        assert "async def codeflash_wrap" in new_test
+        assert "await codeflash_wrap(async_add" in new_test
+                
+    finally:
+        fto_path.write_text(original_code, "utf-8")
+        test_path.unlink(missing_ok=True)
+        test_path_perf.unlink(missing_ok=True)
+
+
 def test_class_method_full_instrumentation() -> None:
     code = """from code_to_optimize.bubble_sort_method import BubbleSorter
 
