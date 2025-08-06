@@ -222,7 +222,7 @@ def generate_tests(server: CodeflashLanguageServer, params: FunctionOptimization
         generated_test.generated_original_test_source for generated_test in generated_tests_list.generated_tests
     ]
     optimizations_dict = {
-        candidate.optimization_id: {"source_code": candidate.source_code.flat, "explanation": candidate.explanation}
+        candidate.optimization_id: {"source_code": candidate.source_code.markdown, "explanation": candidate.explanation}
         for candidate in optimizations_set.control + optimizations_set.experiment
     }
 
@@ -330,7 +330,7 @@ def perform_function_optimization(  # noqa: PLR0911
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
 
-    optimized_source = best_optimization.candidate.source_code.flat
+    optimized_source = best_optimization.candidate.source_code.markdown
     speedup = original_code_baseline.runtime / best_optimization.runtime
 
     server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")

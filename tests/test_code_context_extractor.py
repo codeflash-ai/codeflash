@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent, get_code_block_splitter
+from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 from codeflash.code_utils.code_extractor import add_global_assignments

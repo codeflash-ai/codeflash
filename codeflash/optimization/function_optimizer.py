@@ -62,7 +62,6 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
-    LINE_SPLITTER_MARKER_PREFIX,
     BestOptimization,
     CodeOptimizationContext,
     GeneratedTests,
@@ -171,7 +170,10 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        if has_any_async_functions(code_context.read_writable_code.flat):
+        async_code = any(
+            has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
+        )
+        if async_code:
             return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
@@ -731,7 +733,7 @@ class FunctionOptimizer:
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
             )
-        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code.flat)
+        unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
 
         # Revert unused helper functions to their original definitions
         if unused_helpers:
@@ -1165,15 +1167,10 @@ class FunctionOptimizer:
             optimized_runtimes_all=optimized_runtime_by_test,
         )
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
-            source_code=code_context.read_writable_code.flat.replace(
-                LINE_SPLITTER_MARKER_PREFIX,
-                "# file: ",  # for better readability
-            ),
+            source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-            optimized_code=best_optimization.candidate.source_code.flat.replace(
-                LINE_SPLITTER_MARKER_PREFIX, "# file: "
-            ),
+            optimized_code=best_optimization.candidate.source_code.flat,
             original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
             optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
             original_code_runtime=humanize_runtime(original_code_baseline.runtime),

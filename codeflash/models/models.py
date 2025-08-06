@@ -157,12 +157,8 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
-# Used to split files by adding a marker at the start of each file followed by the file path.
-LINE_SPLITTER_MARKER_PREFIX = "# --codeflash:file--"
-
-
 def get_code_block_splitter(file_path: Path) -> str:
-    return f"{LINE_SPLITTER_MARKER_PREFIX}{file_path}"
+    return f"# file: {file_path}"
 
 
 markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
@@ -181,6 +177,11 @@ class CodeStringsMarkdown(BaseModel):
 
         Returns:
             str: The concatenated code of all blocks with file path annotations.
+
+        !! Important !!:
+        Avoid parsing the flat code with multiple files,
+        parsing may result in unexpected behavior.
+
 
         """
         if self._cache.get("flat") is not None:

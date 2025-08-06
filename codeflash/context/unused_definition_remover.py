@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from dataclasses import dataclass, field
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -611,7 +612,9 @@ def _analyze_imports_in_optimized_code(
 
 
 def detect_unused_helper_functions(
-    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext, optimized_code: str
+    function_to_optimize: FunctionToOptimize,
+    code_context: CodeOptimizationContext,
+    optimized_code: str | CodeStringsMarkdown,
 ) -> list[FunctionSource]:
     """Detect helper functions that are no longer called by the optimized entrypoint function.
 
@@ -624,6 +627,14 @@ def detect_unused_helper_functions(
         List of FunctionSource objects representing unused helper functions
 
     """
+    if isinstance(optimized_code, CodeStringsMarkdown) and len(optimized_code.code_strings) > 0:
+        return list(
+            chain.from_iterable(
+                detect_unused_helper_functions(function_to_optimize, code_context, code.code)
+                for code in optimized_code.code_strings
+            )
+        )
+
     try:
         # Parse the optimized code to analyze function calls and imports
         optimized_ast = ast.parse(optimized_code)

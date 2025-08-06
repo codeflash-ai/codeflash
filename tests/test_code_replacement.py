@@ -123,6 +123,7 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    print(f"Preexisting objects: {preexisting_objects}")
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],

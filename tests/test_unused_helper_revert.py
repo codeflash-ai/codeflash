@@ -92,7 +92,7 @@ def helper_function_2(x):
     code_context = ctx_result.unwrap()
 
     # Test unused helper detection
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
     # Should detect helper_function_2 as unused
     unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -267,7 +267,7 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Test detection - should find no unused helpers
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
     assert len(unused_helpers) == 0, "No helpers should be detected as unused"
 
     # Apply optimization
@@ -350,7 +350,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect helper_function_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -538,7 +538,7 @@ class Calculator:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect Calculator.helper_method_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -683,7 +683,7 @@ class Processor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect external_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -889,7 +889,7 @@ class OuterClass:
                     ]
                 },
             )(),
-            CodeStringsMarkdown.parse_markdown_code(optimized_code).flat,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
         )
 
         # Should detect global_helper_2 as unused
@@ -1018,7 +1018,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect multiply, process_data as unused (at minimum)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1178,7 +1178,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code).flat)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect multiply_numbers and divide_numbers as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1400,7 +1400,7 @@ class MathUtils:
 
         # Test unused helper detection for static method
         unused_helpers = detect_unused_helper_functions(
-            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code).flat
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code)
         )
 
         # Should detect utility_function_2 as unused
