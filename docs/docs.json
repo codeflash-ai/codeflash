@@ -27,7 +27,8 @@
           {
             "group": "🚀 Getting Started",
             "pages": [
-              "getting-started/local-installation"
+              "getting-started/local-installation",
+              "claude-code-integration"
             ]
           },
           {
@@ -125,7 +126,7 @@
             "href": "https://www.codeflash.ai/privacy-policy"
           },
           {
-            "label": "Terms of Service", 
+            "label": "Terms of Service",
             "href": "https://www.codeflash.ai/terms-of-service"
           }
         ]

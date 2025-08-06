@@ -45,11 +45,20 @@ dependencies = [
     "codeflash-benchmark",
 ]
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.2.0",
+    "fastmcp>=2.0.0",
+    "uvloop>=0.20.0",
+    "click>=8.1.0",
+]
+
 [project.urls]
 Homepage = "https://codeflash.ai"
 
 [project.scripts]
 codeflash = "codeflash.main:main"
+codeflash-mcp = "codeflash.mcp.server:main"
 
 [dependency-groups]
 dev = [
