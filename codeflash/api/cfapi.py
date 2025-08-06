@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING, Any, Optional
 import git
 import requests
 import sentry_sdk
+from packaging import version
 from pydantic.json import pydantic_encoder
+from requests import Response
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
@@ -23,7 +25,6 @@ if TYPE_CHECKING:
 
     from codeflash.result.explanation import Explanation
 
-from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
@@ -67,10 +68,7 @@ def make_cfapi_request(
         error_message = ""
         try:
             json_response = response.json()
-            if "error" in json_response:
-                error_message = json_response["error"]
-            elif "message" in json_response:
-                error_message = json_response["message"]
+            error_message = json_response.get("error") or json_response.get("message", "")
         except (ValueError, TypeError):
             error_message = response.text
 
@@ -92,13 +90,18 @@ def get_user_id() -> Optional[str]:
 
     response = make_cfapi_request(endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__})
     if response.status_code == 200:
-        if "min_version" not in response.text:
-            return response.text
-        resp_json = response.json()
-        userid: str | None = resp_json.get("userId")
-        min_version: str | None = resp_json.get("min_version")
+        resp_text = response.text
+        if "min_version" not in resp_text:
+            return resp_text
+        try:
+            resp_json = response.json()
+        except Exception:
+            logger.error("Failed to parse JSON from /cli-get-user response.")
+            return None
+        userid = resp_json.get("userId")
+        min_version_str = resp_json.get("min_version")
         if userid:
-            if min_version and version.parse(min_version) > version.parse(__version__):
+            if min_version_str and version.parse(min_version_str) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
                 if console.quiet:  # lsp
@@ -106,7 +109,6 @@ def get_user_id() -> Optional[str]:
                     return f"Error: {msg}"
                 sys.exit(1)
             return userid
-
         logger.error("Failed to retrieve userid from the response.")
         return None
 
@@ -332,3 +334,6 @@ def send_completion_email() -> Response:
         return response
     payload = {"owner": owner, "repo": repo}
     return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)
+
+
+CFAPI_BASE_URL = "https://app.codeflash.ai"

@@ -134,3 +134,6 @@ def is_pr_draft() -> bool:
     """Check if the PR is draft. in the github action context."""
     event = get_cached_gh_event_data()
     return bool(event.get("pull_request", {}).get("draft", False))
+
+
+CFAPI_BASE_URL = "https://app.codeflash.ai"
