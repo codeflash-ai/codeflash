@@ -345,6 +345,7 @@ def inject_profiling_into_existing_test(
     tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
+        ast.Import(names=[ast.alias(name="inspect")]),
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
     ]
@@ -354,7 +355,7 @@ def inject_profiling_into_existing_test(
         )
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
-    tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
+    tree.body = [*new_imports, create_wrapper_function(mode), create_async_wrapper_inner(), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
@@ -534,13 +535,39 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                     ),
                     lineno=lineno + 11,
                 ),
-                ast.Assign(
-                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id="wrapped", ctx=ast.Load()),
-                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                ast.If(
+                    test=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id="inspect", ctx=ast.Load()), attr="iscoroutinefunction", ctx=ast.Load()
+                        ),
+                        args=[ast.Name(id="wrapped", ctx=ast.Load())],
+                        keywords=[],
                     ),
+                    body=[
+                        ast.Assign(
+                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="codeflash_async_wrap_inner", ctx=ast.Load()),
+                                args=[
+                                    ast.Name(id="wrapped", ctx=ast.Load()),
+                                    ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load()),
+                                ],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        )
+                    ],
+                    orelse=[
+                        ast.Assign(
+                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="wrapped", ctx=ast.Load()),
+                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        )
+                    ],
                     lineno=lineno + 12,
                 ),
                 ast.Assign(
@@ -728,4 +755,33 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         lineno=lineno,
         decorator_list=[],
         returns=None,
+    )
+
+
+def create_async_wrapper_inner() -> ast.AsyncFunctionDef:
+    return ast.AsyncFunctionDef(
+        name="codeflash_async_wrap_inner",
+        args=ast.arguments(
+            args=[ast.arg(arg="wrapped", annotation=None)],
+            vararg=ast.arg(arg="args"),
+            kwarg=ast.arg(arg="kwargs"),
+            posonlyargs=[],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        ),
+        body=[
+            ast.Return(
+                value=ast.Await(
+                    value=ast.Call(
+                        func=ast.Name(id="wrapped", ctx=ast.Load()),
+                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                    )
+                )
+            )
+        ],
+        decorator_list=[],
+        returns=None,
+        lineno=1,
     )

@@ -102,6 +102,13 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
 
+    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
+        # Check if the async function has a return statement and add it to the list
+        if function_has_return_statement(node) and not function_is_a_property(node):
+            self.functions.append(
+                FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
+            )
+
     def generic_visit(self, node: ast.AST) -> None:
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.append(FunctionParent(node.name, node.__class__.__name__))
@@ -221,6 +228,7 @@ def get_functions_to_optimize(
                 f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
                 f"will keep opening pull requests as it finds optimizations."
             )
+        console.rule()
         return filtered_modified_functions, functions_count, trace_file_path
 
 
@@ -396,11 +404,27 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                 )
             )
 
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        if self.class_name is None and node.name == self.function_name:
+            self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                )
+            )
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
         if node.name == self.class_name:
             for body_node in node.body:
-                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                if (
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and body_node.name == self.function_name
+                ):
                     self.is_top_level = True
                     if any(
                         isinstance(decorator, ast.Name) and decorator.id == "classmethod"
@@ -418,7 +442,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
-                    isinstance(body_node, ast.FunctionDef)
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and body_node.name == self.function_name
                     and body_node.lineno in {self.line_no, self.line_no + 1}
                     and any(

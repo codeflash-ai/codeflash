@@ -74,6 +74,7 @@ dev = [
     "types-unidiff>=0.7.0.20240505,<0.8",
     "uv>=0.6.2",
     "pre-commit>=4.2.0,<5",
+    "pytest-asyncio>=1.1.0",
 ]
 
 [tool.hatch.build.targets.sdist]
