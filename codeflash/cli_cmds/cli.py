@@ -26,23 +26,23 @@ def parse_args() -> Namespace:
     # Integrate command - native integrations (replaces setup)
     integrate_parser = subparsers.add_parser("integrate", help="Integrate codeflash with development tools")
     integrate_subparsers = integrate_parser.add_subparsers(dest="integration_target", help="Integration targets")
-    
+
     # Claude Code integration
     claude_parser = integrate_subparsers.add_parser("claude", help="Integrate with Claude Code")
-    claude_parser.add_argument("--project", action="store_true", 
-                              help="Also create project-specific subagent")
-    claude_parser.add_argument("--force", action="store_true",
-                              help="Force integration even if Claude Code not detected")
-    claude_parser.add_argument("--remove", action="store_true",
-                              help="Remove Claude Code integration")
-    
+    claude_parser.add_argument("--project", action="store_true", help="Also create project-specific subagent")
+    claude_parser.add_argument(
+        "--force", action="store_true", help="Force integration even if Claude Code not detected"
+    )
+    claude_parser.add_argument("--remove", action="store_true", help="Remove Claude Code integration")
+
     # Status command
     status_parser = integrate_subparsers.add_parser("status", help="Show integration status")
-    
+
     def integration_handler():
         from codeflash.cli_cmds.cmd_integrate import handle_integration
+
         handle_integration()
-    
+
     integrate_parser.set_defaults(func=integration_handler)
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
