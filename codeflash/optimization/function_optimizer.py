@@ -18,8 +18,8 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash, mark_optimization_success
+from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
+from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
 from codeflash.code_utils import env_utils
@@ -31,6 +31,8 @@ from codeflash.code_utils.code_replacer import (
 from codeflash.code_utils.code_utils import (
     ImportErrorPattern,
     cleanup_paths,
+    create_rank_dictionary_compact,
+    diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
     has_any_async_functions,
@@ -93,6 +95,7 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.models.models import (
         BenchmarkKey,
+        CodeStringsMarkdown,
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
@@ -146,6 +149,9 @@ class FunctionOptimizer:
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
+        self.valid_optimizations: list[BestOptimization] = (
+            list()  # TODO: Figure out the dataclass type for this  # noqa: C408
+        )
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -164,7 +170,10 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        if has_any_async_functions(code_context.read_writable_code):
+        async_code = any(
+            has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
+        )
+        if async_code:
             return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
@@ -283,7 +292,7 @@ class FunctionOptimizer:
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-        code_print(code_context.read_writable_code)
+        code_print(code_context.read_writable_code.flat)
 
         test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
             code_context, should_run_experiment=should_run_experiment
@@ -357,11 +366,12 @@ class FunctionOptimizer:
         exp_type: str,
     ) -> BestOptimization | None:
         best_optimization: BestOptimization | None = None
-        best_runtime_until_now = original_code_baseline.runtime
+        _best_runtime_until_now = original_code_baseline.runtime
 
         speedup_ratios: dict[str, float | None] = {}
         optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
+        optimized_line_profiler_results: dict[str, str] = {}
 
         logger.info(
             f"Determining best optimization candidate (out of {len(candidates)}) for "
@@ -369,13 +379,14 @@ class FunctionOptimizer:
         )
         console.rule()
         candidates = deque(candidates)
+        refinement_done = False
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
             future_line_profile_results = executor.submit(
                 ai_service_client.optimize_python_code_line_profiler,
-                source_code=code_context.read_writable_code,
+                source_code=code_context.read_writable_code.markdown,
                 dependency_code=code_context.read_only_context_code,
                 trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
                 line_profiler_results=original_code_baseline.line_profile_results["str_out"],
@@ -390,8 +401,11 @@ class FunctionOptimizer:
                 candidate_index = 0
                 original_len = len(candidates)
                 while candidates:
-                    done = True if future_line_profile_results is None else future_line_profile_results.done()
-                    if done and (future_line_profile_results is not None):
+                    candidate_index += 1
+                    line_profiler_done = (
+                        True if future_line_profile_results is None else future_line_profile_results.done()
+                    )
+                    if line_profiler_done and (future_line_profile_results is not None):
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
                         original_len += len(line_profile_results)
@@ -400,11 +414,10 @@ class FunctionOptimizer:
                         )
                         future_line_profile_results = None
                     candidate = candidates.popleft()
-                    candidate_index += 1
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                     get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                     logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
-                    code_print(candidate.source_code)
+                    code_print(candidate.source_code.flat)
                     try:
                         did_update = self.replace_function_and_helpers_with_optimized_code(
                             code_context=code_context,
@@ -451,9 +464,11 @@ class FunctionOptimizer:
                         tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                         benchmark_tree = None
                         if speedup_critic(
-                            candidate_result, original_code_baseline.runtime, best_runtime_until_now
+                            candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
                         ) and quantity_of_tests_critic(candidate_result):
-                            tree.add("This candidate is faster than the previous best candidate. 🚀")
+                            tree.add(
+                                "This candidate is faster than the original code. 🚀"
+                            )  # TODO: Change this description
                             tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
                             tree.add(
                                 f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
@@ -462,6 +477,14 @@ class FunctionOptimizer:
                             )
                             tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                             tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                            line_profile_test_results = self.line_profiler_step(
+                                code_context=code_context,
+                                original_helper_code=original_helper_code,
+                                candidate_index=candidate_index,
+                            )
+                            optimized_line_profiler_results[candidate.optimization_id] = line_profile_test_results[
+                                "str_out"
+                            ]
                             replay_perf_gain = {}
                             if self.args.benchmark:
                                 test_results_by_benchmark = (
@@ -487,13 +510,15 @@ class FunctionOptimizer:
                             best_optimization = BestOptimization(
                                 candidate=candidate,
                                 helper_functions=code_context.helper_functions,
+                                code_context=code_context,
                                 runtime=best_test_runtime,
+                                line_profiler_test_results=line_profile_test_results,
                                 winning_behavior_test_results=candidate_result.behavior_test_results,
                                 replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                                 winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                                 winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             )
-                            best_runtime_until_now = best_test_runtime
+                            self.valid_optimizations.append(best_optimization)
                         else:
                             tree.add(
                                 f"Summed runtime: {humanize_runtime(best_test_runtime)} "
@@ -510,8 +535,9 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
+
                     if (not len(candidates)) and (
-                        not done
+                        not line_profiler_done
                     ):  # all original candidates processed but lp results haven't been processed
                         concurrent.futures.wait([future_line_profile_results])
                         line_profile_results = future_line_profile_results.result()
@@ -521,6 +547,26 @@ class FunctionOptimizer:
                             f"Added results from line profiler to candidates, total candidates now: {original_len}"
                         )
                         future_line_profile_results = None
+
+                    if len(candidates) == 0 and len(self.valid_optimizations) > 0 and not refinement_done:
+                        # TODO: Instead of doing it all at once at the end, do it one by one as the optimizations
+                        # are found. This way we can hide the time waiting for the LLM results.
+                        trace_id = self.function_trace_id
+                        if trace_id.endswith(("EXP0", "EXP1")):
+                            trace_id = trace_id[:-4] + exp_type
+                        # refinement_response is a dataclass with optimization_id, code and explanation
+                        refinement_response = self.refine_optimizations(
+                            valid_optimizations=self.valid_optimizations,
+                            original_code_baseline=original_code_baseline,
+                            code_context=code_context,
+                            trace_id=trace_id,
+                            ai_service_client=ai_service_client,
+                            executor=executor,
+                        )
+                        candidates.extend(refinement_response)
+                        print("Added candidates from refinement")
+                        original_len += len(refinement_response)
+                        refinement_done = True
             except KeyboardInterrupt as e:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
@@ -528,14 +574,61 @@ class FunctionOptimizer:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
 
+        if not len(self.valid_optimizations):
+            return None
+        # need to figure out the best candidate here before we return best_optimization
+        diff_lens_list = []  # character level diff
+        runtimes_list = []
+        for valid_opt in self.valid_optimizations:
+            diff_lens_list.append(
+                diff_length(valid_opt.candidate.source_code.flat, code_context.read_writable_code.flat)
+            )  # char level diff
+            runtimes_list.append(valid_opt.runtime)
+        diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
+        runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+        # TODO: better way to resolve conflicts with same min ranking
+        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
+        min_key = min(overall_ranking, key=overall_ranking.get)
+        best_optimization = self.valid_optimizations[min_key]
         ai_service_client.log_results(
             function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             speedup_ratio=speedup_ratios,
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
+            optimized_line_profiler_results=optimized_line_profiler_results,
+            metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
         )
         return best_optimization
+
+    def refine_optimizations(
+        self,
+        valid_optimizations: list[BestOptimization],
+        original_code_baseline: OriginalCodeBaseline,
+        code_context: CodeOptimizationContext,
+        trace_id: str,
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
+    ) -> list[OptimizedCandidate]:
+        request = [
+            AIServiceRefinerRequest(
+                optimization_id=opt.candidate.optimization_id,
+                original_source_code=code_context.read_writable_code.markdown,
+                read_only_dependency_code=code_context.read_only_context_code,
+                original_code_runtime=humanize_runtime(original_code_baseline.runtime),
+                optimized_source_code=opt.candidate.source_code.markdown,
+                optimized_explanation=opt.candidate.explanation,
+                optimized_code_runtime=humanize_runtime(opt.runtime),
+                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=opt.runtime) * 100)}%",
+                trace_id=trace_id,
+                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],
+            )
+            for opt in valid_optimizations
+        ]  # TODO: multiple workers for this?
+        future_refinement_results = executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
+        concurrent.futures.wait([future_refinement_results])
+        return future_refinement_results.result()
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -589,13 +682,22 @@ class FunctionOptimizer:
                 f.write(helper_code)
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str, optimized_function: str
+        self,
+        helper_functions: list[FunctionSource],
+        path: Path,
+        original_code: str,
+        optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_function=optimized_function, check_diff=True)
+        optimized_code = ""
+        if optimized_context is not None:
+            file_to_code_context = optimized_context.file_to_path()
+            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
+
+        new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -604,7 +706,7 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_function=hp_source_code, check_diff=True
+                self.args.formatter_cmds, module_abspath, optimized_code=hp_source_code, check_diff=True
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
@@ -613,7 +715,7 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: str, original_helper_code: str
+        self, code_context: CodeOptimizationContext, optimized_code: CodeStringsMarkdown, original_helper_code: str
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -751,12 +853,13 @@ class FunctionOptimizer:
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
                 f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
             )
+            console.rule()
         return unique_instrumented_test_files
 
     def generate_tests_and_optimizations(
         self,
         testgen_context_code: str,
-        read_writable_code: str,
+        read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
         generated_test_paths: list[Path],
@@ -777,7 +880,7 @@ class FunctionOptimizer:
             )
             future_optimization_candidates = executor.submit(
                 self.aiservice_client.optimize_python_code,
-                read_writable_code,
+                read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
                 N_CANDIDATES,
@@ -796,7 +899,7 @@ class FunctionOptimizer:
             if run_experiment:
                 future_candidates_exp = executor.submit(
                     self.local_aiservice_client.optimize_python_code,
-                    read_writable_code,
+                    read_writable_code.markdown,
                     read_only_context_code,
                     self.function_trace_id[:-4] + "EXP1",
                     N_CANDIDATES,
@@ -938,6 +1041,7 @@ class FunctionOptimizer:
             if candidates is None:
                 continue
 
+            self.valid_optimizations = []  # reset for each experiment
             best_optimization = self.determine_best_candidate(
                 candidates=candidates,
                 code_context=code_context,
@@ -957,7 +1061,7 @@ class FunctionOptimizer:
 
             if best_optimization:
                 logger.info("Best candidate:")
-                code_print(best_optimization.candidate.source_code)
+                code_print(best_optimization.candidate.source_code.flat)
                 console.print(
                     Panel(
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
@@ -991,76 +1095,130 @@ class FunctionOptimizer:
                     code_context.helper_functions,
                     explanation.file_path,
                     self.function_to_optimize_source_code,
-                    optimized_function=best_optimization.candidate.source_code,
+                    optimized_context=best_optimization.candidate.source_code,
                 )
 
                 original_code_combined = original_helper_code.copy()
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
-                if not self.args.no_pr:
-                    coverage_message = (
-                        original_code_baseline.coverage_results.build_message()
-                        if original_code_baseline.coverage_results
-                        else "Coverage data not available"
-                    )
-                    generated_tests = remove_functions_from_generated_tests(
-                        generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
-                    )
-                    original_runtime_by_test = (
-                        original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
-                    )
-                    optimized_runtime_by_test = (
-                        best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
-                    )
-                    qualified_name = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
-                    # Add runtime comments to generated tests before creating the PR
-                    generated_tests = add_runtime_comments_to_generated_tests(
-                        generated_tests, original_runtime_by_test, optimized_runtime_by_test
-                    )
-                    generated_tests_str = "\n\n".join(
-                        [test.generated_original_test_source for test in generated_tests.generated_tests]
-                    )
-                    existing_tests = existing_tests_source_for(
-                        qualified_name,
-                        function_to_all_tests,
-                        test_cfg=self.test_cfg,
-                        original_runtimes_all=original_runtime_by_test,
-                        optimized_runtimes_all=optimized_runtime_by_test,
-                    )
-                    if concolic_test_str:
-                        generated_tests_str += "\n\n" + concolic_test_str
-
-                    check_create_pr(
-                        original_code=original_code_combined,
-                        new_code=new_code_combined,
-                        explanation=explanation,
-                        existing_tests_source=existing_tests,
-                        generated_original_test_source=generated_tests_str,
-                        function_trace_id=self.function_trace_id[:-4] + exp_type
-                        if self.experiment_id
-                        else self.function_trace_id,
-                        coverage_message=coverage_message,
-                        git_remote=self.args.git_remote,
-                    )
-                    if (
-                        self.args.all
-                        or env_utils.get_pr_number()
-                        or self.args.replay_test
-                        or (self.args.file and not self.args.function)
-                    ):
-                        self.write_code_and_helpers(
-                            self.function_to_optimize_source_code,
-                            original_helper_code,
-                            self.function_to_optimize.file_path,
-                        )
-                else:
-                    # Mark optimization success since no PR will be created
-                    mark_optimization_success(
-                        trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
-                    )
+                self.process_review(
+                    original_code_baseline,
+                    best_optimization,
+                    generated_tests,
+                    test_functions_to_remove,
+                    concolic_test_str,
+                    original_code_combined,
+                    new_code_combined,
+                    explanation,
+                    function_to_all_tests,
+                    exp_type,
+                    original_helper_code,
+                    code_context,
+                )
                 self.log_successful_optimization(explanation, generated_tests, exp_type)
         return best_optimization
+
+    def process_review(
+        self,
+        original_code_baseline: OriginalCodeBaseline,
+        best_optimization: BestOptimization,
+        generated_tests: GeneratedTestsList,
+        test_functions_to_remove: list[str],
+        concolic_test_str: str | None,
+        original_code_combined: dict[Path, str],
+        new_code_combined: dict[Path, str],
+        explanation: Explanation,
+        function_to_all_tests: dict[str, set[FunctionCalledInTest]],
+        exp_type: str,
+        original_helper_code: dict[Path, str],
+        code_context: CodeOptimizationContext,
+    ) -> None:
+        coverage_message = (
+            original_code_baseline.coverage_results.build_message()
+            if original_code_baseline.coverage_results
+            else "Coverage data not available"
+        )
+
+        generated_tests = remove_functions_from_generated_tests(
+            generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
+        )
+
+        original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
+        optimized_runtime_by_test = (
+            best_optimization.winning_benchmarking_test_results.usable_runtime_data_by_test_case()
+        )
+
+        generated_tests = add_runtime_comments_to_generated_tests(
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test
+        )
+
+        generated_tests_str = "\n#------------------------------------------------\n".join(
+            [test.generated_original_test_source for test in generated_tests.generated_tests]
+        )
+        if concolic_test_str:
+            generated_tests_str += "\n#------------------------------------------------\n" + concolic_test_str
+
+        existing_tests = existing_tests_source_for(
+            self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
+            function_to_all_tests,
+            test_cfg=self.test_cfg,
+            original_runtimes_all=original_runtime_by_test,
+            optimized_runtimes_all=optimized_runtime_by_test,
+        )
+        new_explanation_raw_str = self.aiservice_client.get_new_explanation(
+            source_code=code_context.read_writable_code.flat,
+            dependency_code=code_context.read_only_context_code,
+            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            optimized_code=best_optimization.candidate.source_code.flat,
+            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+            original_code_runtime=humanize_runtime(original_code_baseline.runtime),
+            optimized_code_runtime=humanize_runtime(best_optimization.runtime),
+            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+            annotated_tests=generated_tests_str,
+            optimization_id=best_optimization.candidate.optimization_id,
+            original_explanation=best_optimization.candidate.explanation,
+        )
+        new_explanation = Explanation(
+            raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
+            winning_behavior_test_results=explanation.winning_behavior_test_results,
+            winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+            original_runtime_ns=explanation.original_runtime_ns,
+            best_runtime_ns=explanation.best_runtime_ns,
+            function_name=explanation.function_name,
+            file_path=explanation.file_path,
+            benchmark_details=explanation.benchmark_details,
+        )
+        data = {
+            "original_code": original_code_combined,
+            "new_code": new_code_combined,
+            "explanation": new_explanation,
+            "existing_tests_source": existing_tests,
+            "generated_original_test_source": generated_tests_str,
+            "function_trace_id": self.function_trace_id[:-4] + exp_type
+            if self.experiment_id
+            else self.function_trace_id,
+            "coverage_message": coverage_message,
+        }
+
+        if not self.args.no_pr and not self.args.staging_review:
+            data["git_remote"] = self.args.git_remote
+            check_create_pr(**data)
+        elif self.args.staging_review:
+            create_staging(**data)
+        else:
+            # Mark optimization success since no PR will be created
+            mark_optimization_success(
+                trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
+            )
+
+        if ((not self.args.no_pr) or not self.args.staging_review) and (
+            self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function)
+        ):
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
 
     def establish_original_code_baseline(
         self,
@@ -1074,16 +1232,8 @@ class FunctionOptimizer:
             assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
             success = True
 
-            test_env = os.environ.copy()
-            test_env["CODEFLASH_TEST_ITERATION"] = "0"
-            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-            test_env["CODEFLASH_LOOP_INDEX"] = "0"
-            if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.args.project_root)
-            else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+            test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-            coverage_results = None
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
@@ -1112,28 +1262,10 @@ class FunctionOptimizer:
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
             if test_framework == "pytest":
-                try:
-                    line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
-                    line_profile_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.LINE_PROFILE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=0,
-                        testing_time=TOTAL_LOOPING_TIME,
-                        enable_coverage=False,
-                        code_context=code_context,
-                        line_profiler_output_file=line_profiler_output_file,
-                    )
-                finally:
-                    # Remove codeflash capture
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
-                if line_profile_results["str_out"] == "":
-                    logger.warning(
-                        f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
-                    )
-                    console.rule()
+                line_profile_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+                )
+                console.rule()
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -1229,14 +1361,11 @@ class FunctionOptimizer:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
 
         with progress_bar("Testing optimization candidate"):
-            test_env = os.environ.copy()
-            test_env["CODEFLASH_LOOP_INDEX"] = "0"
-            test_env["CODEFLASH_TEST_ITERATION"] = str(optimization_candidate_index)
-            test_env["CODEFLASH_TRACER_DISABLE"] = "1"
-            if "PYTHONPATH" not in test_env:
-                test_env["PYTHONPATH"] = str(self.project_root)
-            else:
-                test_env["PYTHONPATH"] += os.pathsep + str(self.project_root)
+            test_env = self.get_test_env(
+                codeflash_loop_index=0,
+                codeflash_test_iteration=optimization_candidate_index,
+                codeflash_tracer_disable=1,
+            )
 
             get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
             # Instrument codeflash capture
@@ -1470,3 +1599,45 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
         cleanup_paths(paths_to_cleanup)
+
+    def get_test_env(
+        self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
+    ) -> dict:
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
+        test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
+        test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
+        if "PYTHONPATH" not in test_env:
+            test_env["PYTHONPATH"] = str(self.args.project_root)
+        else:
+            test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
+        return test_env
+
+    def line_profiler_step(
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
+    ) -> dict:
+        try:
+            test_env = self.get_test_env(
+                codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
+            )
+            line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
+            line_profile_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.LINE_PROFILE,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME,
+                enable_coverage=False,
+                code_context=code_context,
+                line_profiler_output_file=line_profiler_output_file,
+            )
+        finally:
+            # Remove codeflash capture
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+        if line_profile_results["str_out"] == "":
+            logger.warning(
+                f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
+            )
+        return line_profile_results

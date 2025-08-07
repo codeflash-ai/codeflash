@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from rich.prompt import Confirm
 
+from codeflash.cli_cmds.console import console
+
 if TYPE_CHECKING:
     import argparse
 
@@ -142,8 +144,11 @@ def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optiona
         if previous_checkpoint_functions and Confirm.ask(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,
+            console=console,
         ):
-            pass
+            console.rule()
         else:
             previous_checkpoint_functions = None
+
+    console.rule()
     return previous_checkpoint_functions
