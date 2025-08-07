@@ -94,14 +94,12 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
-    from codeflash.models.models import BenchmarkKey, CoverageData, FunctionCalledInTest, FunctionSource
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
-        OptimizedCandidate,
     )
     from codeflash.verification.verification_utils import TestConfig
 
@@ -385,6 +383,7 @@ class FunctionOptimizer:
         future_all_refinements: list[concurrent.futures.Future] = []
         ast_code_to_id = {}
         valid_optimizations = []
+        optimizations_post = {}  # we need to overwrite some opt candidates' code strings as they are no longer evaluated, instead their shorter/longer versions might be evaluated
         # Start a new thread for AI service request, start loop in main thread
         # check if aiservice request is complete, when it is complete, append result to the candidates list
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
@@ -438,9 +437,29 @@ class FunctionOptimizer:
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
                     continue
-                normalized_code = ast.unparse(ast.parse(candidate.source_code.strip()))
+                # check if this code has been evaluated before by checking the ast normalized code string
+                normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
                 if normalized_code in ast_code_to_id:
-                    new_diff_len = diff_length(candidate.source_code, code_context.read_writable_code)
+                    # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
+                    speedup_ratios[candidate.optimization_id] = speedup_ratios[
+                        ast_code_to_id[normalized_code]["optimization_id"]
+                    ]
+                    is_correct[candidate.optimization_id] = is_correct[
+                        ast_code_to_id[normalized_code]["optimization_id"]
+                    ]
+                    optimized_runtimes[candidate.optimization_id] = optimized_runtimes[
+                        ast_code_to_id[normalized_code]["optimization_id"]
+                    ]
+                    optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[
+                        ast_code_to_id[normalized_code]["optimization_id"]
+                    ]
+                    optimizations_post[candidate.optimization_id] = ast_code_to_id[normalized_code][
+                        "shorter_source_code"
+                    ].markdown
+                    optimizations_post[ast_code_to_id[normalized_code]["optimization_id"]] = ast_code_to_id[
+                        normalized_code
+                    ]["shorter_source_code"].markdown
+                    new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
                     if new_diff_len < ast_code_to_id[normalized_code]["diff_len"]:
                         ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
                         ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
@@ -448,7 +467,7 @@ class FunctionOptimizer:
                 ast_code_to_id[normalized_code] = {
                     "optimization_id": candidate.optimization_id,
                     "shorter_source_code": candidate.source_code,
-                    "diff_len": diff_length(candidate.source_code, code_context.read_writable_code),
+                    "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
                 }
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
@@ -592,7 +611,7 @@ class FunctionOptimizer:
         diff_lens_list = []  # character level diff
         runtimes_list = []
         for valid_opt in valid_optimizations:
-            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.strip()))
+            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.flat.strip()))
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
@@ -628,6 +647,7 @@ class FunctionOptimizer:
             optimized_runtime=optimized_runtimes,
             is_correct=is_correct,
             optimized_line_profiler_results=optimized_line_profiler_results,
+            optimizations_post=optimizations_post,
             metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
         )
         return best_optimization
