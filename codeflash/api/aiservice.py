@@ -13,7 +13,7 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
-from codeflash.models.models import AIServiceRefinerRequest, OptimizedCandidate
+from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -136,7 +136,7 @@ class AiServiceClient:
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -206,7 +206,7 @@ class AiServiceClient:
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -263,7 +263,7 @@ class AiServiceClient:
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"][:-4] + "refi",
                 )
