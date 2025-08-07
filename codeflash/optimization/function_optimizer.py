@@ -440,25 +440,20 @@ class FunctionOptimizer:
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
                 if normalized_code in ast_code_to_id:
+                    past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
                     # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
-                    speedup_ratios[candidate.optimization_id] = speedup_ratios[
-                        ast_code_to_id[normalized_code]["optimization_id"]
-                    ]
-                    is_correct[candidate.optimization_id] = is_correct[
-                        ast_code_to_id[normalized_code]["optimization_id"]
-                    ]
-                    optimized_runtimes[candidate.optimization_id] = optimized_runtimes[
-                        ast_code_to_id[normalized_code]["optimization_id"]
-                    ]
-                    optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[
-                        ast_code_to_id[normalized_code]["optimization_id"]
-                    ]
+                    speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
+                    is_correct[candidate.optimization_id] = is_correct[past_opt_id]
+                    optimized_runtimes[candidate.optimization_id] = optimized_runtimes[past_opt_id]
+                    # line profiler results only available for successful runs
+                    if past_opt_id in optimized_line_profiler_results:
+                        optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[
+                            past_opt_id
+                        ]
                     optimizations_post[candidate.optimization_id] = ast_code_to_id[normalized_code][
                         "shorter_source_code"
                     ].markdown
-                    optimizations_post[ast_code_to_id[normalized_code]["optimization_id"]] = ast_code_to_id[
-                        normalized_code
-                    ]["shorter_source_code"].markdown
+                    optimizations_post[past_opt_id] = ast_code_to_id[normalized_code]["shorter_source_code"].markdown
                     new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
                     if new_diff_len < ast_code_to_id[normalized_code]["diff_len"]:
                         ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
