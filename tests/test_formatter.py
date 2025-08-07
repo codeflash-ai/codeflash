@@ -10,6 +10,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, sort_imports
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -263,7 +264,12 @@ def _run_formatting_test(source_code: str, should_content_change: bool, expected
             helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
-            optimized_function=optimized_function,
+            optimized_context=CodeStringsMarkdown(code_strings=[
+                CodeString(
+                    code=optimized_function,
+                    file_path=target_path.relative_to(test_dir)
+                )
+            ]),
         )
 
         content = target_path.read_text(encoding="utf8")
@@ -796,7 +802,7 @@ class ProcessorWithDocs:
         return isinstance(item, dict) and "id" in item
 '''
 
-    optimization_function = """    def process(self,data):
+    optimization_function = """def process(self,data):
         '''Single quote docstring with formatting issues.'''
         return{'result':[item for item in data if self._is_valid(item)]}"""
     _run_formatting_test(source_code, True, optimized_function=optimization_function, expected=expected)

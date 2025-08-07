@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import CodeOptimizationContext, OptimizedCandidate, ValidCode
+    from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
 
@@ -408,16 +408,17 @@ def replace_functions_and_add_imports(
 
 def replace_function_definitions_in_module(
     function_names: list[str],
-    optimized_code: str,
+    optimized_code: CodeStringsMarkdown,
     module_abspath: Path,
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
+    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
     new_code: str = replace_functions_and_add_imports(
-        add_global_assignments(optimized_code, source_code),
+        add_global_assignments(code_to_apply, source_code),
         function_names,
-        optimized_code,
+        code_to_apply,
         module_abspath,
         preexisting_objects,
         project_root_path,
@@ -426,6 +427,19 @@ def replace_function_definitions_in_module(
         return False
     module_abspath.write_text(new_code, encoding="utf8")
     return True
+
+
+def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
+    file_to_code_context = optimized_code.file_to_path()
+    module_optimized_code = file_to_code_context.get(str(relative_path))
+    if module_optimized_code is None:
+        logger.warning(
+            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+            "re-check your 'markdown code structure'"
+            f"existing files are {file_to_code_context.keys()}"
+        )
+        module_optimized_code = ""
+    return module_optimized_code
 
 
 def is_zero_diff(original_code: str, new_code: str) -> bool:
