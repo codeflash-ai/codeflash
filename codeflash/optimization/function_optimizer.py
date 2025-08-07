@@ -219,7 +219,7 @@ class FunctionOptimizer:
             revert_to_print=bool(get_pr_number()),
         ):
             generated_results = self.generate_tests_and_optimizations(
-                testgen_context_code=code_context.testgen_context_code,  # TODO: should we send the markdow context for the testgen instead.
+                testgen_context_code=code_context.testgen_context_code,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 helper_functions=code_context.helper_functions,
@@ -292,7 +292,7 @@ class FunctionOptimizer:
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-        code_print(code_context.read_writable_code.flat)  # Should we print the markdown or the flattened code?
+        code_print(code_context.read_writable_code.flat)
 
         test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
             code_context, should_run_experiment=should_run_experiment
