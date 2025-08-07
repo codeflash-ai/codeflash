@@ -42,7 +42,7 @@ def get_shell_rc_path() -> Path:
 
 
 def get_api_key_export_line(api_key: str) -> str:
-    return f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
+    return f'{SHELL_RC_EXPORT_PREFIX}"{api_key}"'
 
 
 def save_api_key_to_rc(api_key: str) -> Result[str, str]:
