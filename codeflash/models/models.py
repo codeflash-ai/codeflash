@@ -19,7 +19,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -157,12 +157,51 @@ class CodeString(BaseModel):
     file_path: Optional[Path] = None
 
 
+def get_code_block_splitter(file_path: Path) -> str:
+    return f"# file: {file_path}"
+
+
+markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
+
+
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
+    _cache: dict = PrivateAttr(default_factory=dict)
+
+    @property
+    def flat(self) -> str:
+        """Returns the combined Python module from all code blocks.
+
+        Each block is prefixed by a file path comment to indicate its origin.
+        This representation is syntactically valid Python code.
+
+        Returns:
+            str: The concatenated code of all blocks with file path annotations.
+
+        !! Important !!:
+        Avoid parsing the flat code with multiple files,
+        parsing may result in unexpected behavior.
+
+
+        """
+        if self._cache.get("flat") is not None:
+            return self._cache["flat"]
+        self._cache["flat"] = "\n".join(
+            get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
+        )
+        return self._cache["flat"]
 
     @property
     def markdown(self) -> str:
-        """Returns the markdown representation of the code, including the file path where possible."""
+        """Returns a Markdown-formatted string containing all code blocks.
+
+        Each block is enclosed in a triple-backtick code block with an optional
+        file path suffix (e.g., ```python:filename.py).
+
+        Returns:
+            str: Markdown representation of the code blocks.
+
+        """
         return "\n".join(
             [
                 f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
@@ -170,10 +209,44 @@ class CodeStringsMarkdown(BaseModel):
             ]
         )
 
+    def file_to_path(self) -> dict[str, str]:
+        """Return a dictionary mapping file paths to their corresponding code blocks.
+
+        Returns:
+            dict[str, str]: Mapping from file path (as string) to code.
+
+        """
+        if self._cache.get("file_to_path") is not None:
+            return self._cache["file_to_path"]
+        self._cache["file_to_path"] = {
+            str(code_string.file_path): code_string.code for code_string in self.code_strings
+        }
+        return self._cache["file_to_path"]
+
+    @staticmethod
+    def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+        """Parse a Markdown string into a CodeStringsMarkdown object.
+
+        Extracts code blocks and their associated file paths and constructs a new CodeStringsMarkdown instance.
+
+        Args:
+            markdown_code (str): The Markdown-formatted string to parse.
+
+        Returns:
+            CodeStringsMarkdown: Parsed object containing code blocks.
+
+        """
+        matches = markdown_pattern.findall(markdown_code)
+        results = CodeStringsMarkdown()
+        for file_path, code in matches:
+            path = file_path.strip()
+            results.code_strings.append(CodeString(code=code, file_path=Path(path)))
+        return results
+
 
 class CodeOptimizationContext(BaseModel):
     testgen_context_code: str = ""
-    read_writable_code: str = Field(min_length=1)
+    read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
     hashing_code_context_hash: str = ""
@@ -272,7 +345,7 @@ class TestsInFile:
 
 @dataclass(frozen=True)
 class OptimizedCandidate:
-    source_code: str
+    source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
 
