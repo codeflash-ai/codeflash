@@ -11,6 +11,7 @@ from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
 from codeflash.cli_cmds.console import paneled_text
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.code_utils.version_check import check_for_newer_minor_version
 from codeflash.telemetry import posthog_cf
 from codeflash.telemetry.sentry import init_sentry
 
@@ -21,6 +22,17 @@ def main() -> None:
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
     args = parse_args()
+    
+    # Check for newer version (skip for version command to avoid confusion)
+    if not args.version:
+        # Check if version check is disabled in config
+        disable_version_check = False
+        if args.config_file and Path.exists(args.config_file):
+            pyproject_config, _ = parse_config_file(args.config_file)
+            disable_version_check = pyproject_config.get("disable_version_check", False)
+        
+        check_for_newer_minor_version(disable_check=disable_version_check)
+    
     if args.command:
         if args.config_file and Path.exists(args.config_file):
             pyproject_config, _ = parse_config_file(args.config_file)
