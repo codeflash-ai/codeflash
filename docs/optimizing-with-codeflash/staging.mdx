@@ -1,0 +1,55 @@
+---
+title: "Staging Review for Optimizations"
+description: "Review and manage optimizations before creating pull requests with staging mode"
+icon: "layer-group"
+sidebarTitle: "Staging Review"
+keywords:
+  [
+    "staging review",
+    "optimization preview",
+    "pro feature",
+    "batch review",
+    "pull request management",
+  ]
+---
+
+# Staging Review for Optimizations
+
+<Note>This is a Pro feature available exclusively to Codeflash Pro users.</Note>
+
+Staging Review allows you to preview and evaluate all optimizations before creating pull requests. This feature provides a centralized review interface where you can examine proposed changes and selectively create pull requests for approved optimizations.
+
+## Benefits of Staging Review
+
+- **Preview without PRs:** Review all optimization suggestions without cluttering your repository with multiple pull requests
+- **Batch review:** Examine all optimizations in one centralized location
+- **Selective PR creation:** Choose which optimizations to convert into pull requests
+- **Reduced noise:** Keep your repository's PR list clean while evaluating changes
+
+## Using Staging Review
+
+To optimize your codebase with staging review enabled, run:
+
+```bash
+codeflash --all --staging-review
+```
+
+This command will:
+
+1. Analyze and optimize all functions in your codebase
+2. Store the optimizations in a staging area instead of creating PRs immediately
+3. Provide you with a staging interface to review all proposed changes
+
+## Managing Staged Optimizations
+
+Once optimizations are staged, you can:
+
+- Review each optimization individually
+- Compare original and optimized code side-by-side
+- Create pull requests for selected optimizations directly from the staging interface
+
+## Requirements
+
+- Codeflash Pro subscription
+- Codeflash GitHub App installed in your repository
+- Latest version of the Codeflash CLI
