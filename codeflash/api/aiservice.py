@@ -360,6 +360,7 @@ class AiServiceClient:
         is_correct: dict[str, bool] | None,
         optimized_line_profiler_results: dict[str, str] | None,
         metadata: dict[str, Any] | None,
+        optimizations_post: dict[str, str] | None = None,
     ) -> None:
         """Log features to the database.
 
@@ -372,6 +373,7 @@ class AiServiceClient:
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
         - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
         - metadata: contains the best optimization id
+        - optimizations_post - dict mapping opt id to code str after postprocessing
 
         """
         payload = {
@@ -383,6 +385,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "optimized_line_profiler_results": optimized_line_profiler_results,
             "metadata": metadata,
+            "optimizations_post": optimizations_post,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
