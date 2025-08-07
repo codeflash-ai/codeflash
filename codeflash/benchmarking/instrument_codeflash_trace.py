@@ -32,12 +32,14 @@ class AddDecoratorTransformer(cst.CSTTransformer):
     def visit_ClassDef(self, node: ClassDef) -> Optional[bool]:
         if self.class_name:  # Don't go into nested class
             return False
-        self.class_name = node.name.value  # noqa: RET503
+        self.class_name = node.name.value
+        return None
 
     def visit_FunctionDef(self, node: FunctionDef) -> Optional[bool]:
         if self.function_name:  # Don't go into nested function
             return False
-        self.function_name = node.name.value  # noqa: RET503
+        self.function_name = node.name.value
+        return None
 
     def leave_FunctionDef(self, original_node: FunctionDef, updated_node: FunctionDef) -> FunctionDef:
         if self.function_name == original_node.name.value:

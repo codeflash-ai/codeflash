@@ -65,6 +65,13 @@ For detailed installation and usage instructions, visit our documentation at [do
 
 https://github.com/user-attachments/assets/38f44f4e-be1c-4f84-8db9-63d5ee3e61e5
 
+- Optiming a workflow end to end automatically with `codeflash optimize`
+
+
+https://github.com/user-attachments/assets/355ba295-eb5a-453a-8968-7fb35c70d16c
+
+
+
 ## Support
 
 Join our community for support and discussions. If you have any questions, feel free to reach out to us using one of the following methods:
