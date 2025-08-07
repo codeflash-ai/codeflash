@@ -95,6 +95,14 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
     from codeflash.models.models import BenchmarkKey, CoverageData, FunctionCalledInTest, FunctionSource
+    from codeflash.models.models import (
+        BenchmarkKey,
+        CodeStringsMarkdown,
+        CoverageData,
+        FunctionCalledInTest,
+        FunctionSource,
+        OptimizedCandidate,
+    )
     from codeflash.verification.verification_utils import TestConfig
 
 
@@ -164,7 +172,10 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        if has_any_async_functions(code_context.read_writable_code):
+        async_code = any(
+            has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
+        )
+        if async_code:
             return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
@@ -283,7 +294,7 @@ class FunctionOptimizer:
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-        code_print(code_context.read_writable_code)
+        code_print(code_context.read_writable_code.flat)
 
         test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
             code_context, should_run_experiment=should_run_experiment
@@ -379,7 +390,7 @@ class FunctionOptimizer:
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         future_line_profile_results = self.executor.submit(
             ai_service_client.optimize_python_code_line_profiler,
-            source_code=code_context.read_writable_code,
+            source_code=code_context.read_writable_code.markdown,
             dependency_code=code_context.read_only_context_code,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
@@ -406,7 +417,7 @@ class FunctionOptimizer:
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
-                code_print(candidate.source_code)
+                code_print(candidate.source_code.flat)
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
                 try:
@@ -600,7 +611,7 @@ class FunctionOptimizer:
             )
             valid_candidates_with_shorter_code.append(new_best_opt)
             diff_lens_list.append(
-                diff_length(new_best_opt.candidate.source_code, code_context.read_writable_code)
+                diff_length(new_best_opt.candidate.source_code.flat, code_context.read_writable_code.flat)
             )  # char level diff
             runtimes_list.append(new_best_opt.runtime)
         diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
@@ -633,10 +644,10 @@ class FunctionOptimizer:
         request = [
             AIServiceRefinerRequest(
                 optimization_id=opt.candidate.optimization_id,
-                original_source_code=code_context.read_writable_code,
+                original_source_code=code_context.read_writable_code.markdown,
                 read_only_dependency_code=code_context.read_only_context_code,
                 original_code_runtime=humanize_runtime(original_code_baseline.runtime),
-                optimized_source_code=opt.candidate.source_code,
+                optimized_source_code=opt.candidate.source_code.markdown,
                 optimized_explanation=opt.candidate.explanation,
                 optimized_code_runtime=humanize_runtime(opt.runtime),
                 speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=opt.runtime) * 100)}%",
@@ -700,13 +711,22 @@ class FunctionOptimizer:
                 f.write(helper_code)
 
     def reformat_code_and_helpers(
-        self, helper_functions: list[FunctionSource], path: Path, original_code: str, optimized_function: str
+        self,
+        helper_functions: list[FunctionSource],
+        path: Path,
+        original_code: str,
+        optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
         if should_sort_imports and isort.code(original_code) != original_code:
             should_sort_imports = False
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_function=optimized_function, check_diff=True)
+        optimized_code = ""
+        if optimized_context is not None:
+            file_to_code_context = optimized_context.file_to_path()
+            optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
+
+        new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -715,7 +735,7 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_function=hp_source_code, check_diff=True
+                self.args.formatter_cmds, module_abspath, optimized_code=hp_source_code, check_diff=True
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
@@ -724,7 +744,7 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: str, original_helper_code: str
+        self, code_context: CodeOptimizationContext, optimized_code: CodeStringsMarkdown, original_helper_code: str
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -868,7 +888,7 @@ class FunctionOptimizer:
     def generate_tests_and_optimizations(
         self,
         testgen_context_code: str,
-        read_writable_code: str,
+        read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
         generated_test_paths: list[Path],
@@ -887,7 +907,7 @@ class FunctionOptimizer:
         )
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
-            read_writable_code,
+            read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             N_CANDIDATES,
@@ -902,7 +922,7 @@ class FunctionOptimizer:
         if run_experiment:
             future_candidates_exp = self.executor.submit(
                 self.local_aiservice_client.optimize_python_code,
-                read_writable_code,
+                read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
                 N_CANDIDATES,
@@ -1063,7 +1083,7 @@ class FunctionOptimizer:
 
             if best_optimization:
                 logger.info("Best candidate:")
-                code_print(best_optimization.candidate.source_code)
+                code_print(best_optimization.candidate.source_code.flat)
                 console.print(
                     Panel(
                         best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
@@ -1097,7 +1117,7 @@ class FunctionOptimizer:
                     code_context.helper_functions,
                     explanation.file_path,
                     self.function_to_optimize_source_code,
-                    optimized_function=best_optimization.candidate.source_code,
+                    optimized_context=best_optimization.candidate.source_code,
                 )
 
                 original_code_combined = original_helper_code.copy()
@@ -1169,10 +1189,10 @@ class FunctionOptimizer:
             optimized_runtimes_all=optimized_runtime_by_test,
         )
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
-            source_code=code_context.read_writable_code,
+            source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-            optimized_code=best_optimization.candidate.source_code,
+            optimized_code=best_optimization.candidate.source_code.flat,
             original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
             optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
             original_code_runtime=humanize_runtime(original_code_baseline.runtime),
