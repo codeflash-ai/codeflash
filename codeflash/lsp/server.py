@@ -66,15 +66,7 @@ class CodeflashLanguageServer(LanguageServer):
 
         """
         # Convert string message type to LSP MessageType enum
-        type_mapping = {
-            "Info": MessageType.Info,
-            "Warning": MessageType.Warning,
-            "Error": MessageType.Error,
-            "Log": MessageType.Log,
-            "Debug": MessageType.Debug,
-        }
-
-        lsp_message_type = type_mapping.get(message_type, MessageType.Info)
+        lsp_message_type = self._type_mapping.get(message_type, MessageType.Info)
 
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
