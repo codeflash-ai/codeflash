@@ -1,7 +1,5 @@
 def mysorter(arr):
-    print("codeflash stdout: Sorting list")
-    arr.sort()  # built-in Timsort, much faster than bubble sort
-    print(f"result: {arr}")
+    arr.sort()  # built-in Timsort: fastest general-purpose sort in Python
     return arr
 
 
