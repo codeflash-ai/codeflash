@@ -34,7 +34,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
-    api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+    if console.quiet:  # lsp
+        # prefer shell config over env var in lsp mode
+        api_key = read_api_key_from_shell_config()
+    else:
+        api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+
     api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
         msg = (
@@ -111,7 +116,7 @@ def get_cached_gh_event_data() -> dict[str, Any]:
 
 def is_repo_a_fork() -> bool:
     event = get_cached_gh_event_data()
-    return bool(event.get("repository", {}).get("fork", False))
+    return bool(event.get("pull_request", {}).get("head", {}).get("repo", {}).get("fork", False))
 
 
 @lru_cache(maxsize=1)

@@ -364,7 +364,7 @@ def test_run_and_parse_picklepatch() -> None:
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
         test_type = TestType.REPLAY_TEST
-        replay_test_function = "test_code_to_optimize_bubble_sort_picklepatch_test_unused_socket_bubble_sort_with_unused_socket"
+        replay_test_function = "test_code_to_optimize_bubble_sort_picklepatch_test_unused_socket_bubble_sort_with_unused_socket_test_socket_picklepatch"
         func_optimizer = opt.create_function_optimizer(func)
         func_optimizer.test_files = TestFiles(
             test_files=[
@@ -388,7 +388,7 @@ def test_run_and_parse_picklepatch() -> None:
         )
         assert len(test_results_unused_socket) == 1
         assert test_results_unused_socket.test_results[0].id.test_module_path == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"
-        assert test_results_unused_socket.test_results[0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_unused_socket_bubble_sort_with_unused_socket"
+        assert test_results_unused_socket.test_results[0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_unused_socket_bubble_sort_with_unused_socket_test_socket_picklepatch"
         assert test_results_unused_socket.test_results[0].did_pass == True
 
         # Replace with optimized candidate
@@ -439,7 +439,7 @@ def bubble_sort_with_unused_socket(data_container):
         test_type = TestType.REPLAY_TEST
         func = FunctionToOptimize(function_name="bubble_sort_with_used_socket", parents=[],
                                   file_path=Path(fto_used_socket_path))
-        replay_test_function = "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket"
+        replay_test_function = "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket_test_used_socket_picklepatch"
         func_optimizer = opt.create_function_optimizer(func)
         func_optimizer.test_files = TestFiles(
             test_files=[
@@ -467,7 +467,7 @@ def bubble_sort_with_unused_socket(data_container):
         assert test_results_used_socket.test_results[
                    0].id.test_module_path == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"
         assert test_results_used_socket.test_results[
-                   0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket"
+                   0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket_test_used_socket_picklepatch"
         assert test_results_used_socket.test_results[0].did_pass is False
         print("test results used socket")
         print(test_results_used_socket)
@@ -498,7 +498,7 @@ def bubble_sort_with_used_socket(data_container):
         assert test_results_used_socket.test_results[
                    0].id.test_module_path == "code_to_optimize.tests.pytest.benchmarks_socket_test.codeflash_replay_tests.test_code_to_optimize_tests_pytest_benchmarks_socket_test_test_socket__replay_test_0"
         assert test_results_used_socket.test_results[
-                   0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket"
+                   0].id.test_function_name == "test_code_to_optimize_bubble_sort_picklepatch_test_used_socket_bubble_sort_with_used_socket_test_used_socket_picklepatch"
         assert test_results_used_socket.test_results[0].did_pass is False
 
         # Even though tests threw the same error, we reject this as the behavior of the unpickleable object could not be determined.

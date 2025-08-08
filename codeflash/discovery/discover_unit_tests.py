@@ -150,11 +150,13 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.imported_modules: set[str] = set()
         self.has_dynamic_imports: bool = False
         self.wildcard_modules: set[str] = set()
+        # Track aliases: alias_name -> original_name
+        self.alias_mapping: dict[str, str] = {}
 
         # Precompute function_names for prefix search
         # For prefix match, store mapping from prefix-root to candidates for O(1) matching
         self._exact_names = function_names_to_find
-        self._prefix_roots = {}
+        self._prefix_roots: dict[str, list[str]] = {}
         for name in function_names_to_find:
             if "." in name:
                 root = name.split(".", 1)[0]
@@ -206,6 +208,9 @@ class ImportAnalyzer(ast.NodeVisitor):
             imported_name = alias.asname if alias.asname else aname
             self.imported_modules.add(imported_name)
 
+            if alias.asname:
+                self.alias_mapping[imported_name] = aname
+
             # Fast check for dynamic import
             if mod == "importlib" and aname == "import_module":
                 self.has_dynamic_imports = True
@@ -222,7 +227,6 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.found_qualified_name = qname
                 return
 
-            # Fast prefix match: only for relevant roots
             prefix = qname + "."
             # Only bother if one of the targets startswith the prefix-root
             candidates = proots.get(qname, ())
@@ -246,6 +250,18 @@ class ImportAnalyzer(ast.NodeVisitor):
             self.found_any_target_function = True
             self.found_qualified_name = node.attr
             return
+
+        if isinstance(node.value, ast.Name) and node.value.id in self.imported_modules:
+            for target_func in self.function_names_to_find:
+                if "." in target_func:
+                    class_name, method_name = target_func.rsplit(".", 1)
+                    if node.attr == method_name:
+                        imported_name = node.value.id
+                        original_name = self.alias_mapping.get(imported_name, imported_name)
+                        if original_name == class_name:
+                            self.found_any_target_function = True
+                            self.found_qualified_name = target_func
+                            return
 
         # Check if this is accessing a target function through a dynamically imported module
         # Only if we've detected dynamic imports are being used
