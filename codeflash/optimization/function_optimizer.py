@@ -1271,6 +1271,7 @@ class FunctionOptimizer:
 
             test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
+            coverage_results = None
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
