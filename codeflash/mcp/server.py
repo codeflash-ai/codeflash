@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
     from pydantic import BaseModel, Field
 except ImportError as e:
     print("Error: Missing MCP dependencies. Install with: pip install codeflash[mcp]")
@@ -532,7 +532,7 @@ def get_optimization_help() -> Dict[str, Any]:
 
 # Resource for providing project context
 @mcp.resource("codeflash://project-config")
-def get_project_config(uri: str) -> str:
+def get_project_config() -> str:
     """Get codeflash configuration from the current project."""
     try:
         config_path = Path.cwd() / "pyproject.toml"
