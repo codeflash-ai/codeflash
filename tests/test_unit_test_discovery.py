@@ -1298,3 +1298,44 @@ def test_unrelated():
         assert len(filtered_tests) == 1
         assert "target_module.target_function" in filtered_tests
         assert "unrelated_module.unrelated_function" not in filtered_tests
+
+
+def test_analyze_imports_aliased_class_method():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from pydantic_ai.profiles.google import (
+    GoogleJsonSchemaTransformer as pydantic_ai_profiles_google_GoogleJsonSchemaTransformer,
+)
+
+def test_target():
+    ret = pydantic_ai_profiles_google_GoogleJsonSchemaTransformer.transform(*args, **kwargs)
+    assert ret is not None
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"GoogleJsonSchemaTransformer.transform"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_aliased_class_method_negative():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from pydantic_ai.profiles.google import (
+    GoogleJsonSchemaTransformer as pydantic_ai_profiles_google_GoogleJsonSchemaTransformer,
+)
+
+def test_target():
+    ret = pydantic_ai_profiles_google_GoogleJsonSchemaTransformer.validate(*args, **kwargs)
+    assert ret is not None
+"""
+        test_file.write_text(test_content)
+
+        # Looking for transform but code uses validate - should not match
+        target_functions = {"GoogleJsonSchemaTransformer.transform"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False

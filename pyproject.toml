@@ -42,6 +42,7 @@ dependencies = [
     "line_profiler>=4.2.0",
     "platformdirs>=4.3.7",
     "pygls>=1.3.1",
+    "codeflash-benchmark",
 ]
 
 [project.urls]
@@ -238,7 +239,8 @@ ignore = [
     "D104",
     "PERF203",
     "LOG015",
-    "PLC0415"
+    "PLC0415",
+    "UP045"
 ]
 
 [tool.ruff.lint.flake8-type-checking]
@@ -261,6 +263,12 @@ skip-magic-trailing-comma = true
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
+
+[tool.uv]
+workspace = { members = ["codeflash-benchmark"] }
+
+[tool.uv.sources]
+codeflash-benchmark = { workspace = true }
 
 [tool.uv-dynamic-versioning]
 enable = true
@@ -300,5 +308,3 @@ markers = [
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
-[project.entry-points.pytest11]
-codeflash = "codeflash.benchmarking.plugin.plugin"

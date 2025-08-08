@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 
 from pygls import uris
 
+from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.code_utils.git_utils import create_git_worktrees, create_worktree_root_dir, remove_git_worktrees
+from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -27,6 +29,11 @@ class OptimizableFunctionsParams:
 class FunctionOptimizationParams:
     textDocument: types.TextDocumentIdentifier  # noqa: N815
     functionName: str  # noqa: N815
+
+
+@dataclass
+class ProvideApiKeyParams:
+    api_key: str
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
@@ -119,6 +126,53 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
 
 
+def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str, str]:
+    user_id = get_user_id()
+    if user_id is None:
+        return {"status": "error", "message": "api key not found or invalid"}
+
+    if user_id.startswith("Error: "):
+        error_msg = user_id[7:]
+        return {"status": "error", "message": error_msg}
+
+    from codeflash.optimization.optimizer import Optimizer
+
+    server.optimizer = Optimizer(server.args)
+    return {"status": "success", "user_id": user_id}
+
+
+@server.feature("apiKeyExistsAndValid")
+def check_api_key(server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+    try:
+        return _initialize_optimizer_if_valid(server)
+    except Exception:
+        return {"status": "error", "message": "something went wrong while validating the api key"}
+
+
+@server.feature("provideApiKey")
+def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams) -> dict[str, str]:
+    try:
+        api_key = params.api_key
+        if not api_key.startswith("cf-"):
+            return {"status": "error", "message": "Api key is not valid"}
+
+        result = save_api_key_to_rc(api_key)
+        if not is_successful(result):
+            return {"status": "error", "message": result.failure()}
+
+        # clear cache to ensure the new api key is used
+        get_codeflash_api_key.cache_clear()
+        get_user_id.cache_clear()
+
+        init_result = _initialize_optimizer_if_valid(server)
+        if init_result["status"] == "error":
+            return {"status": "error", "message": "Api key is not valid"}
+
+        return {"status": "success", "message": "Api key saved successfully", "user_id": init_result["user_id"]}
+    except Exception:
+        return {"status": "error", "message": "something went wrong while saving the api key"}
+
+
 @server.feature("prepareOptimization")
 def prepare_optimization(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
     current_function = server.optimizer.current_function_being_optimized
@@ -169,7 +223,7 @@ def generate_tests(server: CodeflashLanguageServer, params: FunctionOptimization
         generated_test.generated_original_test_source for generated_test in generated_tests_list.generated_tests
     ]
     optimizations_dict = {
-        candidate.optimization_id: {"source_code": candidate.source_code, "explanation": candidate.explanation}
+        candidate.optimization_id: {"source_code": candidate.source_code.markdown, "explanation": candidate.explanation}
         for candidate in optimizations_set.control + optimizations_set.experiment
     }
 
@@ -277,7 +331,7 @@ def perform_function_optimization(  # noqa: PLR0911
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
 
-    optimized_source = best_optimization.candidate.source_code
+    optimized_source = best_optimization.candidate.source_code.markdown
     speedup = original_code_baseline.runtime / best_optimization.runtime
 
     server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
