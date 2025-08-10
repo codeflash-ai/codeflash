@@ -39,16 +39,20 @@ def build_fully_qualified_name(function_name: str, code_context: CodeOptimizatio
     return full_name
 
 
-def generate_candidates(source_code_path: Path) -> list[str]:
+def generate_candidates(source_code_path: Path) -> set[str]:
     """Generate all the possible candidates for coverage data based on the source code path."""
-    candidates = [source_code_path.name]
+    candidates = set()
+    candidates.add(source_code_path.name)
     current_path = source_code_path.parent
 
+    last_added = source_code_path.name
     while current_path != current_path.parent:
-        candidate_path = str(Path(current_path.name) / candidates[-1])
-        candidates.append(candidate_path)
+        candidate_path = str(Path(current_path.name) / last_added)
+        candidates.add(candidate_path)
+        last_added = candidate_path
         current_path = current_path.parent
 
+    candidates.add(str(source_code_path))
     return candidates
 
 

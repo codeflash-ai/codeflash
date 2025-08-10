@@ -357,7 +357,7 @@ def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> 
 
 def test_generate_candidates() -> None:
     source_code_path = Path("/Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py")
-    expected_candidates = [
+    expected_candidates = {
         "coverage_utils.py",
         "code_utils/coverage_utils.py",
         "codeflash/code_utils/coverage_utils.py",
@@ -367,7 +367,8 @@ def test_generate_candidates() -> None:
         "Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
         "krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
         "Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
-    ]
+        "/Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py"
+    }
     assert generate_candidates(source_code_path) == expected_candidates
 
 

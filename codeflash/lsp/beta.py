@@ -100,6 +100,7 @@ def initialize_function_optimization(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
     )
 
+    server.optimizer.worktree_mode()
     optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
     if not optimizable_funcs:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
@@ -334,9 +335,13 @@ def perform_function_optimization(  # noqa: PLR0911
     speedup = original_code_baseline.runtime / best_optimization.runtime
 
     server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
+    diff_patch_files = server.optimizer.patch_files
 
     # CRITICAL: Clear the function filter after optimization to prevent state corruption
     server.optimizer.args.function = None
+    server.optimizer.patch_files = []
+    server.optimizer.current_worktree = None
+    server.optimizer.cleanup_temporary_paths()
     server.show_message_log("Cleared function filter to prevent state corruption", "Info")
 
     return {
@@ -345,4 +350,5 @@ def perform_function_optimization(  # noqa: PLR0911
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {speedup:.2f}x faster",
         "optimization": optimized_source,
+        "diff_patch_files": diff_patch_files,
     }

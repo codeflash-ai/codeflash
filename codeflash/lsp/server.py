@@ -11,6 +11,8 @@ from pygls.server import LanguageServer
 if TYPE_CHECKING:
     from lsprotocol.types import InitializeParams, InitializeResult
 
+    from codeflash.optimization.optimizer import Optimizer
+
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
@@ -44,7 +46,7 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
 class CodeflashLanguageServer(LanguageServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         super().__init__(*args, **kwargs)
-        self.optimizer = None
+        self.optimizer: Optimizer | None = None
         self.args = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
