@@ -38,7 +38,7 @@ class TestExistingTestsSourceFor:
         original_runtimes = {}
         optimized_runtimes = {}
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -61,7 +61,7 @@ class TestExistingTestsSourceFor:
             self.mock_invocation_id: [500000]   # 0.5ms in nanoseconds
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -89,7 +89,7 @@ class TestExistingTestsSourceFor:
             self.mock_invocation_id: [1000000]  # 1ms in nanoseconds
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -122,7 +122,7 @@ class TestExistingTestsSourceFor:
             mock_invocation_no_class: [800000]
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -148,7 +148,7 @@ class TestExistingTestsSourceFor:
             self.mock_invocation_id: [500000]
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -156,9 +156,7 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
-|----------------------------|---------------|----------------|-----------|
-"""
+        expected = ""
 
         assert result == expected
 
@@ -173,7 +171,7 @@ class TestExistingTestsSourceFor:
         }
         optimized_runtimes = {}
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -181,9 +179,7 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
-|----------------------------|---------------|----------------|-----------|
-"""
+        expected = ""
 
         assert result == expected
 
@@ -212,7 +208,7 @@ class TestExistingTestsSourceFor:
             mock_invocation_2: [1500000]
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -241,7 +237,7 @@ class TestExistingTestsSourceFor:
             self.mock_invocation_id: [600000, 700000, 500000]    # min: 500000
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -278,7 +274,7 @@ class TestExistingTestsSourceFor:
             mock_invocation_complex: [750000]
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -306,7 +302,7 @@ class TestExistingTestsSourceFor:
             self.mock_invocation_id: [0]
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
@@ -314,9 +310,7 @@ class TestExistingTestsSourceFor:
             optimized_runtimes
         )
 
-        expected = """| Test File::Test Function   | Original ⏱️   | Optimized ⏱️   | Speedup   |
-|----------------------------|---------------|----------------|-----------|
-"""
+        expected = ""
 
         assert result == expected
 
@@ -345,7 +339,7 @@ class TestExistingTestsSourceFor:
             mock_generated_invocation: [400000]  # This should be filtered out
         }
 
-        result = existing_tests_source_for(
+        result, _, _ = existing_tests_source_for(
             "module.function",
             function_to_tests,
             self.test_cfg,
