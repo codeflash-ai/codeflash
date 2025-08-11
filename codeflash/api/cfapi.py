@@ -124,8 +124,8 @@ def suggest_changes(
     generated_tests: str,
     trace_id: str,
     coverage_message: str,
-    replay_tests: str,
-    concolic_tests: str,
+    replay_tests: str = "",
+    concolic_tests: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -165,8 +165,8 @@ def create_pr(
     generated_tests: str,
     trace_id: str,
     coverage_message: str,
-    replay_tests: str,
-    concolic_tests: str,
+    replay_tests: str = "",
+    concolic_tests: str = "",
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
