@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
+from codeflash.code_utils.git_utils import create_diff_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
@@ -331,17 +332,23 @@ def perform_function_optimization(  # noqa: PLR0911
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
 
+    # generate a patch for the optimization
+    relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
+    patch_path = create_diff_from_worktree(
+        server.optimizer.current_worktree,
+        relative_file_paths,
+        server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
+    )
+
     optimized_source = best_optimization.candidate.source_code.markdown
     speedup = original_code_baseline.runtime / best_optimization.runtime
 
     server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
-    diff_patch_files = server.optimizer.patch_files
 
     # CRITICAL: Clear the function filter after optimization to prevent state corruption
-    server.optimizer.args.function = None
-    server.optimizer.patch_files = []
-    server.optimizer.current_worktree = None
     server.optimizer.cleanup_temporary_paths()
+    server.optimizer.args.function = None
+    server.optimizer.current_worktree = None
     server.show_message_log("Cleared function filter to prevent state corruption", "Info")
 
     return {
@@ -350,5 +357,5 @@ def perform_function_optimization(  # noqa: PLR0911
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {speedup:.2f}x faster",
         "optimization": optimized_source,
-        "diff_patch_files": diff_patch_files,
+        "patch_path": patch_path,
     }

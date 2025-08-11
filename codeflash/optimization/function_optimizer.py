@@ -1252,6 +1252,10 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
+        # If worktree mode, do not revert code and helpers, we create snapshot commit after each function optimization
+        if self.args.worktree:
+            return
+
         if raise_pr and (
             self.args.all
             or env_utils.get_pr_number()

@@ -55,6 +55,7 @@ class CodeflashLanguageServer(LanguageServer):
         args = parse_args()
         args.config_file = config_file
         args.no_pr = True  # LSP server should not create PRs
+        args.worktree = True
         args = process_pyproject_config(args)
         self.args = args
         # avoid initializing the optimizer during initialization, because it can cause an error if the api key is invalid

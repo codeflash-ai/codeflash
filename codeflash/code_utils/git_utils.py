@@ -15,7 +15,7 @@ import git
 from rich.prompt import Confirm
 from unidiff import PatchSet
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.config_consts import N_CANDIDATES
 
@@ -212,12 +212,16 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
     current_time_str = time.strftime("%Y%m%d-%H%M%S")
     worktree_dir = worktree_dirs / f"{git_root.name}-{current_time_str}"
 
-    result = subprocess.run(["git", "worktree", "add", "-d", str(worktree_dir)], cwd=git_root, check=True)
+    result = subprocess.run(
+        ["git", "worktree", "add", "-d", str(worktree_dir)],
+        cwd=git_root,
+        check=True,
+        stdout=subprocess.DEVNULL if console.quiet else None,
+        stderr=subprocess.DEVNULL if console.quiet else None,
+    )
     if result.returncode != 0:
         logger.error(f"Failed to create worktree: {result.stderr}")
         return None
-
-    print(result.stdout)
 
     # Get uncommitted diff from the original repo
     repository = git.Repo(module_root, search_parent_directories=True)

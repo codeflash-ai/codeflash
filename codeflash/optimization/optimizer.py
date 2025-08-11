@@ -414,16 +414,17 @@ class Optimizer:
             cleanup_paths([self.replay_tests_dir])
 
     def cleanup_temporary_paths(self) -> None:
-        if self.current_function_optimizer:
-            self.current_function_optimizer.cleanup_generated_files()
-
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
-        paths_to_clean = [self.test_cfg.concolic_test_root_dir, self.replay_tests_dir]
+
         if self.current_worktree:
             remove_worktree(self.current_worktree)
-        cleanup_paths(paths_to_clean)
+            return
+
+        if self.current_function_optimizer:
+            self.current_function_optimizer.cleanup_generated_files()
+        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
 
     def worktree_mode(self) -> None:
         if self.current_worktree:
