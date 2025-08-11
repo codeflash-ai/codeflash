@@ -109,7 +109,7 @@ def existing_tests_source_for(
                                 f"`{print_filename}::{qualified_name}`",
                                 f"{print_original_runtime}",
                                 f"{print_optimized_runtime}",
-                                f"⚠️{perf_gain}%",
+                                f"{perf_gain}%⚠️",
                             ]
                         )
                     elif "codeflash_concolic" in str(print_filename):
@@ -118,7 +118,7 @@ def existing_tests_source_for(
                                 f"`{print_filename}::{qualified_name}`",
                                 f"{print_original_runtime}",
                                 f"{print_optimized_runtime}",
-                                f"⚠️{perf_gain}%",
+                                f"{perf_gain}%⚠️",
                             ]
                         )
                     else:
@@ -127,7 +127,7 @@ def existing_tests_source_for(
                                 f"`{print_filename}::{qualified_name}`",
                                 f"{print_original_runtime}",
                                 f"{print_optimized_runtime}",
-                                f"⚠️{perf_gain}%",
+                                f"{perf_gain}%⚠️",
                             ]
                         )
                 elif "__replay_test_" in str(print_filename):
@@ -136,7 +136,7 @@ def existing_tests_source_for(
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
+                            f"{perf_gain}%✅",
                         ]
                     )
                 elif "codeflash_concolic" in str(print_filename):
@@ -145,7 +145,7 @@ def existing_tests_source_for(
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
+                            f"{perf_gain}%✅",
                         ]
                     )
                 else:
@@ -154,7 +154,7 @@ def existing_tests_source_for(
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
+                            f"{perf_gain}%✅",
                         ]
                     )
     output_existing += tabulate(  # type: ignore[no-untyped-call]
