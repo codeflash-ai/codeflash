@@ -149,8 +149,8 @@ def suggest_changes(
         "generatedTests": generated_tests,
         "traceId": trace_id,
         "coverage_message": coverage_message,
-        "replay_tests":replay_tests,
-        "concolic_tests":concolic_tests
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -165,6 +165,8 @@ def create_pr(
     generated_tests: str,
     trace_id: str,
     coverage_message: str,
+    replay_tests: str,
+    concolic_tests: str,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -187,6 +189,8 @@ def create_pr(
         "generatedTests": generated_tests,
         "traceId": trace_id,
         "coverage_message": coverage_message,
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 

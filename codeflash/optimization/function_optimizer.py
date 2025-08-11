@@ -1196,7 +1196,7 @@ class FunctionOptimizer:
         if concolic_test_str:
             generated_tests_str += "\n#------------------------------------------------\n" + concolic_test_str
 
-        existing_tests = existing_tests_source_for(
+        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
@@ -1237,6 +1237,8 @@ class FunctionOptimizer:
             if self.experiment_id
             else self.function_trace_id,
             "coverage_message": coverage_message,
+            "replay_tests": replay_tests,
+            "concolic_tests": concolic_tests,
         }
 
         if not self.args.no_pr and not self.args.staging_review:
@@ -1271,7 +1273,6 @@ class FunctionOptimizer:
 
             test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-            coverage_results = None
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
