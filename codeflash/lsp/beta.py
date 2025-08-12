@@ -46,13 +46,7 @@ def get_optimizable_functions(
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
 
-    server.optimizer.worktree_mode()
-
-    args = server.optimizer.args
-
-    original_relative_file_path = file_path.relative_to(args.base_project_root)
-
-    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
+    server.optimizer.args.file = file_path
     server.optimizer.args.function = None  # Always get ALL functions, not just one
     server.optimizer.args.previous_checkpoint_functions = False
 
@@ -75,11 +69,15 @@ def initialize_function_optimization(
 ) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
+    if server.optimizer is None:
+        _initialize_optimizer_if_valid(server)
     server.optimizer.worktree_mode()
+    original_args, _ = server.optimizer.original_args_and_test_cfg
 
     server.optimizer.args.function = params.functionName
-    original_relative_file_path = file_path.relative_to(server.optimizer.args.base_project_root)
+    original_relative_file_path = file_path.relative_to(original_args.project_root)
     server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
+    server.optimizer.args.previous_checkpoint_functions = False
 
     server.show_message_log(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
@@ -338,10 +336,14 @@ def perform_function_optimization(  # noqa: PLR0911
             "patch_path": patch_path,
         }
     finally:
-        server.optimizer.cleanup_temporary_paths()
-        # restore args and test cfg
-        if server.optimizer.original_args_and_test_cfg:
-            server.optimizer.args, server.optimizer.test_cfg = server.optimizer.original_args_and_test_cfg
-        server.optimizer.args.function = None
-        server.optimizer.current_worktree = None
-        server.optimizer.current_function_optimizer = None
+        cleanup_the_optimizer(server)
+
+
+def cleanup_the_optimizer(server: CodeflashLanguageServer) -> None:
+    server.optimizer.cleanup_temporary_paths()
+    # restore args and test cfg
+    if server.optimizer.original_args_and_test_cfg:
+        server.optimizer.args, server.optimizer.test_cfg = server.optimizer.original_args_and_test_cfg
+    server.optimizer.args.function = None
+    server.optimizer.current_worktree = None
+    server.optimizer.current_function_optimizer = None

@@ -13,7 +13,12 @@ import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
+from codeflash.code_utils.env_utils import (
+    ensure_codeflash_api_key,
+    get_codeflash_api_key,
+    get_pr_number,
+    is_LSP_enabled,
+)
 from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name, git_root_dir
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.version import __version__
@@ -101,7 +106,7 @@ def get_user_id() -> Optional[str]:
             if min_version and version.parse(min_version) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
-                if console.quiet:  # lsp
+                if is_LSP_enabled():
                     logger.debug(msg)
                     return f"Error: {msg}"
                 sys.exit(1)

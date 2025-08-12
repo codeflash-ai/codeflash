@@ -446,7 +446,6 @@ class Optimizer:
         self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
 
         project_root = self.args.project_root
-        self.args.base_project_root = project_root  # keep a reference to the original project root
         module_root = self.args.module_root
         relative_module_root = module_root.relative_to(project_root)
         relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None

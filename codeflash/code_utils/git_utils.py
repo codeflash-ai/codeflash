@@ -15,9 +15,10 @@ import git
 from rich.prompt import Confirm
 from unidiff import PatchSet
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.config_consts import N_CANDIDATES
+from codeflash.lsp.helpers import is_LSP_enabled
 
 if TYPE_CHECKING:
     from git import Repo
@@ -216,8 +217,8 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         ["git", "worktree", "add", "-d", str(worktree_dir)],
         cwd=git_root,
         check=True,
-        stdout=subprocess.DEVNULL if console.quiet else None,
-        stderr=subprocess.DEVNULL if console.quiet else None,
+        stdout=subprocess.DEVNULL if is_LSP_enabled() else None,
+        stderr=subprocess.DEVNULL if is_LSP_enabled() else None,
     )
     if result.returncode != 0:
         logger.error(f"Failed to create worktree: {result.stderr}")
@@ -225,6 +226,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
     # Get uncommitted diff from the original repo
     repository = git.Repo(module_root, search_parent_directories=True)
+    repository.git.add("-N", ".")  # add the index for untracked files to be included in the diff
     uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
 
     if not uni_diff_text.strip():
