@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import os
 import tempfile
 import time
@@ -56,6 +57,7 @@ class Optimizer:
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
         self.current_worktree: Path | None = None
+        self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
 
     def run_benchmarks(
@@ -429,38 +431,45 @@ class Optimizer:
     def worktree_mode(self) -> None:
         if self.current_worktree:
             return
-        project_root = self.args.project_root
-        module_root = self.args.module_root
 
-        if check_running_in_git_repo(module_root):
-            relative_module_root = module_root.relative_to(project_root)
-            relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
-            relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
-            relative_benchmarks_root = (
-                self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
-            )
-
-            worktree_dir = create_detached_worktree(module_root)
+        if check_running_in_git_repo(self.args.module_root):
+            worktree_dir = create_detached_worktree(self.args.module_root)
             if worktree_dir is None:
                 logger.warning("Failed to create worktree. Skipping optimization.")
                 return
             self.current_worktree = worktree_dir
-            # TODO: use a helper function to mutate self.args and self.test_cfg
-            self.args.module_root = worktree_dir / relative_module_root
-            self.args.project_root = worktree_dir
-            self.args.test_project_root = worktree_dir
-            self.args.tests_root = worktree_dir / relative_tests_root
-            if relative_benchmarks_root:
-                self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+            self.mutate_args_for_worktree_mode(worktree_dir)
 
-            self.test_cfg.project_root_path = worktree_dir
-            self.test_cfg.tests_project_rootdir = worktree_dir
-            self.test_cfg.tests_root = worktree_dir / relative_tests_root
-            if relative_benchmarks_root:
-                self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
+    def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
+        saved_args = copy.deepcopy(self.args)
+        saved_test_cfg = copy.deepcopy(self.test_cfg)
+        self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
 
-            if relative_optimized_file is not None:
-                self.args.file = worktree_dir / relative_optimized_file
+        project_root = self.args.project_root
+        self.args.base_project_root = project_root  # keep a reference to the original project root
+        module_root = self.args.module_root
+        relative_module_root = module_root.relative_to(project_root)
+        relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
+        relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
+        relative_benchmarks_root = (
+            self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
+        )
+
+        self.args.module_root = worktree_dir / relative_module_root
+        self.args.project_root = worktree_dir
+        self.args.test_project_root = worktree_dir
+        self.args.tests_root = worktree_dir / relative_tests_root
+        if relative_benchmarks_root:
+            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+
+        self.test_cfg.project_root_path = worktree_dir
+        self.test_cfg.tests_project_rootdir = worktree_dir
+        self.test_cfg.tests_root = worktree_dir / relative_tests_root
+        if relative_benchmarks_root:
+            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
+
+        if relative_optimized_file is not None:
+            self.args.file = worktree_dir / relative_optimized_file
 
 
 def run_with_args(args: Namespace) -> None:

@@ -46,44 +46,27 @@ def get_optimizable_functions(
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
 
-    # Save original args to restore later
-    original_file = getattr(server.optimizer.args, "file", None)
-    original_function = getattr(server.optimizer.args, "function", None)
-    original_checkpoint = getattr(server.optimizer.args, "previous_checkpoint_functions", None)
+    server.optimizer.worktree_mode()
 
-    server.show_message_log(f"Original args - file: {original_file}, function: {original_function}", "Info")
+    args = server.optimizer.args
 
-    try:
-        # Set temporary args for this request only
-        server.optimizer.args.file = file_path
-        server.optimizer.args.function = None  # Always get ALL functions, not just one
-        server.optimizer.args.previous_checkpoint_functions = False
+    original_relative_file_path = file_path.relative_to(args.base_project_root)
 
-        server.show_message_log("Calling get_optimizable_functions...", "Info")
-        optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
+    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
+    server.optimizer.args.function = None  # Always get ALL functions, not just one
+    server.optimizer.args.previous_checkpoint_functions = False
 
-        path_to_qualified_names = {}
-        for path, functions in optimizable_funcs.items():
-            path_to_qualified_names[path.as_posix()] = [func.qualified_name for func in functions]
+    server.show_message_log(f"Calling get_optimizable_functions for {server.optimizer.args.file}...", "Info")
+    optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
 
-        server.show_message_log(
-            f"Found {len(path_to_qualified_names)} files with functions: {path_to_qualified_names}", "Info"
-        )
-        return path_to_qualified_names
-    finally:
-        # Restore original args to prevent state corruption
-        if original_file is not None:
-            server.optimizer.args.file = original_file
-        if original_function is not None:
-            server.optimizer.args.function = original_function
-        else:
-            server.optimizer.args.function = None
-        if original_checkpoint is not None:
-            server.optimizer.args.previous_checkpoint_functions = original_checkpoint
+    path_to_qualified_names = {}
+    for functions in optimizable_funcs.values():
+        path_to_qualified_names[file_path] = [func.qualified_name for func in functions]
 
-        server.show_message_log(
-            f"Restored args - file: {server.optimizer.args.file}, function: {server.optimizer.args.function}", "Info"
-        )
+    server.show_message_log(
+        f"Found {len(path_to_qualified_names)} files with functions: {path_to_qualified_names}", "Info"
+    )
+    return path_to_qualified_names
 
 
 @server.feature("initializeFunctionOptimization")
@@ -92,16 +75,16 @@ def initialize_function_optimization(
 ) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
+    server.optimizer.worktree_mode()
 
-    # IMPORTANT: Store the specific function for optimization, but don't corrupt global state
     server.optimizer.args.function = params.functionName
-    server.optimizer.args.file = file_path
+    original_relative_file_path = file_path.relative_to(server.optimizer.args.base_project_root)
+    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
 
     server.show_message_log(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
     )
 
-    server.optimizer.worktree_mode()
     optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
     if not optimizable_funcs:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
@@ -239,123 +222,126 @@ def generate_tests(server: CodeflashLanguageServer, params: FunctionOptimization
 def perform_function_optimization(  # noqa: PLR0911
     server: CodeflashLanguageServer, params: FunctionOptimizationParams
 ) -> dict[str, str]:
-    server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
-    current_function = server.optimizer.current_function_being_optimized
+    try:
+        server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
+        current_function = server.optimizer.current_function_being_optimized
 
-    if not current_function:
-        server.show_message_log(f"No current function being optimized for {params.functionName}", "Error")
-        return {
-            "functionName": params.functionName,
-            "status": "error",
-            "message": "No function currently being optimized",
-        }
+        if not current_function:
+            server.show_message_log(f"No current function being optimized for {params.functionName}", "Error")
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": "No function currently being optimized",
+            }
 
-    module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
+        module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
 
-    validated_original_code, original_module_ast = module_prep_result
+        validated_original_code, original_module_ast = module_prep_result
 
-    function_optimizer = server.optimizer.create_function_optimizer(
-        current_function,
-        function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
-        original_module_ast=original_module_ast,
-        original_module_path=current_function.file_path,
-        function_to_tests=server.optimizer.discovered_tests or {},
-    )
-
-    server.optimizer.current_function_optimizer = function_optimizer
-    if not function_optimizer:
-        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
-
-    initialization_result = function_optimizer.can_be_optimized()
-    if not is_successful(initialization_result):
-        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
-
-    should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
-
-    test_setup_result = function_optimizer.generate_and_instrument_tests(
-        code_context, should_run_experiment=should_run_experiment
-    )
-    if not is_successful(test_setup_result):
-        return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
-    (
-        generated_tests,
-        function_to_concolic_tests,
-        concolic_test_str,
-        optimizations_set,
-        generated_test_paths,
-        generated_perf_test_paths,
-        instrumented_unittests_created_for_function,
-        original_conftest_content,
-    ) = test_setup_result.unwrap()
-
-    baseline_setup_result = function_optimizer.setup_and_establish_baseline(
-        code_context=code_context,
-        original_helper_code=original_helper_code,
-        function_to_concolic_tests=function_to_concolic_tests,
-        generated_test_paths=generated_test_paths,
-        generated_perf_test_paths=generated_perf_test_paths,
-        instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-        original_conftest_content=original_conftest_content,
-    )
-
-    if not is_successful(baseline_setup_result):
-        return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
-
-    (
-        function_to_optimize_qualified_name,
-        function_to_all_tests,
-        original_code_baseline,
-        test_functions_to_remove,
-        file_path_to_helper_classes,
-    ) = baseline_setup_result.unwrap()
-
-    best_optimization = function_optimizer.find_and_process_best_optimization(
-        optimizations_set=optimizations_set,
-        code_context=code_context,
-        original_code_baseline=original_code_baseline,
-        original_helper_code=original_helper_code,
-        file_path_to_helper_classes=file_path_to_helper_classes,
-        function_to_optimize_qualified_name=function_to_optimize_qualified_name,
-        function_to_all_tests=function_to_all_tests,
-        generated_tests=generated_tests,
-        test_functions_to_remove=test_functions_to_remove,
-        concolic_test_str=concolic_test_str,
-    )
-
-    if not best_optimization:
-        server.show_message_log(
-            f"No best optimizations found for function {function_to_optimize_qualified_name}", "Warning"
+        function_optimizer = server.optimizer.create_function_optimizer(
+            current_function,
+            function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
+            original_module_ast=original_module_ast,
+            original_module_path=current_function.file_path,
+            function_to_tests=server.optimizer.discovered_tests or {},
         )
+
+        server.optimizer.current_function_optimizer = function_optimizer
+        if not function_optimizer:
+            return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+        initialization_result = function_optimizer.can_be_optimized()
+        if not is_successful(initialization_result):
+            return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+
+        should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+
+        test_setup_result = function_optimizer.generate_and_instrument_tests(
+            code_context, should_run_experiment=should_run_experiment
+        )
+        if not is_successful(test_setup_result):
+            return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+        (
+            generated_tests,
+            function_to_concolic_tests,
+            concolic_test_str,
+            optimizations_set,
+            generated_test_paths,
+            generated_perf_test_paths,
+            instrumented_unittests_created_for_function,
+            original_conftest_content,
+        ) = test_setup_result.unwrap()
+
+        baseline_setup_result = function_optimizer.setup_and_establish_baseline(
+            code_context=code_context,
+            original_helper_code=original_helper_code,
+            function_to_concolic_tests=function_to_concolic_tests,
+            generated_test_paths=generated_test_paths,
+            generated_perf_test_paths=generated_perf_test_paths,
+            instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
+            original_conftest_content=original_conftest_content,
+        )
+
+        if not is_successful(baseline_setup_result):
+            return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
+
+        (
+            function_to_optimize_qualified_name,
+            function_to_all_tests,
+            original_code_baseline,
+            test_functions_to_remove,
+            file_path_to_helper_classes,
+        ) = baseline_setup_result.unwrap()
+
+        best_optimization = function_optimizer.find_and_process_best_optimization(
+            optimizations_set=optimizations_set,
+            code_context=code_context,
+            original_code_baseline=original_code_baseline,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
+            function_to_optimize_qualified_name=function_to_optimize_qualified_name,
+            function_to_all_tests=function_to_all_tests,
+            generated_tests=generated_tests,
+            test_functions_to_remove=test_functions_to_remove,
+            concolic_test_str=concolic_test_str,
+        )
+
+        if not best_optimization:
+            server.show_message_log(
+                f"No best optimizations found for function {function_to_optimize_qualified_name}", "Warning"
+            )
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
+            }
+
+        # generate a patch for the optimization
+        relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
+        patch_path = create_diff_from_worktree(
+            server.optimizer.current_worktree,
+            relative_file_paths,
+            server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
+        )
+
+        optimized_source = best_optimization.candidate.source_code.markdown
+        speedup = original_code_baseline.runtime / best_optimization.runtime
+
+        server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
+
         return {
             "functionName": params.functionName,
-            "status": "error",
-            "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
+            "status": "success",
+            "message": "Optimization completed successfully",
+            "extra": f"Speedup: {speedup:.2f}x faster",
+            "optimization": optimized_source,
+            "patch_path": patch_path,
         }
-
-    # generate a patch for the optimization
-    relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-    patch_path = create_diff_from_worktree(
-        server.optimizer.current_worktree,
-        relative_file_paths,
-        server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
-    )
-
-    optimized_source = best_optimization.candidate.source_code.markdown
-    speedup = original_code_baseline.runtime / best_optimization.runtime
-
-    server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
-
-    # CRITICAL: Clear the function filter after optimization to prevent state corruption
-    server.optimizer.cleanup_temporary_paths()
-    server.optimizer.args.function = None
-    server.optimizer.current_worktree = None
-    server.show_message_log("Cleared function filter to prevent state corruption", "Info")
-
-    return {
-        "functionName": params.functionName,
-        "status": "success",
-        "message": "Optimization completed successfully",
-        "extra": f"Speedup: {speedup:.2f}x faster",
-        "optimization": optimized_source,
-        "patch_path": patch_path,
-    }
+    finally:
+        server.optimizer.cleanup_temporary_paths()
+        # restore args and test cfg
+        if server.optimizer.original_args_and_test_cfg:
+            server.optimizer.args, server.optimizer.test_cfg = server.optimizer.original_args_and_test_cfg
+        server.optimizer.args.function = None
+        server.optimizer.current_worktree = None
+        server.optimizer.current_function_optimizer = None
