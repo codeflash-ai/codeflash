@@ -34,12 +34,16 @@ def existing_tests_source_for(
     test_cfg: TestConfig,
     original_runtimes_all: dict[InvocationId, list[int]],
     optimized_runtimes_all: dict[InvocationId, list[int]],
-) -> str:
+) -> tuple[str, str, str]:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
-        return ""
-    output: str = ""
-    rows = []
+        return "", "", ""
+    output_existing: str = ""
+    output_concolic: str = ""
+    output_replay: str = ""
+    rows_existing = []
+    rows_concolic = []
+    rows_replay = []
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
     original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
@@ -99,28 +103,79 @@ def existing_tests_source_for(
                     * 100
                 )
                 if greater:
-                    rows.append(
+                    if "__replay_test_" in str(print_filename):
+                        rows_replay.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                    elif "codeflash_concolic" in str(print_filename):
+                        rows_concolic.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                    else:
+                        rows_existing.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                elif "__replay_test_" in str(print_filename):
+                    rows_replay.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"⚠️{perf_gain}%",
+                            f"{perf_gain}%✅",
+                        ]
+                    )
+                elif "codeflash_concolic" in str(print_filename):
+                    rows_concolic.append(
+                        [
+                            f"`{print_filename}::{qualified_name}`",
+                            f"{print_original_runtime}",
+                            f"{print_optimized_runtime}",
+                            f"{perf_gain}%✅",
                         ]
                     )
                 else:
-                    rows.append(
+                    rows_existing.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
+                            f"{perf_gain}%✅",
                         ]
                     )
-    output += tabulate(  # type: ignore[no-untyped-call]
-        headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    output_existing += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
-    output += "\n"
-    return output
+    output_existing += "\n"
+    if len(rows_existing) == 0:
+        output_existing = ""
+    output_concolic += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    )
+    output_concolic += "\n"
+    if len(rows_concolic) == 0:
+        output_concolic = ""
+    output_replay += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    )
+    output_replay += "\n"
+    if len(rows_replay) == 0:
+        output_replay = ""
+    return output_existing, output_replay, output_concolic
 
 
 def check_create_pr(
@@ -131,6 +186,8 @@ def check_create_pr(
     generated_original_test_source: str,
     function_trace_id: str,
     coverage_message: str,
+    replay_tests: str,
+    concolic_tests: str,
     git_remote: Optional[str] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
@@ -171,6 +228,8 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
             trace_id=function_trace_id,
             coverage_message=coverage_message,
+            replay_tests=replay_tests,
+            concolic_tests=concolic_tests,
         )
         if response.ok:
             logger.info(f"Suggestions were successfully made to PR #{pr_number}")
@@ -218,6 +277,8 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
             trace_id=function_trace_id,
             coverage_message=coverage_message,
+            replay_tests=replay_tests,
+            concolic_tests=concolic_tests,
         )
         if response.ok:
             pr_id = response.text
