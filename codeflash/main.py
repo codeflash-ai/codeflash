@@ -8,7 +8,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
-from codeflash.cli_cmds.console import paneled_text
+from codeflash.cli_cmds.console import console, paneled_text
 from codeflash.code_utils.checkpoint import ask_should_use_checkpoint_get_functions
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.telemetry import posthog_cf
@@ -17,6 +17,7 @@ from codeflash.telemetry.sentry import init_sentry
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
+    console.quiet = False
     paneled_text(
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )

@@ -13,14 +13,10 @@ import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import (
-    ensure_codeflash_api_key,
-    get_codeflash_api_key,
-    get_pr_number,
-    is_LSP_enabled,
-)
+from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name, git_root_dir
 from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
