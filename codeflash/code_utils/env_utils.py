@@ -35,27 +35,26 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
-    # prefer shell config over env var in lsp mode
-    api_key = (
-        read_api_key_from_shell_config()
-        if is_LSP_enabled()
-        else os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
-    )
+    lsp_enabled = is_LSP_enabled()
+    if lsp_enabled:
+        api_key = read_api_key_from_shell_config()
+    else:
+        api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
 
     api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
-        msg = (
-            "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
-            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable.\n"
-            f"{api_secret_docs_message}"
-        )
-        if is_repo_a_fork():
+        if lsp_enabled and is_repo_a_fork():
             msg = (
                 "Codeflash API key not detected in your environment. It appears you're running Codeflash from a GitHub fork.\n"
                 "For external contributors, please ensure you've added your own API key to your fork's repository secrets and set it as the CODEFLASH_API_KEY environment variable.\n"
                 f"{api_secret_docs_message}"
             )
             exit_with_message(msg)
+        msg = (
+            "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
+            "https://app.codeflash.ai/app/apikeys ,\nthen set it as a CODEFLASH_API_KEY environment variable.\n"
+            f"{api_secret_docs_message}"
+        )
         raise OSError(msg)
     if not api_key.startswith("cf-"):
         msg = (

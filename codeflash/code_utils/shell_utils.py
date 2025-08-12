@@ -22,10 +22,9 @@ else:
 def read_api_key_from_shell_config() -> Optional[str]:
     try:
         shell_rc_path = get_shell_rc_path()
-        with open(shell_rc_path, encoding="utf8") as shell_rc:  # noqa: PTH123
-            shell_contents = shell_rc.read()
-            matches = SHELL_RC_EXPORT_PATTERN.findall(shell_contents)
-            return matches[-1] if matches else None
+        with Path.open(shell_rc_path, encoding="utf8") as shell_rc:
+            matches = SHELL_RC_EXPORT_PATTERN.findall(shell_rc.read())
+            return next(reversed(matches), None)
     except FileNotFoundError:
         return None
 
