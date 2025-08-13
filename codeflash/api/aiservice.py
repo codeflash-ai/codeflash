@@ -259,7 +259,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
             return [
                 OptimizedCandidate(
