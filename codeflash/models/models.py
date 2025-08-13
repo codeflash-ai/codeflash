@@ -349,6 +349,9 @@ class OptimizedCandidate:
     explanation: str
     optimization_id: str
 
+    def set_explanation(self, new_explanation: str) -> None:
+        object.__setattr__(self, "explanation", new_explanation)
+
 
 @dataclass(frozen=True)
 class FunctionCalledInTest:

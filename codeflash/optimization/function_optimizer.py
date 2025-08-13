@@ -1227,6 +1227,7 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
+        best_optimization.candidate.set_explanation(new_explanation)
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,

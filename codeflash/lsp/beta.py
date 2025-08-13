@@ -13,6 +13,7 @@ from codeflash.code_utils.git_utils import create_diff_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
+from codeflash.result.explanation import Explanation
 
 if TYPE_CHECKING:
     from lsprotocol import types
@@ -86,7 +87,12 @@ def initialize_function_optimization(
     optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
     if not optimizable_funcs:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
-        return {"functionName": params.functionName, "status": "not found", "args": None}
+        return {
+            "functionName": params.functionName,
+            "status": "error",
+            "message": "function is no found or not optimizable",
+            "args": None,
+        }
 
     fto = optimizable_funcs.popitem()[1][0]
     server.optimizer.current_function_being_optimized = fto
@@ -316,7 +322,7 @@ def perform_function_optimization(  # noqa: PLR0911
 
         # generate a patch for the optimization
         relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-        patch_path = create_diff_from_worktree(
+        patch_file = create_diff_from_worktree(
             server.optimizer.current_worktree,
             relative_file_paths,
             server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
@@ -327,13 +333,16 @@ def perform_function_optimization(  # noqa: PLR0911
 
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
+        explanation = best_optimization.candidate.explanation
+        explanation_str = explanation.explanation_message() if isinstance(explanation, Explanation) else explanation
         return {
             "functionName": params.functionName,
             "status": "success",
             "message": "Optimization completed successfully",
             "extra": f"Speedup: {speedup:.2f}x faster",
             "optimization": optimized_source,
-            "patch_path": patch_path,
+            "patch_file": str(patch_file),
+            "explanation": explanation_str,
         }
     finally:
         cleanup_the_optimizer(server)
