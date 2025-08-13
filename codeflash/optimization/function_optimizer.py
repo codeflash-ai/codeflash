@@ -440,6 +440,9 @@ class FunctionOptimizer:
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
                 if normalized_code in ast_code_to_id:
+                    logger.warning(
+                        "Current candidate has been encountered before in testing, Skipping optimization candidate."
+                    )
                     past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
                     # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
                     speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
@@ -588,8 +591,10 @@ class FunctionOptimizer:
                         if len(possible_refinement) > 0:  # if the api returns a valid response
                             refinement_response.append(possible_refinement[0])
                     candidates.extend(refinement_response)
-                    logger.info(f"Added {len(refinement_response)} candidates from refinement")
                     original_len += len(refinement_response)
+                    logger.info(
+                        f"Added {len(refinement_response)} candidates from refinement, total candidates now: {original_len}"
+                    )
                     refinement_done = True
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(
@@ -1099,11 +1104,6 @@ class FunctionOptimizer:
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code.flat)
-                console.print(
-                    Panel(
-                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
-                    )
-                )
                 processed_benchmark_info = None
                 if self.args.benchmark:
                     processed_benchmark_info = process_benchmark_data(
@@ -1227,6 +1227,7 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
+        console.print(Panel(new_explanation_raw_str, title="Best Candidate Explanation", border_style="blue"))
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,
