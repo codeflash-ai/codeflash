@@ -339,7 +339,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
