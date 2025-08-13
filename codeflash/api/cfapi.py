@@ -203,6 +203,8 @@ def create_staging(
     generated_original_test_source: str,
     function_trace_id: str,
     coverage_message: str,
+    replay_tests: str,
+    concolic_tests: str,
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -243,6 +245,8 @@ def create_staging(
         "generatedTests": generated_original_test_source,
         "traceId": function_trace_id,
         "coverage_message": coverage_message,
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
     }
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
