@@ -203,8 +203,8 @@ def create_staging(
     generated_original_test_source: str,
     function_trace_id: str,
     coverage_message: str,
-    replay_tests: str,
-    concolic_tests: str,
+    replay_tests: str = "",
+    concolic_tests: str = "",
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
