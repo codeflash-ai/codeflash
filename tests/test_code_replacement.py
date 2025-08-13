@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 import libcst as cst
 from codeflash.code_utils.code_replacer import AutouseFixtureModifier, PytestMarkAdder, AddRequestArgument
 import dataclasses
@@ -13,7 +14,7 @@ from codeflash.code_utils.code_replacer import (
     replace_functions_in_file,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, FunctionParent
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -41,11 +42,16 @@ class Args:
 
 
 def test_code_replacement_global_statements():
-    optimized_code = """import numpy as np
+    project_root = Path(__file__).parent.parent.resolve()
+    code_path = (project_root / "code_to_optimize/bubble_sort_optimized.py").resolve()
+    optimized_code = f"""```python:{code_path.relative_to(project_root)}
+import numpy as np
+
 inconsequential_var = '123'
 def sorter(arr):
-    return arr.sort()"""
-    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_optimized.py").resolve()
+    return arr.sort()
+```
+"""
     original_code_str = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").read_text(
         encoding="utf-8"
     )
@@ -70,7 +76,7 @@ def sorter(arr):
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     final_output = code_path.read_text(encoding="utf-8")
     assert "inconsequential_var = '123'" in final_output
@@ -118,6 +124,7 @@ print("Hello world")
 
     function_name: str = "NewClass.new_function"
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    print(f"Preexisting objects: {preexisting_objects}")
     new_code: str = replace_functions_and_add_imports(
         source_code=original_code,
         function_names=[function_name],
@@ -1666,6 +1673,9 @@ print("Hello world")
 
 
 def test_global_reassignment() -> None:
+    root_dir = Path(__file__).parent.parent.resolve()
+    code_path = (root_dir / "code_to_optimize/global_var_original.py").resolve()
+
     original_code = """a=1
 print("Hello world")
 def some_fn():
@@ -1678,7 +1688,9 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
     """
-    optimized_code = """import numpy as np
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+import numpy as np
+
 def some_fn():
     a=np.zeros(10)
     print("did something")
@@ -1691,7 +1703,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=2
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1713,7 +1726,6 @@ class NewClass:
         return "I am still old"
     def new_function2(value):
         return cst.ensure_type(value, str)"""
-    code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
     code_path.write_text(original_code, encoding="utf-8")
     tests_root = Path("/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/tests/pytest/")
     project_root_path = (Path(__file__).parent / "..").resolve()
@@ -1735,7 +1747,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1753,7 +1765,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=1
 """
-    optimized_code = """a=2
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+a=2
 import numpy as np
 def some_fn():
     a=np.zeros(10)
@@ -1766,7 +1779,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
-        """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1811,7 +1825,7 @@ a=2
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1829,7 +1843,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = """import numpy as np
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+import numpy as np
 a=2
 def some_fn():
     a=np.zeros(10)
@@ -1843,7 +1858,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=3
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1888,7 +1904,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1906,7 +1922,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = """a=2
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+a=2
 import numpy as np
 def some_fn():
     a=np.zeros(10)
@@ -1919,7 +1936,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -1964,7 +1982,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -1982,7 +2000,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = """import numpy as np
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+import numpy as np
 a=2
 def some_fn():
     a=np.zeros(10)
@@ -1996,7 +2015,8 @@ class NewClass:
         return cst.ensure_type(value, str)
 a=3
 print("Hello world")
-    """
+```
+"""
     expected_code = """import numpy as np
 
 print("Hello world")
@@ -2041,7 +2061,7 @@ class NewClass:
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -2062,7 +2082,8 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 """
-    optimized_code = """import numpy as np
+    optimized_code = f"""```python:{code_path.relative_to(root_dir)}
+import numpy as np
 if 1<2:
     a=2
 else:
@@ -2079,6 +2100,7 @@ class NewClass:
     def new_function2(value):
         return cst.ensure_type(value, str)
 print("Hello world")
+```
 """
     expected_code = """import numpy as np
 
@@ -2129,7 +2151,7 @@ a = 6
             original_helper_code[helper_function_path] = helper_code
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=optimized_code, original_helper_code=original_helper_code
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
     )
     new_code = code_path.read_text(encoding="utf-8")
     code_path.unlink(missing_ok=True)
@@ -3070,3 +3092,139 @@ def my_fixture(request):
         modified_module = module.visit(transformer)
 
         assert modified_module.code.strip() == expected.strip()
+
+
+def test_type_checking_imports():
+    optim_code = """from dataclasses import dataclass
+from pydantic_ai.providers import Provider, infer_provider
+from pydantic_ai_slim.pydantic_ai.models import Model
+from pydantic_ai_slim.pydantic_ai.tools import ToolDefinition
+from typing import Literal
+
+#### problamatic imports ####
+from huggingface_hub import AsyncInferenceClient, ChatCompletionInputTool
+import requests
+import aiohttp as aiohttp_
+from math import pi as PI, sin as sine
+
+@dataclass(init=False)
+class HuggingFaceModel(Model):
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        provider: Literal['huggingface'] | Provider[AsyncInferenceClient] = 'huggingface',
+    ):
+        print(requests.__name__)
+        print(aiohttp_.__name__)
+        print(PI)
+        print(sine)
+        # Fast branch: avoid repeating provider assignment
+        if isinstance(provider, str):
+            provider_obj = infer_provider(provider)
+        else:
+            provider_obj = provider
+        self._provider = provider
+        self._model_name = model_name
+        self.client = provider_obj.client
+
+    @staticmethod
+    def _map_tool_definition(f: ToolDefinition) -> ChatCompletionInputTool:
+        # Inline dict creation and single pass for possible strict attribute
+        tool_dict = {
+            'type': 'function',
+            'function': {
+                'name': f.name,
+                'description': f.description,
+                'parameters': f.parameters_json_schema,
+            },
+        }
+        if f.strict is not None:
+            tool_dict['function']['strict'] = f.strict
+        return ChatCompletionInputTool.parse_obj_as_instance(tool_dict)  # type: ignore
+"""
+
+    original_code = """from dataclasses import dataclass
+from pydantic_ai.providers import Provider, infer_provider
+from pydantic_ai_slim.pydantic_ai.models import Model
+from pydantic_ai_slim.pydantic_ai.tools import ToolDefinition
+from typing import Literal
+
+try:
+    import aiohttp as aiohttp_
+    from math import pi as PI, sin as sine
+    from huggingface_hub import (
+        AsyncInferenceClient,
+        ChatCompletionInputMessage,
+        ChatCompletionInputMessageChunk,
+        ChatCompletionInputTool,
+        ChatCompletionInputToolCall,
+        ChatCompletionInputURL,
+        ChatCompletionOutput,
+        ChatCompletionOutputMessage,
+        ChatCompletionStreamOutput,
+    )
+    from huggingface_hub.errors import HfHubHTTPError
+
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `huggingface_hub` to use Hugging Face Inference Providers, '
+        'you can use the `huggingface` optional group — `pip install "pydantic-ai-slim[huggingface]"`'
+    ) from _import_error
+
+if True:
+    import requests
+
+__all__ = (
+    'HuggingFaceModel',
+    'HuggingFaceModelSettings',
+)
+
+@dataclass(init=False)
+class HuggingFaceModel(Model):
+
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        provider: Literal['huggingface'] | Provider[AsyncInferenceClient] = 'huggingface',
+    ):
+        self._model_name = model_name
+        self._provider = provider
+        if isinstance(provider, str):
+            provider = infer_provider(provider)
+        self.client = provider.client
+
+    @staticmethod
+    def _map_tool_definition(f: ToolDefinition) -> ChatCompletionInputTool:
+        tool_param: ChatCompletionInputTool = ChatCompletionInputTool.parse_obj_as_instance(  # type: ignore
+            {
+                'type': 'function',
+                'function': {
+                    'name': f.name,
+                    'description': f.description,
+                    'parameters': f.parameters_json_schema,
+                },
+            }
+        )
+        if f.strict is not None:
+            tool_param['function']['strict'] = f.strict
+        return tool_param
+"""
+
+
+    function_name: str = "HuggingFaceModel._map_tool_definition"
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=[function_name],
+        optimized_code=optim_code,
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+
+    assert not re.search(r"^import requests\b", new_code, re.MULTILINE)  # conditional simple import: import <name>
+    assert not re.search(r"^import aiohttp as aiohttp_\b", new_code, re.MULTILINE)  # conditional alias import: import <name> as <alias>
+    assert not re.search(r"^from math import pi as PI, sin as sine\b", new_code, re.MULTILINE)  # conditional multiple aliases imports
+    assert "from huggingface_hub import AsyncInferenceClient, ChatCompletionInputTool" not in new_code # conditional from import

@@ -104,7 +104,7 @@ def get_diff_lines_count(diff_output: str) -> int:
 def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
-    optimized_function: str = "",
+    optimized_code: str = "",
     check_diff: bool = False,  # noqa
     print_status: bool = True,  # noqa
     exit_on_failure: bool = True,  # noqa
@@ -121,7 +121,7 @@ def format_code(
 
         if check_diff and original_code_lines > 50:
             # we dont' count the formatting diff for the optimized function as it should be well-formatted
-            original_code_without_opfunc = original_code.replace(optimized_function, "")
+            original_code_without_opfunc = original_code.replace(optimized_code, "")
 
             original_temp = Path(test_dir_str) / "original_temp.py"
             original_temp.write_text(original_code_without_opfunc, encoding="utf8")

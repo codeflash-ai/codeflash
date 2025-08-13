@@ -13,7 +13,7 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
-from codeflash.models.models import AIServiceRefinerRequest, OptimizedCandidate
+from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -136,7 +136,7 @@ class AiServiceClient:
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -206,7 +206,7 @@ class AiServiceClient:
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                 )
@@ -248,7 +248,7 @@ class AiServiceClient:
             }
             for opt in request
         ]
-        logger.info(f"Refining {len(request)} optimizations…")
+        logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
@@ -259,11 +259,11 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
             return [
                 OptimizedCandidate(
-                    source_code=opt["source_code"],
+                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"][:-4] + "refi",
                 )
@@ -339,7 +339,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
@@ -360,6 +359,7 @@ class AiServiceClient:
         is_correct: dict[str, bool] | None,
         optimized_line_profiler_results: dict[str, str] | None,
         metadata: dict[str, Any] | None,
+        optimizations_post: dict[str, str] | None = None,
     ) -> None:
         """Log features to the database.
 
@@ -372,6 +372,7 @@ class AiServiceClient:
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
         - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
         - metadata: contains the best optimization id
+        - optimizations_post - dict mapping opt id to code str after postprocessing
 
         """
         payload = {
@@ -383,6 +384,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "optimized_line_profiler_results": optimized_line_profiler_results,
             "metadata": metadata,
+            "optimizations_post": optimizations_post,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)

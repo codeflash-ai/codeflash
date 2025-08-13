@@ -1,6 +1,6 @@
 [project]
 name = "codeflash-benchmark"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pytest benchmarking plugin for codeflash.ai - automatic code performance optimization"
 authors = [{ name = "CodeFlash Inc.", email = "contact@codeflash.ai" }]
 requires-python = ">=3.9"
@@ -25,7 +25,7 @@ Repository = "https://github.com/codeflash-ai/codeflash-benchmark"
 codeflash-benchmark = "codeflash_benchmark.plugin"
 
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

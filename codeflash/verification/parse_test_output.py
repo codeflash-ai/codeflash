@@ -271,7 +271,7 @@ def parse_test_xml(
                 groups = match.groups()
                 if len(groups[5].split(":")) > 1:
                     iteration_id = groups[5].split(":")[0]
-                    groups = groups[:5] + (iteration_id,)
+                    groups = (*groups[:5], iteration_id)
                 end_matches[groups] = match
 
             if not begin_matches or not begin_matches:
