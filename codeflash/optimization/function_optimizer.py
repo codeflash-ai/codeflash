@@ -440,6 +440,9 @@ class FunctionOptimizer:
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
                 if normalized_code in ast_code_to_id:
+                    logger.warning(
+                        "Current candidate has been encountered before in testing, Skipping optimization candidate."
+                    )
                     past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
                     # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
                     speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
@@ -588,8 +591,10 @@ class FunctionOptimizer:
                         if len(possible_refinement) > 0:  # if the api returns a valid response
                             refinement_response.append(possible_refinement[0])
                     candidates.extend(refinement_response)
-                    logger.info(f"Added {len(refinement_response)} candidates from refinement")
                     original_len += len(refinement_response)
+                    logger.info(
+                        f"Added {len(refinement_response)} candidates from refinement, total candidates now: {original_len}"
+                    )
                     refinement_done = True
         except KeyboardInterrupt as e:
             self.write_code_and_helpers(
@@ -1099,11 +1104,6 @@ class FunctionOptimizer:
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code.flat)
-                console.print(
-                    Panel(
-                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
-                    )
-                )
                 processed_benchmark_info = None
                 if self.args.benchmark:
                     processed_benchmark_info = process_benchmark_data(
@@ -1227,6 +1227,7 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
+        console.print(Panel(new_explanation_raw_str, title="Best Candidate Explanation", border_style="blue"))
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,
@@ -1241,7 +1242,9 @@ class FunctionOptimizer:
             "concolic_tests": concolic_tests,
         }
 
-        if not self.args.no_pr and not self.args.staging_review:
+        raise_pr = not self.args.no_pr
+
+        if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif self.args.staging_review:
@@ -1252,12 +1255,24 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        if ((not self.args.no_pr) or not self.args.staging_review) and (
-            self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function)
+        if raise_pr and (
+            self.args.all
+            or env_utils.get_pr_number()
+            or self.args.replay_test
+            or (self.args.file and not self.args.function)
         ):
-            self.write_code_and_helpers(
-                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-            )
+            self.revert_code_and_helpers(original_helper_code)
+            return
+
+        if self.args.staging_review:
+            # always revert code and helpers when staging review
+            self.revert_code_and_helpers(original_helper_code)
+            return
+
+    def revert_code_and_helpers(self, original_helper_code: dict[Path, str]) -> None:
+        self.write_code_and_helpers(
+            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+        )
 
     def establish_original_code_baseline(
         self,
