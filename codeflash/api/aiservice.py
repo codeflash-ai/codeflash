@@ -249,7 +249,7 @@ class AiServiceClient:
             }
             for opt in request
         ]
-        logger.info(f"Refining {len(request)} optimizations…")
+        logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
@@ -260,7 +260,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
             return [
                 OptimizedCandidate(
@@ -340,7 +340,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
