@@ -403,6 +403,8 @@ class FunctionOptimizer:
         )
         candidate_index = 0
         original_len = len(candidates)
+        # TODO : We need to rewrite this candidate loop as a class, the container which has candidates receives new candidates at unknown times due to the async nature of lp and refinement calls,
+        #  TODO : in addition, the refinement calls depend on line profiler calls being complete so we need to check that reliably
         while True:
             try:
                 if len(candidates) > 0:
