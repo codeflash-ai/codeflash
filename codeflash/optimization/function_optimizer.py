@@ -380,9 +380,7 @@ class FunctionOptimizer:
         console.rule()
         candidates = deque(candidates)
         refinement_done = False
-        refinements_added = False
         line_profiler_done = False
-        line_profiler_added = False
         future_all_refinements: list[concurrent.futures.Future] = []
         ast_code_to_id = {}
         valid_optimizations = []
@@ -407,7 +405,7 @@ class FunctionOptimizer:
         original_len = len(candidates)
         while True:
             try:
-                if len(candidates)>0:
+                if len(candidates) > 0:
                     candidate = candidates.popleft()
                 else:
                     if not line_profiler_done:
@@ -416,7 +414,9 @@ class FunctionOptimizer:
                         line_profile_results = future_line_profile_results.result()
                         candidates.extend(line_profile_results)
                         original_len += len(line_profile_results)
-                        logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
+                        logger.info(
+                            f"Added results from line profiler to candidates, total candidates now: {original_len}"
+                        )
                         line_profiler_done = True
                         continue
                     if line_profiler_done and not refinement_done:
