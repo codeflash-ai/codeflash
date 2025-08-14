@@ -28,7 +28,6 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
             pyproject_toml_path = self._find_pyproject_toml(workspace_path)
             if pyproject_toml_path:
                 server.prepare_optimizer_arguments(pyproject_toml_path)
-                server.show_message(f"Found pyproject.toml at: {pyproject_toml_path}")
             else:
                 server.show_message("No pyproject.toml found in workspace.")
         else:
