@@ -5,7 +5,7 @@ from fastmcp import FastMCP
 from tests.scripts.end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codeflash_command
 
 mcp = FastMCP(
-    name="Code Optimization Assistant",
+    name="codeflash",
     instructions="""
         This server provides code optimization tools.
         Call optimize_code(file, function) to optimize your code.
