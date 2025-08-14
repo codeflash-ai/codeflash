@@ -202,7 +202,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
             return [
                 OptimizedCandidate(
