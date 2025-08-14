@@ -18,7 +18,7 @@ from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
 from codeflash.code_utils.git_utils import (
     check_running_in_git_repo,
     create_detached_worktree,
-    create_diff_from_worktree,
+    create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
     remove_worktree,
 )
@@ -346,7 +346,7 @@ class Optimizer:
                                 relative_file_paths = [
                                     code_string.file_path for code_string in read_writable_code.code_strings
                                 ]
-                                patch_path = create_diff_from_worktree(
+                                patch_path = create_diff_patch_from_worktree(
                                     self.current_worktree,
                                     relative_file_paths,
                                     self.current_function_optimizer.function_to_optimize.qualified_name,

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
-from codeflash.code_utils.git_utils import create_diff_from_worktree
+from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
@@ -322,7 +322,7 @@ def perform_function_optimization(  # noqa: PLR0911
 
         # generate a patch for the optimization
         relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-        patch_file = create_diff_from_worktree(
+        patch_file = create_diff_patch_from_worktree(
             server.optimizer.current_worktree,
             relative_file_paths,
             server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,

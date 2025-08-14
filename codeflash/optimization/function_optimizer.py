@@ -1259,7 +1259,7 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        # If worktree mode, do not revert code and helpers, we create snapshot commit after each function optimization
+        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
         if self.args.worktree:
             return
 

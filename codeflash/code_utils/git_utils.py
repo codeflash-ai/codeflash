@@ -258,7 +258,7 @@ def remove_worktree(worktree_dir: Path) -> None:
         logger.exception(f"Failed to remove worktree: {worktree_dir}")
 
 
-def create_diff_from_worktree(worktree_dir: Path, files: list[str], fto_name: str) -> Path:
+def create_diff_patch_from_worktree(worktree_dir: Path, files: list[str], fto_name: str) -> Path:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
 
