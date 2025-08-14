@@ -43,14 +43,13 @@ def generate_candidates(source_code_path: Path) -> set[str]:
     """Generate all the possible candidates for coverage data based on the source code path."""
     candidates = set()
     candidates.add(source_code_path.name)
-    current_path = source_code_path.parent
 
     last_added = source_code_path.name
-    while current_path != current_path.parent:
-        candidate_path = str(Path(current_path.name) / last_added)
+    parts = source_code_path.parts
+    for i in range(len(parts) - 2, 0, -1):
+        candidate_path = f"{parts[i]}/{last_added}"
         candidates.add(candidate_path)
         last_added = candidate_path
-        current_path = current_path.parent
 
     candidates.add(str(source_code_path))
     return candidates
