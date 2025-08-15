@@ -12,7 +12,7 @@ response = client.beta.messages.create(
             "content": 'Optimize my codebase, the file is "/Users/codeflash/Downloads/codeflash-dev/codeflash/code_to_optimize/bubble_sort.py" and the function is "sorter"',
         }
     ],
-    mcp_servers=[{"type": "url", "url": f"{url}/mcp/", "name": "Code Optimization Assistant"}],
+    mcp_servers=[{"type": "url", "url": f"{url}/mcp/", "name": "codeflash"}],
     extra_headers={"anthropic-beta": "mcp-client-2025-04-04"},
 )
 rprint(response.content)
