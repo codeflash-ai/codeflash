@@ -242,7 +242,11 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
         # Apply the patch inside the worktree
         try:
-            subprocess.run(["git", "apply", patch_path], cwd=worktree_dir, check=True)
+            subprocess.run(
+                ["git", "apply", "--ignore-space-change", "--ignore-whitespace", patch_path],
+                cwd=worktree_dir,
+                check=True,
+            )
             create_worktree_snapshot_commit(worktree_dir, "Initial Snapshot")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to apply patch to worktree: {e}")
