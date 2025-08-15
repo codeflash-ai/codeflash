@@ -1247,7 +1247,13 @@ class FunctionOptimizer:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif self.args.staging_review:
-            create_staging(**data)
+            response = create_staging(**data)
+            if response.status_code == 200:
+                staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
+                console.print(f"[bold green]✅ Staging created:[/bold green] [link={staging_url}]{staging_url}[/link]")
+            else:
+                console.print(f"[bold red]❌ Failed to create staging [/bold red] — status {response.status_code}")
+
         else:
             # Mark optimization success since no PR will be created
             mark_optimization_success(
