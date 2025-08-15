@@ -3,13 +3,20 @@ import tempfile
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
+import pytest
+from pathlib import Path
+
+@pytest.fixture
+def temp_dir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield Path(tmpdirname)
 
 
-def test_get_code_function() -> None:
+def test_get_code_function(temp_dir: Path) -> None:
     code = """def test(self):
     return self._test"""
 
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
@@ -18,14 +25,14 @@ def test_get_code_function() -> None:
         assert contextual_dunder_methods == set()
 
 
-def test_get_code_property() -> None:
+def test_get_code_property(temp_dir: Path) -> None:
     code = """class TestClass:
     def __init__(self):
         self._test = 5
     @property
     def test(self):
         return self._test"""
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
@@ -36,7 +43,7 @@ def test_get_code_property() -> None:
         assert contextual_dunder_methods == {("TestClass", "__init__")}
 
 
-def test_get_code_class() -> None:
+def test_get_code_class(temp_dir: Path) -> None:
     code = """
 class TestClass:
     def __init__(self):
@@ -54,7 +61,7 @@ class TestClass:
     @property
     def test(self):
         return self._test"""
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
@@ -65,7 +72,7 @@ class TestClass:
         assert contextual_dunder_methods == {("TestClass", "__init__")}
 
 
-def test_get_code_bubble_sort_class() -> None:
+def test_get_code_bubble_sort_class(temp_dir: Path) -> None:
     code = """
 def hi():
     pass
@@ -105,7 +112,7 @@ class BubbleSortClass:
                     arr[j + 1] = temp
         return arr
 """
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
@@ -116,7 +123,7 @@ class BubbleSortClass:
         assert contextual_dunder_methods == {("BubbleSortClass", "__init__"), ("BubbleSortClass", "__call__")}
 
 
-def test_get_code_indent() -> None:
+def test_get_code_indent(temp_dir: Path) -> None:
     code = """def hi():
     pass
 
@@ -168,7 +175,7 @@ def non():
     def helper(self, arr, j):
         return arr[j] > arr[j + 1]
 """
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         new_code, contextual_dunder_methods = get_code(
@@ -198,7 +205,7 @@ def non():
     def unsorter(self, arr):
         return shuffle(arr)
 """
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
         new_code, contextual_dunder_methods = get_code(
@@ -212,7 +219,7 @@ def non():
         assert contextual_dunder_methods == {("BubbleSortClass", "__init__"), ("BubbleSortClass", "__call__")}
 
 
-def test_get_code_multiline_class_def() -> None:
+def test_get_code_multiline_class_def(temp_dir: Path) -> None:
     code = """class StatementAssignmentVariableConstantMutable(
     StatementAssignmentVariableMixin, StatementAssignmentVariableConstantMutableBase
 ):
@@ -235,7 +242,7 @@ def test_get_code_multiline_class_def() -> None:
     def computeStatement(self, trace_collection):
         return self, None, None
 """
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
@@ -252,13 +259,13 @@ def test_get_code_multiline_class_def() -> None:
         assert contextual_dunder_methods == set()
 
 
-def test_get_code_dataclass_attribute():
+def test_get_code_dataclass_attribute(temp_dir: Path) -> None:
     code = """@dataclass
 class CustomDataClass:
     name: str = ""
     data: List[int] = field(default_factory=list)"""
 
-    with tempfile.NamedTemporaryFile("w") as f:
+    with (temp_dir / "temp_file.py").open(mode="w") as f:
         f.write(code)
         f.flush()
 
