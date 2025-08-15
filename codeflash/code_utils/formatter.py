@@ -85,6 +85,9 @@ def apply_formatter_cmds(
                 expand=False,
             )
             console.print(panel)
+            logger.warning(
+                f"Formatter command not found: {' '.join(formatter_cmd_list)}, continuing without formatting"
+            )
             if exit_on_failure:
                 raise e from None
 
@@ -126,28 +129,41 @@ def format_code(
             original_temp = Path(test_dir_str) / "original_temp.py"
             original_temp.write_text(original_code_without_opfunc, encoding="utf8")
 
-            formatted_temp, formatted_code = apply_formatter_cmds(
-                formatter_cmds, original_temp, test_dir_str, print_status=False
-            )
-
-            diff_output = generate_unified_diff(
-                original_code_without_opfunc, formatted_code, from_file=str(original_temp), to_file=str(formatted_temp)
-            )
-            diff_lines_count = get_diff_lines_count(diff_output)
-
-            max_diff_lines = min(int(original_code_lines * 0.3), 50)
-
-            if diff_lines_count > max_diff_lines and max_diff_lines != -1:
-                logger.debug(
-                    f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
+            try:
+                formatted_temp, formatted_code = apply_formatter_cmds(
+                    formatter_cmds, original_temp, test_dir_str, print_status=False
                 )
+
+                diff_output = generate_unified_diff(
+                    original_code_without_opfunc,
+                    formatted_code,
+                    from_file=str(original_temp),
+                    to_file=str(formatted_temp),
+                )
+                diff_lines_count = get_diff_lines_count(diff_output)
+
+                max_diff_lines = min(int(original_code_lines * 0.3), 50)
+
+                if diff_lines_count > max_diff_lines and max_diff_lines != -1:
+                    logger.debug(
+                        f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
+                    )
+            except FileNotFoundError as e:
+                logger.warning(f"Formatter not found, skipping diff check: {e}")
+                # Continue without formatting checks
                 return original_code
+
         # TODO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
-        _, formatted_code = apply_formatter_cmds(
-            formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
-        )
-        logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
-        return formatted_code
+        try:
+            _, formatted_code = apply_formatter_cmds(
+                formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
+            )
+        except FileNotFoundError as e:
+            logger.warning(f"Formatter not found, returning original code: {e}")
+            return original_code
+        else:
+            logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
+            return formatted_code
 
 
 def sort_imports(code: str) -> str:
