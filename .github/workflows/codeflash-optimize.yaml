@@ -14,7 +14,7 @@ concurrency:
 jobs:
   optimize:
     name: Optimize new Python code
-    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    if: ${{ github.actor != 'codeflash-ai[bot]' && github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     env:
       CODEFLASH_AIS_SERVER: prod
