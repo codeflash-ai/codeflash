@@ -30,7 +30,7 @@ def get_latest_version_from_pypi() -> Optional[str]:
         return _version_cache["version"]
     
     try:
-        response = requests.get("https://pypi.org/pypi/codeflash/json", timeout=10)
+        response = requests.get("https://pypi.org/pypi/codeflash/json", timeout=2)
         if response.status_code == 200:
             data = response.json()
             latest_version = data["info"]["version"]
@@ -67,15 +67,13 @@ def check_for_newer_minor_version(*, disable_check: bool = False) -> None:
     if disable_check:
         return
         
-    # Get current version dynamically to handle runtime changes
-    from codeflash.version import __version__ as current_version
     latest_version = get_latest_version_from_pypi()
     
     if not latest_version:
         return
     
     try:
-        current_parsed = version.parse(current_version)
+        current_parsed = version.parse(__version__)
         latest_parsed = version.parse(latest_version)
         
         # Check if there's a newer minor version available
@@ -86,11 +84,11 @@ def check_for_newer_minor_version(*, disable_check: bool = False) -> None:
             
             console.print(
                 f"[bold blue]ℹ️  A newer version of Codeflash is available![/bold blue]\n"
-                f"Current version: {current_version} | Latest version: {latest_version}\n"
+                f"Current version: {__version__} | Latest version: {latest_version}\n"
                 f"Consider upgrading for better quality optimizations.",
                 style="blue"
             )
             
     except version.InvalidVersion as e:
         logger.debug(f"Invalid version format: {e}")
-        return 
+        return
