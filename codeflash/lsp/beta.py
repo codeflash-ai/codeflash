@@ -11,6 +11,7 @@ from pygls import uris
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
+from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 from codeflash.result.explanation import Explanation
@@ -38,6 +39,23 @@ class ProvideApiKeyParams:
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+
+
+@server.feature("getOptimizableFunctionsInCurrentDiff")
+def get_functions_in_current_git_diff(
+    server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
+) -> dict[str, str | list[str]]:
+    functions = get_functions_within_git_diff(uncommitted_changes=True)
+    file_to_funcs_to_optimize, _ = filter_functions(
+        modified_functions=functions,
+        tests_root=server.optimizer.test_cfg.tests_root,
+        ignore_paths=[],
+        project_root=server.optimizer.args.project_root,
+        module_root=server.optimizer.args.module_root,
+        previous_checkpoint_functions={},
+    )
+    qualified_names: list[str] = [func.qualified_name for funcs in file_to_funcs_to_optimize.values() for func in funcs]
+    return {"functions": qualified_names, "status": "success"}
 
 
 @server.feature("getOptimizableFunctions")
