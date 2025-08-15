@@ -202,7 +202,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
             return [
                 OptimizedCandidate(
@@ -248,7 +248,7 @@ class AiServiceClient:
             }
             for opt in request
         ]
-        logger.info(f"Refining {len(request)} optimizations…")
+        logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
@@ -259,7 +259,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
             return [
                 OptimizedCandidate(
@@ -339,7 +339,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
@@ -360,6 +359,7 @@ class AiServiceClient:
         is_correct: dict[str, bool] | None,
         optimized_line_profiler_results: dict[str, str] | None,
         metadata: dict[str, Any] | None,
+        optimizations_post: dict[str, str] | None = None,
     ) -> None:
         """Log features to the database.
 
@@ -372,6 +372,7 @@ class AiServiceClient:
         - is_correct (Optional[Dict[str, bool]]): Whether the optimized code is correct.
         - optimized_line_profiler_results: line_profiler results for every candidate mapped to their optimization_id
         - metadata: contains the best optimization id
+        - optimizations_post - dict mapping opt id to code str after postprocessing
 
         """
         payload = {
@@ -383,6 +384,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "optimized_line_profiler_results": optimized_line_profiler_results,
             "metadata": metadata,
+            "optimizations_post": optimizations_post,
         }
         try:
             self.make_ai_service_request("/log_features", payload=payload, timeout=5)
