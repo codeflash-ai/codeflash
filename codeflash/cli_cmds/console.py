@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import contextmanager
 from itertools import cycle
 from typing import TYPE_CHECKING
@@ -28,6 +29,10 @@ if TYPE_CHECKING:
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
+
+if os.getenv("CODEFLASH_LSP"):
+    console.quiet = True
+
 logging.basicConfig(
     level=logging.INFO,
     handlers=[RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)],

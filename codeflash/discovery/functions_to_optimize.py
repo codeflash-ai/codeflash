@@ -208,7 +208,7 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             console.rule()
             ph("cli-optimizing-git-diff")
-            functions = get_functions_within_git_diff()
+            functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
@@ -224,8 +224,8 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
-    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
+def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
+    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)

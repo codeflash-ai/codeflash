@@ -7,10 +7,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
+from codeflash.lsp.helpers import is_LSP_enabled
 
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
@@ -34,11 +35,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
-    if console.quiet:  # lsp
-        # prefer shell config over env var in lsp mode
-        api_key = read_api_key_from_shell_config()
-    else:
-        api_key = os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+    # prefer shell config over env var in lsp mode
+    api_key = (
+        read_api_key_from_shell_config()
+        if is_LSP_enabled()
+        else os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+    )
 
     api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
@@ -123,11 +125,6 @@ def is_repo_a_fork() -> bool:
 def is_ci() -> bool:
     """Check if running in a CI environment."""
     return bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
-
-
-@lru_cache(maxsize=1)
-def is_LSP_enabled() -> bool:
-    return console.quiet
 
 
 def is_pr_draft() -> bool:
