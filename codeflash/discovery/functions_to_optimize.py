@@ -85,7 +85,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
-                    is_async=node.asynchronous is not None,
+                    is_async=bool(node.asynchronous),
                 )
             )
 
