@@ -75,7 +75,7 @@ class FunctionVisitor(cst.CSTVisitor):
             parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
             ast_parents: list[FunctionParent] = []
             while parents is not None:
-                if isinstance(parents, (cst.FunctionDef, cst.ClassDef)):
+                if isinstance(parents, (cst.FunctionDef, cst.AsyncFunctionDef, cst.ClassDef)):
                     ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
                 parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
             self.functions.append(
@@ -85,6 +85,29 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
+                    is_async=False,
+                )
+            )
+
+    def visit_AsyncFunctionDef(self, node: cst.AsyncFunctionDef) -> None:
+        return_visitor: ReturnStatementVisitor = ReturnStatementVisitor()
+        node.visit(return_visitor)
+        if return_visitor.has_return_statement:
+            pos: CodeRange = self.get_metadata(cst.metadata.PositionProvider, node)
+            parents: CSTNode | None = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+            ast_parents: list[FunctionParent] = []
+            while parents is not None:
+                if isinstance(parents, (cst.FunctionDef, cst.AsyncFunctionDef, cst.ClassDef)):
+                    ast_parents.append(FunctionParent(parents.name.value, parents.__class__.__name__))
+                parents = self.get_metadata(cst.metadata.ParentNodeProvider, parents, default=None)
+            self.functions.append(
+                FunctionToOptimize(
+                    function_name=node.name.value,
+                    file_path=self.file_path,
+                    parents=list(reversed(ast_parents)),
+                    starting_line=pos.start.line,
+                    ending_line=pos.end.line,
+                    is_async=True,
                 )
             )
 

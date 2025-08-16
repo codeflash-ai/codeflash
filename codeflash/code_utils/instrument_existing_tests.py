@@ -48,6 +48,39 @@ def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
     )
 
 
+class AsyncIOGatherRemover(ast.NodeTransformer):
+    def _contains_asyncio_gather(self, node: ast.AST) -> bool:
+        """Check if a node contains asyncio.gather calls."""
+        for child_node in ast.walk(node):
+            if (
+                isinstance(child_node, ast.Call)
+                and isinstance(child_node.func, ast.Attribute)
+                and isinstance(child_node.func.value, ast.Name)
+                and child_node.func.value.id == "asyncio"
+                and child_node.func.attr == "gather"
+            ):
+                return True
+
+            if (
+                isinstance(child_node, ast.Call)
+                and isinstance(child_node.func, ast.Name)
+                and child_node.func.id == "gather"
+            ):
+                return True
+
+        return False
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef | None:
+        if node.name.startswith("test_") and self._contains_asyncio_gather(node):
+            return None
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef | None:
+        if node.name.startswith("test_") and self._contains_asyncio_gather(node):
+            return None
+        return self.generic_visit(node)
+
+
 class InjectPerfOnly(ast.NodeTransformer):
     def __init__(
         self,
@@ -397,6 +430,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
                 else:
                     self.imported_as = FunctionToOptimize(
@@ -405,6 +439,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
 
 
@@ -415,7 +450,6 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
-    is_async: bool = False,
 ) -> tuple[bool, str | None]:
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
@@ -429,6 +463,13 @@ def inject_profiling_into_existing_test(
     import_visitor = FunctionImportedAsVisitor(function_to_optimize)
     import_visitor.visit(tree)
     func = import_visitor.imported_as
+
+    is_async = function_to_optimize.is_async
+    logger.debug(f"Using async status from discovery phase for {function_to_optimize.function_name}: {is_async}")
+
+    if is_async:
+        asyncio_gather_remover = AsyncIOGatherRemover()
+        tree = asyncio_gather_remover.visit(tree)
 
     tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode, is_async=is_async).visit(
         tree
@@ -444,11 +485,15 @@ def inject_profiling_into_existing_test(
         )
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
+    if is_async:
+        new_imports.append(ast.Import(names=[ast.alias(name="inspect")]))
     tree.body = [*new_imports, create_wrapper_function(mode, is_async), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
-def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR, is_async: bool = False) -> ast.FunctionDef:
+def create_wrapper_function(
+    mode: TestingMode = TestingMode.BEHAVIOR, is_async: bool = False
+) -> ast.FunctionDef | ast.AsyncFunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
@@ -624,22 +669,70 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR, is_async: 
                     ),
                     lineno=lineno + 11,
                 ),
-                ast.Assign(
-                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                    value=ast.Await(
-                        value=ast.Call(
-                            func=ast.Name(id="wrapped", ctx=ast.Load()),
-                            args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                            keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                        )
-                    )
+                # For async wrappers
+                # Call the wrapped function first, then check if result is awaitable before awaiting.
+                # This handles mixed scenarios where async tests might call both sync and async functions.
+                *(
+                    [
+                        ast.Assign(
+                            targets=[ast.Name(id="ret", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="wrapped", ctx=ast.Load()),
+                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        ),
+                        ast.If(
+                            test=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="inspect", ctx=ast.Load()), attr="isawaitable", ctx=ast.Load()
+                                ),
+                                args=[ast.Name(id="ret", ctx=ast.Load())],
+                                keywords=[],
+                            ),
+                            body=[
+                                ast.Assign(
+                                    targets=[ast.Name(id="counter", ctx=ast.Store())],
+                                    value=ast.Call(
+                                        func=ast.Attribute(
+                                            value=ast.Name(id="time", ctx=ast.Load()),
+                                            attr="perf_counter_ns",
+                                            ctx=ast.Load(),
+                                        ),
+                                        args=[],
+                                        keywords=[],
+                                    ),
+                                    lineno=lineno + 14,
+                                ),
+                                ast.Assign(
+                                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                                    value=ast.Await(value=ast.Name(id="ret", ctx=ast.Load())),
+                                    lineno=lineno + 15,
+                                ),
+                            ],
+                            orelse=[
+                                ast.Assign(
+                                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                                    value=ast.Name(id="ret", ctx=ast.Load()),
+                                    lineno=lineno + 16,
+                                )
+                            ],
+                            lineno=lineno + 13,
+                        ),
+                    ]
                     if is_async
-                    else ast.Call(
-                        func=ast.Name(id="wrapped", ctx=ast.Load()),
-                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                    ),
-                    lineno=lineno + 12,
+                    else [
+                        ast.Assign(
+                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="wrapped", ctx=ast.Load()),
+                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        )
+                    ]
                 ),
                 ast.Assign(
                     targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],

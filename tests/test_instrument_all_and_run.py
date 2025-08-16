@@ -62,7 +62,12 @@ async_codeflash_wrap_string = """async def codeflash_wrap(wrapped, test_module_n
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = await wrapped(*args, **kwargs)
+        ret = wrapped(*args, **kwargs)
+        if inspect.isawaitable(ret):
+            counter = time.perf_counter_ns()
+            return_value = await ret
+        else:
+            return_value = ret
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -266,14 +271,15 @@ async def test_async_add():
     assert result == 5"""
 
     expected = (
-        """import gc
+        """import asyncio
+import gc
+import inspect
 import os
 import sqlite3
 import time
 
 import dill as pickle
 
-import asyncio
 from code_to_optimize.async_adder import async_add
 
 
@@ -286,7 +292,7 @@ async def test_async_add():
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-    result = await codeflash_wrap(async_add, '{module_path}', None, 'test_async_add', 'async_add', '1', codeflash_loop_index, codeflash_cur, codeflash_con, 2, 3)
+    result = await codeflash_wrap(async_add, '{module_path}', None, 'test_async_add', 'async_add', '0', codeflash_loop_index, codeflash_cur, codeflash_con, 2, 3)
     assert result == 5
     codeflash_con.close()
 """
@@ -320,15 +326,14 @@ async def test_async_add():
             project_root_path,
             "pytest",
             mode=TestingMode.BEHAVIOR,
-            is_async=True,
+
         )
         os.chdir(original_cwd)
         assert success
         assert new_test is not None
-        assert "await wrapped(*args, **kwargs)" in new_test
-        assert "async def codeflash_wrap" in new_test
-        assert "await codeflash_wrap(async_add" in new_test
-                
+        assert new_test.replace('"', "'") == expected.format(
+            module_path="code_to_optimize.tests.pytest.test_async_adder_behavior_temp", tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        ).replace('"', "'")
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
