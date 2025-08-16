@@ -89,6 +89,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
+        *,
         is_async: bool = False,
     ) -> None:
         self.mode: TestingMode = mode
@@ -487,12 +488,12 @@ def inject_profiling_into_existing_test(
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     if is_async:
         new_imports.append(ast.Import(names=[ast.alias(name="inspect")]))
-    tree.body = [*new_imports, create_wrapper_function(mode, is_async), *tree.body]
+    tree.body = [*new_imports, create_wrapper_function(mode, is_async=is_async), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
 def create_wrapper_function(
-    mode: TestingMode = TestingMode.BEHAVIOR, is_async: bool = False
+    mode: TestingMode = TestingMode.BEHAVIOR, *, is_async: bool = False
 ) -> ast.FunctionDef | ast.AsyncFunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
