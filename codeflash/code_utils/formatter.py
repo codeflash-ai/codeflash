@@ -144,10 +144,11 @@ def format_code(
 
                 max_diff_lines = min(int(original_code_lines * 0.3), 50)
 
-                if diff_lines_count > max_diff_lines and max_diff_lines != -1:
+                if diff_lines_count > max_diff_lines:
                     logger.debug(
                         f"Skipping formatting {path}: {diff_lines_count} lines would change (max: {max_diff_lines})"
                     )
+                    return original_code
             except FileNotFoundError as e:
                 logger.warning(f"Formatter not found, skipping diff check: {e}")
                 # Continue without formatting checks
