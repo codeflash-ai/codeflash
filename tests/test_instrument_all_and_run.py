@@ -46,6 +46,41 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     return return_value
 """
 
+async_codeflash_wrap_string = """async def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+    if not hasattr(codeflash_wrap, 'index'):
+        codeflash_wrap.index = {{}}
+    if test_id in codeflash_wrap.index:
+        codeflash_wrap.index[test_id] += 1
+    else:
+        codeflash_wrap.index[test_id] = 0
+    codeflash_test_index = codeflash_wrap.index[test_id]
+    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    print(f"!$######{{test_stdout_tag}}######$!")
+    exception = None
+    gc.disable()
+    try:
+        counter = time.perf_counter_ns()
+        ret = wrapped(*args, **kwargs)
+        if inspect.isawaitable(ret):
+            counter = time.perf_counter_ns()
+            return_value = await ret
+        else:
+            return_value = ret
+        codeflash_duration = time.perf_counter_ns() - counter
+    except Exception as e:
+        codeflash_duration = time.perf_counter_ns() - counter
+        exception = e
+    gc.enable()
+    print(f"!######{{test_stdout_tag}}######!")
+    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_con.commit()
+    if exception:
+        raise exception
+    return return_value
+"""
 
 def test_bubble_sort_behavior_results() -> None:
     code = """from code_to_optimize.bubble_sort import sorter
@@ -219,6 +254,86 @@ result: [0, 1, 2, 3, 4, 5]
 """
         assert out_str == results2[0].stdout
         assert compare_test_results(test_results, results2)
+    finally:
+        fto_path.write_text(original_code, "utf-8")
+        test_path.unlink(missing_ok=True)
+        test_path_perf.unlink(missing_ok=True)
+
+
+def test_async_function_behavior_results() -> None:
+    """Test that async_codeflash_wrap_string is used for async functions."""
+    code = """import asyncio
+from code_to_optimize.async_adder import async_add
+
+
+async def test_async_add():
+    result = await async_add(2, 3)
+    assert result == 5"""
+
+    expected = (
+        """import asyncio
+import gc
+import inspect
+import os
+import sqlite3
+import time
+
+import dill as pickle
+
+from code_to_optimize.async_adder import async_add
+
+
+"""
+        + async_codeflash_wrap_string
+        + """
+async def test_async_add():
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+    result = await codeflash_wrap(async_add, '{module_path}', None, 'test_async_add', 'async_add', '0', codeflash_loop_index, codeflash_cur, codeflash_con, 2, 3)
+    assert result == 5
+    codeflash_con.close()
+"""
+    )
+
+    test_path = (
+        Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_async_adder_behavior_temp.py"
+    ).resolve()
+    test_path_perf = (
+        Path(__file__).parent.resolve()
+        / "../code_to_optimize/tests/pytest/test_async_adder_perf_temp.py"
+    ).resolve()
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/async_adder.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    
+    try:
+        with test_path.open("w") as f:
+            f.write(code)
+
+        tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+        project_root_path = (Path(__file__).parent / "..").resolve()
+        original_cwd = Path.cwd()
+        run_cwd = Path(__file__).parent.parent.resolve()
+        func = FunctionToOptimize(function_name="async_add", parents=[], file_path=Path(fto_path), is_async=True)
+        os.chdir(run_cwd)
+        success, new_test = inject_profiling_into_existing_test(
+            test_path,
+            [CodePosition(6, 19)],
+            func,
+            project_root_path,
+            "pytest",
+            mode=TestingMode.BEHAVIOR,
+
+        )
+        os.chdir(original_cwd)
+        assert success
+        assert new_test is not None
+        assert new_test.replace('"', "'") == expected.format(
+            module_path="code_to_optimize.tests.pytest.test_async_adder_behavior_temp", tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        ).replace('"', "'")
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)

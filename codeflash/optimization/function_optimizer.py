@@ -35,7 +35,6 @@ from codeflash.code_utils.code_utils import (
     diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
 )
@@ -111,7 +110,7 @@ class FunctionOptimizer:
         test_cfg: TestConfig,
         function_to_optimize_source_code: str = "",
         function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
-        function_to_optimize_ast: ast.FunctionDef | None = None,
+        function_to_optimize_ast: ast.FunctionDef | ast.AsyncFunctionDef | None = None,
         aiservice_client: AiServiceClient | None = None,
         function_benchmark_timings: dict[BenchmarkKey, int] | None = None,
         total_benchmark_timings: dict[BenchmarkKey, int] | None = None,
@@ -170,11 +169,6 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        async_code = any(
-            has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
-        )
-        if async_code:
-            return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect

@@ -48,6 +48,39 @@ def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
     )
 
 
+class AsyncIOGatherRemover(ast.NodeTransformer):
+    def _contains_asyncio_gather(self, node: ast.AST) -> bool:
+        """Check if a node contains asyncio.gather calls."""
+        for child_node in ast.walk(node):
+            if (
+                isinstance(child_node, ast.Call)
+                and isinstance(child_node.func, ast.Attribute)
+                and isinstance(child_node.func.value, ast.Name)
+                and child_node.func.value.id == "asyncio"
+                and child_node.func.attr == "gather"
+            ):
+                return True
+
+            if (
+                isinstance(child_node, ast.Call)
+                and isinstance(child_node.func, ast.Name)
+                and child_node.func.id == "gather"
+            ):
+                return True
+
+        return False
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef | None:
+        if node.name.startswith("test_") and self._contains_asyncio_gather(node):
+            return None
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef | None:
+        if node.name.startswith("test_") and self._contains_asyncio_gather(node):
+            return None
+        return self.generic_visit(node)
+
+
 class InjectPerfOnly(ast.NodeTransformer):
     def __init__(
         self,
@@ -56,6 +89,8 @@ class InjectPerfOnly(ast.NodeTransformer):
         test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
+        *,
+        is_async: bool = False,
     ) -> None:
         self.mode: TestingMode = mode
         self.function_object = function
@@ -64,6 +99,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.module_path = module_path
         self.test_framework = test_framework
         self.call_positions = call_positions
+        self.is_async = is_async
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
 
@@ -71,6 +107,8 @@ class InjectPerfOnly(ast.NodeTransformer):
         self, test_node: ast.stmt, node_name: str, index: str, test_class_name: str | None = None
     ) -> Iterable[ast.stmt] | None:
         call_node = None
+        await_node = None
+
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call) and node_in_call_position(node, self.call_positions):
                 call_node = node
@@ -120,6 +158,64 @@ class InjectPerfOnly(ast.NodeTransformer):
                         node.keywords = call_node.keywords
                         break
 
+            # Check for awaited function calls
+            elif (
+                isinstance(node, ast.Await)
+                and isinstance(node.value, ast.Call)
+                and node_in_call_position(node.value, self.call_positions)
+            ):
+                call_node = node.value
+                await_node = node
+                if isinstance(call_node.func, ast.Name):
+                    function_name = call_node.func.id
+                    call_node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                    call_node.args = [
+                        ast.Name(id=function_name, ctx=ast.Load()),
+                        ast.Constant(value=self.module_path),
+                        ast.Constant(value=test_class_name or None),
+                        ast.Constant(value=node_name),
+                        ast.Constant(value=self.function_object.qualified_name),
+                        ast.Constant(value=index),
+                        ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
+                        *(
+                            [ast.Name(id="codeflash_cur", ctx=ast.Load()), ast.Name(id="codeflash_con", ctx=ast.Load())]
+                            if self.mode == TestingMode.BEHAVIOR
+                            else []
+                        ),
+                        *call_node.args,
+                    ]
+                    call_node.keywords = call_node.keywords
+                    # Keep the await wrapper around the modified call
+                    await_node.value = call_node
+                    break
+                if isinstance(call_node.func, ast.Attribute):
+                    function_to_test = call_node.func.attr
+                    if function_to_test == self.function_object.function_name:
+                        function_name = ast.unparse(call_node.func)
+                        call_node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
+                        call_node.args = [
+                            ast.Name(id=function_name, ctx=ast.Load()),
+                            ast.Constant(value=self.module_path),
+                            ast.Constant(value=test_class_name or None),
+                            ast.Constant(value=node_name),
+                            ast.Constant(value=self.function_object.qualified_name),
+                            ast.Constant(value=index),
+                            ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
+                            *(
+                                [
+                                    ast.Name(id="codeflash_cur", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_con", ctx=ast.Load()),
+                                ]
+                                if self.mode == TestingMode.BEHAVIOR
+                                else []
+                            ),
+                            *call_node.args,
+                        ]
+                        call_node.keywords = call_node.keywords
+                        # Keep the await wrapper around the modified call
+                        await_node.value = call_node
+                        break
+
         if call_node is None:
             return None
         return [test_node]
@@ -129,8 +225,33 @@ class InjectPerfOnly(ast.NodeTransformer):
         for inner_node in ast.walk(node):
             if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node, node.name)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node, node.name)
 
         return node
+
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef, test_class_name: str | None = None
+    ) -> ast.AsyncFunctionDef:
+        sync_node = ast.FunctionDef(
+            name=node.name,
+            args=node.args,
+            body=node.body,
+            decorator_list=node.decorator_list,
+            returns=node.returns,
+            lineno=node.lineno,
+            col_offset=node.col_offset if hasattr(node, "col_offset") else 0,
+        )
+        processed_sync = self.visit_FunctionDef(sync_node, test_class_name)
+        return ast.AsyncFunctionDef(
+            name=processed_sync.name,
+            args=processed_sync.args,
+            body=processed_sync.body,
+            decorator_list=processed_sync.decorator_list,
+            returns=processed_sync.returns,
+            lineno=processed_sync.lineno,
+            col_offset=processed_sync.col_offset if hasattr(processed_sync, "col_offset") else 0,
+        )
 
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
@@ -310,6 +431,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
                 else:
                     self.imported_as = FunctionToOptimize(
@@ -318,6 +440,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
 
 
@@ -342,7 +465,16 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
+    is_async = function_to_optimize.is_async
+    logger.debug(f"Using async status from discovery phase for {function_to_optimize.function_name}: {is_async}")
+
+    if is_async:
+        asyncio_gather_remover = AsyncIOGatherRemover()
+        tree = asyncio_gather_remover.visit(tree)
+
+    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode, is_async=is_async).visit(
+        tree
+    )
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
@@ -354,11 +486,15 @@ def inject_profiling_into_existing_test(
         )
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
-    tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
+    if is_async:
+        new_imports.append(ast.Import(names=[ast.alias(name="inspect")]))
+    tree.body = [*new_imports, create_wrapper_function(mode, is_async=is_async), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
-def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
+def create_wrapper_function(
+    mode: TestingMode = TestingMode.BEHAVIOR, *, is_async: bool = False
+) -> ast.FunctionDef | ast.AsyncFunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
         ast.Assign(
@@ -534,14 +670,70 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                     ),
                     lineno=lineno + 11,
                 ),
-                ast.Assign(
-                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id="wrapped", ctx=ast.Load()),
-                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                    ),
-                    lineno=lineno + 12,
+                # For async wrappers
+                # Call the wrapped function first, then check if result is awaitable before awaiting.
+                # This handles mixed scenarios where async tests might call both sync and async functions.
+                *(
+                    [
+                        ast.Assign(
+                            targets=[ast.Name(id="ret", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="wrapped", ctx=ast.Load()),
+                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        ),
+                        ast.If(
+                            test=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="inspect", ctx=ast.Load()), attr="isawaitable", ctx=ast.Load()
+                                ),
+                                args=[ast.Name(id="ret", ctx=ast.Load())],
+                                keywords=[],
+                            ),
+                            body=[
+                                ast.Assign(
+                                    targets=[ast.Name(id="counter", ctx=ast.Store())],
+                                    value=ast.Call(
+                                        func=ast.Attribute(
+                                            value=ast.Name(id="time", ctx=ast.Load()),
+                                            attr="perf_counter_ns",
+                                            ctx=ast.Load(),
+                                        ),
+                                        args=[],
+                                        keywords=[],
+                                    ),
+                                    lineno=lineno + 14,
+                                ),
+                                ast.Assign(
+                                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                                    value=ast.Await(value=ast.Name(id="ret", ctx=ast.Load())),
+                                    lineno=lineno + 15,
+                                ),
+                            ],
+                            orelse=[
+                                ast.Assign(
+                                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                                    value=ast.Name(id="ret", ctx=ast.Load()),
+                                    lineno=lineno + 16,
+                                )
+                            ],
+                            lineno=lineno + 13,
+                        ),
+                    ]
+                    if is_async
+                    else [
+                        ast.Assign(
+                            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Name(id="wrapped", ctx=ast.Load()),
+                                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                            ),
+                            lineno=lineno + 12,
+                        )
+                    ]
                 ),
                 ast.Assign(
                     targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
@@ -703,7 +895,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         ),
         ast.Return(value=ast.Name(id="return_value", ctx=ast.Load()), lineno=lineno + 19),
     ]
-    return ast.FunctionDef(
+    func_def = ast.FunctionDef(
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
@@ -729,3 +921,13 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         decorator_list=[],
         returns=None,
     )
+    if is_async:
+        return ast.AsyncFunctionDef(
+            name="codeflash_wrap",
+            args=func_def.args,
+            body=func_def.body,
+            lineno=func_def.lineno,
+            decorator_list=func_def.decorator_list,
+            returns=func_def.returns,
+        )
+    return func_def
