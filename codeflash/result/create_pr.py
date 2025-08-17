@@ -86,7 +86,7 @@ def existing_tests_source_for(
             # if not present in optimized output nan
             if (
                 original_tests_to_runtimes[filename][qualified_name] != 0
-                and optimized_tests_to_runtimes[filename][qualified_name] != 0
+                or optimized_tests_to_runtimes[filename][qualified_name] != 0
             ):
                 print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
