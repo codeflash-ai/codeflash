@@ -195,8 +195,19 @@ class LastImportFinder(cst.CSTVisitor):
                 self.last_import_line = self.current_line
 
 
-class ConditionalImportCollector(cst.CSTVisitor):
-    """Collect imports inside top-level conditionals (e.g., if TYPE_CHECKING, try/except)."""
+class DottedImportCollector(cst.CSTVisitor):
+    """Collects all top-level imports from a Python module in normalized dotted format, including top-level conditional imports like `if TYPE_CHECKING:`.
+
+    Examples
+    --------
+        import os                                                                  ==> "os"
+        import dbt.adapters.factory                                                ==> "dbt.adapters.factory"
+        from pathlib import Path                                                   ==> "pathlib.Path"
+        from recce.adapter.base import BaseAdapter                                 ==> "recce.adapter.base.BaseAdapter"
+        from typing import Any, List, Optional                                     ==> "typing.Any", "typing.List", "typing.Optional"
+        from recce.util.lineage import ( build_column_key, filter_dependency_maps) ==> "recce.util.lineage.build_column_key", "recce.util.lineage.filter_dependency_maps"
+
+    """
 
     def __init__(self) -> None:
         self.imports: set[str] = set()
@@ -217,7 +228,10 @@ class ConditionalImportCollector(cst.CSTVisitor):
                         for alias in child.names:
                             module = self.get_full_dotted_name(alias.name)
                             asname = alias.asname.name.value if alias.asname else alias.name.value
-                            self.imports.add(module if module == asname else f"{module}.{asname}")
+                            if isinstance(asname, cst.Attribute):
+                                self.imports.add(module)
+                            else:
+                                self.imports.add(module if module == asname else f"{module}.{asname}")
 
                     elif isinstance(child, cst.ImportFrom):
                         if child.module is None:
@@ -231,6 +245,7 @@ class ConditionalImportCollector(cst.CSTVisitor):
 
     def visit_Module(self, node: cst.Module) -> None:
         self.depth = 0
+        self._collect_imports_from_block(node)
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.depth += 1
@@ -388,19 +403,18 @@ def add_needed_imports_from_module(
         logger.error(f"Error parsing source module code: {e}")
         return dst_module_code
 
-    cond_import_collector = ConditionalImportCollector()
+    dotted_import_collector = DottedImportCollector()
     try:
         parsed_dst_module = cst.parse_module(dst_module_code)
-        parsed_dst_module.visit(cond_import_collector)
+        parsed_dst_module.visit(dotted_import_collector)
     except cst.ParserSyntaxError as e:
         logger.exception(f"Syntax error in destination module code: {e}")
         return dst_module_code  # Return the original code if there's a syntax error
 
     try:
         for mod in gatherer.module_imports:
-            if mod in cond_import_collector.imports:
-                continue
-            AddImportsVisitor.add_needed_import(dst_context, mod)
+            if mod not in dotted_import_collector.imports:
+                AddImportsVisitor.add_needed_import(dst_context, mod)
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
         for mod, obj_seq in gatherer.object_mapping.items():
             for obj in obj_seq:
@@ -408,25 +422,25 @@ def add_needed_imports_from_module(
                     f"{mod}.{obj}" in helper_functions_fqn or dst_context.full_module_name == mod  # avoid circular deps
                 ):
                     continue  # Skip adding imports for helper functions already in the context
-                if f"{mod}.{obj}" in cond_import_collector.imports:
-                    continue
-                AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                if f"{mod}.{obj}" not in dotted_import_collector.imports:
+                    AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                 RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
+
     for mod, asname in gatherer.module_aliases.items():
-        if f"{mod}.{asname}" in cond_import_collector.imports:
-            continue
-        AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
+        if f"{mod}.{asname}" not in dotted_import_collector.imports:
+            AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
+
     for mod, alias_pairs in gatherer.alias_mapping.items():
         for alias_pair in alias_pairs:
             if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
                 continue
-            if f"{mod}.{alias_pair[1]}" in cond_import_collector.imports:
-                continue
-            AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+
+            if f"{mod}.{alias_pair[1]}" not in dotted_import_collector.imports:
+                AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
 
     try:
