@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
+from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 
 
 def test_add_needed_imports_from_module0() -> None:
@@ -121,3 +122,230 @@ def belongs_to_function(name: Name, function_name: str) -> bool:
     project_root = Path("/home/roger/repos/codeflash")
     new_module = add_needed_imports_from_module(src_module, dst_module, src_path, dst_path, project_root)
     assert new_module == expected
+
+def test_duplicated_imports() -> None:
+    optim_code = '''from dataclasses import dataclass
+from recce.adapter.base import BaseAdapter
+from typing import Dict, List, Optional
+
+@dataclass
+class DbtAdapter(BaseAdapter):
+
+    def build_parent_map(self, nodes: Dict, base: Optional[bool] = False) -> Dict[str, List[str]]:
+        manifest = self.curr_manifest if base is False else self.base_manifest
+        
+        try:
+            parent_map_source = manifest.parent_map
+        except AttributeError:
+            parent_map_source = manifest.to_dict()["parent_map"]
+
+        node_ids = set(nodes)
+        parent_map = {}
+        for k, parents in parent_map_source.items():
+            if k not in node_ids:
+                continue
+            parent_map[k] = [parent for parent in parents if parent in node_ids]
+
+        return parent_map
+'''
+
+    original_code = '''import json
+import logging
+import os
+import uuid
+from contextlib import contextmanager
+from copy import deepcopy
+from dataclasses import dataclass, fields
+from errno import ENOENT
+from functools import lru_cache
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
+
+from recce.event import log_performance
+from recce.exceptions import RecceException
+from recce.util.cll import CLLPerformanceTracking, cll
+from recce.util.lineage import (
+    build_column_key,
+    filter_dependency_maps,
+    find_downstream,
+    find_upstream,
+)
+from recce.util.perf_tracking import LineagePerfTracker
+
+from ...tasks.profile import ProfileTask
+from ...util.breaking import BreakingPerformanceTracking, parse_change_category
+
+try:
+    import agate
+    import dbt.adapters.factory
+    from dbt.contracts.state import PreviousState
+except ImportError as e:
+    print("Error: dbt module not found. Please install it by running:")
+    print("pip install dbt-core dbt-<adapter>")
+    raise e
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from recce.adapter.base import BaseAdapter
+from recce.state import ArtifactsRoot
+
+from ...models import RunType
+from ...models.types import (
+    CllColumn,
+    CllData,
+    CllNode,
+    LineageDiff,
+    NodeChange,
+    NodeDiff,
+)
+from ...tasks import (
+    HistogramDiffTask,
+    ProfileDiffTask,
+    QueryBaseTask,
+    QueryDiffTask,
+    QueryTask,
+    RowCountDiffTask,
+    RowCountTask,
+    Task,
+    TopKDiffTask,
+    ValueDiffDetailTask,
+    ValueDiffTask,
+)
+from .dbt_version import DbtVersion
+
+@dataclass
+class DbtAdapter(BaseAdapter):
+
+    def build_parent_map(self, nodes: Dict, base: Optional[bool] = False) -> Dict[str, List[str]]:
+        manifest = self.curr_manifest if base is False else self.base_manifest
+        manifest_dict = manifest.to_dict()
+
+        node_ids = nodes.keys()
+        parent_map = {}
+        for k, parents in manifest_dict["parent_map"].items():
+            if k not in node_ids:
+                continue
+            parent_map[k] = [parent for parent in parents if parent in node_ids]
+
+        return parent_map
+'''
+    expected = '''import json
+import logging
+import os
+import uuid
+from contextlib import contextmanager
+from copy import deepcopy
+from dataclasses import dataclass, fields
+from errno import ENOENT
+from functools import lru_cache
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
+
+from recce.event import log_performance
+from recce.exceptions import RecceException
+from recce.util.cll import CLLPerformanceTracking, cll
+from recce.util.lineage import (
+    build_column_key,
+    filter_dependency_maps,
+    find_downstream,
+    find_upstream,
+)
+from recce.util.perf_tracking import LineagePerfTracker
+
+from ...tasks.profile import ProfileTask
+from ...util.breaking import BreakingPerformanceTracking, parse_change_category
+
+try:
+    import agate
+    import dbt.adapters.factory
+    from dbt.contracts.state import PreviousState
+except ImportError as e:
+    print("Error: dbt module not found. Please install it by running:")
+    print("pip install dbt-core dbt-<adapter>")
+    raise e
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from recce.adapter.base import BaseAdapter
+from recce.state import ArtifactsRoot
+
+from ...models import RunType
+from ...models.types import (
+    CllColumn,
+    CllData,
+    CllNode,
+    LineageDiff,
+    NodeChange,
+    NodeDiff,
+)
+from ...tasks import (
+    HistogramDiffTask,
+    ProfileDiffTask,
+    QueryBaseTask,
+    QueryDiffTask,
+    QueryTask,
+    RowCountDiffTask,
+    RowCountTask,
+    Task,
+    TopKDiffTask,
+    ValueDiffDetailTask,
+    ValueDiffTask,
+)
+from .dbt_version import DbtVersion
+
+@dataclass
+class DbtAdapter(BaseAdapter):
+
+    def build_parent_map(self, nodes: Dict, base: Optional[bool] = False) -> Dict[str, List[str]]:
+        manifest = self.curr_manifest if base is False else self.base_manifest
+        
+        try:
+            parent_map_source = manifest.parent_map
+        except AttributeError:
+            parent_map_source = manifest.to_dict()["parent_map"]
+
+        node_ids = set(nodes)
+        parent_map = {}
+        for k, parents in parent_map_source.items():
+            if k not in node_ids:
+                continue
+            parent_map[k] = [parent for parent in parents if parent in node_ids]
+
+        return parent_map
+'''
+
+    function_name: str = "DbtAdapter.build_parent_map"
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=[function_name],
+        optimized_code=optim_code,
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+    assert new_code == expected
