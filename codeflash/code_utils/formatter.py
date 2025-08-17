@@ -110,15 +110,15 @@ def format_code(
         # lsp mode
         exit_on_failure = False
 
+    if isinstance(path, str):
+        path = Path(path)
+
     # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
     if formatter_name == "disabled":
         return path.read_text(encoding="utf8")
 
     with tempfile.TemporaryDirectory() as test_dir_str:
-        if isinstance(path, str):
-            path = Path(path)
-
         original_code = path.read_text(encoding="utf8")
         original_code_lines = len(original_code.split("\n"))
 
