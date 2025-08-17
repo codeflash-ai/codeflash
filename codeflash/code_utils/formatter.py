@@ -45,17 +45,12 @@ def apply_formatter_cmds(
     print_status: bool,  # noqa
     exit_on_failure: bool = True,  # noqa
 ) -> tuple[Path, str, bool]:
-    # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
-    formatter_name = cmds[0].lower()
     should_make_copy = False
     file_path = path
 
     if test_dir_str:
         should_make_copy = True
         file_path = Path(test_dir_str) / "temp.py"
-
-    if not cmds or formatter_name == "disabled":
-        return path, path.read_text(encoding="utf8"), False
 
     if not path.exists():
         msg = f"File {path} does not exist. Cannot apply formatter commands."
@@ -114,6 +109,12 @@ def format_code(
     if console.quiet:
         # lsp mode
         exit_on_failure = False
+
+    # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
+    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
+    if formatter_name == "disabled":
+        return path.read_text(encoding="utf8")
+
     with tempfile.TemporaryDirectory() as test_dir_str:
         if isinstance(path, str):
             path = Path(path)
@@ -152,16 +153,17 @@ def format_code(
                 return original_code
 
         # TODO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
-        try:
-            _, formatted_code, _ = apply_formatter_cmds(
-                formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
+        _, formatted_code, changed = apply_formatter_cmds(
+            formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
+        )
+        if not changed:
+            logger.warning(
+                f"No changes detected in {path} after formatting, are you sure you have valid formatter commands?"
             )
-        except FileNotFoundError as e:
-            logger.warning(f"Formatter not found, returning original code: {e}")
             return original_code
-        else:
-            logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
-            return formatted_code
+
+        logger.debug(f"Formatted {path} with commands: {formatter_cmds}")
+        return formatted_code
 
 
 def sort_imports(code: str) -> str:
