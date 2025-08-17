@@ -1228,7 +1228,7 @@ class FunctionOptimizer:
             benchmark_details=explanation.benchmark_details,
         )
 
-        best_optimization.candidate.set_explanation(new_explanation)
+        best_optimization.candidate.explanation = new_explanation
 
         console.print(Panel(new_explanation_raw_str, title="Best Candidate Explanation", border_style="blue"))
 
@@ -1250,9 +1250,9 @@ class FunctionOptimizer:
 
         if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
-            check_create_pr(**data)
+            check_create_pr(**data, root_dir=self.project_root)
         elif self.args.staging_review:
-            create_staging(**data)
+            create_staging(**data, root_dir=self.project_root)
         else:
             # Mark optimization success since no PR will be created
             mark_optimization_success(

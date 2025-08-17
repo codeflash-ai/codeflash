@@ -14,7 +14,7 @@ from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
-from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name, git_root_dir
+from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__
@@ -206,6 +206,7 @@ def create_staging(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    root_dir: Optional[Path] = None,
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -218,12 +219,10 @@ def create_staging(
     :param coverage_message: Coverage report or summary.
     :return: The response object from the backend.
     """
-    relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+    relative_path = explanation.file_path.relative_to(root_dir).as_posix()
 
     build_file_changes = {
-        Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
-            oldContent=original_code[p], newContent=new_code[p]
-        )
+        Path(p).relative_to(root_dir).as_posix(): FileDiffContent(oldContent=original_code[p], newContent=new_code[p])
         for p in original_code
     }
 

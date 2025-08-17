@@ -10,12 +10,7 @@ from codeflash.api import cfapi
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import is_zero_diff
-from codeflash.code_utils.git_utils import (
-    check_and_push_branch,
-    get_current_branch,
-    get_repo_owner_and_name,
-    git_root_dir,
-)
+from codeflash.code_utils.git_utils import check_and_push_branch, get_current_branch, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
@@ -189,6 +184,7 @@ def check_create_pr(
     replay_tests: str,
     concolic_tests: str,
     git_remote: Optional[str] = None,
+    root_dir: Optional[Path] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -196,9 +192,9 @@ def check_create_pr(
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
-        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
         build_file_changes = {
-            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
@@ -247,10 +243,10 @@ def check_create_pr(
         if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
-        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
         base_branch = get_current_branch()
         build_file_changes = {
-            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code

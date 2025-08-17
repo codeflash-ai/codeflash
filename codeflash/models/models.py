@@ -343,14 +343,11 @@ class TestsInFile:
     test_type: TestType
 
 
-@dataclass(frozen=True)
+@dataclass
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
-
-    def set_explanation(self, new_explanation: str) -> None:
-        object.__setattr__(self, "explanation", new_explanation)
 
 
 @dataclass(frozen=True)

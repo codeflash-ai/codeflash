@@ -18,7 +18,6 @@ from unidiff import PatchSet
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.config_consts import N_CANDIDATES
-from codeflash.lsp.helpers import is_LSP_enabled
 
 if TYPE_CHECKING:
     from git import Repo
@@ -213,19 +212,11 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
     current_time_str = time.strftime("%Y%m%d-%H%M%S")
     worktree_dir = worktree_dirs / f"{git_root.name}-{current_time_str}"
 
-    result = subprocess.run(
-        ["git", "worktree", "add", "-d", str(worktree_dir)],
-        cwd=git_root,
-        check=True,
-        stdout=subprocess.DEVNULL if is_LSP_enabled() else None,
-        stderr=subprocess.DEVNULL if is_LSP_enabled() else None,
-    )
-    if result.returncode != 0:
-        logger.error(f"Failed to create worktree: {result.stderr}")
-        return None
+    repository = git.Repo(git_root, search_parent_directories=True)
+
+    repository.git.worktree("add", "-d", str(worktree_dir))
 
     # Get uncommitted diff from the original repo
-    repository = git.Repo(module_root, search_parent_directories=True)
     repository.git.add("-N", ".")  # add the index for untracked files to be included in the diff
     uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
 
@@ -234,7 +225,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         return worktree_dir
 
     # Write the diff to a temporary file
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".codeflash.patch", delete=False) as tmp_patch_file:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".codeflash.patch", delete=False) as tmp_patch_file:
         tmp_patch_file.write(uni_diff_text + "\n")  # the new line here is a must otherwise the last hunk won't be valid
         tmp_patch_file.flush()
 
