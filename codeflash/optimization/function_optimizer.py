@@ -1158,7 +1158,7 @@ class FunctionOptimizer:
                     original_helper_code,
                     code_context,
                 )
-                self.log_successful_optimization(explanation, generated_tests, exp_type)
+                self.log_successful_optimization(best_optimization.candidate.explanation, generated_tests, exp_type)
         return best_optimization
 
     def process_review(
@@ -1232,7 +1232,8 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
-        console.print(Panel(new_explanation_raw_str, title="Best Candidate Explanation", border_style="blue"))
+        best_optimization.candidate.explanation = new_explanation
+
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,
