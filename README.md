@@ -3,9 +3,7 @@
    <a href="https://github.com/codeflash-ai/codeflash">
     <img src="https://img.shields.io/github/commit-activity/m/codeflash-ai/codeflash" alt="GitHub commit activity">
   </a>
-  <a href="https://pypi.org/project/codeflash/">
-    <img src="https://img.shields.io/pypi/dm/codeflash" alt="PyPI Downloads">
-  </a>
+  <a href="https://pypi.org/project/codeflash/"><img src="https://static.pepy.tech/badge/codeflash" alt="PyPI Downloads"></a>
   <a href="https://pypi.org/project/codeflash/">
     <img src="https://img.shields.io/pypi/v/codeflash?label=PyPI%20version" alt="PyPI Downloads">
   </a>
