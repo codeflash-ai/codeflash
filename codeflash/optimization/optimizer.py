@@ -341,6 +341,7 @@ class Optimizer:
                             )
                         if is_successful(best_optimization):
                             optimizations_found += 1
+                            # create a diff patch for successful optimization
                             if self.current_worktree:
                                 read_writable_code = best_optimization.unwrap().code_context.read_writable_code
                                 relative_file_paths = [
