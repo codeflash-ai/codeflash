@@ -1260,7 +1260,7 @@ class FunctionOptimizer:
                     Panel(
                         f"[bold green]✅ Staging created:[/bold green]\n[link={staging_url}]{staging_url}[/link]",
                         title="Staging Link",
-                        border_style="green"
+                        border_style="green",
                     )
                 )
             else:
@@ -1268,7 +1268,7 @@ class FunctionOptimizer:
                     Panel(
                         f"[bold red]❌ Failed to create staging[/bold red]\nStatus: {response.status_code}",
                         title="Staging Error",
-                        border_style="red"
+                        border_style="red",
                     )
                 )
 
