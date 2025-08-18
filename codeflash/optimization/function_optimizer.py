@@ -739,7 +739,9 @@ class FunctionOptimizer:
             file_to_code_context = optimized_context.file_to_path()
             optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
+        new_code = format_code(
+            self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
+        )
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -748,7 +750,11 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_code=hp_source_code, check_diff=True
+                self.args.formatter_cmds,
+                module_abspath,
+                optimized_code=hp_source_code,
+                check_diff=True,
+                exit_on_failure=False,
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
