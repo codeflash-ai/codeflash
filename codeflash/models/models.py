@@ -344,7 +344,7 @@ class TestsInFile:
     test_type: TestType
 
 
-@dataclass(frozen=True)
+@dataclass
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str

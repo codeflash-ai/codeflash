@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import os
 import tempfile
 import time
@@ -14,6 +15,13 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
+from codeflash.code_utils.git_utils import (
+    check_running_in_git_repo,
+    create_detached_worktree,
+    create_diff_patch_from_worktree,
+    create_worktree_snapshot_commit,
+    remove_worktree,
+)
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -48,6 +56,9 @@ class Optimizer:
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
+        self.current_worktree: Path | None = None
+        self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
+        self.patch_files: list[Path] = []
 
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
@@ -252,6 +263,10 @@ class Optimizer:
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return
+
+        if self.args.worktree:
+            self.worktree_mode()
+
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
@@ -260,7 +275,6 @@ class Optimizer:
             file_to_funcs_to_optimize, num_optimizable_functions
         )
         optimizations_found: int = 0
-        function_iterator_count: int = 0
         if self.args.test_framework == "pytest":
             self.test_cfg.concolic_test_root_dir = Path(
                 tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
@@ -296,8 +310,8 @@ class Optimizer:
                     except Exception as e:
                         logger.debug(f"Could not rank functions in {original_module_path}: {e}")
 
-                for function_to_optimize in functions_to_optimize:
-                    function_iterator_count += 1
+                for i, function_to_optimize in enumerate(functions_to_optimize):
+                    function_iterator_count = i + 1
                     logger.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
                         f"{function_to_optimize.qualified_name}"
@@ -327,6 +341,23 @@ class Optimizer:
                             )
                         if is_successful(best_optimization):
                             optimizations_found += 1
+                            # create a diff patch for successful optimization
+                            if self.current_worktree:
+                                read_writable_code = best_optimization.unwrap().code_context.read_writable_code
+                                relative_file_paths = [
+                                    code_string.file_path for code_string in read_writable_code.code_strings
+                                ]
+                                patch_path = create_diff_patch_from_worktree(
+                                    self.current_worktree,
+                                    relative_file_paths,
+                                    self.current_function_optimizer.function_to_optimize.qualified_name,
+                                )
+                                self.patch_files.append(patch_path)
+                                if i < len(functions_to_optimize) - 1:
+                                    create_worktree_snapshot_commit(
+                                        self.current_worktree,
+                                        f"Optimizing {functions_to_optimize[i + 1].qualified_name}",
+                                    )
                         else:
                             logger.warning(best_optimization.failure())
                             console.rule()
@@ -337,6 +368,10 @@ class Optimizer:
                             function_optimizer.cleanup_generated_files()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
+            if len(self.patch_files) > 0:
+                logger.info(
+                    f"Created {len(self.patch_files)} patch(es) ({[str(patch_path) for patch_path in self.patch_files]})"
+                )
             if self.functions_checkpoint:
                 self.functions_checkpoint.cleanup()
             if hasattr(self.args, "command") and self.args.command == "optimize":
@@ -382,13 +417,59 @@ class Optimizer:
             cleanup_paths([self.replay_tests_dir])
 
     def cleanup_temporary_paths(self) -> None:
-        if self.current_function_optimizer:
-            self.current_function_optimizer.cleanup_generated_files()
-
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
+
+        if self.current_worktree:
+            remove_worktree(self.current_worktree)
+            return
+
+        if self.current_function_optimizer:
+            self.current_function_optimizer.cleanup_generated_files()
         cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
+
+    def worktree_mode(self) -> None:
+        if self.current_worktree:
+            return
+
+        if check_running_in_git_repo(self.args.module_root):
+            worktree_dir = create_detached_worktree(self.args.module_root)
+            if worktree_dir is None:
+                logger.warning("Failed to create worktree. Skipping optimization.")
+                return
+            self.current_worktree = worktree_dir
+            self.mutate_args_for_worktree_mode(worktree_dir)
+
+    def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
+        saved_args = copy.deepcopy(self.args)
+        saved_test_cfg = copy.deepcopy(self.test_cfg)
+        self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
+
+        project_root = self.args.project_root
+        module_root = self.args.module_root
+        relative_module_root = module_root.relative_to(project_root)
+        relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
+        relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
+        relative_benchmarks_root = (
+            self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
+        )
+
+        self.args.module_root = worktree_dir / relative_module_root
+        self.args.project_root = worktree_dir
+        self.args.test_project_root = worktree_dir
+        self.args.tests_root = worktree_dir / relative_tests_root
+        if relative_benchmarks_root:
+            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+
+        self.test_cfg.project_root_path = worktree_dir
+        self.test_cfg.tests_project_rootdir = worktree_dir
+        self.test_cfg.tests_root = worktree_dir / relative_tests_root
+        if relative_benchmarks_root:
+            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
+
+        if relative_optimized_file is not None:
+            self.args.file = worktree_dir / relative_optimized_file
 
 
 def run_with_args(args: Namespace) -> None:

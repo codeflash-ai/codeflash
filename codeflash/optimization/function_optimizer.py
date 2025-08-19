@@ -1247,6 +1247,7 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "root_dir": self.project_root,
         }
 
         raise_pr = not self.args.no_pr
@@ -1261,6 +1262,10 @@ class FunctionOptimizer:
             mark_optimization_success(
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
+
+        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        if self.args.worktree:
+            return
 
         if raise_pr and (
             self.args.all
