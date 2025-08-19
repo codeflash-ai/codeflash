@@ -10,8 +10,9 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
+from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
