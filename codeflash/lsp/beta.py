@@ -14,7 +14,6 @@ from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
-from codeflash.result.explanation import Explanation
 
 if TYPE_CHECKING:
     from lsprotocol import types
@@ -351,8 +350,6 @@ def perform_function_optimization(  # noqa: PLR0911
 
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
-        explanation = best_optimization.candidate.explanation
-        explanation_str = explanation.explanation_message() if isinstance(explanation, Explanation) else explanation
         return {
             "functionName": params.functionName,
             "status": "success",
@@ -360,7 +357,7 @@ def perform_function_optimization(  # noqa: PLR0911
             "extra": f"Speedup: {speedup:.2f}x faster",
             "optimization": optimized_source,
             "patch_file": str(patch_file),
-            "explanation": explanation_str,
+            "explanation": best_optimization.explanation_v2,
         }
     finally:
         cleanup_the_optimizer(server)
