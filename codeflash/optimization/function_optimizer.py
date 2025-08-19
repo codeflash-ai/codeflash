@@ -1244,15 +1244,16 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "root_dir": self.project_root,
         }
 
         raise_pr = not self.args.no_pr
 
         if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
-            check_create_pr(**data, root_dir=self.project_root)
+            check_create_pr(**data)
         elif self.args.staging_review:
-            create_staging(**data, root_dir=self.project_root)
+            create_staging(**data)
         else:
             # Mark optimization success since no PR will be created
             mark_optimization_success(

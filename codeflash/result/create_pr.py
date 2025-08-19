@@ -183,8 +183,8 @@ def check_create_pr(
     coverage_message: str,
     replay_tests: str,
     concolic_tests: str,
+    root_dir: Path,
     git_remote: Optional[str] = None,
-    root_dir: Optional[Path] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
