@@ -1233,7 +1233,7 @@ class FunctionOptimizer:
         )
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 
-        best_optimization.candidate.explanation_v2 = new_explanation.explanation_message()
+        best_optimization.explanation_v2 = new_explanation.explanation_message()
 
         data = {
             "original_code": original_code_combined,

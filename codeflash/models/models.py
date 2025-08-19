@@ -91,6 +91,7 @@ class FunctionSource:
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
+    explanation_v2: Optional[str] = None
     helper_functions: list[FunctionSource]
     code_context: CodeOptimizationContext
     runtime: int
@@ -348,7 +349,6 @@ class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
-    explanation_v2: str | None = None
 
 
 @dataclass(frozen=True)
