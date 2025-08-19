@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
@@ -88,9 +89,14 @@ def initialize_function_optimization(
 ) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
+
     if server.optimizer is None:
-        _initialize_optimizer_if_valid(server)
+        _initialize_optimizer_if_api_key_is_valid(server)
+
     server.optimizer.worktree_mode()
+    # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
+    Path(server.optimizer.args.tests_root).mkdir(parents=True, exist_ok=True)
+
     original_args, _ = server.optimizer.original_args_and_test_cfg
 
     server.optimizer.args.function = params.functionName
@@ -132,7 +138,36 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
 
 
-def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str, str]:
+@server.feature("validateProject")
+def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
+    from codeflash.cli_cmds.cli import process_pyproject_config
+    from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
+
+    server.show_message_log("Validating project...", "Info")
+    config = is_valid_pyproject_toml(server.args.config_file)
+    if config is None:
+        server.show_message_log("pyproject.toml is not valid", "Error")
+        return {
+            "status": "error",
+            "message": "pyproject.toml is not valid",
+        }  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
+
+    new_args = process_pyproject_config(server.args)
+    server.args = new_args
+
+    repo = git.Repo(new_args.module_root, search_parent_directories=True)
+    if repo.bare:
+        return {"status": "error", "message": "Repository is in bare state"}
+
+    try:
+        _ = repo.head.commit
+    except Exception:
+        return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
+
+    return {"status": "success"}
+
+
+def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -> dict[str, str]:
     user_id = get_user_id()
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
@@ -150,7 +185,7 @@ def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str,
 @server.feature("apiKeyExistsAndValid")
 def check_api_key(server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
     try:
-        return _initialize_optimizer_if_valid(server)
+        return _initialize_optimizer_if_api_key_is_valid(server)
     except Exception:
         return {"status": "error", "message": "something went wrong while validating the api key"}
 
@@ -170,7 +205,7 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         get_codeflash_api_key.cache_clear()
         get_user_id.cache_clear()
 
-        init_result = _initialize_optimizer_if_valid(server)
+        init_result = _initialize_optimizer_if_api_key_is_valid(server)
         if init_result["status"] == "error":
             return {"status": "error", "message": "Api key is not valid"}
 

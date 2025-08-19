@@ -155,6 +155,22 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
+def is_valid_pyproject_toml(pyproject_toml_path: Path) -> dict[str, Any] | None:
+    if not pyproject_toml_path.exists():
+        return None
+    try:
+        config, _ = parse_config_file(pyproject_toml_path)
+    except Exception:
+        return None
+
+    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
+        return None
+    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
+        return None
+
+    return config
+
+
 def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     """Check if the current directory contains a valid pyproject.toml file with codeflash config.
 
@@ -163,16 +179,9 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     from rich.prompt import Confirm
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
-    if not pyproject_toml_path.exists():
-        return True, None
-    try:
-        config, config_file_path = parse_config_file(pyproject_toml_path)
-    except Exception:
-        return True, None
 
-    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
-        return True, None
-    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
+    config = is_valid_pyproject_toml(pyproject_toml_path)
+    if config is None:
         return True, None
 
     return Confirm.ask(
@@ -442,7 +451,7 @@ def collect_setup_info() -> SetupInfo:
         apologize_and_exit()
     formatter = formatter_answers["formatter"]
 
-    git_remote = ""
+    git_remote = "origin"
     try:
         repo = Repo(str(module_root), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
@@ -968,6 +977,11 @@ def install_github_app(git_remote: str) -> None:
     except git.InvalidGitRepositoryError:
         click.echo("Skipping GitHub app installation because you're not in a git repository.")
         return
+
+    if git_remote not in get_git_remotes(git_repo):
+        click.echo(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
+        return
+
     owner, repo = get_repo_owner_and_name(git_repo, git_remote)
 
     if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):

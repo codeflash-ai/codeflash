@@ -27,6 +27,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
@@ -470,6 +471,9 @@ def was_function_previously_optimized(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
+    if is_LSP_enabled:
+        return False
+
     # Check optimization status if repository info is provided
     # already_optimized_count = 0
     try:

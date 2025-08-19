@@ -201,7 +201,8 @@ patches_dir = codeflash_cache_dir / "patches"
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
-    repository.git.commit("-am", commit_message, "--no-verify")
+    repository.git.add(".")
+    repository.git.commit("-m", commit_message, "--no-verify")
 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:
@@ -234,7 +235,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         # Apply the patch inside the worktree
         try:
             subprocess.run(
-                ["git", "apply", "--ignore-space-change", "--ignore-whitespace", patch_path],
+                ["git", "apply", "--ignore-space-change", "--ignore-whitespace", "--whitespace=nowarn", patch_path],
                 cwd=worktree_dir,
                 check=True,
             )
