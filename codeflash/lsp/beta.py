@@ -149,8 +149,8 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
         server.show_message_log("pyproject.toml is not valid", "Error")
         return {
             "status": "error",
-            "message": "pyproject.toml is not valid",
-        }  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
+            "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
+        }
 
     new_args = process_pyproject_config(server.args)
     server.args = new_args

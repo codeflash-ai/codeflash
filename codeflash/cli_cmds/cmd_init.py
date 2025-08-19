@@ -451,7 +451,7 @@ def collect_setup_info() -> SetupInfo:
         apologize_and_exit()
     formatter = formatter_answers["formatter"]
 
-    git_remote = "origin"
+    git_remote = ""
     try:
         repo = Repo(str(module_root), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
