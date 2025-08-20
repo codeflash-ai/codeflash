@@ -2,7 +2,7 @@
 title: "Staging Review for Optimizations"
 description: "Review and manage optimizations before creating pull requests with staging mode"
 icon: "layer-group"
-sidebarTitle: "Staging Review"
+sidebarTitle: "Review Optimizations"
 keywords:
   [
     "staging review",
@@ -40,13 +40,22 @@ codeflash --all --staging-review
 
 This command will:
 
-1. Store the optimizations in a [staging area](https://app.codeflash.ai/staging) instead of creating PRs immediately
+
+1. Start to optimize your project, and if it finds any optimizations, it will save them to [Review Optimizations Page](https://app.codeflash.ai/review-optimizations) instead of creating PRs immediately
+
+   ![Review Optimizations List](../images/review-optimizations.png)
+
 2. Provide you with a staging interface to review all proposed changes
+
+   ![Staging Review Editor](../images/Editor.png)
 
 ## Managing Staged Optimizations
 
 Once optimizations are staged, you can:
-
 - Review each optimization individually
 - Compare original and optimized code side-by-side
 - Create pull requests for selected optimizations directly from the staging interface
+- Edit the code of staged optimizations 
+
+![Edited Code](../images/edited-code.png)
+
