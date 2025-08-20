@@ -380,6 +380,7 @@ class FunctionOptimizer:
         console.rule()
         candidates = deque(candidates)
         refinement_done = False
+        line_profiler_done = False
         future_all_refinements: list[concurrent.futures.Future] = []
         ast_code_to_id = {}
         valid_optimizations = []
@@ -400,19 +401,45 @@ class FunctionOptimizer:
             if self.experiment_id
             else None,
         )
-        try:
-            candidate_index = 0
-            original_len = len(candidates)
-            while candidates:
+        candidate_index = 0
+        original_len = len(candidates)
+        # TODO : We need to rewrite this candidate loop as a class, the container which has candidates receives new candidates at unknown times due to the async nature of lp and refinement calls,
+        #  TODO : in addition, the refinement calls depend on line profiler calls being complete so we need to check that reliably
+        while True:
+            try:
+                if len(candidates) > 0:
+                    candidate = candidates.popleft()
+                else:
+                    if not line_profiler_done:
+                        logger.debug("all candidates processed, await candidates from line profiler")
+                        concurrent.futures.wait([future_line_profile_results])
+                        line_profile_results = future_line_profile_results.result()
+                        candidates.extend(line_profile_results)
+                        original_len += len(line_profile_results)
+                        logger.info(
+                            f"Added results from line profiler to candidates, total candidates now: {original_len}"
+                        )
+                        line_profiler_done = True
+                        continue
+                    if line_profiler_done and not refinement_done:
+                        concurrent.futures.wait(future_all_refinements)
+                        refinement_response = []
+                        for future_refinement in future_all_refinements:
+                            possible_refinement = future_refinement.result()
+                            if len(possible_refinement) > 0:  # if the api returns a valid response
+                                refinement_response.append(possible_refinement[0])
+                        candidates.extend(refinement_response)
+                        original_len += len(refinement_response)
+                        logger.info(
+                            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {original_len}"
+                        )
+                        refinement_done = True
+                        continue
+                    if line_profiler_done and refinement_done:
+                        logger.debug("everything done, exiting")
+                        break
+
                 candidate_index += 1
-                line_profiler_done = True if future_line_profile_results is None else future_line_profile_results.done()
-                if line_profiler_done and (future_line_profile_results is not None):
-                    line_profile_results = future_line_profile_results.result()
-                    candidates.extend(line_profile_results)
-                    original_len += len(line_profile_results)
-                    logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
-                    future_line_profile_results = None
-                candidate = candidates.popleft()
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"Optimization candidate {candidate_index}/{original_len}:")
@@ -440,6 +467,9 @@ class FunctionOptimizer:
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
                 if normalized_code in ast_code_to_id:
+                    logger.warning(
+                        "Current candidate has been encountered before in testing, Skipping optimization candidate."
+                    )
                     past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
                     # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
                     speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
@@ -471,7 +501,6 @@ class FunctionOptimizer:
                     file_path_to_helper_classes=file_path_to_helper_classes,
                 )
                 console.rule()
-
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
@@ -525,7 +554,6 @@ class FunctionOptimizer:
                                     optimized_runtime_ns=candidate_replay_runtime,
                                 )
                                 benchmark_tree.add(f"{benchmark_key}: {replay_perf_gain[benchmark_key] * 100:.1f}%")
-
                         best_optimization = BestOptimization(
                             candidate=candidate,
                             helper_functions=code_context.helper_functions,
@@ -568,36 +596,12 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
-
-                if (
-                    (not len(candidates)) and (not line_profiler_done)
-                ):  # all original candidates processed but lp results haven't been processed, doesn't matter at the moment if we're done refining or not
-                    concurrent.futures.wait([future_line_profile_results])
-                    line_profile_results = future_line_profile_results.result()
-                    candidates.extend(line_profile_results)
-                    original_len += len(line_profile_results)
-                    logger.info(f"Added results from line profiler to candidates, total candidates now: {original_len}")
-                    future_line_profile_results = None
-                # all original candidates and lp candidates processed, collect refinement candidates and append to candidate list
-                if (not len(candidates)) and line_profiler_done and not refinement_done:
-                    # waiting just in case not all calls are finished, nothing else to do
-                    concurrent.futures.wait(future_all_refinements)
-                    refinement_response = []
-                    for future_refinement in future_all_refinements:
-                        possible_refinement = future_refinement.result()
-                        if len(possible_refinement) > 0:  # if the api returns a valid response
-                            refinement_response.append(possible_refinement[0])
-                    candidates.extend(refinement_response)
-                    logger.info(f"Added {len(refinement_response)} candidates from refinement")
-                    original_len += len(refinement_response)
-                    refinement_done = True
-        except KeyboardInterrupt as e:
-            self.write_code_and_helpers(
-                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-            )
-            logger.exception(f"Optimization interrupted: {e}")
-            raise
-
+            except KeyboardInterrupt as e:
+                self.write_code_and_helpers(
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                )
+                logger.exception(f"Optimization interrupted: {e}")
+                raise
         if not valid_optimizations:
             return None
         # need to figure out the best candidate here before we return best_optimization
@@ -741,7 +745,9 @@ class FunctionOptimizer:
             file_to_code_context = optimized_context.file_to_path()
             optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
+        new_code = format_code(
+            self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
+        )
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -750,7 +756,11 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_code=hp_source_code, check_diff=True
+                self.args.formatter_cmds,
+                module_abspath,
+                optimized_code=hp_source_code,
+                check_diff=True,
+                exit_on_failure=False,
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
@@ -1099,11 +1109,6 @@ class FunctionOptimizer:
             if best_optimization:
                 logger.info("Best candidate:")
                 code_print(best_optimization.candidate.source_code.flat)
-                console.print(
-                    Panel(
-                        best_optimization.candidate.explanation, title="Best Candidate Explanation", border_style="blue"
-                    )
-                )
                 processed_benchmark_info = None
                 if self.args.benchmark:
                     processed_benchmark_info = process_benchmark_data(
@@ -1153,7 +1158,6 @@ class FunctionOptimizer:
                     original_helper_code,
                     code_context,
                 )
-                self.log_successful_optimization(explanation, generated_tests, exp_type)
         return best_optimization
 
     def process_review(
@@ -1227,6 +1231,10 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
+        self.log_successful_optimization(new_explanation, generated_tests, exp_type)
+
+        best_optimization.explanation_v2 = new_explanation.explanation_message()
+
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,
@@ -1239,25 +1247,62 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "root_dir": self.project_root,
         }
 
-        if not self.args.no_pr and not self.args.staging_review:
+        raise_pr = not self.args.no_pr
+
+        if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif self.args.staging_review:
-            create_staging(**data)
+            response = create_staging(**data)
+            if response.status_code == 200:
+                staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
+                console.print(
+                    Panel(
+                        f"[bold green]✅ Staging created:[/bold green]\n[link={staging_url}]{staging_url}[/link]",
+                        title="Staging Link",
+                        border_style="green",
+                    )
+                )
+            else:
+                console.print(
+                    Panel(
+                        f"[bold red]❌ Failed to create staging[/bold red]\nStatus: {response.status_code}",
+                        title="Staging Error",
+                        border_style="red",
+                    )
+                )
+
         else:
             # Mark optimization success since no PR will be created
             mark_optimization_success(
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        if ((not self.args.no_pr) or not self.args.staging_review) and (
-            self.args.all or env_utils.get_pr_number() or (self.args.file and not self.args.function)
+        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        if self.args.worktree:
+            return
+
+        if raise_pr and (
+            self.args.all
+            or env_utils.get_pr_number()
+            or self.args.replay_test
+            or (self.args.file and not self.args.function)
         ):
-            self.write_code_and_helpers(
-                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-            )
+            self.revert_code_and_helpers(original_helper_code)
+            return
+
+        if self.args.staging_review:
+            # always revert code and helpers when staging review
+            self.revert_code_and_helpers(original_helper_code)
+            return
+
+    def revert_code_and_helpers(self, original_helper_code: dict[Path, str]) -> None:
+        self.write_code_and_helpers(
+            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+        )
 
     def establish_original_code_baseline(
         self,

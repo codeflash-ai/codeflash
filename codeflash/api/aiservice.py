@@ -10,8 +10,9 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
+from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
@@ -202,7 +203,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
             return [
                 OptimizedCandidate(
@@ -248,7 +249,7 @@ class AiServiceClient:
             }
             for opt in request
         ]
-        logger.info(f"Refining {len(request)} optimizations…")
+        logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
@@ -259,7 +260,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.info(f"Generated {len(refined_optimizations)} candidate refinements.")
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
             return [
                 OptimizedCandidate(
@@ -339,7 +340,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             explanation: str = response.json()["explanation"]
-            logger.debug(f"New Explanation: {explanation}")
             console.rule()
             return explanation
         try:
