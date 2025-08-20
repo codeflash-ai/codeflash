@@ -1265,46 +1265,33 @@ def prompt_claude_mcp_setup() -> None:
 
 def add_mcp_server_to_claude_config() -> None:
     """Add the Codeflash MCP server to Claude Code configuration."""
-    # Try to find Claude Code config directory
-    home_dir = Path.home()
-    claude_config_dirs = [
-        home_dir / ".config" / "claude-code",
-        home_dir / ".claude-code",
-        home_dir / "Library" / "Application Support" / "claude-code",  # macOS
-    ]
-
-    claude_config_dir = None
-    for config_dir in claude_config_dirs:
-        if config_dir.exists():
-            claude_config_dir = config_dir
-            break
-
-    # If no existing config directory found, create one
-    if not claude_config_dir:
-        claude_config_dir = home_dir / ".config" / "claude-code"
-        claude_config_dir.mkdir(parents=True, exist_ok=True)
-        console.print(f"📁 Created Claude Code config directory: {claude_config_dir}")
-
-    config_file = claude_config_dir / "mcp_servers.json"
-
-    # Get the absolute path to myserver.py
-    myserver_path = Path.cwd() / "myserver.py"
+    claude_config_dir = Path.cwd()
+    config_file = claude_config_dir / ".mcp.json"
 
     # Create MCP server configuration
-    server_config = {"codeflash": {"command": "python", "args": [str(myserver_path.absolute())], "env": {}}}
+    # TODO we assume uv exists,
+    codeflash_server_entry = {
+        "codeflash": {
+            "type": "stdio",
+            "command": "uv",
+            "args": ["run", "--directory", str(claude_config_dir), "myserver.py"],
+            "env": {},
+        }
+    }
 
     # Read existing config or create new one
     if config_file.exists():
         try:
             with config_file.open("r", encoding="utf8") as f:
-                existing_config = json.load(f)
-            existing_config.update(server_config)
-            updated_config = existing_config
+                updated_config = json.load(f)
+            if "mcpServers" not in updated_config:
+                updated_config["mcpServers"] = {}
+            updated_config["mcpServers"].update(codeflash_server_entry)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Could not read existing MCP config: {e}")
-            updated_config = server_config
+            updated_config = {"mcpServers": codeflash_server_entry}
     else:
-        updated_config = server_config
+        updated_config = {"mcpServers": codeflash_server_entry}
 
     # Write the updated configuration
     try:
