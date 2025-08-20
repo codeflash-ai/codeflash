@@ -169,6 +169,7 @@ def get_functions_to_optimize(
     )
     functions: dict[str, list[FunctionToOptimize]]
     trace_file_path: Path | None = None
+    is_lsp = is_LSP_enabled()
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
@@ -186,6 +187,8 @@ def get_functions_to_optimize(
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
+                    if is_lsp:
+                        return functions, 0, None
                     exit_with_message(
                         "Function name should be in the format 'function_name' or 'class_name.function_name'"
                     )
@@ -201,6 +204,8 @@ def get_functions_to_optimize(
                     ):
                         found_function = fn
                 if found_function is None:
+                    if is_lsp:
+                        return functions, 0, None
                     exit_with_message(
                         f"Function {only_function_name} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )

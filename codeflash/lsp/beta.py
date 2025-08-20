@@ -106,15 +106,12 @@ def initialize_function_optimization(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
     )
 
-    optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
-    if not optimizable_funcs:
+    optimizable_funcs, count, _ = server.optimizer.get_optimizable_functions()
+
+    if count == 0:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
-        return {
-            "functionName": params.functionName,
-            "status": "error",
-            "message": "function is no found or not optimizable",
-            "args": None,
-        }
+        cleanup_the_optimizer(server)
+        return {"functionName": params.functionName, "status": "error", "message": "not found", "args": None}
 
     fto = optimizable_funcs.popitem()[1][0]
     server.optimizer.current_function_being_optimized = fto
