@@ -91,6 +91,7 @@ class FunctionSource:
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
+    explanation_v2: Optional[str] = None
     helper_functions: list[FunctionSource]
     code_context: CodeOptimizationContext
     runtime: int
@@ -343,7 +344,7 @@ class TestsInFile:
     test_type: TestType
 
 
-@dataclass
+@dataclass(frozen=True)
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
