@@ -46,6 +46,7 @@ class CodeflashLanguageServer(LanguageServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         super().__init__(*args, **kwargs)
         self.optimizer: Optimizer | None = None
+        self.args_processed_before: bool = False
         self.args = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:

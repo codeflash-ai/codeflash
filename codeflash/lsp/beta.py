@@ -10,6 +10,7 @@ import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
+from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
@@ -140,7 +141,6 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
 
 @server.feature("validateProject")
 def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
-    from codeflash.cli_cmds.cli import process_pyproject_config
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
 
     server.show_message_log("Validating project...", "Info")
@@ -152,8 +152,11 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
             "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
         }
 
-    new_args = process_pyproject_config(server.args)
-    server.args = new_args
+    new_args = server.args
+    if not server.args_processed_before:
+        new_args = process_pyproject_config(server.args)
+        server.args = new_args
+        server.args_processed_before = True
 
     repo = git.Repo(new_args.module_root, search_parent_directories=True)
     if repo.bare:
@@ -178,7 +181,9 @@ def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -
 
     from codeflash.optimization.optimizer import Optimizer
 
-    server.optimizer = Optimizer(server.args)
+    new_args = server.args if server.args_processed_before else process_pyproject_config(server.args)
+    server.args_processed_before = True
+    server.optimizer = Optimizer(new_args)
     return {"status": "success", "user_id": user_id}
 
 
