@@ -67,7 +67,9 @@ It will then try to optimize the new code for the benchmark and calculate the im
 
 4. **Run Codeflash :**
 
-   Benchmark mode is best used together with Codeflash as a GitHub Action. This way, if new code in a Pull Request touches the benchmark workflow, Codeflash will try to optimize the code for the benchmark, and you will know the impact of Codeflash's optimizations on your benchmarks.
+   Benchmark mode is best used together with Codeflash as a GitHub Action. This way,
+   Codeflash will trace through your benchmark and optimize the functions modified in your Pull Request to speed up the benchmark.
+   It will also report the impact of Codeflash's optimizations on your benchmarks.
    
    Use `codeflash init` for an easy way to set up Codeflash as a GitHub Action.
 
