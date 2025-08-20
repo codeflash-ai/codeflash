@@ -471,7 +471,7 @@ def was_function_previously_optimized(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
-    if is_LSP_enabled:
+    if is_LSP_enabled():
         return False
 
     # Check optimization status if repository info is provided
