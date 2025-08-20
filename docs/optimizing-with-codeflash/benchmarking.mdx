@@ -1,21 +1,21 @@
 ---
-title: "Using Benchmarks in CI"
+title: "Optimize Performance Benchmarks with every Pull Request"
 description: "Configure and use pytest-benchmark integration for performance-critical code optimization"
 icon: "chart-line"
-sidebarTitle: "CI Benchmarks"
+sidebarTitle: Setup Benchmarks to Optimize
 keywords: ["benchmarks", "CI", "pytest-benchmark", "performance testing", "github actions", "benchmark mode"]
 ---
 <Info>
-**Performance-critical optimization** - Define benchmarks for your most important functions and let Codeflash measure the real-world impact of every optimization on your performance metrics.
+**Performance-critical optimization** - Define benchmarks for your most important code sections and let Codeflash optimize and measure the real-world impact of every optimization on your performance metrics.
 </Info>
 
-Benchmark mode is an easy way for users to define workflows that are performance-critical and need to be optimized.
-For example, if a user has an important function that requires minimal latency, the user can define a benchmark for that function.
-Codeflash will then calculate the impact (if any) of any optimization on the performance of that function.
+Benchmark mode is an easy way to define workflows that are performance-critical and need to be optimized and run fast.
+Codeflash will run the benchmark, understand how the current code change in the Pull Request is affecting the benchmark.
+It will then try to optimize the new code for the benchmark and calculate the impact of any optimization on the speed of that benchmark.
 
 ## Using Codeflash in Benchmark Mode
 
-1. **Create a benchmarks root** 
+1. **Create a benchmarks root:**
 
     Create a directory for benchmarks if it does not already exist. 
 
@@ -31,7 +31,7 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
    formatter-cmds = ["disabled"]
     ```
     
-2. **Define your benchmarks**
+2. **Define your benchmarks:**
     
    Currently, Codeflash only supports benchmarks written as pytest-benchmarks. Check out the [pytest-benchmark](https://pytest-benchmark.readthedocs.io/en/stable/index.html) documentation for more information on syntax.
 
@@ -50,7 +50,7 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
    The pytest-benchmark format is simply used as an interface. The plugin is actually not used - Codeflash will run these benchmarks with its own pytest plugin
 
 
-3. **Run Codeflash**
+3. **Run and Test Codeflash:**
 
    Run Codeflash with the `--benchmark` flag. Note that benchmark mode cannot be used with `--all`. 
 
@@ -65,13 +65,13 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
    ```
    
 
-4. **Run Codeflash in CI**
+4. **Run Codeflash :**
 
-   Benchmark mode is best used together with Codeflash as a Github Action. This way, with every PR, you will know the impact of Codeflash's optimizations on your benchmarks.
+   Benchmark mode is best used together with Codeflash as a GitHub Action. This way, if new code in a Pull Request touches the benchmark workflow, Codeflash will try to optimize the code for the benchmark, and you will know the impact of Codeflash's optimizations on your benchmarks.
    
-   Use `codeflash init` for an easy way to set up Codeflash as a Github Action (with the option to enable benchmark mode).
+   Use `codeflash init` for an easy way to set up Codeflash as a GitHub Action.
 
-   Otherwise, you can run the following command in your Codeflash GitHub Action:
+   After that, you can add the `--benchmark` argument to codeflash to enable benchmarks optimization.
 
    ```bash
    codeflash --benchmark
@@ -84,7 +84,7 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
 1. Codeflash identifies benchmarks in the benchmarks-root directory.
 
 
-2. The benchmarks are run so that runtime statistics and information can be recorded. 
+2. The benchmarks are run so that runtime statistics and inputs can be recorded.
 
 
 3. Replay tests are generated so the performance of optimization candidates on the exact inputs used in the benchmarks can be measured.
@@ -97,5 +97,3 @@ Codeflash will then calculate the impact (if any) of any optimization on the per
 
 
 Using Codeflash with benchmarks is a great way to find optimizations that really matter.
-
-Codeflash is actively working on this feature and will be adding new capabilities in the near future!

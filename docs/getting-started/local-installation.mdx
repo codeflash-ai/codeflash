@@ -6,8 +6,6 @@ icon: "download"
 
 Codeflash is installed and configured on a per-project basis.
 
-You can install Codeflash locally for a project by running the following command in the project's virtual environment:
-
 ### Prerequisites
 
 Before installing Codeflash, ensure you have:
@@ -15,7 +13,6 @@ Before installing Codeflash, ensure you have:
 1. **Python 3.9 or above** installed
 2. **A Python project** with a virtual environment
 3. **Project dependencies installed** in your virtual environment
-4. **Tests** (optional) for your code (Codeflash uses tests to verify optimizations)
 
 <Warning>
 **Virtual Environment Required**
@@ -23,14 +20,15 @@ Before installing Codeflash, ensure you have:
 Always install Codeflash in your project's virtual environment, not globally. Make sure your virtual environment is activated before proceeding.
 
 ```bash
-# Example: Activate your virtual environment
 source venv/bin/activate  # On Linux/Mac
 # or
-#venv\Scripts\activate     # On Windows
+venv\Scripts\activate     # On Windows
 ```
 </Warning>
 <Steps>
 <Step title="Install Codeflash">
+
+You can install Codeflash locally for a project by running the following command in the project's virtual environment:
 ```bash
 pip install codeflash
 ```
@@ -39,37 +37,32 @@ pip install codeflash
 **Codeflash is a Development Dependency**
 
 We recommend installing Codeflash as a development dependency.
-It doesn't need to be installed as part of your package requirements. 
-Codeflash is intended to be used locally and as part of development workflows such as CI.
+Codeflash is intended to be used in development workflows locally and as part of CI.
+Try to always use the latest version of Codeflash as it improves quickly.
 
 <CodeGroup>
-```toml Poetry
-[tool.poetry.dependencies.dev]
-codeflash = "^latest"
-```
-
 ```bash uv
 uv add --dev codeflash
 ```
 
-```bash pip
-pip install --dev codeflash
+```bash poetry
+poetry add codeflash@latest --group dev
 ```
 </CodeGroup>
 </Tip>
 </Step>
 
 <Step title="Generate a Codeflash API Key">
-Codeflash uses cloud-hosted AI models to optimize your code. You'll need an API key to use it.
+Codeflash uses cloud-hosted AI models and integrations with GitHub. You'll need an API key to authorize your accesss.
 
-1. Visit the [Codeflash Web App](https://app.codeflash.ai/) 
+1. Visit the [Codeflash Web App](https://app.codeflash.ai/)
 2. Sign up with your GitHub account (free)
 3. Navigate to the [API Key](https://app.codeflash.ai/app/apikeys) page to generate your API key
 
 <Note>
 **Free Tier Available**
 
-Codeflash offers a **free tier** with a limited number of optimizations per month. Perfect for trying it out or small projects!
+Codeflash offers a **free tier** with a limited number of optimizations. Perfect for trying it out on small projects!
 </Note>
 </Step>
 
@@ -77,10 +70,6 @@ Codeflash offers a **free tier** with a limited number of optimizations per mont
 Navigate to your project's root directory (where your `pyproject.toml` file is or should be) and run:
 
 ```bash
-# Make sure you're in your project root
-cd /path/to/your/project
-
-# Run the initialization
 codeflash init
 ```
 
@@ -89,30 +78,31 @@ If you don't have a pyproject.toml file yet, the codeflash init command will ask
 <Info>
 **What's pyproject.toml?**
 
-`pyproject.toml` is a configuration file that is used to specify build tool settings for Python projects. 
-pyproject.toml is the modern replacement for setup.py and requirements.txt files.
-It's the new standard for Python package metadata.
+`pyproject.toml` is a configuration file that is used to specify build and tool settings for Python projects.
+`pyproject.toml` is the modern replacement for setup.py and requirements.txt files.
 </Info>
 
 When running `codeflash init`, you will see the following prompts:
 
 ```text
-1. Enter your Codeflash API key: 
-2. Which Python module do you want me to optimize going forward? (e.g. my_module)
-3. Where are your tests located? (e.g. tests/)
-4. Which test framework do you use? (pytest/unittest)
+1. Enter your Codeflash API key:
+2. Install the GitHub app.
+3. Which Python module do you want me to optimize going forward? (e.g. my_module)
+4. Where are your tests located? (e.g. tests/)
+5. Which test framework do you use? (pytest/unittest)
+6. Install GitHub actions for Continuous optimization?
 ```
 </Step>
 </Steps>
 
-After you have answered these questions, Codeflash will be configured for your project.
-The configuration will be saved in the `pyproject.toml` file in the root directory of your project.
-To understand the configuration options, and set more advanced options, see the [Configuration](/configuration) page.
+After you have answered these questions, the Codeflash configuration will be saved in the `pyproject.toml` file.
+To understand the configuration options, and set more advanced options, see the [Manual Configuration](/configuration) page.
 
 ### Step 4: Install the Codeflash GitHub App
 
 {/* TODO: Justify to users Why we need the user to install Github App even in local Installation or local optimization? */}
-Finally, if you have not done so already, Codeflash will ask you to install the Github App in your repository.  The Codeflash GitHub App allows access to your repository to the codeflash-ai bot to open PRs, review code, and provide optimization suggestions.
+Finally, if you have not done so already, Codeflash will ask you to install the GitHub App in your repository.
+The Codeflash GitHub App allows access to your repository to the codeflash-ai bot to open PRs, review code, and provide optimization suggestions.
 
 Please [install the Codeflash GitHub
 app](https://github.com/apps/codeflash-ai/installations/select_target) by choosing the repository you want to install
@@ -128,30 +118,29 @@ Once configured, you can start optimizing your code immediately:
 # Optimize a specific function
 codeflash --file path/to/your/file.py --function function_name
 
-# Or optimize locally without creating a PR
-codeflash --file path/to/your/file.py --function function_name --no-pr
+# Or optimize all functions in your codebase
+codeflash --all
 ```
 
-<Tip>
-**Pro tip**: Start with a single function to see how Codeflash works before running it on your entire codebase.
-</Tip>
 </Tab>
 
-<Tab title="Example Project">
-<Card title="🚀 Try Our Example Repository" icon="github" href="https://github.com/codeflash-ai/optimize-me">
-  Want to see Codeflash in action? Check out our **optimize-me** repository with real examples.
+<Tab title="Optimize Example Project">
+<Card title="🚀 Try optimizing our example repository" icon="github" href="https://github.com/codeflash-ai/optimize-me">
+  Want to see Codeflash in action and don't know what code to optimize? Check out our **optimize-me** repository with code ready to optimize.
   
   **What's included:**
   - Sample Python code with performance issues
   - Tests for verification  
   - Pre-configured `pyproject.toml`
-  - Before/after optimization examples in PRs
 </Card>
 
 <Steps>
-<Step title="Clone the Repository">
+  <Step title="Fork the Repository">
+    Fork the [optimize-me](https://github.com/codeflash-ai/optimize-me) repo to your GitHub account by clicking "Fork" on the top of the page. This allows Codeflash to open Pull Requests with the optimizations it found on your forked repo.
+  </Step>
+<Step title="Clone the Forked Repository">
 ```bash
-git clone https://github.com/codeflash-ai/optimize-me.git
+git clone https://github.com/your_github_username/optimize-me.git
 cd optimize-me
 ```
 </Step>
@@ -159,7 +148,7 @@ cd optimize-me
 <Step title="Set Up Environment">
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # or venv\Scripts\activate on Windows
+source .venv/bin/activate
 pip install -r requirements.txt
 pip install codeflash
 ```
@@ -193,7 +182,9 @@ codeflash --all # optimize the entire repo
   </Accordion>
 
   <Accordion title="🧪 No optimizations found or debugging issues">
-    Use the `--verbose` flag for detailed output:
+    Do know that not all functions can be optimized as no optimization opportunities may exist for them. This is fine and expected.
+
+    To investigate further, use the `--verbose` flag for detailed output:
     ```bash
     codeflash optimize --verbose
     ```
@@ -203,13 +194,7 @@ codeflash --all # optimize the entire repo
     - 🚫 Why certain functions were skipped
     - ⚠️ Detailed error messages
     - 📊 Performance analysis results
-    
-    <Tip>
-    **Common Reasons Functions Are Skipped:**
-    - Function is too simple (less than 3 lines)
-    - Function has no clear performance bottleneck
-    - Function contains unsupported constructs
-    </Tip>
+
   </Accordion>
 
   <Accordion title="🔍 No tests found errors">
@@ -223,7 +208,7 @@ codeflash --all # optimize the entire repo
     pytest --collect-only
     
     # Check your pyproject.toml configuration
-    cat pyproject.toml | grep -A 5 "\[tool.codeflash\]"
+    cat pyproject.toml | grep -A 8 "\[tool.codeflash\]"
     ```
   </Accordion>
 </AccordionGroup>
@@ -233,5 +218,5 @@ codeflash --all # optimize the entire repo
 
 - Learn about [Codeflash Concepts](/codeflash-concepts/how-codeflash-works)
 - Explore [Optimization workflows](/optimizing-with-codeflash/one-function)
-- Set up [GitHub Actions integration](/getting-started/codeflash-github-actions)
+- Set up [Pull Request Optimization](/optimizing-with-codeflash/codeflash-github-actions)
 - Read [configuration options](/configuration) for advanced setups
