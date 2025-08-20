@@ -18,6 +18,8 @@ from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
 if TYPE_CHECKING:
+    from argparse import Namespace
+
     from lsprotocol import types
 
 
@@ -146,13 +148,8 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
             "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
         }
 
-    new_args = server.args
-    if not server.args_processed_before:
-        new_args = process_pyproject_config(server.args)
-        server.args = new_args
-        server.args_processed_before = True
-
-    repo = git.Repo(new_args.module_root, search_parent_directories=True)
+    args = process_args(server)
+    repo = git.Repo(args.module_root, search_parent_directories=True)
     if repo.bare:
         return {"status": "error", "message": "Repository is in bare state"}
 
@@ -175,10 +172,18 @@ def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -
 
     from codeflash.optimization.optimizer import Optimizer
 
-    new_args = server.args if server.args_processed_before else process_pyproject_config(server.args)
-    server.args_processed_before = True
+    new_args = process_args(server)
     server.optimizer = Optimizer(new_args)
     return {"status": "success", "user_id": user_id}
+
+
+def process_args(server: CodeflashLanguageServer) -> Namespace:
+    if server.args_processed_before:
+        return server.args
+    new_args = process_pyproject_config(server.args)
+    server.args = new_args
+    server.args_processed_before = True
+    return new_args
 
 
 @server.feature("apiKeyExistsAndValid")
