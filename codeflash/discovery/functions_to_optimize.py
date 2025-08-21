@@ -477,6 +477,7 @@ def was_function_previously_optimized(
 
     """
     if is_LSP_enabled():
+        # was_function_previously_optimized is for the checking the optimization duplicates in the github action, no need to do this in the LSP mode
         return False
 
     # Check optimization status if repository info is provided
