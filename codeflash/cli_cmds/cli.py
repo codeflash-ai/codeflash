@@ -5,7 +5,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
+from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions, launch_mcp
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
@@ -22,6 +22,9 @@ def parse_args() -> Namespace:
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
+
+    mcp_parser = subparsers.add_parser("mcp", help="Launches the codeflash mcp server")
+    mcp_parser.set_defaults(func=launch_mcp)
 
     trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
 

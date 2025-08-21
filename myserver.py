@@ -10,7 +10,7 @@ mcp = FastMCP(
 
 
 @mcp.tool
-def optimize_code(file: str, function: str) -> dict[str, str]:
+def optimize_code(file: str, function: str) -> str:
     # config = TestConfig(
     #     file_path=pathlib.Path(file),
     #     function_name=function,
@@ -24,15 +24,7 @@ def optimize_code(file: str, function: str) -> dict[str, str]:
     # )
     # cwd = pathlib.Path("/Users/aseemsaxena/Downloads/codeflash_dev/codeflash/code_to_optimize")  # TODO remove it
     print(file, function)
-    return {
-        "code": """def sorter(arr):
-    print("codeflash stdout: Sorting list")
-    arr.sort()
-    print(f"result: {arr}")
-    return arr
-""",
-        "explanation": "A faster version of the code is using python's in-built timsort function",
-    }
+    return "the function is already optimal"
 
 
 if __name__ == "__main__":

@@ -69,6 +69,12 @@ class DependencyManager(Enum):
     UNKNOWN = auto()
 
 
+def launch_mcp() -> None:
+    from myserver import mcp
+
+    mcp.run(transport="stdio")
+
+
 def init_codeflash() -> None:
     try:
         welcome_panel = Panel(
@@ -1270,14 +1276,7 @@ def add_mcp_server_to_claude_config() -> None:
 
     # Create MCP server configuration
     # TODO we assume uv exists,
-    codeflash_server_entry = {
-        "codeflash": {
-            "type": "stdio",
-            "command": "uv",
-            "args": ["run", "--directory", str(claude_config_dir), "myserver.py"],
-            "env": {},
-        }
-    }
+    codeflash_server_entry = {"codeflash": {"type": "stdio", "command": "codeflash", "args": ["mcp"], "env": {}}}
 
     # Read existing config or create new one
     if config_file.exists():
