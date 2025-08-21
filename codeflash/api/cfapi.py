@@ -260,10 +260,7 @@ def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: b
     :param suppress_errors: If True, suppress error logging when the app is not installed.
     :return: True if the app is installed, False otherwise.
     """
-    response = make_cfapi_request(
-        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET", suppress_errors=suppress_errors
-    )
-    return response.ok and response.text == "true"
+    return _cached_is_github_app_installed_on_repo(owner, repo, suppress_errors)
 
 
 def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
@@ -344,3 +341,11 @@ def send_completion_email() -> Response:
         return response
     payload = {"owner": owner, "repo": repo}
     return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)
+
+
+@lru_cache(maxsize=128)
+def _cached_is_github_app_installed_on_repo(owner: str, repo: str, suppress_errors: bool) -> bool:
+    response = make_cfapi_request(
+        endpoint=f"/is-github-app-installed?repo={repo}&owner={owner}", method="GET", suppress_errors=suppress_errors
+    )
+    return response.ok and response.text == "true"
