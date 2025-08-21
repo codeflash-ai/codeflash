@@ -10,7 +10,7 @@
   "favicon": "/favicon.ico",
   "integrations": {
     "intercom": {
-          "appId": "ljxo1nzr"
+      "appId": "ljxo1nzr"
     }
   },
   "navigation": {
@@ -20,16 +20,14 @@
         "groups": [
           {
             "group": "🏠 Overview",
-            "pages": [
-              "index"
-            ]
+            "pages": ["index"]
           },
           {
+
             "group": "🚀 Quickstart",
             "pages": [
               "getting-started/local-installation"
-            ]
-          },
+            ]          },
           {
             "group": "⚡ Optimizing with Codeflash",
             "pages": [
@@ -42,22 +40,17 @@
             "group": "✨ Continuous Optimization",
             "pages": [
               "optimizing-with-codeflash/codeflash-github-actions",
-              "optimizing-with-codeflash/benchmarking"
+              "optimizing-with-codeflash/benchmarking",
+               "optimizing-with-codeflash/review-optimizations"
             ]
           },
           {
             "group": "🧠 Core Concepts",
-            "pages": [
-              "codeflash-concepts/how-codeflash-works",
-              "codeflash-concepts/benchmarking"
-            ]
+            "pages": ["codeflash-concepts/how-codeflash-works", "codeflash-concepts/benchmarking"]
           },
           {
             "group": "⚙️ Configuration & Best Practices",
-            "pages": [
-              "configuration",
-              "getting-the-best-out-of-codeflash"
-            ]
+            "pages": ["configuration", "getting-the-best-out-of-codeflash"]
           }
         ]
       }
@@ -91,9 +84,7 @@
     }
   },
   "contextual": {
-    "options": [
-      "copy"
-    ]
+    "options": ["copy"]
   },
   "redirects": [
     {
@@ -116,7 +107,7 @@
             "href": "https://www.codeflash.ai/privacy-policy"
           },
           {
-            "label": "Terms of Service", 
+            "label": "Terms of Service",
             "href": "https://www.codeflash.ai/terms-of-service"
           }
         ]
