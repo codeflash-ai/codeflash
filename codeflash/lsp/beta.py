@@ -94,8 +94,6 @@ def initialize_function_optimization(
         _initialize_optimizer_if_api_key_is_valid(server)
 
     server.optimizer.worktree_mode()
-    # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
-    Path(server.optimizer.args.tests_root).mkdir(parents=True, exist_ok=True)
 
     original_args, _ = server.optimizer.original_args_and_test_cfg
 

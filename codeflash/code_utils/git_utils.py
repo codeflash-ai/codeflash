@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -220,14 +219,9 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
     # Get uncommitted diff from the original repo
     repository.git.add("-N", ".")  # add the index for untracked files to be included in the diff
-    uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
-
-    # HACK: remove binary files from the diff, find a better way  # noqa: FIX004
-    uni_diff_text = re.sub(
-        r"^diff --git a\/.*?\.(?:pyc|class|jar|exe|dll|so|dylib|o|obj|bin|pdf|jpg|jpeg|png|gif|zip|tar|gz) b\/.*?\.\w+.*?\n(?:.*?\n)*?(?=diff --git|\Z)",
-        "",
-        uni_diff_text,
-        flags=re.MULTILINE,
+    exclude_binary_files = [":!*.pyc", ":!*.pyo", ":!*.pyd", ":!*.so", ":!*.dll", ":!*.whl", ":!*.egg", ":!*.egg-info", ":!*.pyz", ":!*.pkl", ":!*.pickle", ":!*.joblib", ":!*.npy", ":!*.npz", ":!*.h5", ":!*.hdf5", ":!*.pth", ":!*.pt", ":!*.pb", ":!*.onnx", ":!*.db", ":!*.sqlite", ":!*.sqlite3", ":!*.feather", ":!*.parquet", ":!*.jpg", ":!*.jpeg", ":!*.png", ":!*.gif", ":!*.bmp", ":!*.tiff", ":!*.webp", ":!*.wav", ":!*.mp3", ":!*.ogg", ":!*.flac", ":!*.mp4", ":!*.avi", ":!*.mov", ":!*.mkv", ":!*.pdf", ":!*.doc", ":!*.docx", ":!*.xls", ":!*.xlsx", ":!*.ppt", ":!*.pptx", ":!*.zip", ":!*.rar", ":!*.tar", ":!*.tar.gz", ":!*.tgz", ":!*.bz2", ":!*.xz"]  # fmt: off
+    uni_diff_text = repository.git.diff(
+        None, "HEAD", "--", *exclude_binary_files, ignore_blank_lines=True, ignore_space_at_eol=True
     )
 
     if not uni_diff_text.strip():
