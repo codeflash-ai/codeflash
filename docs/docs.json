@@ -39,9 +39,9 @@
           {
             "group": "✨ Continuous Optimization",
             "pages": [
-              "optimizing-with-codeflash/review-optimizations",
               "optimizing-with-codeflash/codeflash-github-actions",
-              "optimizing-with-codeflash/benchmarking"
+              "optimizing-with-codeflash/benchmarking",
+               "optimizing-with-codeflash/review-optimizations"
             ]
           },
           {
