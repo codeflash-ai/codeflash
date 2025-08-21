@@ -23,7 +23,7 @@ def optimize_code(file: str, function: str) -> str:
     cwd = Path(file).resolve().parent
     status = run_codeflash_command(cwd, config, expected_improvement_pct=5)
     if status:
-        "Optimization Successful, file has been edited"
+        return "Optimization Successful, file has been edited"
     else:
         return "Codeflash run did not meet expected requirements for testing, reverting file changes."
 
