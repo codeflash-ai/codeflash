@@ -46,16 +46,16 @@ class CodeflashLanguageServer(LanguageServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         super().__init__(*args, **kwargs)
         self.optimizer: Optimizer | None = None
+        self.args_processed_before: bool = False
         self.args = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
-        from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+        from codeflash.cli_cmds.cli import parse_args
 
         args = parse_args()
         args.config_file = config_file
         args.no_pr = True  # LSP server should not create PRs
         args.worktree = True
-        args = process_pyproject_config(args)
         self.args = args
         # avoid initializing the optimizer during initialization, because it can cause an error if the api key is invalid
 
