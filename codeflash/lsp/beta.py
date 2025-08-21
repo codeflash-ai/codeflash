@@ -168,7 +168,7 @@ def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -
         error_msg = user_id[7:]
         return {"status": "error", "message": error_msg}
 
-    from codeflash.optimization.optimizer import Optimizer
+    Optimizer = _get_optimizer()
 
     new_args = process_args(server)
     server.optimizer = Optimizer(new_args)
@@ -348,3 +348,15 @@ def cleanup_the_optimizer(server: CodeflashLanguageServer) -> None:
     server.optimizer.args.function = None
     server.optimizer.current_worktree = None
     server.optimizer.current_function_optimizer = None
+
+
+def _get_optimizer():
+    global _cached_optimizer
+    if _cached_optimizer is None:
+        from codeflash.optimization.optimizer import Optimizer
+
+        _cached_optimizer = Optimizer
+    return _cached_optimizer
+
+
+_cached_optimizer = None
