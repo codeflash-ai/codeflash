@@ -745,7 +745,9 @@ class FunctionOptimizer:
             file_to_code_context = optimized_context.file_to_path()
             optimized_code = file_to_code_context.get(str(path.relative_to(self.project_root)), "")
 
-        new_code = format_code(self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True)
+        new_code = format_code(
+            self.args.formatter_cmds, path, optimized_code=optimized_code, check_diff=True, exit_on_failure=False
+        )
         if should_sort_imports:
             new_code = sort_imports(new_code)
 
@@ -754,7 +756,11 @@ class FunctionOptimizer:
             module_abspath = hp.file_path
             hp_source_code = hp.source_code
             formatted_helper_code = format_code(
-                self.args.formatter_cmds, module_abspath, optimized_code=hp_source_code, check_diff=True
+                self.args.formatter_cmds,
+                module_abspath,
+                optimized_code=hp_source_code,
+                check_diff=True,
+                exit_on_failure=False,
             )
             if should_sort_imports:
                 formatted_helper_code = sort_imports(formatted_helper_code)
@@ -1152,7 +1158,6 @@ class FunctionOptimizer:
                     original_helper_code,
                     code_context,
                 )
-                self.log_successful_optimization(explanation, generated_tests, exp_type)
         return best_optimization
 
     def process_review(
@@ -1226,7 +1231,10 @@ class FunctionOptimizer:
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
         )
-        console.print(Panel(new_explanation_raw_str, title="Best Candidate Explanation", border_style="blue"))
+        self.log_successful_optimization(new_explanation, generated_tests, exp_type)
+
+        best_optimization.explanation_v2 = new_explanation.explanation_message()
+
         data = {
             "original_code": original_code_combined,
             "new_code": new_code_combined,
@@ -1239,6 +1247,7 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "root_dir": self.project_root,
         }
 
         raise_pr = not self.args.no_pr
@@ -1247,12 +1256,34 @@ class FunctionOptimizer:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif self.args.staging_review:
-            create_staging(**data)
+            response = create_staging(**data)
+            if response.status_code == 200:
+                staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
+                console.print(
+                    Panel(
+                        f"[bold green]✅ Staging created:[/bold green]\n[link={staging_url}]{staging_url}[/link]",
+                        title="Staging Link",
+                        border_style="green",
+                    )
+                )
+            else:
+                console.print(
+                    Panel(
+                        f"[bold red]❌ Failed to create staging[/bold red]\nStatus: {response.status_code}",
+                        title="Staging Error",
+                        border_style="red",
+                    )
+                )
+
         else:
             # Mark optimization success since no PR will be created
             mark_optimization_success(
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
+
+        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        if self.args.worktree:
+            return
 
         if raise_pr and (
             self.args.all

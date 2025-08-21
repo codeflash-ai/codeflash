@@ -11,6 +11,8 @@ from pygls.server import LanguageServer
 if TYPE_CHECKING:
     from lsprotocol.types import InitializeParams, InitializeResult
 
+    from codeflash.optimization.optimizer import Optimizer
+
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
@@ -26,7 +28,6 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
             pyproject_toml_path = self._find_pyproject_toml(workspace_path)
             if pyproject_toml_path:
                 server.prepare_optimizer_arguments(pyproject_toml_path)
-                server.show_message(f"Found pyproject.toml at: {pyproject_toml_path}")
             else:
                 server.show_message("No pyproject.toml found in workspace.")
         else:
@@ -44,16 +45,17 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
 class CodeflashLanguageServer(LanguageServer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
         super().__init__(*args, **kwargs)
-        self.optimizer = None
+        self.optimizer: Optimizer | None = None
+        self.args_processed_before: bool = False
         self.args = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
-        from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
+        from codeflash.cli_cmds.cli import parse_args
 
         args = parse_args()
         args.config_file = config_file
         args.no_pr = True  # LSP server should not create PRs
-        args = process_pyproject_config(args)
+        args.worktree = True
         self.args = args
         # avoid initializing the optimizer during initialization, because it can cause an error if the api key is invalid
 

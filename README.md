@@ -3,9 +3,7 @@
    <a href="https://github.com/codeflash-ai/codeflash">
     <img src="https://img.shields.io/github/commit-activity/m/codeflash-ai/codeflash" alt="GitHub commit activity">
   </a>
-  <a href="https://pypi.org/project/codeflash/">
-    <img src="https://img.shields.io/pypi/dm/codeflash" alt="PyPI Downloads">
-  </a>
+  <a href="https://pypi.org/project/codeflash/"><img src="https://static.pepy.tech/badge/codeflash" alt="PyPI Downloads"></a>
   <a href="https://pypi.org/project/codeflash/">
     <img src="https://img.shields.io/pypi/v/codeflash?label=PyPI%20version" alt="PyPI Downloads">
   </a>
@@ -83,4 +81,4 @@ Join our community for support and discussions. If you have any questions, feel 
 
 ## License
 
-Codeflash is licensed under the BSL-1.1 License. See the LICENSE file for details.
+Codeflash is licensed under the BSL-1.1 License. See the [LICENSE](https://github.com/codeflash-ai/codeflash/blob/main/codeflash/LICENSE) file for details.

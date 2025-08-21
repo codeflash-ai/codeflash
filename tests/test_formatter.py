@@ -208,13 +208,15 @@ import os
 import sys
 def foo():
     return os.path.join(sys.path[0], 'bar')"""
-    expected = original_code
     with tempfile.NamedTemporaryFile("w") as tmp:
         tmp.write(original_code)
         tmp.flush()
         tmp_path = tmp.name
-        with pytest.raises(FileNotFoundError):
-            format_code(formatter_cmds=["exit 1"], path=Path(tmp_path))
+        try:
+            new_code = format_code(formatter_cmds=["exit 1"], path=Path(tmp_path), exit_on_failure=False)
+            assert new_code == original_code
+        except Exception as e:
+            assert False, f"Shouldn't throw an exception even if the formatter is not found: {e}"
 
 
 def _run_formatting_test(source_code: str, should_content_change: bool, expected = None, optimized_function: str = ""):
@@ -570,12 +572,12 @@ if __name__=='__main__':main()
 def test_formatting_edge_case_exactly_100_diffs():
     """Test behavior when exactly at the threshold of 100 changes."""
     # Create a file with exactly 100 minor formatting issues
-    source_code = '''import json\n''' + '''
-def func{}():
+    snippet = '''import json\n''' + '''
+def func_{i}():
     x=1;y=2;z=3
     return x+y+z
-'''.replace('{}', '_{i}').format(i='{i}') * 33  # This creates exactly 100 potential formatting fixes
-
+'''
+    source_code = "".join([snippet.format(i=i) for i in range(100)])
     _run_formatting_test(source_code, False)
 
 
