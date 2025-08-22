@@ -21,7 +21,8 @@ def setup_logging() -> logging.Logger:
 
     # Set up stderr handler for VS Code output channel with [LSP-Server] prefix
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("[LSP-Server] %(asctime)s [%(levelname)s]: %(message)s"))
+    # adding the :::: here for the client to easily extract the message from the log
+    handler.setFormatter(logging.Formatter("[LSP-Server] %(asctime)s [%(levelname)s]::::%(message)s"))
 
     # Configure root logger
     root_logger.addHandler(handler)
