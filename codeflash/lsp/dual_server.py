@@ -2,7 +2,7 @@
 
 Usage:
     python dual_server.py --mode lsp     # Start LSP server
-    python dual_server.py --mode mcp     # Start MCP server  
+    python dual_server.py --mode mcp     # Start MCP server
     python dual_server.py --help         # Show help
 """
 
@@ -34,20 +34,20 @@ def prepare_server_config(server: CodeflashLanguageServer) -> None:
     try:
         cwd = Path.cwd()
         pyproject_path = None
-        
+
         # Look for pyproject.toml in current directory and parents
         for parent in [cwd] + list(cwd.parents):
             potential_pyproject = parent / "pyproject.toml"
             if potential_pyproject.exists():
                 pyproject_path = potential_pyproject
                 break
-        
+
         if pyproject_path:
             server.prepare_optimizer_arguments(pyproject_path)
             logging.info(f"Found pyproject.toml at: {pyproject_path}")
         else:
             logging.info("No pyproject.toml found, server will require manual configuration")
-            
+
     except Exception as e:
         logging.warning(f"Could not prepare optimizer arguments: {e}")
 
@@ -55,12 +55,12 @@ def prepare_server_config(server: CodeflashLanguageServer) -> None:
 def start_lsp_server() -> None:
     """Start the LSP server."""
     from codeflash.lsp.beta import server
-    
+
     log = setup_logging()
     log.info("Starting Codeflash Language Server (LSP mode)...")
-    
+
     prepare_server_config(server)
-    
+
     log.info("LSP Server ready with custom features for VS Code extension")
     server.start_io()
 
@@ -71,15 +71,13 @@ async def start_mcp_server() -> None:
     log.info("Starting Codeflash MCP Server...")
 
     # Create server instance
-    server = CodeflashLanguageServer(
-        "codeflash-mcp-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol
-    )
-    
+    server = CodeflashLanguageServer("codeflash-mcp-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+
     prepare_server_config(server)
 
     # Get the MCP server instance and run it
     mcp_server = server.get_mcp_server()
-    
+
     log.info("MCP Server ready with tools:")
     log.info("  - optimize_code(file, function): Optimize a function in a file")
     log.info("  - get_optimizable_functions(file): Get list of optimizable functions")
@@ -87,7 +85,7 @@ async def start_mcp_server() -> None:
     log.info("MCP Server ready with resources:")
     log.info("  - file://{path}: Get file content")
     log.info("  - codeflash://functions/{file_path}: Get optimizable functions as JSON")
-    
+
     # Run the MCP server
     await mcp_server.run()
 
@@ -101,18 +99,18 @@ def main() -> None:
 Examples:
   python dual_server.py --mode lsp     # Start Language Server Protocol server
   python dual_server.py --mode mcp     # Start Model Context Protocol server
-        """
+        """,
     )
-    
+
     parser.add_argument(
-        "--mode", 
-        choices=["lsp", "mcp"], 
+        "--mode",
+        choices=["lsp", "mcp"],
         required=True,
-        help="Server mode: 'lsp' for Language Server Protocol, 'mcp' for Model Context Protocol"
+        help="Server mode: 'lsp' for Language Server Protocol, 'mcp' for Model Context Protocol",
     )
-    
+
     args = parser.parse_args()
-    
+
     try:
         if args.mode == "lsp":
             start_lsp_server()
