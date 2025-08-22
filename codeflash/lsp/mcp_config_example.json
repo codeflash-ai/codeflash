@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codeflash": {
+      "command": "python",
+      "args": ["-m", "codeflash.lsp.mcp_entry"],
+      "env": {
+        "CODEFLASH_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}

@@ -38,6 +38,11 @@ class ProvideApiKeyParams:
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
 
+def get_mcp_server():
+    """Get the MCP server instance for standalone MCP usage."""
+    return server.get_mcp_server()
+
+
 @server.feature("getOptimizableFunctionsInCurrentDiff")
 def get_functions_in_current_git_diff(
     server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
