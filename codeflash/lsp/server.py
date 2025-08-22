@@ -85,13 +85,16 @@ class CodeflashLanguageServer(LanguageServer):
         self.lsp.notify("window/logMessage", log_params)
 
     def cleanup_the_optimizer(self) -> None:
-        self.optimizer.cleanup_temporary_paths()
-        # restore args and test cfg
-        if self.optimizer.original_args_and_test_cfg:
-            self.optimizer.args, self.optimizer.test_cfg = self.optimizer.original_args_and_test_cfg
-        self.optimizer.args.function = None
-        self.optimizer.current_worktree = None
-        self.optimizer.current_function_optimizer = None
+        try:
+            self.optimizer.cleanup_temporary_paths()
+            # restore args and test cfg
+            if self.optimizer.original_args_and_test_cfg:
+                self.optimizer.args, self.optimizer.test_cfg = self.optimizer.original_args_and_test_cfg
+            self.optimizer.args.function = None
+            self.optimizer.current_worktree = None
+            self.optimizer.current_function_optimizer = None
+        except Exception:
+            self.show_message_log("Failed to cleanup optimizer", "Error")
 
     def start_io(self, stdin: Optional[TextIO] = None, stdout: Optional[TextIO] = None) -> None:
         self.show_message_log("Starting IO server", "Info")
