@@ -121,6 +121,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         return updated_node
 
     def _find_insertion_index(self, updated_node: cst.Module) -> int:
+        """Find the position of the last import statement in the top-level of the module."""
         insert_index = 0
         for i, stmt in enumerate(updated_node.body):
             is_top_level_import = isinstance(stmt, cst.SimpleStatementLine) and any(
@@ -135,9 +136,14 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
             if is_top_level_import or is_conditional_import:
                 insert_index = i + 1
-            else:
-                # stop when we find the first non-import statement
+
+            # Stop scanning once we reach a class or function definition.
+            # Imports are supposed to be at the top of the file, but they can technically appear anywhere, even at the bottom of the file.
+            # Without this check, a stray import later in the file
+            # would incorrectly shift our insertion index below actual code definitions.
+            if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
                 break
+
         return insert_index
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
