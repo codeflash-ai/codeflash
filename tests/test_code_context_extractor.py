@@ -1800,9 +1800,10 @@ def get_system_details():
 
         # Set up the optimizer
         file_path = main_file_path.resolve()
+        project_root = package_dir.resolve()
         opt = Optimizer(
             Namespace(
-                project_root=package_dir.resolve(),
+                project_root=project_root,
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
@@ -1826,8 +1827,10 @@ def get_system_details():
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         hashing_context = code_ctx.hashing_code_context
         # The expected contexts
+        # Resolve both paths to handle symlink issues on macOS
+        relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{relative_path}
 import utility_module
 
 class Calculator:
@@ -2045,9 +2048,10 @@ def get_system_details():
 
         # Set up the optimizer
         file_path = main_file_path.resolve()
+        project_root = package_dir.resolve()
         opt = Optimizer(
             Namespace(
-                project_root=package_dir.resolve(),
+                project_root=project_root,
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
@@ -2070,6 +2074,7 @@ def get_system_details():
         code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         # The expected contexts
+        relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
 ```python:utility_module.py
 # Function that will be used in the main code
@@ -2096,7 +2101,7 @@ def select_precision(precision, fallback_precision):
     else:
         return DEFAULT_PRECISION
 ```
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{relative_path}
 import utility_module
 
 class Calculator:
