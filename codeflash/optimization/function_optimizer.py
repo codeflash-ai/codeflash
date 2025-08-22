@@ -117,7 +117,7 @@ class CandidateProcessor:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
         self.refinement_done = False
-        self.original_len = len(initial_candidates)
+        self.candidate_len = len(initial_candidates)
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
@@ -150,8 +150,8 @@ class CandidateProcessor:
         for candidate in line_profile_results:
             self.candidate_queue.put(candidate)
 
-        self.original_len += len(line_profile_results)
-        logger.info(f"Added results from line profiler to candidates, total candidates now: {self.original_len}")
+        self.candidate_len += len(line_profile_results)
+        logger.info(f"Added results from line profiler to candidates, total candidates now: {self.candidate_len}")
         self.line_profiler_done = True
 
         return self.get_next_candidate()
@@ -169,9 +169,9 @@ class CandidateProcessor:
         for candidate in refinement_response:
             self.candidate_queue.put(candidate)
 
-        self.original_len += len(refinement_response)
+        self.candidate_len += len(refinement_response)
         logger.info(
-            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.original_len}"
+            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
         )
         self.refinement_done = True
 
@@ -493,7 +493,7 @@ class FunctionOptimizer:
                 candidate_index += 1
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                logger.info(f"Optimization candidate {candidate_index}/{processor.original_len}:")
+                logger.info(f"Optimization candidate {candidate_index}/{processor.candidate_len}:")
                 code_print(candidate.source_code.flat)
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
