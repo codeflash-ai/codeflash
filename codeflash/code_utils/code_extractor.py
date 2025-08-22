@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
@@ -119,6 +120,26 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         return updated_node
 
+    def _find_insertion_index(self, updated_node: cst.Module) -> int:
+        insert_index = 0
+        for i, stmt in enumerate(updated_node.body):
+            is_top_level_import = isinstance(stmt, cst.SimpleStatementLine) and any(
+                isinstance(child, (cst.Import, cst.ImportFrom)) for child in stmt.body
+            )
+
+            is_conditional_import = isinstance(stmt, cst.If) and all(
+                isinstance(inner, cst.SimpleStatementLine)
+                and all(isinstance(child, (cst.Import, cst.ImportFrom)) for child in inner.body)
+                for inner in stmt.body.body
+            )
+
+            if is_top_level_import or is_conditional_import:
+                insert_index = i + 1
+            else:
+                # stop when we find the first non-import statement
+                break
+        return insert_index
+
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
@@ -131,18 +152,24 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         ]
 
         if assignments_to_append:
-            # Add a blank line before appending new assignments if needed
-            if new_statements and not isinstance(new_statements[-1], cst.EmptyLine):
-                new_statements.append(cst.SimpleStatementLine([cst.Pass()], leading_lines=[cst.EmptyLine()]))
-                new_statements.pop()  # Remove the Pass statement but keep the empty line
+            # after last top-level imports
+            insert_index = self._find_insertion_index(updated_node)
 
-            # Add the new assignments
-            new_statements.extend(
-                [
-                    cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                    for assignment in assignments_to_append
-                ]
-            )
+            assignment_lines = [
+                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
+                for assignment in assignments_to_append
+            ]
+
+            new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
+
+            # Add a blank line after the last assignment if needed
+            after_index = insert_index + len(assignment_lines)
+            if after_index < len(new_statements):
+                next_statement = new_statements[after_index]
+                if not next_statement.leading_lines or not isinstance(next_statement.leading_lines[-1], cst.EmptyLine):
+                    new_statements[after_index] = next_statement.with_changes(
+                        leading_lines=[cst.EmptyLine(), *next_statement.leading_lines]
+                    )
 
         return updated_node.with_changes(body=new_statements)
 

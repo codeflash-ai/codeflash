@@ -2104,6 +2104,8 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
+a = 6
+
 print("Hello world")
 if 2<3:
     a=4
@@ -2126,8 +2128,6 @@ class NewClass:
         return "I am still old"
     def new_function2(value):
         return cst.ensure_type(value, str)
-
-a = 6
 """
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
     code_path.write_text(original_code, encoding="utf-8")
