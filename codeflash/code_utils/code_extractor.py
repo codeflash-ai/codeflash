@@ -165,10 +165,12 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
             # Add a blank line after the last assignment if needed
             after_index = insert_index + len(assignment_lines)
             if after_index < len(new_statements):
-                next_statement = new_statements[after_index]
-                if not next_statement.leading_lines or not isinstance(next_statement.leading_lines[-1], cst.EmptyLine):
-                    new_statements[after_index] = next_statement.with_changes(
-                        leading_lines=[cst.EmptyLine(), *next_statement.leading_lines]
+                next_stmt = new_statements[after_index]
+                # If there's no empty line, add one
+                has_empty = any(isinstance(line, cst.EmptyLine) for line in next_stmt.leading_lines)
+                if not has_empty:
+                    new_statements[after_index] = next_stmt.with_changes(
+                        leading_lines=[cst.EmptyLine(), *next_stmt.leading_lines]
                     )
 
         return updated_node.with_changes(body=new_statements)
