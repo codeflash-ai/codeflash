@@ -135,14 +135,18 @@ class AiServiceClient:
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
-            return [
-                OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
+            candidates = []
+
+            for opt in optimizations_json:
+                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+                if not code.code_strings:
+                    continue
+                candidates.append(
+                    OptimizedCandidate(
+                        source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
+                    )
                 )
-                for opt in optimizations_json
-            ]
+            return candidates
         try:
             error = response.json()["error"]
         except Exception:
@@ -205,14 +209,17 @@ class AiServiceClient:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
-            return [
-                OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
+            candidates = []
+            for opt in optimizations_json:
+                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+                if not code.code_strings:
+                    continue
+                candidates.append(
+                    OptimizedCandidate(
+                        source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
+                    )
                 )
-                for opt in optimizations_json
-            ]
+            return candidates
         try:
             error = response.json()["error"]
         except Exception:
@@ -262,14 +269,19 @@ class AiServiceClient:
             refined_optimizations = response.json()["refinements"]
             logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
-            return [
-                OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"][:-4] + "refi",
+            candidates = []
+            for opt in refined_optimizations:
+                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+                if not code.code_strings:
+                    continue
+                candidates.append(
+                    OptimizedCandidate(
+                        source_code=code,
+                        explanation=opt["explanation"],
+                        optimization_id=opt["optimization_id"][:-4] + "refi",
+                    )
                 )
-                for opt in refined_optimizations
-            ]
+            return candidates
         try:
             error = response.json()["error"]
         except Exception:
