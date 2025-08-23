@@ -3230,7 +3230,7 @@ class HuggingFaceModel(Model):
     assert "from huggingface_hub import AsyncInferenceClient, ChatCompletionInputTool" not in new_code # conditional from import
 
 
-def test_test():
+def test_duplicate_global_assignments_when_reverting_helpers():
     root_dir = Path(__file__).parent.parent.resolve()
     main_file = Path(root_dir / "code_to_optimize/temp_main.py").resolve()
 
@@ -3244,42 +3244,14 @@ from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
 
 import regex
 from typing_extensions import Self, TypeAlias
-
-from unstructured.common.html_table import HtmlCell, HtmlRow, HtmlTable
-from unstructured.documents.elements import (
-    CompositeElement,
-    ConsolidationStrategy,
-    Element,
-    ElementMetadata,
-    Table,
-    TableChunk,
-    Title,
-)
 from unstructured.utils import lazyproperty
+from unstructured.documents.elements import Element
 
 # ================================================================================================
 # MODEL
 # ================================================================================================
 
 CHUNK_MAX_CHARS_DEFAULT: int = 500
-"""Hard-max chunk-length when no explicit value specified in `max_characters` argument.
-
-Provided for reference only, for example so the ingest CLI can advertise the default value in its
-UI. External chunking-related functions (e.g. in ingest or decorators) should use
-`max_characters: int | None = None` and not apply this default themselves. Only
-`ChunkingOptions.max_characters` should apply a default value.
-"""
-
-CHUNK_MULTI_PAGE_DEFAULT: bool = True
-"""When False, respect page-boundaries (no two elements from different page in same chunk).
-
-Only operative for "by_title" chunking strategy.
-"""
-
-BoundaryPredicate: TypeAlias = Callable[[Element], bool]
-"""Detects when element represents crossing a semantic boundary like section or page."""
-
-TextAndHtml: TypeAlias = tuple[str, str]
 
 # ================================================================================================
 # PRE-CHUNKER
@@ -3395,42 +3367,14 @@ from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
 
 import regex
 from typing_extensions import Self, TypeAlias
-
-from unstructured.common.html_table import HtmlCell, HtmlRow, HtmlTable
-from unstructured.documents.elements import (
-    CompositeElement,
-    ConsolidationStrategy,
-    Element,
-    ElementMetadata,
-    Table,
-    TableChunk,
-    Title,
-)
 from unstructured.utils import lazyproperty
+from unstructured.documents.elements import Element
 
 # ================================================================================================
 # MODEL
 # ================================================================================================
 
 CHUNK_MAX_CHARS_DEFAULT: int = 500
-"""Hard-max chunk-length when no explicit value specified in `max_characters` argument.
-
-Provided for reference only, for example so the ingest CLI can advertise the default value in its
-UI. External chunking-related functions (e.g. in ingest or decorators) should use
-`max_characters: int | None = None` and not apply this default themselves. Only
-`ChunkingOptions.max_characters` should apply a default value.
-"""
-
-CHUNK_MULTI_PAGE_DEFAULT: bool = True
-"""When False, respect page-boundaries (no two elements from different page in same chunk).
-
-Only operative for "by_title" chunking strategy.
-"""
-
-BoundaryPredicate: TypeAlias = Callable[[Element], bool]
-"""Detects when element represents crossing a semantic boundary like section or page."""
-
-TextAndHtml: TypeAlias = tuple[str, str]
 
 # ================================================================================================
 # PRE-CHUNKER
