@@ -81,6 +81,19 @@ class AiServiceClient:
         # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
         return response
 
+    def _get_valid_candidates(self, optimizations_json: list[dict[str, Any]]) -> list[OptimizedCandidate]:
+        candidates: list[OptimizedCandidate] = []
+        for opt in optimizations_json:
+            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+            if not code.code_strings:
+                continue
+            candidates.append(
+                OptimizedCandidate(
+                    source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
+                )
+            )
+        return candidates
+
     def optimize_python_code(  # noqa: D417
         self,
         source_code: str,
@@ -135,18 +148,7 @@ class AiServiceClient:
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
-            candidates = []
-
-            for opt in optimizations_json:
-                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
-                if not code.code_strings:
-                    continue
-                candidates.append(
-                    OptimizedCandidate(
-                        source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
-                    )
-                )
-            return candidates
+            return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
         except Exception:
@@ -209,17 +211,7 @@ class AiServiceClient:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
-            candidates = []
-            for opt in optimizations_json:
-                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
-                if not code.code_strings:
-                    continue
-                candidates.append(
-                    OptimizedCandidate(
-                        source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
-                    )
-                )
-            return candidates
+            return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
         except Exception:
@@ -269,19 +261,17 @@ class AiServiceClient:
             refined_optimizations = response.json()["refinements"]
             logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
-            candidates = []
-            for opt in refined_optimizations:
-                code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
-                if not code.code_strings:
-                    continue
-                candidates.append(
-                    OptimizedCandidate(
-                        source_code=code,
-                        explanation=opt["explanation"],
-                        optimization_id=opt["optimization_id"][:-4] + "refi",
-                    )
+
+            refinements = self._get_valid_candidates(refined_optimizations)
+            return [
+                OptimizedCandidate(
+                    source_code=c.source_code,
+                    explanation=c.explanation,
+                    optimization_id=c.optimization_id[:-4] + "refi",
                 )
-            return candidates
+                for c in refinements
+            ]
+
         try:
             error = response.json()["error"]
         except Exception:

@@ -1300,6 +1300,7 @@ class FunctionOptimizer:
             return
 
     def revert_code_and_helpers(self, original_helper_code: dict[Path, str]) -> None:
+        logger.info("Reverting code and helpers...")
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
