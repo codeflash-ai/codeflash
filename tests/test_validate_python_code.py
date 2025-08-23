@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from codeflash.api.aiservice import AiServiceClient
 from codeflash.models.models import CodeString
 
 
@@ -41,3 +42,30 @@ def test_whitespace_only():
     whitespace_code = "    "
     cs = CodeString(code=whitespace_code)
     assert cs.code == whitespace_code
+
+def test_generated_candidates_validation():
+    ai_service = AiServiceClient()
+    code = """```python:file.py
+print name
+```"""
+    mock_generate_candidates = [
+        {
+            "source_code": code,
+            "explanation": "",
+            "optimization_id": ""
+        }
+    ]
+    candidates = ai_service._get_valid_candidates(mock_generate_candidates)
+    assert len(candidates) == 0
+    code = """```python:file.py
+print('Hello, World!')
+```"""
+    mock_generate_candidates = [
+        {
+            "source_code": code,
+            "explanation": "",
+            "optimization_id": ""
+        }
+    ]
+    candidates = ai_service._get_valid_candidates(mock_generate_candidates)
+    assert len(candidates) == 1
