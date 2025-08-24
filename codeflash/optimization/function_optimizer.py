@@ -31,13 +31,15 @@ from codeflash.code_utils.code_replacer import (
 )
 from codeflash.code_utils.code_utils import (
     ImportErrorPattern,
+    choose_weights,
     cleanup_paths,
-    create_rank_dictionary_compact,
+    create_score_dictionary_from_metrics,
     diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
     has_any_async_functions,
     module_name_from_file_path,
+    normalize,
     restore_conftest,
 )
 from codeflash.code_utils.config_consts import (
@@ -683,11 +685,15 @@ class FunctionOptimizer:
                 diff_length(new_best_opt.candidate.source_code.flat, code_context.read_writable_code.flat)
             )  # char level diff
             runtimes_list.append(new_best_opt.runtime)
-        diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
-        runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
-        # TODO: better way to resolve conflicts with same min ranking
-        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
-        min_key = min(overall_ranking, key=overall_ranking.get)
+
+        # runtime is more important than diff by a factor of 3
+        weights = choose_weights(runtime=3, diff=1)
+
+        runtime_norm = normalize(runtimes_list)
+        diffs_norm = normalize(diff_lens_list)
+        score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
+
+        min_key = min(score_dict, key=score_dict.get)
         best_optimization = valid_candidates_with_shorter_code[min_key]
         # reassign code string which is the shortest
         ai_service_client.log_results(

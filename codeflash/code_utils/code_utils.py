@@ -64,6 +64,63 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 
+def choose_weights(**importance: float) -> list[float]:
+    """Choose normalized weights from relative importance values.
+
+    Example:
+        choose_weights(runtime=3, diff=1)
+        -> [0.75, 0.25]
+
+    Args:
+        **importance: keyword args of metric=importance (relative numbers).
+
+    Returns:
+        A list of weights in the same order as the arguments.
+
+    """
+    total = sum(importance.values())
+    if total == 0:
+        raise ValueError("At least one importance value must be > 0")
+
+    return [v / total for v in importance.values()]
+
+
+def normalize(values: list[float]) -> list[float]:
+    mn, mx = min(values), max(values)
+    if mx == mn:
+        return [0.0] * len(values)
+    return [(v - mn) / (mx - mn) for v in values]
+
+
+def create_score_dictionary_from_metrics(weights: list[float], *metrics: list[float]) -> dict[int, int]:
+    """Combine multiple metrics into a single weighted score dictionary.
+
+    Each metric is a list of values (smaller = better).
+    The total score for each index is the weighted sum of its values
+    across all metrics:
+
+        score[index] = Σ (value * weight)
+
+    Args:
+        weights: A list of weights, one per metric. Larger weight = more influence.
+        *metrics: Lists of values (one list per metric, aligned by index).
+
+    Returns:
+        A dictionary mapping each index to its combined weighted score.
+
+    """
+    if len(weights) != len(metrics):
+        raise ValueError("Number of weights must match number of metrics")
+
+    combined: dict[int, float] = {}
+
+    for weight, metric in zip(weights, metrics):
+        for idx, value in enumerate(metric):
+            combined[idx] = combined.get(idx, 0) + value * weight
+
+    return combined
+
+
 @contextmanager
 def custom_addopts() -> None:
     pyproject_file = find_pyproject_toml()
