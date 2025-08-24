@@ -338,20 +338,28 @@ def delete___future___aliased_imports(module_code: str) -> str:
 
 
 def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
-    non_assignment_global_statements = extract_global_statements(src_module_code)
+    new_added_global_statements = extract_global_statements(src_module_code)
+    existing_global_statements = extract_global_statements(dst_module_code)
 
-    # Find the last import line in target
-    last_import_line = find_last_import_line(dst_module_code)
+    unique_global_statements = [
+        stmt
+        for stmt in new_added_global_statements
+        if not any(stmt.deep_equals(existing_stmt) for existing_stmt in existing_global_statements)
+    ]
 
-    # Parse the target code
-    target_module = cst.parse_module(dst_module_code)
+    if unique_global_statements:
+        # Find the last import line in target
+        last_import_line = find_last_import_line(dst_module_code)
 
-    # Create transformer to insert non_assignment_global_statements
-    transformer = ImportInserter(non_assignment_global_statements, last_import_line)
-    #
-    # # Apply transformation
-    modified_module = target_module.visit(transformer)
-    dst_module_code = modified_module.code
+        # Parse the target code
+        target_module = cst.parse_module(dst_module_code)
+
+        # Create transformer to insert new statements
+        transformer = ImportInserter(unique_global_statements, last_import_line)
+        #
+        # # Apply transformation
+        modified_module = target_module.visit(transformer)
+        dst_module_code = modified_module.code
 
     # Parse the code
     original_module = cst.parse_module(dst_module_code)
