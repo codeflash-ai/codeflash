@@ -52,10 +52,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--codeflash-trace", action="store_true", default=False, help="Enable CodeFlash tracing for benchmarks"
     )
-    # These options are ignored when --codeflash-trace is used
-    for option, action, default, help_text in benchmark_options:
-        help_suffix = " (ignored when --codeflash-trace is used)"
-        parser.addoption(option, action=action, default=default, help=help_text + help_suffix)
+    # Only add benchmark options if pytest-benchmark is not installed for backward compatibility with existing pytest-benchmark setup
+    if not PYTEST_BENCHMARK_INSTALLED:
+        for option, action, default, help_text in benchmark_options:
+            help_suffix = " (ignored when --codeflash-trace is used)"
+            parser.addoption(option, action=action, default=default, help=help_text + help_suffix)
 
 
 @pytest.fixture
