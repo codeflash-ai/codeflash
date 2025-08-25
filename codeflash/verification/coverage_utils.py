@@ -41,7 +41,7 @@ class CoverageUtils:
         if not database_path.stat().st_size or not database_path.exists():
             logger.debug(f"Coverage database {database_path} is empty or does not exist")
             sentry_sdk.capture_message(f"Coverage database {database_path} is empty or does not exist")
-            return CoverageUtils.create_empty(source_code_path, function_name, code_context)
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
         cov.load()
 
         reporter = JsonReporter(cov)
@@ -51,7 +51,7 @@ class CoverageUtils:
                 reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
             except NoDataError:
                 sentry_sdk.capture_message(f"No coverage data found for {function_name} in {source_code_path}")
-                return CoverageUtils.create_empty(source_code_path, function_name, code_context)
+                return CoverageData.create_empty(source_code_path, function_name, code_context)
         with temp_json_file.open() as f:
             original_coverage_data = json.load(f)
 

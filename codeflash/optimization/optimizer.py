@@ -139,7 +139,7 @@ class Optimizer:
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,
-        function_to_optimize_ast: ast.FunctionDef | None = None,
+        function_to_optimize_ast: ast.FunctionDef | ast.AsyncFunctionDef | None = None,
         function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
@@ -283,6 +283,7 @@ class Optimizer:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
                 logger.info("No functions found to optimize. Exiting…")
+                console.rule()
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
