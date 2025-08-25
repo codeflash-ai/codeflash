@@ -537,6 +537,7 @@ def revert_unused_helper_functions(
                     module_abspath=file_path,
                     preexisting_objects=set(),  # Empty set since we're reverting
                     project_root_path=project_root,
+                    global_assignments_added_before=True,  # since we revert helpers functions after applying the optimization, we know that the file already has global assignments added, otherwise they would be added twice.
                 )
 
                 if reverted_code:

@@ -110,7 +110,7 @@ def initialize_function_optimization(
 
     if count == 0:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
-        cleanup_the_optimizer(server)
+        server.cleanup_the_optimizer()
         return {"functionName": params.functionName, "status": "error", "message": "not found", "args": None}
 
     fto = optimizable_funcs.popitem()[1][0]
@@ -217,6 +217,7 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
 
 
 @server.feature("performFunctionOptimization")
+@server.thread()
 def perform_function_optimization(  # noqa: PLR0911
     server: CodeflashLanguageServer, params: FunctionOptimizationParams
 ) -> dict[str, str]:
@@ -337,14 +338,4 @@ def perform_function_optimization(  # noqa: PLR0911
             "explanation": best_optimization.explanation_v2,
         }
     finally:
-        cleanup_the_optimizer(server)
-
-
-def cleanup_the_optimizer(server: CodeflashLanguageServer) -> None:
-    server.optimizer.cleanup_temporary_paths()
-    # restore args and test cfg
-    if server.optimizer.original_args_and_test_cfg:
-        server.optimizer.args, server.optimizer.test_cfg = server.optimizer.original_args_and_test_cfg
-    server.optimizer.args.function = None
-    server.optimizer.current_worktree = None
-    server.optimizer.current_function_optimizer = None
+        server.cleanup_the_optimizer()

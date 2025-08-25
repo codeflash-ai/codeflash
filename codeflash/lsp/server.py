@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from threading import Event
+from typing import TYPE_CHECKING, Any, Optional, TextIO
 
 from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
 from pygls import uris
 from pygls.protocol import LanguageServerProtocol, lsp_method
-from pygls.server import LanguageServer
+from pygls.server import LanguageServer, StdOutTransportAdapter, aio_readline
 
 if TYPE_CHECKING:
     from lsprotocol.types import InitializeParams, InitializeResult
@@ -81,3 +83,39 @@ class CodeflashLanguageServer(LanguageServer):
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
         self.lsp.notify("window/logMessage", log_params)
+
+    def cleanup_the_optimizer(self) -> None:
+        try:
+            self.optimizer.cleanup_temporary_paths()
+            # restore args and test cfg
+            if self.optimizer.original_args_and_test_cfg:
+                self.optimizer.args, self.optimizer.test_cfg = self.optimizer.original_args_and_test_cfg
+            self.optimizer.args.function = None
+            self.optimizer.current_worktree = None
+            self.optimizer.current_function_optimizer = None
+        except Exception:
+            self.show_message_log("Failed to cleanup optimizer", "Error")
+
+    def start_io(self, stdin: Optional[TextIO] = None, stdout: Optional[TextIO] = None) -> None:
+        self.show_message_log("Starting IO server", "Info")
+
+        self._stop_event = Event()
+        transport = StdOutTransportAdapter(stdin or sys.stdin.buffer, stdout or sys.stdout.buffer)
+        self.lsp.connection_made(transport)
+        try:
+            self.loop.run_until_complete(
+                aio_readline(
+                    self.loop,
+                    self.thread_pool_executor,
+                    self._stop_event,
+                    stdin or sys.stdin.buffer,
+                    self.lsp.data_received,
+                )
+            )
+        except BrokenPipeError:
+            self.show_message_log("Connection to the client is lost! Shutting down the server.", "Error")
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        finally:
+            self.cleanup_the_optimizer()
+            self.shutdown()

@@ -18,6 +18,8 @@ from collections.abc import Sequence
 
 from pydantic_ai_slim.pydantic_ai.messages import BinaryContent, UserContent
 
+_TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
+
 def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
     if not content:
         return 0
@@ -34,9 +36,6 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
         # TODO(Marcelo): We need to study how we can estimate the tokens for AudioUrl or ImageUrl.
 
     return tokens
-
-
-_TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
 """, encoding="utf-8")
 
     main_file = (root_dir / "code_to_optimize/temp_main.py").resolve()
@@ -131,6 +130,10 @@ from collections.abc import Sequence
 
 from pydantic_ai_slim.pydantic_ai.messages import BinaryContent, UserContent
 
+_translate_table = {ord(c): ord(' ') for c in ' \\t\\n\\r\\x0b\\x0c",.:'}
+
+_TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
+
 def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
     if not content:
         return 0
@@ -155,11 +158,6 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
             tokens += len(part.data)
 
     return tokens
-
-
-_TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
-
-_translate_table = {ord(c): ord(' ') for c in ' \\t\\n\\r\\x0b\\x0c",.:'}
 """
 
     assert new_code.rstrip() == original_main.rstrip() # No Change
