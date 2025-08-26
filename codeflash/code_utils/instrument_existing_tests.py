@@ -77,10 +77,10 @@ class InjectPerfOnly(ast.NodeTransformer):
                 call_node = node
                 if isinstance(node.func, ast.Name):
                     function_name = node.func.id
-                    
+
                     if self.function_object.is_async:
                         return [test_node]
-                    
+
                     node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                     node.args = [
                         ast.Name(id=function_name, ctx=ast.Load()),
@@ -104,7 +104,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                     if function_to_test == self.function_object.function_name:
                         if self.function_object.is_async:
                             return [test_node]
-                        
+
                         function_name = ast.unparse(node.func)
                         node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                         node.args = [
@@ -359,11 +359,10 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
-    source_module_path: Path | None = None,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return False, None
-        
+
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
     try:
@@ -390,7 +389,7 @@ def inject_profiling_into_existing_test(
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     additional_functions = [create_wrapper_function(mode)]
-    
+
     tree.body = [*new_imports, *additional_functions, *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
@@ -925,5 +924,3 @@ def add_async_decorator_to_function(
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
     instrumented_filename = f"instrumented_{source_path.name}"
     return temp_dir / instrumented_filename
-
-
