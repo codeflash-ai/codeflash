@@ -412,7 +412,7 @@ def replace_function_definitions_in_module(
     module_abspath: Path,
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
-    global_assignments_added_before: bool = False,  # noqa: FBT001, FBT002
+    should_add_global_assignments: bool = True,  # noqa: FBT001, FBT002
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
@@ -422,7 +422,7 @@ def replace_function_definitions_in_module(
         # becuase of an "edge case" where the optimized code intoduced a new import and a global assignment using that import
         # and that import wasn't used before, so it was ignored when calling AddImportsVisitor.add_needed_import inside replace_functions_and_add_imports (because the global assignment wasn't added yet)
         # this was added at https://github.com/codeflash-ai/codeflash/pull/448
-        add_global_assignments(code_to_apply, source_code) if not global_assignments_added_before else source_code,
+        add_global_assignments(code_to_apply, source_code) if should_add_global_assignments else source_code,
         function_names,
         code_to_apply,
         module_abspath,
