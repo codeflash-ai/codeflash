@@ -159,7 +159,11 @@ class FunctionToOptimize:
 
     @property
     def qualified_name(self) -> str:
-        return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
+        if not self.parents:
+            return self.function_name
+        # Join all parent names with dots to handle nested classes properly
+        parent_path = ".".join(parent.name for parent in self.parents)
+        return f"{parent_path}.{self.function_name}"
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"

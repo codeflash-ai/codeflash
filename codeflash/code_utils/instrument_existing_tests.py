@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import isort
+import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
@@ -76,6 +77,10 @@ class InjectPerfOnly(ast.NodeTransformer):
                 call_node = node
                 if isinstance(node.func, ast.Name):
                     function_name = node.func.id
+                    
+                    if self.function_object.is_async:
+                        return [test_node]
+                    
                     node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                     node.args = [
                         ast.Name(id=function_name, ctx=ast.Load()),
@@ -97,6 +102,9 @@ class InjectPerfOnly(ast.NodeTransformer):
                 if isinstance(node.func, ast.Attribute):
                     function_to_test = node.func.attr
                     if function_to_test == self.function_object.function_name:
+                        if self.function_object.is_async:
+                            return [test_node]
+                        
                         function_name = ast.unparse(node.func)
                         node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                         node.args = [
@@ -310,6 +318,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
                 else:
                     self.imported_as = FunctionToOptimize(
@@ -318,7 +327,29 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                         file_path=self.function.file_path,
                         starting_line=self.function.starting_line,
                         ending_line=self.function.ending_line,
+                        is_async=self.function.is_async,
                     )
+
+
+def instrument_source_module_with_async_decorators(
+    source_path: Path, function_to_optimize: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
+) -> tuple[bool, str | None]:
+    if not function_to_optimize.is_async:
+        return False, None
+
+    try:
+        with source_path.open(encoding="utf8") as f:
+            source_code = f.read()
+
+        modified_code, decorator_added = add_async_decorator_to_function(source_code, function_to_optimize, mode)
+
+        if decorator_added:
+            return True, modified_code
+
+    except Exception:
+        return False, None
+    else:
+        return False, None
 
 
 def inject_profiling_into_existing_test(
@@ -328,7 +359,11 @@ def inject_profiling_into_existing_test(
     tests_project_root: Path,
     test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
+    source_module_path: Path | None = None,
 ) -> tuple[bool, str | None]:
+    if function_to_optimize.is_async:
+        return False, None
+        
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
     try:
@@ -336,7 +371,7 @@ def inject_profiling_into_existing_test(
     except SyntaxError:
         logger.exception(f"Syntax error in code in file - {test_path}")
         return False, None
-    # TODO: Pass the full name of function here, otherwise we can run into namespace clashes
+
     test_module_path = module_name_from_file_path(test_path, tests_project_root)
     import_visitor = FunctionImportedAsVisitor(function_to_optimize)
     import_visitor.visit(tree)
@@ -354,7 +389,9 @@ def inject_profiling_into_existing_test(
         )
     if test_framework == "unittest":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
-    tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
+    additional_functions = [create_wrapper_function(mode)]
+    
+    tree.body = [*new_imports, *additional_functions, *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)
 
 
@@ -729,3 +766,164 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         decorator_list=[],
         returns=None,
     )
+
+
+class AsyncDecoratorAdder(cst.CSTTransformer):
+    """Transformer that adds async decorator to async function definitions."""
+
+    def __init__(self, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
+        """Initialize the transformer.
+
+        Args:
+        ----
+            function: The FunctionToOptimize object representing the target async function.
+            mode: The testing mode to determine which decorator to apply.
+
+        """
+        super().__init__()
+        self.function = function
+        self.mode = mode
+        self.qualified_name_parts = function.qualified_name.split(".")
+        self.context_stack = []
+        self.added_decorator = False
+
+        # Choose decorator based on mode
+        self.decorator_name = (
+            "codeflash_behavior_async" if mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
+        )
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        # Track when we enter a class
+        self.context_stack.append(node.name.value)
+
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+        # Pop the context when we leave a class
+        self.context_stack.pop()
+        return updated_node
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        # Track when we enter a function
+        self.context_stack.append(node.name.value)
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        # Check if this is an async function and matches our target
+        if original_node.asynchronous is not None and self.context_stack == self.qualified_name_parts:
+            # Check if the decorator is already present
+            has_decorator = any(
+                self._is_target_decorator(decorator.decorator) for decorator in original_node.decorators
+            )
+
+            # Only add the decorator if it's not already there
+            if not has_decorator:
+                new_decorator = cst.Decorator(decorator=cst.Name(value=self.decorator_name))
+
+                # Add our new decorator to the existing decorators
+                updated_decorators = [new_decorator, *list(updated_node.decorators)]
+                updated_node = updated_node.with_changes(decorators=tuple(updated_decorators))
+                self.added_decorator = True
+
+        # Pop the context when we leave a function
+        self.context_stack.pop()
+        return updated_node
+
+    def _is_target_decorator(self, decorator_node: cst.Name | cst.Attribute | cst.Call) -> bool:
+        """Check if a decorator matches our target decorator name."""
+        if isinstance(decorator_node, cst.Name):
+            return decorator_node.value in {
+                "codeflash_trace_async",
+                "codeflash_behavior_async",
+                "codeflash_performance_async",
+            }
+        if isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
+            return decorator_node.func.value in {
+                "codeflash_trace_async",
+                "codeflash_behavior_async",
+                "codeflash_performance_async",
+            }
+        return False
+
+
+class AsyncDecoratorImportAdder(cst.CSTTransformer):
+    """Transformer that adds the import for async decorators."""
+
+    def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
+        self.mode = mode
+        self.has_import = False
+
+    def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+        # Check if the async decorator import is already present
+        if (
+            isinstance(node.module, cst.Attribute)
+            and isinstance(node.module.value, cst.Attribute)
+            and isinstance(node.module.value.value, cst.Name)
+            and node.module.value.value.value == "codeflash"
+            and node.module.value.attr.value == "code_utils"
+            and node.module.attr.value == "codeflash_wrap_decorator"
+            and not isinstance(node.names, cst.ImportStar)
+        ):
+            decorator_name = (
+                "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
+            )
+            for import_alias in node.names:
+                if import_alias.name.value == decorator_name:
+                    self.has_import = True
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        # If the import is already there, don't add it again
+        if self.has_import:
+            return updated_node
+
+        # Choose import based on mode
+        decorator_name = (
+            "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
+        )
+
+        # Parse the import statement into a CST node
+        import_node = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")
+
+        # Add the import to the module's body
+        return updated_node.with_changes(body=[import_node, *list(updated_node.body)])
+
+
+def add_async_decorator_to_function(
+    source_code: str, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
+) -> tuple[str, bool]:
+    """Add async decorator to an async function definition.
+
+    Args:
+    ----
+        source_code: The source code to modify.
+        function: The FunctionToOptimize object representing the target async function.
+        mode: The testing mode to determine which decorator to apply.
+
+    Returns:
+    -------
+        Tuple of (modified_source_code, was_decorator_added).
+
+    """
+    if not function.is_async:
+        return source_code, False
+
+    try:
+        module = cst.parse_module(source_code)
+
+        # Add the decorator to the function
+        decorator_transformer = AsyncDecoratorAdder(function, mode)
+        module = module.visit(decorator_transformer)
+
+        # Add the import if decorator was added
+        if decorator_transformer.added_decorator:
+            import_transformer = AsyncDecoratorImportAdder(mode)
+            module = module.visit(import_transformer)
+
+        return isort.code(module.code, float_to_top=True), decorator_transformer.added_decorator
+    except Exception as e:
+        logger.exception(f"Error adding async decorator to function {function.qualified_name}: {e}")
+        return source_code, False
+
+
+def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
+    instrumented_filename = f"instrumented_{source_path.name}"
+    return temp_dir / instrumented_filename
+
+

@@ -893,6 +893,7 @@ class FunctionOptimizer:
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
+                    
                 success, injected_behavior_test = inject_profiling_into_existing_test(
                     mode=TestingMode.BEHAVIOR,
                     test_path=path_obj_test_file,
@@ -900,6 +901,7 @@ class FunctionOptimizer:
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     test_framework=self.args.test_framework,
+                    source_module_path=self.function_to_optimize.file_path,
                 )
                 if not success:
                     continue
@@ -910,6 +912,7 @@ class FunctionOptimizer:
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
                     test_framework=self.args.test_framework,
+                    source_module_path=self.function_to_optimize.file_path,
                 )
                 if not success:
                     continue
@@ -1364,6 +1367,16 @@ class FunctionOptimizer:
 
             test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
+            if self.function_to_optimize.is_async:
+                from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+                success, instrumented_source = instrument_source_module_with_async_decorators(
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                )
+                if success and instrumented_source:
+                    with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
+                        f.write(instrumented_source)
+                    logger.debug(f"Applied async instrumentation to {self.function_to_optimize.file_path}")
+            
             # Instrument codeflash capture
             try:
                 instrument_codeflash_capture(
@@ -1379,7 +1392,6 @@ class FunctionOptimizer:
                     code_context=code_context,
                 )
             finally:
-                # Remove codeflash capture
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
@@ -1396,15 +1408,34 @@ class FunctionOptimizer:
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
                 )
                 console.rule()
-                benchmarking_results, _ = self.run_and_parse_tests(
-                    testing_type=TestingMode.PERFORMANCE,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME,
-                    enable_coverage=False,
-                    code_context=code_context,
-                )
+                
+                # For async functions, instrument at definition site for performance benchmarking
+                if self.function_to_optimize.is_async:
+                    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    )
+                    if success and instrumented_source:
+                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
+                            f.write(instrumented_source)
+                        logger.debug(f"Applied async performance instrumentation to {self.function_to_optimize.file_path}")
+                
+                try:
+                    benchmarking_results, _ = self.run_and_parse_tests(
+                        testing_type=TestingMode.PERFORMANCE,
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=0,
+                        testing_time=TOTAL_LOOPING_TIME,
+                        enable_coverage=False,
+                        code_context=code_context,
+                    )
+                finally:
+                    # Restore original source if we instrumented it
+                    if self.function_to_optimize.is_async:
+                        self.write_code_and_helpers(
+                            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                        )
             else:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
@@ -1537,14 +1568,32 @@ class FunctionOptimizer:
                 return Failure("Test results did not match the test results of the original code.")
 
             if test_framework == "pytest":
-                candidate_benchmarking_results, _ = self.run_and_parse_tests(
-                    testing_type=TestingMode.PERFORMANCE,
-                    test_env=test_env,
-                    test_files=self.test_files,
-                    optimization_iteration=optimization_candidate_index,
-                    testing_time=TOTAL_LOOPING_TIME,
-                    enable_coverage=False,
-                )
+                # For async functions, instrument at definition site for performance benchmarking
+                if self.function_to_optimize.is_async:
+                    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    )
+                    if success and instrumented_source:
+                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
+                            f.write(instrumented_source)
+                        logger.debug(f"Applied async performance instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}")
+                
+                try:
+                    candidate_benchmarking_results, _ = self.run_and_parse_tests(
+                        testing_type=TestingMode.PERFORMANCE,
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=optimization_candidate_index,
+                        testing_time=TOTAL_LOOPING_TIME,
+                        enable_coverage=False,
+                    )
+                finally:
+                    # Restore original source if we instrumented it
+                    if self.function_to_optimize.is_async:
+                        self.write_code_and_helpers(
+                            candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
+                        )
                 loop_count = (
                     max(all_loop_indices)
                     if (
