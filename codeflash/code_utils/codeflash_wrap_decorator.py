@@ -17,28 +17,77 @@ F = TypeVar("F", bound=Callable[..., Any])
 def extract_test_context_from_frame() -> tuple[str, str | None, str]:
     frame = inspect.currentframe()
     try:
+        potential_tests = []
+
         while frame:
             frame = frame.f_back
-            if frame and frame.f_code.co_name.startswith("test_"):
-                test_name = frame.f_code.co_name
+            if not frame:
+                break
+
+            function_name = frame.f_code.co_name
+            filename = frame.f_code.co_filename
+
+            if function_name.startswith("test_"):
+                test_name = function_name
                 test_module_name = frame.f_globals.get("__name__", "unknown_module")
                 test_class_name = None
+
                 if "self" in frame.f_locals:
-                    test_class_name = frame.f_locals["self"].__class__.__name__
+                    self_obj = frame.f_locals["self"]
+                    if hasattr(self_obj, "__class__") and hasattr(self_obj.__class__, "__name__"):
+                        test_class_name = self_obj.__class__.__name__
 
                 return test_module_name, test_class_name, test_name
+
+            if (
+                frame.f_globals.get("__name__", "").startswith("test_")
+                or Path(filename).stem.startswith("test_")
+                or "test" in Path(filename).parts
+            ):
+                test_module_name = frame.f_globals.get("__name__", "unknown_module")
+
+                if "self" in frame.f_locals:
+                    self_obj = frame.f_locals["self"]
+                    if hasattr(self_obj, "__class__") and hasattr(self_obj.__class__, "__name__"):
+                        class_name = self_obj.__class__.__name__
+                        if class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower():
+                            potential_tests.append((test_module_name, class_name, function_name))
+
+                elif "test" in test_module_name or Path(filename).stem.startswith("test_"):
+                    potential_tests.append((test_module_name, None, function_name))
+
+            if (
+                function_name in ["runTest", "_runTest", "run", "_testMethodName"]
+                or "pytest" in str(frame.f_globals.get("__file__", ""))
+                or "unittest" in str(frame.f_globals.get("__file__", ""))
+            ):
+                # This might be a test framework frame, look for test context nearby
+                test_module_name = frame.f_globals.get("__name__", "unknown_module")
+                if "self" in frame.f_locals:
+                    self_obj = frame.f_locals["self"]
+                    if hasattr(self_obj, "__class__"):
+                        class_name = self_obj.__class__.__name__
+                        if class_name.startswith("Test") or "test" in class_name.lower():
+                            test_method = getattr(self_obj, "_testMethodName", function_name)
+                            potential_tests.append((test_module_name, class_name, test_method))
+
+        if potential_tests:
+            for test_module, test_class, test_func in potential_tests:
+                if test_func.startswith("test_"):
+                    return test_module, test_class, test_func
+            return potential_tests[0]
+
         raise RuntimeError("No test function found in call stack")
     finally:
         del frame
 
 
 def codeflash_behavior_async(func: F) -> F:
-    function_name = func.__name__
-    line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
-    loop_index = int(os.environ.get("CODEFLASH_LOOP_INDEX", "1"))
-
     @wraps(func)
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        function_name = func.__name__
+        line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
+        loop_index = os.environ["CODEFLASH_LOOP_INDEX"]
         test_module_name, test_class_name, test_name = extract_test_context_from_frame()
 
         test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
