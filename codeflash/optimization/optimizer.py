@@ -440,6 +440,8 @@ class Optimizer:
                 return
             self.current_worktree = worktree_dir
             self.mutate_args_for_worktree_mode(worktree_dir)
+            # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
+            Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
     def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
         saved_args = copy.deepcopy(self.args)

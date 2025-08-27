@@ -201,7 +201,8 @@ patches_dir = codeflash_cache_dir / "patches"
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
-    repository.git.commit("-am", commit_message, "--no-verify")
+    repository.git.add(".")
+    repository.git.commit("-m", commit_message, "--no-verify")
 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:
@@ -218,7 +219,10 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
     # Get uncommitted diff from the original repo
     repository.git.add("-N", ".")  # add the index for untracked files to be included in the diff
-    uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
+    exclude_binary_files = [":!*.pyc", ":!*.pyo", ":!*.pyd", ":!*.so", ":!*.dll", ":!*.whl", ":!*.egg", ":!*.egg-info", ":!*.pyz", ":!*.pkl", ":!*.pickle", ":!*.joblib", ":!*.npy", ":!*.npz", ":!*.h5", ":!*.hdf5", ":!*.pth", ":!*.pt", ":!*.pb", ":!*.onnx", ":!*.db", ":!*.sqlite", ":!*.sqlite3", ":!*.feather", ":!*.parquet", ":!*.jpg", ":!*.jpeg", ":!*.png", ":!*.gif", ":!*.bmp", ":!*.tiff", ":!*.webp", ":!*.wav", ":!*.mp3", ":!*.ogg", ":!*.flac", ":!*.mp4", ":!*.avi", ":!*.mov", ":!*.mkv", ":!*.pdf", ":!*.doc", ":!*.docx", ":!*.xls", ":!*.xlsx", ":!*.ppt", ":!*.pptx", ":!*.zip", ":!*.rar", ":!*.tar", ":!*.tar.gz", ":!*.tgz", ":!*.bz2", ":!*.xz"]  # fmt: off
+    uni_diff_text = repository.git.diff(
+        None, "HEAD", "--", *exclude_binary_files, ignore_blank_lines=True, ignore_space_at_eol=True
+    )
 
     if not uni_diff_text.strip():
         logger.info("No uncommitted changes to copy to worktree.")
@@ -234,7 +238,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         # Apply the patch inside the worktree
         try:
             subprocess.run(
-                ["git", "apply", "--ignore-space-change", "--ignore-whitespace", patch_path],
+                ["git", "apply", "--ignore-space-change", "--ignore-whitespace", "--whitespace=nowarn", patch_path],
                 cwd=worktree_dir,
                 check=True,
             )

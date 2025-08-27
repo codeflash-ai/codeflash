@@ -10,7 +10,7 @@
   "favicon": "/favicon.ico",
   "integrations": {
     "intercom": {
-          "appId": "ljxo1nzr"
+      "appId": "ljxo1nzr"
     }
   },
   "navigation": {
@@ -20,26 +20,16 @@
         "groups": [
           {
             "group": "🏠 Overview",
-            "pages": [
-              "index"
-            ]
+            "pages": ["index"]
           },
           {
-            "group": "🚀 Getting Started",
+
+            "group": "🚀 Quickstart",
             "pages": [
               "getting-started/local-installation"
-            ]
-          },
+            ]          },
           {
-            "group": "🔧 Continuous Optimization",
-            "pages": [
-              "getting-started/codeflash-github-actions",
-              "optimizing-with-codeflash/optimize-prs",
-              "optimizing-with-codeflash/benchmarking"
-            ]
-          },
-          {
-            "group": "⚡ Optimization Workflows",
+            "group": "⚡ Optimizing with Codeflash",
             "pages": [
               "optimizing-with-codeflash/one-function",
               "optimizing-with-codeflash/trace-and-optimize",
@@ -47,36 +37,24 @@
             ]
           },
           {
-            "group": "🧠 Core Concepts",
+            "group": "✨ Continuous Optimization",
             "pages": [
-              "codeflash-concepts/how-codeflash-works",
-              "codeflash-concepts/benchmarking"
+              "optimizing-with-codeflash/codeflash-github-actions",
+              "optimizing-with-codeflash/benchmarking",
+               "optimizing-with-codeflash/review-optimizations"
             ]
           },
           {
+            "group": "🧠 Core Concepts",
+            "pages": ["codeflash-concepts/how-codeflash-works", "codeflash-concepts/benchmarking"]
+          },
+          {
             "group": "⚙️ Configuration & Best Practices",
-            "pages": [
-              "configuration",
-              "getting-the-best-out-of-codeflash"
-            ]
+            "pages": ["configuration", "getting-the-best-out-of-codeflash"]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "GitHub",
-          "href": "https://github.com/codeflash-ai",
-          "icon": "github"
-        },
-        {
-          "anchor": "Discord",
-          "href": "https://www.codeflash.ai/discord",
-          "icon": "discord"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/images/codeflash_light.svg",
@@ -85,8 +63,14 @@
   "navbar": {
     "links": [
       {
-        "label": "Contact",
-        "href": "mailto:contact@codeflash.ai"
+        "label": "Discord",
+        "href": "https://www.codeflash.ai/discord",
+        "icon": "discord"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/codeflash-ai/codeflash",
+        "icon": "github"
       },
       {
         "label": "Blog",
@@ -100,9 +84,7 @@
     }
   },
   "contextual": {
-    "options": [
-      "copy"
-    ]
+    "options": ["copy"]
   },
   "redirects": [
     {
@@ -113,7 +95,7 @@
   "footer": {
     "socials": {
       "discord": "https://www.codeflash.ai/discord",
-      "github": "https://github.com/codeflash-ai",
+      "github": "https://github.com/codeflash-ai/codeflash",
       "linkedin": "https://www.linkedin.com/company/codeflash-ai"
     },
     "links": [
@@ -125,7 +107,7 @@
             "href": "https://www.codeflash.ai/privacy-policy"
           },
           {
-            "label": "Terms of Service", 
+            "label": "Terms of Service",
             "href": "https://www.codeflash.ai/terms-of-service"
           }
         ]
