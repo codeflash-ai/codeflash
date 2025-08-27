@@ -287,6 +287,7 @@ def save_patches_metadata(patch_metadata: dict) -> dict:
     meta_file = project_patches_dir / "metadata.json"
     lock_file = project_patches_dir / "metadata.json.lock"
 
+    # we are not supporting multiple concurrent optimizations within the same process, but keep that in case we decide to do so in the future.
     with FileLock(lock_file, timeout=10):
         metadata = get_patches_metadata()
 

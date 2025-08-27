@@ -43,6 +43,11 @@ class ProvideApiKeyParams:
     api_key: str
 
 
+@dataclass
+class OnPatchAppliedParams:
+    patch_id: str
+
+
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
 
@@ -220,16 +225,21 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
+@server.feature("retrieveSuccessfulOptimizations")
+def retrieve_successful_optimizations(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+    metadata = get_patches_metadata()
+    return {"status": "success", "patches": metadata["patches"]}
+
+
 @server.feature("onPatchApplied")
-def on_patch_applied(_server: CodeflashLanguageServer, params: dict[str, str]) -> dict[str, str]:
+def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedParams) -> dict[str, str]:
     # first remove the patch from the metadata
-    patch_id = params["patch_id"]
     metadata = get_patches_metadata()
 
     deleted_patch_file = None
     new_patches = []
     for patch in metadata["patches"]:
-        if patch["id"] == patch_id:
+        if patch["id"] == params.patch_id:
             deleted_patch_file = patch["patch_path"]
             continue
         new_patches.append(patch)
@@ -349,7 +359,7 @@ def perform_function_optimization(  # noqa: PLR0911
 
         # get the original file path in the actual project (not in the worktree)
         original_args, _ = server.optimizer.original_args_and_test_cfg
-        relative_file_path = current_function.file_path.relative_to(server.args.project_root)
+        relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
         original_file_path = Path(original_args.project_root / relative_file_path).resolve()
 
         metadata = create_diff_patch_from_worktree(
