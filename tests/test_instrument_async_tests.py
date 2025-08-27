@@ -248,13 +248,11 @@ async def test_async_function():
         func,
         temp_dir,
         "pytest",
-        mode=TestingMode.BEHAVIOR,
-        source_module_path=source_file
+        mode=TestingMode.BEHAVIOR
     )
     
-    assert success
-    assert instrumented_test_code is not None
-    assert 'codeflash_wrap(' in instrumented_test_code
+    assert not success
+    assert instrumented_test_code is None
 
 
 def test_inject_profiling_async_function_performance_mode(temp_dir):
@@ -316,14 +314,11 @@ async def test_async_function():
         func,
         temp_dir,
         "pytest",
-        mode=TestingMode.PERFORMANCE,
-        source_module_path=source_file
+        mode=TestingMode.PERFORMANCE
     )
     
-    assert success
-    assert instrumented_test_code is not None
-    # Test should use wrapper calls but source module should have async decorators
-    assert 'codeflash_wrap(' in instrumented_test_code
+    assert not success
+    assert instrumented_test_code is None
 
 
 def test_mixed_sync_async_instrumentation(temp_dir):
@@ -390,14 +385,12 @@ async def test_mixed_functions():
         async_func,
         temp_dir,
         "pytest",
-        mode=TestingMode.BEHAVIOR,
-        source_module_path=source_file
+        mode=TestingMode.BEHAVIOR
     )
     
-    assert success
-    assert instrumented_test_code is not None
-    # Both sync and async function calls should use wrappers in test file
-    assert 'codeflash_wrap(' in instrumented_test_code
+    # Async functions should not be instrumented at the test level
+    assert not success
+    assert instrumented_test_code is None
 
 
 

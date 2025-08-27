@@ -1541,11 +1541,25 @@ class FunctionOptimizer:
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+            if self.function_to_optimize.is_async:
+                from codeflash.code_utils.instrument_existing_tests import (
+                    instrument_source_module_with_async_decorators,
+                )
+
+                success, instrumented_source = instrument_source_module_with_async_decorators(
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                )
+                if success and instrumented_source:
+                    with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
+                        f.write(instrumented_source)
+                    logger.debug(
+                        f"Applied async behavioral instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}"
+                    )
+
             try:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
-
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
