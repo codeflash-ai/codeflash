@@ -311,6 +311,8 @@ class Optimizer:
                         logger.debug(f"Could not rank functions in {original_module_path}: {e}")
 
                 for i, function_to_optimize in enumerate(functions_to_optimize):
+                    if function_to_optimize.function_name!='_match_default_error_mapping':
+                        continue
                     function_iterator_count = i + 1
                     logger.info(
                         f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
