@@ -631,13 +631,14 @@ class FunctionOptimizer:
                                     executor=self.executor,
                                 )
                             )
-                    tree.add(
-                        f"Summed runtime: {humanize_runtime(best_test_runtime)} "
-                        f"(measured over {candidate_result.max_loop_count} "
-                        f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                    )
-                    tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                    tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                    else:
+                        tree.add(
+                            f"Summed runtime: {humanize_runtime(best_test_runtime)} "
+                            f"(measured over {candidate_result.max_loop_count} "
+                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                        )
+                        tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
+                        tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                     console.print(tree)
                     if self.args.benchmark and benchmark_tree:
                         console.print(benchmark_tree)
