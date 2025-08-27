@@ -1,7 +1,21 @@
-from fastmcp import FastMCP
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+from fastmcp import FastMCP
+
 from tests.scripts.end_to_end_test_utilities import TestConfig, run_codeflash_command
+
+
+# Define lifespan context manager
+@asynccontextmanager
+async def lifespan(mcp: FastMCP) -> None:
+    print("Starting up...")
+    print(mcp.name)
+    # Do startup work here (connect to DB, initialize cache, etc.)
+    yield
+    # Cleanup work after shutdown
+    print("Shutting down...")
+
 
 mcp = FastMCP(
     name="codeflash",
@@ -9,23 +23,19 @@ mcp = FastMCP(
         This server provides code optimization tools.
         Call optimize_code(file, function) to optimize your code.
     """,
+    lifespan=lifespan,
 )
 
 
 @mcp.tool
 def optimize_code(file: str, function: str) -> str:
     # TODO ask for pr or no pr if successful
-    config = TestConfig(
-            file_path=Path(f"{file}"),
-            function_name=f"{function}",
-            test_framework="pytest",
-        )
+    config = TestConfig(file_path=Path(f"{file}"), function_name=f"{function}", test_framework="pytest")
     cwd = Path(file).resolve().parent
     status = run_codeflash_command(cwd, config, expected_improvement_pct=5)
     if status:
         return "Optimization Successful, file has been edited"
-    else:
-        return "Codeflash run did not meet expected requirements for testing, reverting file changes."
+    return "Codeflash run did not meet expected requirements for testing, reverting file changes."
 
 
 if __name__ == "__main__":
