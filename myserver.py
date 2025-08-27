@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, AsyncGenerator
 
 from fastmcp import FastMCP
 
@@ -8,7 +9,7 @@ from tests.scripts.end_to_end_test_utilities import TestConfig, run_codeflash_co
 
 # Define lifespan context manager
 @asynccontextmanager
-async def lifespan(mcp: FastMCP) -> None:
+async def lifespan(mcp: FastMCP) -> AsyncGenerator[None, Any]:
     print("Starting up...")
     print(mcp.name)
     # Do startup work here (connect to DB, initialize cache, etc.)
