@@ -275,10 +275,11 @@ def get_patches_dir_for_project() -> Path:
 
 
 def get_patches_metadata() -> dict[str, Any]:
-    project_patches_dir = get_patches_dir_for_project()
+    project_patches_dir = _cached_get_patches_dir_for_project()
     meta_file = project_patches_dir / "metadata.json"
     if meta_file.exists():
-        return json.loads(meta_file.read_text())
+        with open(meta_file, encoding="utf-8") as f:
+            return json.load(f)
     return {"id": get_git_project_id() or "", "patches": []}
 
 
@@ -341,3 +342,9 @@ def create_diff_patch_from_worktree(
         final_metadata = save_patches_metadata(final_metadata)
 
     return final_metadata
+
+
+@lru_cache(maxsize=1)
+def _cached_get_patches_dir_for_project():
+    # Caches the result to avoid repeated expensive computation
+    return get_patches_dir_for_project()
