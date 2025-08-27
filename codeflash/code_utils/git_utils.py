@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from functools import cache
+from functools import cache, lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import git
+from filelock import FileLock
 from rich.prompt import Confirm
 from unidiff import PatchSet
 
@@ -20,6 +22,8 @@ from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.config_consts import N_CANDIDATES
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from git import Repo
 
 
@@ -199,6 +203,14 @@ worktree_dirs = codeflash_cache_dir / "worktrees"
 patches_dir = codeflash_cache_dir / "patches"
 
 
+@lru_cache(maxsize=1)
+def get_git_project_id() -> str:
+    """Return the first commit sha of the repo."""
+    repo: Repo = git.Repo(search_parent_directories=True)
+    root_commits = list(repo.iter_commits(rev="HEAD", max_parents=0))
+    return root_commits[0].hexsha
+
+
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
     repository.git.add(".")
@@ -257,20 +269,70 @@ def remove_worktree(worktree_dir: Path) -> None:
         logger.exception(f"Failed to remove worktree: {worktree_dir}")
 
 
-def create_diff_patch_from_worktree(worktree_dir: Path, files: list[str], fto_name: str) -> Path:
+def get_patches_dir_for_project() -> Path:
+    project_id = get_git_project_id() or ""
+    return Path(patches_dir / project_id)
+
+
+def get_patches_metadata() -> dict[str, Any]:
+    project_patches_dir = get_patches_dir_for_project()
+    meta_file = project_patches_dir / "metadata.json"
+    if meta_file.exists():
+        return json.loads(meta_file.read_text())
+    return {"id": get_git_project_id() or "", "patches": []}
+
+
+def save_patches_metadata(patch_metadata: dict) -> dict:
+    project_patches_dir = get_patches_dir_for_project()
+    meta_file = project_patches_dir / "metadata.json"
+    lock_file = project_patches_dir / "metadata.json.lock"
+
+    with FileLock(lock_file, timeout=10):
+        metadata = get_patches_metadata()
+
+        patch_metadata["id"] = time.strftime("%Y%m%d-%H%M%S")
+        metadata["patches"].append(patch_metadata)
+
+        meta_file.write_text(json.dumps(metadata, indent=2))
+
+    return patch_metadata
+
+
+def overwrite_patch_metadata(patches: list[dict]) -> bool:
+    project_patches_dir = get_patches_dir_for_project()
+    meta_file = project_patches_dir / "metadata.json"
+    lock_file = project_patches_dir / "metadata.json.lock"
+
+    with FileLock(lock_file, timeout=10):
+        metadata = get_patches_metadata()
+        metadata["patches"] = patches
+        meta_file.write_text(json.dumps(metadata, indent=2))
+    return True
+
+
+def create_diff_patch_from_worktree(
+    worktree_dir: Path, files: list[str], metadata_input: dict[str, Any]
+) -> dict[str, Any]:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
 
     if not uni_diff_text:
         logger.warning("No changes found in worktree.")
-        return None
+        return {}
 
     if not uni_diff_text.endswith("\n"):
         uni_diff_text += "\n"
 
-    # write to patches_dir
-    patches_dir.mkdir(parents=True, exist_ok=True)
-    patch_path = patches_dir / f"{worktree_dir.name}.{fto_name}.patch"
+    project_patches_dir = get_patches_dir_for_project()
+    project_patches_dir.mkdir(parents=True, exist_ok=True)
+
+    patch_path = project_patches_dir / f"{worktree_dir.name}.{metadata_input['fto_name']}.patch"
     with patch_path.open("w", encoding="utf8") as f:
         f.write(uni_diff_text)
-    return patch_path
+
+    final_metadata = {}
+    if metadata_input:
+        metadata_input["patch_path"] = str(patch_path)
+        final_metadata = save_patches_metadata(metadata_input)
+
+    return final_metadata

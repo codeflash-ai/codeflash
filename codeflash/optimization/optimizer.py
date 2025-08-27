@@ -343,16 +343,15 @@ class Optimizer:
                             optimizations_found += 1
                             # create a diff patch for successful optimization
                             if self.current_worktree:
-                                read_writable_code = best_optimization.unwrap().code_context.read_writable_code
+                                best_opt = best_optimization.unwrap()
+                                read_writable_code = best_opt.code_context.read_writable_code
                                 relative_file_paths = [
                                     code_string.file_path for code_string in read_writable_code.code_strings
                                 ]
-                                patch_path = create_diff_patch_from_worktree(
-                                    self.current_worktree,
-                                    relative_file_paths,
-                                    self.current_function_optimizer.function_to_optimize.qualified_name,
+                                metadata = create_diff_patch_from_worktree(
+                                    self.current_worktree, relative_file_paths, metadata_input={}
                                 )
-                                self.patch_files.append(patch_path)
+                                self.patch_files.append(metadata["patch_path"])
                                 if i < len(functions_to_optimize) - 1:
                                     create_worktree_snapshot_commit(
                                         self.current_worktree,
