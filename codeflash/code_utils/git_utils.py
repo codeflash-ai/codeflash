@@ -335,9 +335,9 @@ def create_diff_patch_from_worktree(
     with patch_path.open("w", encoding="utf8") as f:
         f.write(uni_diff_text)
 
-    final_metadata = {}
+    final_metadata = {"patch_path": str(patch_path)}
     if metadata_input:
-        metadata_input["patch_path"] = str(patch_path)
-        final_metadata = save_patches_metadata(metadata_input)
+        final_metadata.update(metadata_input)
+        final_metadata = save_patches_metadata(final_metadata)
 
     return final_metadata
