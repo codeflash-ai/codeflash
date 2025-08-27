@@ -312,7 +312,10 @@ def overwrite_patch_metadata(patches: list[dict]) -> bool:
 
 
 def create_diff_patch_from_worktree(
-    worktree_dir: Path, files: list[str], metadata_input: dict[str, Any]
+    worktree_dir: Path,
+    files: list[str],
+    fto_name: Optional[str] = None,
+    metadata_input: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
@@ -327,7 +330,8 @@ def create_diff_patch_from_worktree(
     project_patches_dir = get_patches_dir_for_project()
     project_patches_dir.mkdir(parents=True, exist_ok=True)
 
-    patch_path = project_patches_dir / f"{worktree_dir.name}.{metadata_input['fto_name']}.patch"
+    final_function_name = fto_name or metadata_input.get("fto_name", "unknown")
+    patch_path = project_patches_dir / f"{worktree_dir.name}.{final_function_name}.patch"
     with patch_path.open("w", encoding="utf8") as f:
         f.write(uni_diff_text)
 
