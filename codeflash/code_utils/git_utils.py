@@ -270,15 +270,16 @@ def remove_worktree(worktree_dir: Path) -> None:
 
 
 def get_patches_dir_for_project() -> Path:
-    project_id = get_git_project_id() or ""
-    return Path(patches_dir / project_id)
+    project_id = get_git_project_id()
+    return patches_dir / project_id
 
 
 def get_patches_metadata() -> dict[str, Any]:
     project_patches_dir = get_patches_dir_for_project()
     meta_file = project_patches_dir / "metadata.json"
     if meta_file.exists():
-        return json.loads(meta_file.read_text())
+        with meta_file.open("r", encoding="utf-8") as f:
+            return json.load(f)
     return {"id": get_git_project_id() or "", "patches": []}
 
 

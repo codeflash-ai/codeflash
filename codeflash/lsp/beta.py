@@ -244,9 +244,9 @@ def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedPar
             continue
         new_patches.append(patch)
 
-    overwrite_patch_metadata(new_patches)
     # then remove the patch file
     if deleted_patch_file:
+        overwrite_patch_metadata(new_patches)
         patch_path = Path(deleted_patch_file)
         patch_path.unlink(missing_ok=True)
         return {"status": "success"}
