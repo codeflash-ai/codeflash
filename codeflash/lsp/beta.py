@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
+from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
@@ -16,6 +18,8 @@ from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
 if TYPE_CHECKING:
+    from argparse import Namespace
+
     from lsprotocol import types
 
 
@@ -85,9 +89,12 @@ def initialize_function_optimization(
 ) -> dict[str, str]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
+
     if server.optimizer is None:
-        _initialize_optimizer_if_valid(server)
+        _initialize_optimizer_if_api_key_is_valid(server)
+
     server.optimizer.worktree_mode()
+
     original_args, _ = server.optimizer.original_args_and_test_cfg
 
     server.optimizer.args.function = params.functionName
@@ -99,15 +106,12 @@ def initialize_function_optimization(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
     )
 
-    optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
-    if not optimizable_funcs:
+    optimizable_funcs, count, _ = server.optimizer.get_optimizable_functions()
+
+    if count == 0:
         server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
-        return {
-            "functionName": params.functionName,
-            "status": "error",
-            "message": "function is no found or not optimizable",
-            "args": None,
-        }
+        server.cleanup_the_optimizer()
+        return {"functionName": params.functionName, "status": "error", "message": "not found", "args": None}
 
     fto = optimizable_funcs.popitem()[1][0]
     server.optimizer.current_function_being_optimized = fto
@@ -129,7 +133,33 @@ def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOpt
     return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
 
 
-def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str, str]:
+@server.feature("validateProject")
+def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
+    from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
+
+    server.show_message_log("Validating project...", "Info")
+    config = is_valid_pyproject_toml(server.args.config_file)
+    if config is None:
+        server.show_message_log("pyproject.toml is not valid", "Error")
+        return {
+            "status": "error",
+            "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
+        }
+
+    args = process_args(server)
+    repo = git.Repo(args.module_root, search_parent_directories=True)
+    if repo.bare:
+        return {"status": "error", "message": "Repository is in bare state"}
+
+    try:
+        _ = repo.head.commit
+    except Exception:
+        return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
+
+    return {"status": "success"}
+
+
+def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -> dict[str, str]:
     user_id = get_user_id()
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
@@ -140,14 +170,24 @@ def _initialize_optimizer_if_valid(server: CodeflashLanguageServer) -> dict[str,
 
     from codeflash.optimization.optimizer import Optimizer
 
-    server.optimizer = Optimizer(server.args)
+    new_args = process_args(server)
+    server.optimizer = Optimizer(new_args)
     return {"status": "success", "user_id": user_id}
+
+
+def process_args(server: CodeflashLanguageServer) -> Namespace:
+    if server.args_processed_before:
+        return server.args
+    new_args = process_pyproject_config(server.args)
+    server.args = new_args
+    server.args_processed_before = True
+    return new_args
 
 
 @server.feature("apiKeyExistsAndValid")
 def check_api_key(server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
     try:
-        return _initialize_optimizer_if_valid(server)
+        return _initialize_optimizer_if_api_key_is_valid(server)
     except Exception:
         return {"status": "error", "message": "something went wrong while validating the api key"}
 
@@ -167,7 +207,7 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         get_codeflash_api_key.cache_clear()
         get_user_id.cache_clear()
 
-        init_result = _initialize_optimizer_if_valid(server)
+        init_result = _initialize_optimizer_if_api_key_is_valid(server)
         if init_result["status"] == "error":
             return {"status": "error", "message": "Api key is not valid"}
 
@@ -177,6 +217,7 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
 
 
 @server.feature("performFunctionOptimization")
+@server.thread()
 def perform_function_optimization(  # noqa: PLR0911
     server: CodeflashLanguageServer, params: FunctionOptimizationParams
 ) -> dict[str, str]:
@@ -297,14 +338,4 @@ def perform_function_optimization(  # noqa: PLR0911
             "explanation": best_optimization.explanation_v2,
         }
     finally:
-        cleanup_the_optimizer(server)
-
-
-def cleanup_the_optimizer(server: CodeflashLanguageServer) -> None:
-    server.optimizer.cleanup_temporary_paths()
-    # restore args and test cfg
-    if server.optimizer.original_args_and_test_cfg:
-        server.optimizer.args, server.optimizer.test_cfg = server.optimizer.original_args_and_test_cfg
-    server.optimizer.args.function = None
-    server.optimizer.current_worktree = None
-    server.optimizer.current_function_optimizer = None
+        server.cleanup_the_optimizer()
