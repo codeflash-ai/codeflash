@@ -11,7 +11,7 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.code_utils.git_utils import (
+from codeflash.code_utils.git_worktree_utils import (
     create_diff_patch_from_worktree,
     get_patches_metadata,
     overwrite_patch_metadata,

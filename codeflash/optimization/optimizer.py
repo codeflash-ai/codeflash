@@ -15,8 +15,8 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import (
-    check_running_in_git_repo,
+from codeflash.code_utils.git_utils import check_running_in_git_repo
+from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
