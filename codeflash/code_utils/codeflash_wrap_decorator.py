@@ -87,7 +87,7 @@ def codeflash_behavior_async(func: F) -> F:
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
         function_name = func.__name__
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
-        loop_index = os.environ["CODEFLASH_LOOP_INDEX"]
+        loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
         test_module_name, test_class_name, test_name = extract_test_context_from_frame()
 
         test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
