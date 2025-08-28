@@ -1393,10 +1393,9 @@ class FunctionOptimizer:
                     code_context=code_context,
                 )
             finally:
-                if not self.function_to_optimize.is_async:
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
+                self.write_code_and_helpers(
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                )
             if not behavioral_results:
                 logger.warning(
                     f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
