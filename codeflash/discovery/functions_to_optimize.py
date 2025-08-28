@@ -232,15 +232,15 @@ def get_functions_to_optimize(
 
 def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
-    return get_functions_inside_lines(modified_lines)
+    return get_functions_within_lines(modified_lines)
 
 
 def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(only_this_commit=commit_hash)
-    return get_functions_inside_lines(modified_lines)
+    return get_functions_within_lines(modified_lines)
 
 
-def get_functions_inside_lines(modified_lines: dict[str, list[int]]) -> dict[str, list[FunctionToOptimize]]:
+def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str, list[FunctionToOptimize]]:
     functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
