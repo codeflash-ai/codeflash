@@ -60,7 +60,19 @@ from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
-from codeflash.either import Failure, Success, is_successful
+from codeflash.either import CodeflashError, Failure, Success, is_successful
+from codeflash.errors.errors import (
+    baseline_establishment_failed_error,
+    behavioral_test_failure_error,
+    code_context_extraction_failed_error,
+    coverage_threshold_not_met_error,
+    function_optimization_attempted_error,
+    no_best_optimization_found_error,
+    no_optimizations_generated_error,
+    no_tests_generated_error,
+    test_confidence_threshold_not_met_error,
+    test_result_didnt_match_error,
+)
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -252,14 +264,18 @@ class FunctionOptimizer:
             has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
         )
         if async_code:
-            return Failure("Codeflash does not support async functions in the code to optimize.")
+            return Failure(
+                CodeflashError(
+                    "ASYNC_CODE_ERROR", "Codeflash does not support async functions in the code to optimize."
+                )
+            )
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
         if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
             self.function_to_optimize, code_context, self.args
         ):
-            return Failure("Function optimization previously attempted, skipping.")
+            return Failure(function_optimization_attempted_error())
 
         return Success((should_run_experiment, code_context, original_helper_code))
 
@@ -430,7 +446,7 @@ class FunctionOptimizer:
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)
         if not best_optimization:
-            return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
+            return Failure(no_best_optimization_found_error(self.function_to_optimize.qualified_name))
         return Success(best_optimization)
 
     def determine_best_candidate(
@@ -852,7 +868,7 @@ class FunctionOptimizer:
                 self.function_to_optimize, self.project_root
             )
         except ValueError as e:
-            return Failure(str(e))
+            return Failure(code_context_extraction_failed_error(str(e)))
 
         return Success(
             CodeOptimizationContext(
@@ -1012,7 +1028,7 @@ class FunctionOptimizer:
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
         if not candidates:
-            return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
+            return Failure(no_optimizations_generated_error(self.function_to_optimize.function_name))
 
         candidates_experiment = future_candidates_exp.result() if future_candidates_exp else None
 
@@ -1040,7 +1056,7 @@ class FunctionOptimizer:
                 )
         if not tests:
             logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
-            return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
+            return Failure(no_tests_generated_error(self.function_to_optimize.function_name))
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
         logger.info(f"Generated {len(tests)} tests for {self.function_to_optimize.function_name}")
         console.rule()
@@ -1100,14 +1116,21 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
-            or not quantity_of_tests_critic(original_code_baseline)
-        ):
-            if self.args.override_fixtures:
-                restore_conftest(original_conftest_content)
-            cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test confidence was not met.")
+        if isinstance(original_code_baseline, OriginalCodeBaseline):
+            error = None
+            sufficent_coverage = coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+            sufficent_tests = quantity_of_tests_critic(original_code_baseline)
+
+            if not sufficent_coverage:
+                error = coverage_threshold_not_met_error()
+            elif not sufficent_tests:
+                error = test_confidence_threshold_not_met_error()
+
+            if error:
+                if self.args.override_fixtures:
+                    restore_conftest(original_conftest_content)
+                cleanup_paths(paths_to_cleanup)
+                return Failure(error)
 
         return Success(
             (
@@ -1394,9 +1417,9 @@ class FunctionOptimizer:
                     f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
                 )
                 console.rule()
-                return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
+                return Failure(behavioral_test_failure_error())
             if not coverage_critic(coverage_results, self.args.test_framework):
-                return Failure("The threshold for test coverage was not met.")
+                return Failure(coverage_threshold_not_met_error())
             if test_framework == "pytest":
                 line_profile_results = self.line_profiler_step(
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
@@ -1456,7 +1479,7 @@ class FunctionOptimizer:
                 console.rule()
                 success = False
             if not success:
-                return Failure("Failed to establish a baseline for the original code.")
+                return Failure(baseline_establishment_failed_error())
 
             loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
             logger.info(
@@ -1540,7 +1563,7 @@ class FunctionOptimizer:
             else:
                 logger.info("Test results did not match the test results of the original code.")
                 console.rule()
-                return Failure("Test results did not match the test results of the original code.")
+                return Failure(test_result_didnt_match_error())
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(

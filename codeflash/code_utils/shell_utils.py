@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 from codeflash.code_utils.compat import LF
 from codeflash.either import Failure, Success
+from codeflash.errors.errors import shell_rc_not_found_error, shell_rc_permission_error
 
 if TYPE_CHECKING:
     from codeflash.either import Result
@@ -69,13 +70,6 @@ def save_api_key_to_rc(api_key: str) -> Result[str, str]:
             shell_file.truncate()
         return Success(f"✅ {action} {shell_rc_path}")
     except PermissionError:
-        return Failure(
-            f"💡 I tried adding your Codeflash API key to {shell_rc_path} - but seems like I don't have permissions to do so.{LF}"
-            f"You'll need to open it yourself and add the following line:{LF}{LF}{api_key_line}{LF}"
-        )
+        return Failure(shell_rc_permission_error(shell_rc_path, api_key_line))
     except FileNotFoundError:
-        return Failure(
-            f"💡 I went to save your Codeflash API key to {shell_rc_path}, but noticed that it doesn't exist.{LF}"
-            f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {shell_rc_path} and add the following line:{LF}"
-            f"{LF}{api_key_line}{LF}"
-        )
+        return Failure(shell_rc_not_found_error(shell_rc_path, api_key_line))
