@@ -439,9 +439,16 @@ class AiServiceClient:
             "test_index": test_index,
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
+            "is_async": bool(getattr(function_to_optimize, "is_async", False)),
         }
+        
+        endpoint = "/testgen"
+        logger.debug(
+            f"Using unified test generation endpoint for function {function_to_optimize.function_name} (is_async={payload['is_async']})"
+        )
+        
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            response = self.make_ai_service_request(endpoint, payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
