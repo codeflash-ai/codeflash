@@ -76,5 +76,5 @@ def test_confidence_threshold_not_met_error() -> CodeflashError:
 def behavioral_test_failure_error() -> CodeflashError:
     return CodeflashError(
         "BEHAVIORAL_TEST_FAILURE_ERROR",
-        "Failed to establish a baseline for the original code - bevhavioral tests failed.",
+        "Failed to establish a baseline for the original code - behavioral tests failed.",
     )
