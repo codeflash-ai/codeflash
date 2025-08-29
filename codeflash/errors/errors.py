@@ -39,7 +39,7 @@ def baseline_establishment_failed_error(failure_msg: str) -> CodeflashError:
     return CodeflashError(
         "BASELINE_ESTABLISHMENT_FAILED_ERROR",
         "Failed to establish a baseline for the original code. {failure_msg}",
-        **locals(),
+        failure_msg=failure_msg,
     )
 
 
