@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import gc
 import inspect
 import os
@@ -8,9 +9,12 @@ import time
 from enum import Enum
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import dill as pickle
+
+if TYPE_CHECKING:
+    from types import FrameType
 
 
 class VerificationType(str, Enum):  # moved from codeflash/verification/codeflash_capture.py
@@ -24,63 +28,93 @@ class VerificationType(str, Enum):  # moved from codeflash/verification/codeflas
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+def _extract_class_name_tracer(frame_locals: dict[str, Any]) -> str | None:
+    try:
+        self_arg = frame_locals.get("self")
+        if self_arg is not None:
+            try:
+                return self_arg.__class__.__name__
+            except AttributeError:
+                cls_arg = frame_locals.get("cls")
+                if cls_arg is not None:
+                    with contextlib.suppress(AttributeError):
+                        return cls_arg.__name__
+        else:
+            cls_arg = frame_locals.get("cls")
+            if cls_arg is not None:
+                with contextlib.suppress(AttributeError):
+                    return cls_arg.__name__
+    except:  # noqa: E722
+        # Handle cases where getattr is overridden and raises exceptions (e.g., wrapt)
+        return None
+    return None
+
+
+def _get_module_name_cf_tracer(frame: FrameType | None) -> str:
+    with contextlib.suppress(Exception):
+        test_module = inspect.getmodule(frame)
+        if test_module and hasattr(test_module, "__name__"):
+            return test_module.__name__
+
+    if frame is not None:
+        return frame.f_globals.get("__name__", "unknown_module")
+    return "unknown_module"
+
+
 def extract_test_context_from_frame() -> tuple[str, str | None, str]:
     frame = inspect.currentframe()
     try:
         potential_tests = []
 
-        while frame:
+        if frame is not None:
             frame = frame.f_back
-            if not frame:
-                break
 
-            function_name = frame.f_code.co_name
-            filename = frame.f_code.co_filename
-            filename_path = Path(filename)
+        while frame is not None:
+            try:
+                function_name = frame.f_code.co_name
+                filename = frame.f_code.co_filename
+                filename_path = Path(filename)
+                frame_locals = frame.f_locals
+                if function_name.startswith("test_"):
+                    test_name = function_name
+                    test_module_name = _get_module_name_cf_tracer(frame)
+                    test_class_name = _extract_class_name_tracer(frame_locals)
+                    return test_module_name, test_class_name, test_name
 
-            if function_name.startswith("test_"):
-                test_name = function_name
-                test_module_name = frame.f_globals.get("__name__", "unknown_module")
-                test_class_name = None
+                if (
+                    frame.f_globals.get("__name__", "").startswith("test_")
+                    or filename_path.stem.startswith("test_")
+                    or "test" in filename_path.parts
+                ):
+                    test_module_name = _get_module_name_cf_tracer(frame)
+                    class_name = _extract_class_name_tracer(frame_locals)
 
-                if "self" in frame.f_locals:
-                    self_obj = frame.f_locals["self"]
-                    if hasattr(self_obj, "__class__") and hasattr(self_obj.__class__, "__name__"):
-                        test_class_name = self_obj.__class__.__name__
-
-                return test_module_name, test_class_name, test_name
-
-            if (
-                frame.f_globals.get("__name__", "").startswith("test_")
-                or filename_path.stem.startswith("test_")
-                or "test" in filename_path.parts
-            ):
-                test_module_name = frame.f_globals.get("__name__", "unknown_module")
-
-                if "self" in frame.f_locals:
-                    self_obj = frame.f_locals["self"]
-                    if hasattr(self_obj, "__class__") and hasattr(self_obj.__class__, "__name__"):
-                        class_name = self_obj.__class__.__name__
+                    if class_name:
                         if class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower():
                             potential_tests.append((test_module_name, class_name, function_name))
+                    elif "test" in test_module_name or filename_path.stem.startswith("test_"):
+                        potential_tests.append((test_module_name, None, function_name))
 
-                elif "test" in test_module_name or filename_path.stem.startswith("test_"):
-                    potential_tests.append((test_module_name, None, function_name))
+                if (
+                    function_name in ["runTest", "_runTest", "run", "_testMethodName"]
+                    or "pytest" in str(frame.f_globals.get("__file__", ""))
+                    or "unittest" in str(frame.f_globals.get("__file__", ""))
+                ):
+                    test_module_name = _get_module_name_cf_tracer(frame)
+                    class_name = _extract_class_name_tracer(frame_locals)
 
-            if (
-                function_name in ["runTest", "_runTest", "run", "_testMethodName"]
-                or "pytest" in str(frame.f_globals.get("__file__", ""))
-                or "unittest" in str(frame.f_globals.get("__file__", ""))
-            ):
-                # This might be a test framework frame, look for test context nearby
-                test_module_name = frame.f_globals.get("__name__", "unknown_module")
-                if "self" in frame.f_locals:
-                    self_obj = frame.f_locals["self"]
-                    if hasattr(self_obj, "__class__"):
-                        class_name = self_obj.__class__.__name__
-                        if class_name.startswith("Test") or "test" in class_name.lower():
-                            test_method = getattr(self_obj, "_testMethodName", function_name)
-                            potential_tests.append((test_module_name, class_name, test_method))
+                    if class_name and (class_name.startswith("Test") or "test" in class_name.lower()):
+                        test_method = function_name
+                        if "self" in frame_locals:
+                            with contextlib.suppress(AttributeError, TypeError):
+                                test_method = getattr(frame_locals["self"], "_testMethodName", function_name)
+                        potential_tests.append((test_module_name, class_name, test_method))
+
+                frame = frame.f_back
+
+            except Exception:
+                frame = frame.f_back
+                continue
 
         if potential_tests:
             for test_module, test_class, test_func in potential_tests:
