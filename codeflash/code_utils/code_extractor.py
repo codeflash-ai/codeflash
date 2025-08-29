@@ -444,28 +444,28 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
 
         if all_names is not None:
             return set(all_names)
-        else:
-            public_names = set()
-            for node in tree.body:
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    if not node.name.startswith("_"):
-                        public_names.add(node.name)
-                elif isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name) and not target.id.startswith("_"):
-                            public_names.add(target.id)
-                elif isinstance(node, ast.AnnAssign):
-                    if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
-                        public_names.add(node.target.id)
-                elif isinstance(node, ast.Import) or (
-                    isinstance(node, ast.ImportFrom) and not any(alias.name == "*" for alias in node.names)
-                ):
-                    for alias in node.names:
-                        name = alias.asname or alias.name
-                        if not name.startswith("_"):
-                            public_names.add(name)
 
-            return public_names
+        public_names = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if not node.name.startswith("_"):
+                    public_names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
+                        public_names.add(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
+                    public_names.add(node.target.id)
+            elif isinstance(node, ast.Import) or (
+                isinstance(node, ast.ImportFrom) and not any(alias.name == "*" for alias in node.names)
+            ):
+                for alias in node.names:
+                    name = alias.asname or alias.name
+                    if not name.startswith("_"):
+                        public_names.add(name)
+
+        return public_names  # noqa: TRY300
 
     except Exception as e:
         logger.warning(f"Error resolving star import for {module_name}: {e}")

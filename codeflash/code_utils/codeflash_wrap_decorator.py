@@ -13,13 +13,12 @@ from typing import Any, Callable, TypeVar
 import dill as pickle
 
 
-class VerificationType(str, Enum): # moved from codeflash/verification/codeflash_capture.py
+class VerificationType(str, Enum):  # moved from codeflash/verification/codeflash_capture.py
     FUNCTION_CALL = (
         "function_call"  # Correctness verification for a test function, checks input values and output values)
     )
     INIT_STATE_FTO = "init_state_fto"  # Correctness verification for fto class instance attributes after init
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
-
 
 
 F = TypeVar("F", bound=Callable[..., Any])
@@ -131,9 +130,9 @@ def codeflash_behavior_async(func: F) -> F:
         exception = None
         gc.disable()
         try:
-            ret = func(*args, **kwargs) # coroutine creation has some overhead, though it is very small
+            ret = func(*args, **kwargs)  # coroutine creation has some overhead, though it is very small
             counter = time.perf_counter_ns()
-            return_value = await ret # let's measure the actual execution time of the code
+            return_value = await ret  # let's measure the actual execution time of the code
             codeflash_duration = time.perf_counter_ns() - counter
         except Exception as e:
             codeflash_duration = time.perf_counter_ns() - counter
