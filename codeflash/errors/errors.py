@@ -3,6 +3,10 @@ from __future__ import annotations
 from codeflash.code_utils.compat import LF
 from codeflash.either import CodeflashError
 
+_TEST_CONFIDENCE_ERROR = CodeflashError(
+    "TEST_CONFIDENCE_THRESHOLD_NOT_MET_ERROR", "The threshold for test confidence was not met."
+)
+
 
 def shell_rc_permission_error(shell_rc_path: str, api_key_line: str) -> CodeflashError:
     return CodeflashError(
@@ -70,7 +74,7 @@ def coverage_threshold_not_met_error() -> CodeflashError:
 
 
 def test_confidence_threshold_not_met_error() -> CodeflashError:
-    return CodeflashError("TEST_CONFIDENCE_THRESHOLD_NOT_MET_ERROR", "The threshold for test confidence was not met.")
+    return _TEST_CONFIDENCE_ERROR
 
 
 def behavioral_test_failure_error() -> CodeflashError:
