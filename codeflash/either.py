@@ -17,7 +17,11 @@ class CodeflashError:
     @property
     def message(self) -> str:
         try:
-            formatted = self.message_template.format(**self.formatting_args)
+            formatted = ""
+            if not isinstance(self.message_template, str):
+                formatted = str(self.message_template)
+            else:
+                formatted = self.message_template.format(**self.formatting_args)
             return f"[{self.code}] {formatted}"  # noqa: TRY300
         except KeyError:
             logger.debug(f"Invalid template: missing {self.formatting_args}")
