@@ -61,7 +61,7 @@ def no_best_optimization_found_error(function_name: str) -> CodeflashError:
 
 def code_context_extraction_failed_error(error: str) -> CodeflashError:
     return CodeflashError(
-        "CODE_CONTEXT_EXTRACTION_FAILED_ERROR", "Failed to extract code context. Error: {error}.", **locals()
+        "CODE_CONTEXT_EXTRACTION_FAILED_ERROR", "Failed to extract code context. Error: {error}.", error=error
     )
 
 
