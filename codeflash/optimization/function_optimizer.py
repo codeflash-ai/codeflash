@@ -1461,6 +1461,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
+            failure_msg = ""
 
             total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
             functions_to_remove = [
@@ -1469,17 +1470,17 @@ class FunctionOptimizer:
                 if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
             ]
             if total_timing == 0:
-                logger.warning(
-                    "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
-                )
+                failure_msg = "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
+                logger.warning(failure_msg)
                 console.rule()
                 success = False
             if not total_timing:
-                logger.warning("Failed to run the tests for the original function, skipping optimization")
+                failure_msg = "Failed to run the tests for the original function, skipping optimization"
+                logger.warning(failure_msg)
                 console.rule()
                 success = False
             if not success:
-                return Failure(baseline_establishment_failed_error())
+                return Failure(baseline_establishment_failed_error(failure_msg))
 
             loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
             logger.info(
