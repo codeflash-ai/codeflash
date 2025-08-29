@@ -3,13 +3,15 @@ from __future__ import annotations
 import gc
 import inspect
 import os
-import pickle
+import sqlite3
 import time
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
-from codeflash.code_utils.code_utils import get_run_tmp_file
+import dill as pickle
+
+from codeflash.verification.codeflash_capture import VerificationType
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -106,18 +108,23 @@ def codeflash_behavior_async(func: F) -> F:
 
         print(f"!$######{test_stdout_tag}######$!")
 
+        iteration = os.environ.get("CODEFLASH_TEST_ITERATION", "0")
+        db_path = Path.cwd() / f"codeflash_test_results_{iteration}.sqlite"
+        codeflash_con = sqlite3.connect(db_path)
+        codeflash_cur = codeflash_con.cursor()
+
+        codeflash_cur.execute(
+            "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, "
+            "test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, "
+            "runtime INTEGER, return_value BLOB, verification_type TEXT)"
+        )
+
         exception = None
         gc.disable()
         try:
+            ret = func(*args, **kwargs) # coroutine creation has some overhead, though it is very small
             counter = time.perf_counter_ns()
-            ret = func(*args, **kwargs)
-
-            if inspect.isawaitable(ret):
-                counter = time.perf_counter_ns()
-                return_value = await ret
-            else:
-                return_value = ret
-
+            return_value = await ret # let's measure the actual execution time of the code
             codeflash_duration = time.perf_counter_ns() - counter
         except Exception as e:
             codeflash_duration = time.perf_counter_ns() - counter
@@ -127,28 +134,23 @@ def codeflash_behavior_async(func: F) -> F:
 
         print(f"!######{test_stdout_tag}######!")
 
-        iteration = os.environ.get("CODEFLASH_TEST_ITERATION", "0")
-
-        codeflash_run_tmp_dir = get_run_tmp_file(Path()).as_posix()
-
-        output_file = Path(codeflash_run_tmp_dir) / f"test_return_values_{iteration}.bin"
-
-        with output_file.open("ab") as f:
-            pickled_values = (
-                pickle.dumps((args, kwargs, exception)) if exception else pickle.dumps((args, kwargs, return_value))
-            )
-            _test_name = f"{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{line_id}".encode(
-                "ascii"
-            )
-
-            f.write(len(_test_name).to_bytes(4, byteorder="big"))
-            f.write(_test_name)
-            f.write(codeflash_duration.to_bytes(8, byteorder="big"))
-            f.write(len(pickled_values).to_bytes(4, byteorder="big"))
-            f.write(pickled_values)
-            f.write(loop_index.to_bytes(8, byteorder="big"))
-            f.write(len(invocation_id).to_bytes(4, byteorder="big"))
-            f.write(invocation_id.encode("ascii"))
+        pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps((args, kwargs, return_value))
+        codeflash_cur.execute(
+            "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                test_module_name,
+                test_class_name,
+                test_name,
+                function_name,
+                loop_index,
+                invocation_id,
+                codeflash_duration,
+                pickled_return_value,
+                VerificationType.FUNCTION_CALL.value,
+            ),
+        )
+        codeflash_con.commit()
+        codeflash_con.close()
 
         if exception:
             raise exception
@@ -162,7 +164,7 @@ def codeflash_performance_async(func: F) -> F:
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
         function_name = func.__name__
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
-        loop_index = os.environ["CODEFLASH_LOOP_INDEX"]
+        loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
 
         test_module_name, test_class_name, test_name = extract_test_context_from_frame()
 
@@ -184,15 +186,9 @@ def codeflash_performance_async(func: F) -> F:
         exception = None
         gc.disable()
         try:
-            counter = time.perf_counter_ns()
             ret = func(*args, **kwargs)
-
-            if inspect.isawaitable(ret):
-                counter = time.perf_counter_ns()
-                return_value = await ret
-            else:
-                return_value = ret
-
+            counter = time.perf_counter_ns()
+            return_value = await ret
             codeflash_duration = time.perf_counter_ns() - counter
         except Exception as e:
             codeflash_duration = time.perf_counter_ns() - counter
