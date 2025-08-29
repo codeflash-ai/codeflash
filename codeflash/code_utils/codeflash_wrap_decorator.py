@@ -41,8 +41,8 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
 
             if (
                 frame.f_globals.get("__name__", "").startswith("test_")
-                or Path(filename).stem.startswith("test_")
-                or "test" in Path(filename).parts
+                or filename.rpartition("/")[-1].rpartition("\\")[-1].rpartition(".")[0].startswith("test_")
+                or "test" in filename.replace("\\", "/").split("/")
             ):
                 test_module_name = frame.f_globals.get("__name__", "unknown_module")
 
@@ -53,7 +53,9 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
                         if class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower():
                             potential_tests.append((test_module_name, class_name, function_name))
 
-                elif "test" in test_module_name or Path(filename).stem.startswith("test_"):
+                elif "test" in test_module_name or filename.rpartition("/")[-1].rpartition("\\")[-1].rpartition(".")[
+                    0
+                ].startswith("test_"):
                     potential_tests.append((test_module_name, None, function_name))
 
             if (
