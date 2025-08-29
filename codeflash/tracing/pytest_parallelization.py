@@ -11,6 +11,7 @@ def pytest_split(
     """Split pytest test files from a directory into N roughly equal groups for parallel execution.
 
     Args:
+        arguments: List of arguments passed to pytest
         test_directory: Path to directory containing test files
         num_splits: Number of groups to split tests into. If None, uses CPU count.
 
@@ -40,8 +41,7 @@ def pytest_split(
             return None, None
         if _test_path.is_dir():
             # Find all test files matching the pattern test_*.py
-            for test_file in _test_path.rglob("test_*.py"):
-                test_files.append(str(test_file))
+            test_files.extend(map(str, _test_path.rglob("test_*.py")))
         elif _test_path.is_file():
             test_files.append(str(_test_path))
 

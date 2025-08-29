@@ -203,7 +203,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 if outfile:
                     outfile.unlink(missing_ok=True)
                 for replay_test_path in replay_test_paths:
-                    replay_test_path.unlink(missing_ok=True)
+                    Path(replay_test_path).unlink(missing_ok=True)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.
