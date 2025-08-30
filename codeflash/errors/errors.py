@@ -7,6 +7,10 @@ _TEST_CONFIDENCE_ERROR = CodeflashError(
     "TEST_CONFIDENCE_THRESHOLD_NOT_MET_ERROR", "The threshold for test confidence was not met."
 )
 
+_BEHAVIORAL_TEST_FAILURE_ERROR = CodeflashError(
+    "BEHAVIORAL_TEST_FAILURE_ERROR", "Failed to establish a baseline for the original code - bevhavioral tests failed."
+)
+
 
 def shell_rc_permission_error(shell_rc_path: str, api_key_line: str) -> CodeflashError:
     return CodeflashError(
@@ -78,7 +82,4 @@ def test_confidence_threshold_not_met_error() -> CodeflashError:
 
 
 def behavioral_test_failure_error() -> CodeflashError:
-    return CodeflashError(
-        "BEHAVIORAL_TEST_FAILURE_ERROR",
-        "Failed to establish a baseline for the original code - bevhavioral tests failed.",
-    )
+    return _BEHAVIORAL_TEST_FAILURE_ERROR

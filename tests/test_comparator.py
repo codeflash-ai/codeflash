@@ -13,7 +13,7 @@ import array # Add import for array
 import pydantic
 import pytest
 
-from codeflash.either import Failure, Success
+from codeflash.either import CodeflashError, Failure, Success
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 from codeflash.verification.comparator import comparator
 from codeflash.verification.equivalence import compare_test_results
@@ -789,7 +789,7 @@ def test_returns():
     a = Success(5)
     b = Success(5)
     c = Success(6)
-    d = Failure(5)
+    d = Failure(CodeflashError("TEST", 5))
     e = Success((5, 5))
     f = Success((5, 6))
     assert comparator(a, b)
