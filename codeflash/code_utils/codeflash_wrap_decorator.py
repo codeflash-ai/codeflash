@@ -34,18 +34,17 @@ def _extract_class_name_tracer(frame_locals: dict[str, Any]) -> str | None:
         if self_arg is not None:
             try:
                 return self_arg.__class__.__name__
-            except AttributeError:
+            except (AttributeError, Exception):
                 cls_arg = frame_locals.get("cls")
                 if cls_arg is not None:
-                    with contextlib.suppress(AttributeError):
+                    with contextlib.suppress(AttributeError, Exception):
                         return cls_arg.__name__
         else:
             cls_arg = frame_locals.get("cls")
             if cls_arg is not None:
-                with contextlib.suppress(AttributeError):
+                with contextlib.suppress(AttributeError, Exception):
                     return cls_arg.__name__
-    except:  # noqa: E722
-        # Handle cases where getattr is overridden and raises exceptions (e.g., wrapt)
+    except Exception:
         return None
     return None
 
@@ -65,8 +64,10 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
     frame = inspect.currentframe()
     # optimize?
     try:
+        frames_info = []
         potential_tests = []
 
+        # First pass: collect all frame information
         if frame is not None:
             frame = frame.f_back
 
@@ -76,46 +77,107 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
                 filename = frame.f_code.co_filename
                 filename_path = Path(filename)
                 frame_locals = frame.f_locals
-                if function_name.startswith("test_"):
-                    test_name = function_name
-                    test_module_name = _get_module_name_cf_tracer(frame)
-                    test_class_name = _extract_class_name_tracer(frame_locals)
-                    return test_module_name, test_class_name, test_name
+                test_module_name = _get_module_name_cf_tracer(frame)
+                class_name = _extract_class_name_tracer(frame_locals)
 
-                if (
-                    frame.f_globals.get("__name__", "").startswith("test_")
-                    or filename_path.stem.startswith("test_")
-                    or "test" in filename_path.parts
-                ):
-                    test_module_name = _get_module_name_cf_tracer(frame)
-                    class_name = _extract_class_name_tracer(frame_locals)
-
-                    if class_name:
-                        if class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower():
-                            potential_tests.append((test_module_name, class_name, function_name))
-                    elif "test" in test_module_name or filename_path.stem.startswith("test_"):
-                        potential_tests.append((test_module_name, None, function_name))
-
-                if (
-                    function_name in ["runTest", "_runTest", "run", "_testMethodName"]
-                    or "pytest" in str(frame.f_globals.get("__file__", ""))
-                    or "unittest" in str(frame.f_globals.get("__file__", ""))
-                ):
-                    test_module_name = _get_module_name_cf_tracer(frame)
-                    class_name = _extract_class_name_tracer(frame_locals)
-
-                    if class_name and (class_name.startswith("Test") or "test" in class_name.lower()):
-                        test_method = function_name
-                        if "self" in frame_locals:
-                            with contextlib.suppress(AttributeError, TypeError):
-                                test_method = getattr(frame_locals["self"], "_testMethodName", function_name)
-                        potential_tests.append((test_module_name, class_name, test_method))
-
-                frame = frame.f_back
+                frames_info.append(
+                    {
+                        "function_name": function_name,
+                        "filename_path": filename_path,
+                        "frame_locals": frame_locals,
+                        "test_module_name": test_module_name,
+                        "class_name": class_name,
+                        "frame": frame,
+                    }
+                )
 
             except Exception:
-                frame = frame.f_back
-                continue
+                pass
+
+            frame = frame.f_back
+
+        # Second pass: analyze frames with full context
+        test_class_candidates = []
+        for frame_info in frames_info:
+            function_name = frame_info["function_name"]
+            filename_path = frame_info["filename_path"]
+            frame_locals = frame_info["frame_locals"]
+            test_module_name = frame_info["test_module_name"]
+            class_name = frame_info["class_name"]
+            frame_obj = frame_info["frame"]
+
+            # Keep track of test classes
+            if class_name and (
+                class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower()
+            ):
+                test_class_candidates.append((class_name, test_module_name))
+
+        # Now process frames again looking for test functions with full candidates list
+        # Collect all test functions to prioritize outer ones over nested ones
+        test_functions = []
+        for frame_info in frames_info:
+            function_name = frame_info["function_name"]
+            filename_path = frame_info["filename_path"]
+            frame_locals = frame_info["frame_locals"]
+            test_module_name = frame_info["test_module_name"]
+            class_name = frame_info["class_name"]
+            frame_obj = frame_info["frame"]
+
+            # Collect test functions
+            if function_name.startswith("test_"):
+                test_class_name = class_name
+
+                # If no class found in current frame, check if we have any test class candidates
+                # Prefer the innermost (first) test class candidate which is more specific
+                if test_class_name is None and test_class_candidates:
+                    test_class_name = test_class_candidates[0][0]
+
+                test_functions.append((test_module_name, test_class_name, function_name))
+
+        # Prioritize test functions with class context, then innermost
+        if test_functions:
+            # First prefer test functions with class context
+            for test_func in test_functions:
+                if test_func[1] is not None:  # has class_name
+                    return test_func
+            # If no test function has class context, return the outermost (most likely the actual test method)
+            return test_functions[-1]
+
+        # If no direct test functions found, look for other test patterns
+        for frame_info in frames_info:
+            function_name = frame_info["function_name"]
+            filename_path = frame_info["filename_path"]
+            frame_locals = frame_info["frame_locals"]
+            test_module_name = frame_info["test_module_name"]
+            class_name = frame_info["class_name"]
+            frame_obj = frame_info["frame"]
+
+            # Test file/module detection
+            if (
+                frame_obj.f_globals.get("__name__", "").startswith("test_")
+                or filename_path.stem.startswith("test_")
+                or "test" in filename_path.parts
+            ):
+                if class_name and (
+                    class_name.startswith("Test") or class_name.endswith("Test") or "test" in class_name.lower()
+                ):
+                    potential_tests.append((test_module_name, class_name, function_name))
+                elif "test" in test_module_name or filename_path.stem.startswith("test_"):
+                    # For functions without class context, try to find the most recent test class
+                    best_class = test_class_candidates[0][0] if test_class_candidates else None
+                    potential_tests.append((test_module_name, best_class, function_name))
+
+            # Framework integration detection
+            if (
+                function_name in ["runTest", "_runTest", "run", "_testMethodName"]
+                or "pytest" in str(frame_obj.f_globals.get("__file__", ""))
+                or "unittest" in str(frame_obj.f_globals.get("__file__", ""))
+            ) and class_name and (class_name.startswith("Test") or "test" in class_name.lower()):
+                test_method = function_name
+                if "self" in frame_locals:
+                    with contextlib.suppress(AttributeError, TypeError):
+                        test_method = getattr(frame_locals["self"], "_testMethodName", function_name)
+                potential_tests.append((test_module_name, class_name, test_method))
 
         if potential_tests:
             for test_module, test_class, test_func in potential_tests:
