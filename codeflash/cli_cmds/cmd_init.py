@@ -826,13 +826,17 @@ def install_vscode_extension() -> None:
             error = e.stderr or "Unknown error."
 
     if error:
-        click.echo("❌ Failed to install Codeflash for VSCode.")
+        ph("vscode-extension-install-failed", {"error": error.strip()})
+        click.echo(
+            "Failed to install Codeflash for VSCode. Please try installing it manually from the Marketplace: https://marketplace.visualstudio.com/items?itemName=codeflash.codeflash"
+        )
         click.echo(error.strip())
     else:
         output = (result.stdout or "").lower()
         if "already installed" in output:
             click.echo("✅ Codeflash for VSCode is already installed.")
             return
+        ph("vscode-extension-installed")
         click.echo("✅ Installed the latest version of Codeflash for VSCode.")
 
 
