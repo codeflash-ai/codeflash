@@ -94,9 +94,10 @@ def remove_worktree(worktree_dir: Path) -> None:
         logger.exception(f"Failed to remove worktree: {worktree_dir}")
 
 
+@lru_cache(maxsize=1)
 def get_patches_dir_for_project() -> Path:
-    project_id = get_git_project_id()
-    return patches_dir / project_id
+    project_id = get_git_project_id() or ""
+    return Path(patches_dir / project_id)
 
 
 def get_patches_metadata() -> dict[str, Any]:
