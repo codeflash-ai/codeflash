@@ -63,6 +63,7 @@ def _get_module_name_cf_tracer(frame: FrameType | None) -> str:
 
 def extract_test_context_from_frame() -> tuple[str, str | None, str]:
     frame = inspect.currentframe()
+    # optimize?
     try:
         potential_tests = []
 
