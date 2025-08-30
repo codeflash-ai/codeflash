@@ -3,6 +3,10 @@ from __future__ import annotations
 from codeflash.code_utils.compat import LF
 from codeflash.either import CodeflashError
 
+_TEST_CONFIDENCE_ERROR = CodeflashError(
+    "TEST_CONFIDENCE_THRESHOLD_NOT_MET_ERROR", "The threshold for test confidence was not met."
+)
+
 _BEHAVIORAL_TEST_FAILURE_ERROR = CodeflashError(
     "BEHAVIORAL_TEST_FAILURE_ERROR", "Failed to establish a baseline for the original code - bevhavioral tests failed."
 )
@@ -74,7 +78,7 @@ def coverage_threshold_not_met_error() -> CodeflashError:
 
 
 def test_confidence_threshold_not_met_error() -> CodeflashError:
-    return CodeflashError("TEST_CONFIDENCE_THRESHOLD_NOT_MET_ERROR", "The threshold for test confidence was not met.")
+    return _TEST_CONFIDENCE_ERROR
 
 
 def behavioral_test_failure_error() -> CodeflashError:
