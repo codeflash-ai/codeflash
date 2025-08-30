@@ -232,6 +232,7 @@ def codeflash_behavior_async(func: F) -> F:
         )
 
         exception = None
+        counter = time.perf_counter_ns()
         gc.disable()
         try:
             ret = func(*args, **kwargs)  # coroutine creation has some overhead, though it is very small
@@ -296,6 +297,7 @@ def codeflash_performance_async(func: F) -> F:
         print(f"!$######{test_stdout_tag}######$!")
 
         exception = None
+        counter = time.perf_counter_ns()
         gc.disable()
         try:
             ret = func(*args, **kwargs)
