@@ -11,7 +11,7 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.code_utils.git_utils import (
+from codeflash.code_utils.git_worktree_utils import (
     create_diff_patch_from_worktree,
     get_patches_metadata,
     overwrite_patch_metadata,
@@ -244,9 +244,9 @@ def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedPar
             continue
         new_patches.append(patch)
 
-    overwrite_patch_metadata(new_patches)
     # then remove the patch file
     if deleted_patch_file:
+        overwrite_patch_metadata(new_patches)
         patch_path = Path(deleted_patch_file)
         patch_path.unlink(missing_ok=True)
         return {"status": "success"}
