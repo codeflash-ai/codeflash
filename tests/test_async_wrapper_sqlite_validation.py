@@ -41,7 +41,8 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.fixture
     def temp_db_path(self, test_env_setup):
         iteration = test_env_setup["CODEFLASH_TEST_ITERATION"]
-        db_path = Path.cwd() / f"codeflash_test_results_{iteration}.sqlite"
+        from codeflash.code_utils.codeflash_wrap_decorator import get_run_tmp_file
+        db_path = get_run_tmp_file(Path(f"test_return_values_{iteration}.sqlite"))
         
         yield db_path
         

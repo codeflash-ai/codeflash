@@ -9,6 +9,7 @@ import time
 from enum import Enum
 from functools import wraps
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 import dill as pickle
@@ -26,6 +27,12 @@ class VerificationType(str, Enum):  # moved from codeflash/verification/codeflas
 
 
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+def get_run_tmp_file(file_path: Path) -> Path: # moved from codeflash/code_utils/code_utils.py
+    if not hasattr(get_run_tmp_file, "tmpdir"):
+        get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
+    return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 
 def _extract_class_name_tracer(frame_locals: dict[str, Any]) -> str | None:
@@ -214,7 +221,7 @@ def codeflash_behavior_async(func: F) -> F:
         print(f"!$######{test_stdout_tag}######$!")
 
         iteration = os.environ.get("CODEFLASH_TEST_ITERATION", "0")
-        db_path = Path.cwd() / f"codeflash_test_results_{iteration}.sqlite"
+        db_path = get_run_tmp_file(Path(f"test_return_values_{iteration}.sqlite"))
         codeflash_con = sqlite3.connect(db_path)
         codeflash_cur = codeflash_con.cursor()
 
