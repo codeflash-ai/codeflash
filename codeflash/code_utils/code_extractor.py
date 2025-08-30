@@ -335,12 +335,12 @@ class ImportInserter(cst.CSTTransformer):
         return updated_node
 
 
-def extract_global_statements(source_code: str) -> list[cst.SimpleStatementLine]:
+def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.SimpleStatementLine]]:
     """Extract global statements from source code."""
     module = cst.parse_module(source_code)
     collector = GlobalStatementCollector()
     module.visit(collector)
-    return collector.global_statements
+    return module, collector.global_statements
 
 
 def find_last_import_line(target_code: str) -> int:
@@ -373,16 +373,11 @@ def delete___future___aliased_imports(module_code: str) -> str:
 
 
 def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
-    # Avoid repeat parses and visits
-    src_module, new_added_global_statements = _extract_global_statements_once(src_module_code)
-    dst_module, existing_global_statements = _extract_global_statements_once(dst_module_code)
+    src_module, new_added_global_statements = extract_global_statements(src_module_code)
+    dst_module, existing_global_statements = extract_global_statements(dst_module_code)
 
-    # Build a list of global statements which are not already present using more efficient membership test.
-    # Slightly optimized by making a set of (hashable deep identity) for comparison.
-    # However, since CST nodes are not hashable, continue using deep_equals but do NOT recompute for identical object references.
     unique_global_statements = []
     for stmt in new_added_global_statements:
-        # Fast path: check by id
         if any(
             stmt is existing_stmt or stmt.deep_equals(existing_stmt) for existing_stmt in existing_global_statements
         ):
@@ -651,11 +646,3 @@ def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionP
                 if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     preexisting_objects.add((cnode.name, (FunctionParent(node.name, "ClassDef"),)))
     return preexisting_objects
-
-
-def _extract_global_statements_once(source_code: str):
-    """Extract global statements once and return both module and statements (internal)"""
-    module = cst.parse_module(source_code)
-    collector = GlobalStatementCollector()
-    module.visit(collector)
-    return module, collector.global_statements
