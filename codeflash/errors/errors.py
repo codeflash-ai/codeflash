@@ -11,6 +11,38 @@ _BEHAVIORAL_TEST_FAILURE_ERROR = CodeflashError(
     "BEHAVIORAL_TEST_FAILURE_ERROR", "Failed to establish a baseline for the original code - bevhavioral tests failed."
 )
 
+_COVERAGE_THRESHOLD_NOT_MET_ERROR = CodeflashError(
+    "COVERAGE_THRESHOLD_NOT_MET_ERROR", "The threshold for test coverage was not met."
+)
+
+_FUNCTION_OPTIMIZATION_ATTEMPTED_ERROR = CodeflashError(
+    "FUNCTION_OPTIMIZATION_ATTEMPTED_ERROR", "Function optimization previously attempted, skipping."
+)
+
+_TEST_RESULT_DIDNT_MATCH_ERROR = CodeflashError(
+    "TEST_RESULT_DIDNT_MATCH_ERROR", "Test results did not match the test results of the original code."
+)
+
+
+def test_result_didnt_match_error() -> CodeflashError:
+    return _TEST_RESULT_DIDNT_MATCH_ERROR
+
+
+def function_optimization_attempted_error() -> CodeflashError:
+    return _FUNCTION_OPTIMIZATION_ATTEMPTED_ERROR
+
+
+def coverage_threshold_not_met_error() -> CodeflashError:
+    return _COVERAGE_THRESHOLD_NOT_MET_ERROR
+
+
+def test_confidence_threshold_not_met_error() -> CodeflashError:
+    return _TEST_CONFIDENCE_ERROR
+
+
+def behavioral_test_failure_error() -> CodeflashError:
+    return _BEHAVIORAL_TEST_FAILURE_ERROR
+
 
 def shell_rc_permission_error(shell_rc_path: str, api_key_line: str) -> CodeflashError:
     return CodeflashError(
@@ -28,18 +60,6 @@ def shell_rc_not_found_error(shell_rc_path: str, api_key_line: str) -> Codeflash
         f"To ensure your Codeflash API key is automatically loaded into your environment at startup, you can create {{shell_rc_path}} and add the following line:{LF}"
         f"{LF}{{api_key_line}}{LF}",
         **locals(),
-    )
-
-
-def test_result_didnt_match_error() -> CodeflashError:
-    return CodeflashError(
-        "TEST_RESULT_DIDNT_MATCH_ERROR", "Test results did not match the test results of the original code."
-    )
-
-
-def function_optimization_attempted_error() -> CodeflashError:
-    return CodeflashError(
-        "FUNCTION_OPTIMIZATION_ATTEMPTED_ERROR", "Function optimization previously attempted, skipping."
     )
 
 
@@ -71,15 +91,3 @@ def code_context_extraction_failed_error(error: str) -> CodeflashError:
     return CodeflashError(
         "CODE_CONTEXT_EXTRACTION_FAILED_ERROR", "Failed to extract code context. Error: {error}.", **locals()
     )
-
-
-def coverage_threshold_not_met_error() -> CodeflashError:
-    return CodeflashError("COVERAGE_THRESHOLD_NOT_MET_ERROR", "The threshold for test coverage was not met.")
-
-
-def test_confidence_threshold_not_met_error() -> CodeflashError:
-    return _TEST_CONFIDENCE_ERROR
-
-
-def behavioral_test_failure_error() -> CodeflashError:
-    return _BEHAVIORAL_TEST_FAILURE_ERROR
