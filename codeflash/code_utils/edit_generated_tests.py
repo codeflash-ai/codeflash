@@ -201,7 +201,7 @@ def remove_functions_from_generated_tests(
     for generated_test in generated_tests.generated_tests:
         for test_function in test_functions_to_remove:
             function_pattern = re.compile(
-                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\ndef\s|$)",
+                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?(async\s+)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\n(async\s+)?def\s|$)",
                 re.DOTALL,
             )
 

@@ -983,6 +983,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             N_CANDIDATES,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
+            self.function_to_optimize.is_async,
         )
         future_candidates_exp = None
 
@@ -998,6 +999,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 N_CANDIDATES,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
+                self.function_to_optimize.is_async,
             )
             futures.append(future_candidates_exp)
 
