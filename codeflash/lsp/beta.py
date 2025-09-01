@@ -57,7 +57,7 @@ server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_c
 @server.feature("getOptimizableFunctionsInCurrentDiff")
 def get_functions_in_current_git_diff(
     server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
-) -> dict[str, str | list[str]]:
+) -> dict[str, str | dict[str, list[str]]]:
     functions = get_functions_within_git_diff(uncommitted_changes=True)
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
@@ -67,8 +67,10 @@ def get_functions_in_current_git_diff(
         module_root=server.optimizer.args.module_root,
         previous_checkpoint_functions={},
     )
-    qualified_names: list[str] = [func.qualified_name for funcs in file_to_funcs_to_optimize.values() for func in funcs]
-    return {"functions": qualified_names, "status": "success"}
+    file_to_qualified_names: dict[str, list[str]] = {
+        str(path): [f.qualified_name for f in funcs] for path, funcs in file_to_funcs_to_optimize.items()
+    }
+    return {"functions": file_to_qualified_names, "status": "success"}
 
 
 @server.feature("getOptimizableFunctionsInCommit")
