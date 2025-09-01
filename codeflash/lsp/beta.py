@@ -72,14 +72,14 @@ def get_functions_in_commit(
 
 
 def _group_functions_by_file(
-    _server: CodeflashLanguageServer, functions: dict[str, list[FunctionToOptimize]]
+    server: CodeflashLanguageServer, functions: dict[str, list[FunctionToOptimize]]
 ) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
-        tests_root=_server.optimizer.test_cfg.tests_root,
+        tests_root=server.optimizer.test_cfg.tests_root,
         ignore_paths=[],
-        project_root=_server.optimizer.args.project_root,
-        module_root=_server.optimizer.args.module_root,
+        project_root=server.optimizer.args.project_root,
+        module_root=server.optimizer.args.module_root,
         previous_checkpoint_functions={},
     )
     file_to_qualified_names: dict[str, list[str]] = {
