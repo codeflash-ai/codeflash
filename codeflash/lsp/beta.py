@@ -13,7 +13,11 @@ from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
-from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
+from codeflash.discovery.functions_to_optimize import (
+    filter_functions,
+    get_functions_inside_a_commit,
+    get_functions_within_git_diff,
+)
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -21,6 +25,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from lsprotocol import types
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 @dataclass
@@ -39,6 +45,11 @@ class ProvideApiKeyParams:
     api_key: str
 
 
+@dataclass
+class OptimizableFunctionsInCommitParams:
+    commit_hash: str
+
+
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
 
@@ -47,6 +58,22 @@ def get_functions_in_current_git_diff(
     server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
 ) -> dict[str, str | dict[str, list[str]]]:
     functions = get_functions_within_git_diff(uncommitted_changes=True)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+@server.feature("getOptimizableFunctionsInCommit")
+def get_functions_in_commit(
+    server: CodeflashLanguageServer, params: OptimizableFunctionsInCommitParams
+) -> dict[str, str | dict[str, list[str]]]:
+    functions = get_functions_inside_a_commit(params.commit_hash)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+def _group_functions_by_file(
+    server: CodeflashLanguageServer, functions: dict[str, list[FunctionToOptimize]]
+) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
         tests_root=server.optimizer.test_cfg.tests_root,
@@ -58,7 +85,7 @@ def get_functions_in_current_git_diff(
     file_to_qualified_names: dict[str, list[str]] = {
         str(path): [f.qualified_name for f in funcs] for path, funcs in file_to_funcs_to_optimize.items()
     }
-    return {"functions": file_to_qualified_names, "status": "success"}
+    return file_to_qualified_names
 
 
 @server.feature("getOptimizableFunctions")
