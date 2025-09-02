@@ -21,8 +21,7 @@ def parse_args() -> Namespace:
     init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
     init_parser.set_defaults(func=init_codeflash)
 
-    install_vscode_parser = subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
-    install_vscode_parser.set_defaults(func=install_vscode_extension)
+    subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
@@ -118,9 +117,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
         logging_config.set_level(logging.INFO, echo_setting=not is_init)
+
     if args.version:
         logger.info(f"Codeflash version {version}")
         sys.exit()
+
+    if args.command == "vscode-install":
+        install_vscode_extension()
+        sys.exit()
+
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
             exit_with_message("No git repository detected and user aborted run. Exiting...", error_on_exit=True)
