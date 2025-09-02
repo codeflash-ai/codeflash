@@ -202,25 +202,6 @@ class TestVersionCheck(unittest.TestCase):
 
         mock_console.print.assert_not_called()
 
-    @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
-    def test_check_for_newer_minor_version_disable_check(self, mock_console, mock_get_version):
-        """Test that version check is skipped when disable_check is True."""
-        check_for_newer_minor_version(disable_check=True)
-
-        mock_get_version.assert_not_called()
-        mock_console.print.assert_not_called()
-
-    @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
-    def test_check_for_newer_minor_version_disable_check_false(self, mock_console, mock_get_version):
-        """Test that version check runs when disable_check is False."""
-        mock_get_version.return_value = None
-
-        check_for_newer_minor_version(disable_check=False)
-
-        mock_get_version.assert_called_once()
-        mock_console.print.assert_not_called()
 
 
 if __name__ == '__main__':

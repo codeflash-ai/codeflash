@@ -22,23 +22,15 @@ def main() -> None:
         CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
     )
     args = parse_args()
-    
-    # Check for newer version (skip for version command to avoid confusion)
-    if not args.version:
-        # Check if version check is disabled in config
-        disable_version_check = False
-        if args.config_file and Path.exists(args.config_file):
-            pyproject_config, _ = parse_config_file(args.config_file)
-            disable_version_check = pyproject_config.get("disable_version_check", False)
-        
-        check_for_newer_minor_version(disable_check=disable_version_check)
-    
+
+    # Check for newer version for all commands
+    check_for_newer_minor_version()
+
     if args.command:
+        disable_telemetry = False
         if args.config_file and Path.exists(args.config_file):
             pyproject_config, _ = parse_config_file(args.config_file)
             disable_telemetry = pyproject_config.get("disable_telemetry", False)
-        else:
-            disable_telemetry = False
         init_sentry(not disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not disable_telemetry)
         args.func()
