@@ -17,7 +17,11 @@ from codeflash.code_utils.git_worktree_utils import (
     overwrite_patch_metadata,
 )
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
-from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
+from codeflash.discovery.functions_to_optimize import (
+    filter_functions,
+    get_functions_inside_a_commit,
+    get_functions_within_git_diff,
+)
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -25,6 +29,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from lsprotocol import types
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 @dataclass
@@ -47,6 +53,10 @@ class ProvideApiKeyParams:
 class OnPatchAppliedParams:
     patch_id: str
 
+@dataclass
+class OptimizableFunctionsInCommitParams:
+    commit_hash: str
+
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
@@ -54,8 +64,24 @@ server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_c
 @server.feature("getOptimizableFunctionsInCurrentDiff")
 def get_functions_in_current_git_diff(
     server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
-) -> dict[str, str | list[str]]:
+) -> dict[str, str | dict[str, list[str]]]:
     functions = get_functions_within_git_diff(uncommitted_changes=True)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+@server.feature("getOptimizableFunctionsInCommit")
+def get_functions_in_commit(
+    server: CodeflashLanguageServer, params: OptimizableFunctionsInCommitParams
+) -> dict[str, str | dict[str, list[str]]]:
+    functions = get_functions_inside_a_commit(params.commit_hash)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+def _group_functions_by_file(
+    server: CodeflashLanguageServer, functions: dict[str, list[FunctionToOptimize]]
+) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
         tests_root=server.optimizer.test_cfg.tests_root,
@@ -64,8 +90,10 @@ def get_functions_in_current_git_diff(
         module_root=server.optimizer.args.module_root,
         previous_checkpoint_functions={},
     )
-    qualified_names: list[str] = [func.qualified_name for funcs in file_to_funcs_to_optimize.values() for func in funcs]
-    return {"functions": qualified_names, "status": "success"}
+    file_to_qualified_names: dict[str, list[str]] = {
+        str(path): [f.qualified_name for f in funcs] for path, funcs in file_to_funcs_to_optimize.items()
+    }
+    return file_to_qualified_names
 
 
 @server.feature("getOptimizableFunctions")
