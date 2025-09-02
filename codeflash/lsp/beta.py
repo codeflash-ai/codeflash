@@ -11,7 +11,11 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
+from codeflash.code_utils.git_worktree_utils import (
+    create_diff_patch_from_worktree,
+    get_patches_metadata,
+    overwrite_patch_metadata,
+)
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import (
     filter_functions,
@@ -44,6 +48,10 @@ class FunctionOptimizationParams:
 class ProvideApiKeyParams:
     api_key: str
 
+
+@dataclass
+class OnPatchAppliedParams:
+    patch_id: str
 
 @dataclass
 class OptimizableFunctionsInCommitParams:
@@ -245,6 +253,34 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
+@server.feature("retrieveSuccessfulOptimizations")
+def retrieve_successful_optimizations(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+    metadata = get_patches_metadata()
+    return {"status": "success", "patches": metadata["patches"]}
+
+
+@server.feature("onPatchApplied")
+def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedParams) -> dict[str, str]:
+    # first remove the patch from the metadata
+    metadata = get_patches_metadata()
+
+    deleted_patch_file = None
+    new_patches = []
+    for patch in metadata["patches"]:
+        if patch["id"] == params.patch_id:
+            deleted_patch_file = patch["patch_path"]
+            continue
+        new_patches.append(patch)
+
+    # then remove the patch file
+    if deleted_patch_file:
+        overwrite_patch_metadata(new_patches)
+        patch_path = Path(deleted_patch_file)
+        patch_path.unlink(missing_ok=True)
+        return {"status": "success"}
+    return {"status": "error", "message": "Patch not found"}
+
+
 @server.feature("performFunctionOptimization")
 @server.thread()
 def perform_function_optimization(  # noqa: PLR0911
@@ -346,14 +382,24 @@ def perform_function_optimization(  # noqa: PLR0911
 
         # generate a patch for the optimization
         relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-        patch_file = create_diff_patch_from_worktree(
+
+        speedup = original_code_baseline.runtime / best_optimization.runtime
+
+        # get the original file path in the actual project (not in the worktree)
+        original_args, _ = server.optimizer.original_args_and_test_cfg
+        relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
+        original_file_path = Path(original_args.project_root / relative_file_path).resolve()
+
+        metadata = create_diff_patch_from_worktree(
             server.optimizer.current_worktree,
             relative_file_paths,
-            server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
+            metadata_input={
+                "fto_name": function_to_optimize_qualified_name,
+                "explanation": best_optimization.explanation_v2,
+                "file_path": str(original_file_path),
+                "speedup": speedup,
+            },
         )
-
-        optimized_source = best_optimization.candidate.source_code.markdown
-        speedup = original_code_baseline.runtime / best_optimization.runtime
 
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
@@ -362,8 +408,8 @@ def perform_function_optimization(  # noqa: PLR0911
             "status": "success",
             "message": "Optimization completed successfully",
             "extra": f"Speedup: {speedup:.2f}x faster",
-            "optimization": optimized_source,
-            "patch_file": str(patch_file),
+            "patch_file": metadata["patch_path"],
+            "patch_id": metadata["id"],
             "explanation": best_optimization.explanation_v2,
         }
     finally:
