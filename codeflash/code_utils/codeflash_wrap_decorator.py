@@ -51,10 +51,15 @@ def _extract_class_name_tracer(frame_locals: dict[str, Any]) -> str | None:
 
 
 def _get_module_name_cf_tracer(frame: FrameType | None) -> str:
-    with contextlib.suppress(Exception):
+    try:
         test_module = inspect.getmodule(frame)
-        if test_module and hasattr(test_module, "__name__"):
-            return test_module.__name__
+    except Exception:
+        test_module = None
+
+    if test_module is not None:
+        module_name = getattr(test_module, "__name__", None)
+        if module_name is not None:
+            return module_name
 
     if frame is not None:
         return frame.f_globals.get("__name__", "unknown_module")
