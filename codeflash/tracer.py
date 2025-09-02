@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import pickle
 import subprocess
+import time
+
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 
 
 def main(args: Namespace | None = None) -> ArgumentParser:
+    start = time.time()
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
@@ -173,7 +176,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     sys.exit(1)
                 finally:
                     result_pickle_file_path.unlink(missing_ok=True)
-
+            print(f"Took {time.time() - start}")
             if not parsed_args.trace_only and replay_test_paths:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
