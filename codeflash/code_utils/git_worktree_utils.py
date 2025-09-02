@@ -32,8 +32,7 @@ if TYPE_CHECKING:
 def get_git_project_id() -> str:
     """Return the first commit sha of the repo."""
     repo: Repo = git.Repo(search_parent_directories=True)
-    root_commits = list(repo.iter_commits(rev="HEAD", max_parents=0))
-    return root_commits[0].hexsha
+    return next(repo.iter_commits(rev="HEAD", max_parents=0)).hexsha
 
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
@@ -97,7 +96,7 @@ def remove_worktree(worktree_dir: Path) -> None:
 @lru_cache(maxsize=1)
 def get_patches_dir_for_project() -> Path:
     project_id = get_git_project_id() or ""
-    return Path(patches_dir / project_id)
+    return patches_dir / project_id
 
 
 def get_patches_metadata() -> dict[str, Any]:
