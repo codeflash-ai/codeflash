@@ -51,23 +51,20 @@ def is_argument_name(name: str, arguments_node: ast.arguments) -> bool:
 class AsyncIOGatherRemover(ast.NodeTransformer):
     def _contains_asyncio_gather(self, node: ast.AST) -> bool:
         """Check if a node contains asyncio.gather calls."""
-        for child_node in ast.walk(node):
-            if (
-                isinstance(child_node, ast.Call)
-                and isinstance(child_node.func, ast.Attribute)
-                and isinstance(child_node.func.value, ast.Name)
-                and child_node.func.value.id == "asyncio"
-                and child_node.func.attr == "gather"
-            ):
-                return True
-
-            if (
-                isinstance(child_node, ast.Call)
-                and isinstance(child_node.func, ast.Name)
-                and child_node.func.id == "gather"
-            ):
-                return True
-
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, ast.Call):
+                if isinstance(current.func, ast.Attribute):
+                    if (
+                        isinstance(current.func.value, ast.Name)
+                        and current.func.value.id == "asyncio"
+                        and current.func.attr == "gather"
+                    ):
+                        return True
+                elif isinstance(current.func, ast.Name) and current.func.id == "gather":
+                    return True
+            stack.extend(ast.iter_child_nodes(current))
         return False
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef | None:
