@@ -13,6 +13,7 @@ from typing import Optional, Union
 import isort
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.lsp.helpers import is_LSP_enabled
 
 
 def generate_unified_diff(original: str, modified: str, from_file: str, to_file: str) -> str:
@@ -106,8 +107,7 @@ def format_code(
     print_status: bool = True,  # noqa
     exit_on_failure: bool = True,  # noqa
 ) -> str:
-    if console.quiet:
-        # lsp mode
+    if is_LSP_enabled():
         exit_on_failure = False
 
     if isinstance(path, str):

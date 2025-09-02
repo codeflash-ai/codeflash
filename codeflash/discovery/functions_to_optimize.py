@@ -27,6 +27,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
 
@@ -181,6 +182,7 @@ def get_functions_to_optimize(
     )
     functions: dict[str, list[FunctionToOptimize]]
     trace_file_path: Path | None = None
+    is_lsp = is_LSP_enabled()
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
@@ -198,6 +200,8 @@ def get_functions_to_optimize(
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
+                    if is_lsp:
+                        return functions, 0, None
                     exit_with_message(
                         "Function name should be in the format 'function_name' or 'class_name.function_name'"
                     )
@@ -213,6 +217,8 @@ def get_functions_to_optimize(
                     ):
                         found_function = fn
                 if found_function is None:
+                    if is_lsp:
+                        return functions, 0, None
                     exit_with_message(
                         f"Function {only_function_name} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
@@ -221,7 +227,7 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             console.rule()
             ph("cli-optimizing-git-diff")
-            functions = get_functions_within_git_diff()
+            functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
@@ -238,8 +244,8 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff() -> dict[str, list[FunctionToOptimize]]:
-    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=False)
+def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
+    modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     modified_functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
@@ -500,6 +506,10 @@ def was_function_previously_optimized(
         Tuple of (filtered_functions_dict, remaining_count)
 
     """
+    if is_LSP_enabled():
+        # was_function_previously_optimized is for the checking the optimization duplicates in the github action, no need to do this in the LSP mode
+        return False
+
     # Check optimization status if repository info is provided
     # already_optimized_count = 0
     try:

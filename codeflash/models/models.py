@@ -19,7 +19,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr
+from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr, ValidationError
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -91,6 +91,7 @@ class FunctionSource:
 
 class BestOptimization(BaseModel):
     candidate: OptimizedCandidate
+    explanation_v2: Optional[str] = None
     helper_functions: list[FunctionSource]
     code_context: CodeOptimizationContext
     runtime: int
@@ -238,10 +239,14 @@ class CodeStringsMarkdown(BaseModel):
         """
         matches = markdown_pattern.findall(markdown_code)
         results = CodeStringsMarkdown()
-        for file_path, code in matches:
-            path = file_path.strip()
-            results.code_strings.append(CodeString(code=code, file_path=Path(path)))
-        return results
+        try:
+            for file_path, code in matches:
+                path = file_path.strip()
+                results.code_strings.append(CodeString(code=code, file_path=Path(path)))
+            return results  # noqa: TRY300
+        except ValidationError:
+            # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
+            return CodeStringsMarkdown()
 
 
 class CodeOptimizationContext(BaseModel):

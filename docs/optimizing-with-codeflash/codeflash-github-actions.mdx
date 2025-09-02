@@ -1,20 +1,24 @@
 ---
-title: "GitHub Actions Integration"
-description: "Automatically optimize pull requests with Codeflash GitHub Actions workflow"
+title: "Auto Optimize Pull Requests"
+description: "Automatically optimize new code in pull requests with Codeflash GitHub Actions workflow"
 icon: "github"
 ---
 
-{/* TODO: Add more pictures to guide better */}
 
-Codeflash can automatically optimize your code when new pull requests are opened.
+Optimizing new code in Pull Requests is the best way to ensure that all code you and your team ship is performant
+in the future. Automating optimization in the Pull Request stage how most teams use Codeflash, to
+continuously find optimizations for their new code.
 
-To be able to scan new code for performance optimizations, Codeflash requires a GitHub action workflow to 
-be installed which runs the Codeflash optimization logic on every new pull request.
+To scan new code for performance optimizations, Codeflash uses a GitHub Action workflow which runs
+the Codeflash optimization logic on the new code in every pull request.
 If the action workflow finds an optimization, it communicates with the Codeflash GitHub 
-App through our secure servers and asks it to suggest new changes to the pull request.
+App and asks it to suggest new changes to the pull request.
 
 This is the most useful way of using Codeflash, where you set it up once and all your new code gets optimized.
 So setting this up is highly recommended.
+
+## Pull Request Optimization 30 seconds demo
+<iframe width="640" height="400" src="https://www.youtube.com/embed/nqa-uewizkU?si=H1wb1RvPp-JqvKPh" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
 ## Prerequisites
 
@@ -38,18 +42,18 @@ So setting this up is highly recommended.
 codeflash init-actions
 ```
 This command will automatically create the GitHub Actions workflow file and guide you through the setup process.
+
+Alternatively running `codeflash init` also asks to setup the github actions.
 </Step>
 
-<Step title="Test Your Setup">
+<Step title="Customize and Test Your Setup">
 Open a new pull request to your GitHub project. You'll see:
 - ✅ A new Codeflash workflow running in GitHub Actions
 - 🤖 The codeflash-ai bot commenting with optimization suggestions (if any are found)
+
+Ensure that your Python environment installation works correctly and codeflash is able to run.
 </Step>
 </Steps>
-
-<Note>
-**Recommended approach** - This automated setup ensures you get the latest workflow configuration with all best practices included.
-</Note>
 </Tab>
 
 <Tab title="Manual Setup">
@@ -153,4 +157,16 @@ Customize the dependency installation based on your Python package manager:
 </Steps>
 </Tab>
 </Tabs>
+## How the Pull Request Optimization Suggestion looks
 
+Codeflash creates a new dependent Pull Request for you to review with the reported speedups, helpful explanation for the optimization
+and the proof of correctness. The pull request has the code change for you to review and accept.
+
+![Codeflash PR Review](/images/codeflash_pr_suggestion_1.png)
+
+
+Sometimes it also makes an inline suggestion with the optimization.
+
+![Codeflash PR Suggestion](/images/code-suggestion.png)
+
+We hope you enjoy the performance unlock the Pull Request optimization enables.

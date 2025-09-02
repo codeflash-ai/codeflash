@@ -10,8 +10,9 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.env_utils import get_codeflash_api_key, is_LSP_enabled
+from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
@@ -80,6 +81,19 @@ class AiServiceClient:
         # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
         return response
 
+    def _get_valid_candidates(self, optimizations_json: list[dict[str, Any]]) -> list[OptimizedCandidate]:
+        candidates: list[OptimizedCandidate] = []
+        for opt in optimizations_json:
+            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+            if not code.code_strings:
+                continue
+            candidates.append(
+                OptimizedCandidate(
+                    source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
+                )
+            )
+        return candidates
+
     def optimize_python_code(  # noqa: D417
         self,
         source_code: str,
@@ -134,14 +148,7 @@ class AiServiceClient:
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
-            return [
-                OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                )
-                for opt in optimizations_json
-            ]
+            return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
         except Exception:
@@ -204,14 +211,7 @@ class AiServiceClient:
             optimizations_json = response.json()["optimizations"]
             logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
-            return [
-                OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"],
-                )
-                for opt in optimizations_json
-            ]
+            return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
         except Exception:
@@ -261,14 +261,17 @@ class AiServiceClient:
             refined_optimizations = response.json()["refinements"]
             logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
+
+            refinements = self._get_valid_candidates(refined_optimizations)
             return [
                 OptimizedCandidate(
-                    source_code=CodeStringsMarkdown.parse_markdown_code(opt["source_code"]),
-                    explanation=opt["explanation"],
-                    optimization_id=opt["optimization_id"][:-4] + "refi",
+                    source_code=c.source_code,
+                    explanation=c.explanation,
+                    optimization_id=c.optimization_id[:-4] + "refi",
                 )
-                for opt in refined_optimizations
+                for c in refinements
             ]
+
         try:
             error = response.json()["error"]
         except Exception:
