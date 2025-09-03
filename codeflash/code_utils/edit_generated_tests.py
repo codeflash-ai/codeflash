@@ -33,7 +33,7 @@ class CommentMapper(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
         for inner_node in ast.walk(node):
-            if isinstance(inner_node, ast.FunctionDef):
+            if isinstance(inner_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.visit_FunctionDef(inner_node)
         self.context_stack.pop()
         return node
@@ -50,6 +50,12 @@ class CommentMapper(ast.NodeVisitor):
         return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        return self._process_function_def(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        return self._process_function_def(node)
+
+    def _process_function_def(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.FunctionDef | ast.AsyncFunctionDef:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
         test_qualified_name = ".".join(self.context_stack)
