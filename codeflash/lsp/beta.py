@@ -53,6 +53,7 @@ class ProvideApiKeyParams:
 class OnPatchAppliedParams:
     patch_id: str
 
+
 @dataclass
 class OptimizableFunctionsInCommitParams:
     commit_hash: str
