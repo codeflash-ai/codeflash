@@ -68,8 +68,9 @@ class CommentMapper(ast.NodeVisitor):
                 j = len(line_node.body) - 1
                 while j >= 0:
                     compound_line_node: ast.stmt = line_node.body[j]
-                    internal_node: ast.AST
-                    for internal_node in ast.walk(compound_line_node):
+                    nodes_to_check = [compound_line_node]
+                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    for internal_node in nodes_to_check:
                         if isinstance(internal_node, (ast.stmt, ast.Assign)):
                             inv_id = str(i) + "_" + str(j)
                             match_key = key + "#" + inv_id
