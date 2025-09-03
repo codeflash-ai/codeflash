@@ -424,6 +424,9 @@ class FunctionOptimizer:
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)
         if not best_optimization:
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
