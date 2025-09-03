@@ -1,21 +1,17 @@
 from code_to_optimize.bubble_sort import sorter
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
 
+
 def calculate_pairwise_products(arr):
-    """
-    Calculate the average of all pairwise products in the array.
-    """
-    sum_of_products = 0
-    count = 0
+    """Calculate the average of all pairwise products in the array."""
+    if len(arr) < 2:
+        return 0
+    total = sum(arr)
+    total_sq = sum(x * x for x in arr)
+    sum_of_products = total * total - total_sq
+    count = len(arr) * (len(arr) - 1)
+    return sum_of_products / count
 
-    for i in range(len(arr)):
-        for j in range(len(arr)):
-            if i != j:
-                sum_of_products += arr[i] * arr[j]
-                count += 1
-
-    # The average of all pairwise products
-    return sum_of_products / count if count > 0 else 0
 
 @codeflash_trace
 def compute_and_sort(arr):
