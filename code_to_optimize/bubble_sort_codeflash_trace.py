@@ -1,4 +1,6 @@
 from codeflash.benchmarking.codeflash_trace import codeflash_trace
+
+
 @codeflash_trace
 def sorter(arr):
     for i in range(len(arr)):
@@ -8,6 +10,7 @@ def sorter(arr):
                 arr[j] = arr[j + 1]
                 arr[j + 1] = temp
     return arr
+
 
 @codeflash_trace
 def recursive_bubble_sort(arr, n=None):
@@ -27,18 +30,15 @@ def recursive_bubble_sort(arr, n=None):
     # Recursively sort the remaining n-1 elements
     return recursive_bubble_sort(arr, n - 1)
 
+
 class Sorter:
     @codeflash_trace
     def __init__(self, arr):
         self.arr = arr
+
     @codeflash_trace
     def sorter(self, multiplier):
-        for i in range(len(self.arr)):
-            for j in range(len(self.arr) - 1):
-                if self.arr[j] > self.arr[j + 1]:
-                    temp = self.arr[j]
-                    self.arr[j] = self.arr[j + 1]
-                    self.arr[j + 1] = temp
+        self.arr.sort()
         return self.arr * multiplier
 
     @staticmethod
