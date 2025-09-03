@@ -32,7 +32,6 @@ class CommentMapper(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
-        # Optimize by iterating node.body directly instead of ast.walk
         for inner_node in node.body:
             if isinstance(inner_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.visit_FunctionDef(inner_node)
