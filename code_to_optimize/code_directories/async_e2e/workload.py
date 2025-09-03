@@ -1,22 +1,12 @@
 import asyncio
+async def fake_api_call(delay, data):
+    await asyncio.sleep(0.0001)
+    return f"Processed: {data}"
 
 
-async def process_data_list(data_list):
+async def some_api_call(urls):
     results = []
-    
-    for item in data_list:
-        await asyncio.sleep(0.1)
-        processed = item * 2 + 10
-        results.append(processed)
-    
+    for url in urls:
+        res = await fake_api_call(1, url)
+        results.append(res)
     return results
-
-
-async def main():
-    data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    result = await process_data_list(data)
-    print(f"Processed {len(result)} items: {result}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
