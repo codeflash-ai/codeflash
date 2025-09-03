@@ -29,7 +29,7 @@ class VerificationType(str, Enum):  # moved from codeflash/verification/codeflas
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def get_run_tmp_file(file_path: Path) -> Path: # moved from codeflash/code_utils/code_utils.py
+def get_run_tmp_file(file_path: Path) -> Path:  # moved from codeflash/code_utils/code_utils.py
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
     return Path(get_run_tmp_file.tmpdir.name) / file_path
@@ -181,10 +181,14 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
 
             # Framework integration detection
             if (
-                function_name in ["runTest", "_runTest", "run", "_testMethodName"]
-                or "pytest" in str(frame_obj.f_globals.get("__file__", ""))
-                or "unittest" in str(frame_obj.f_globals.get("__file__", ""))
-            ) and class_name and (class_name.startswith("Test") or "test" in class_name.lower()):
+                (
+                    function_name in ["runTest", "_runTest", "run", "_testMethodName"]
+                    or "pytest" in str(frame_obj.f_globals.get("__file__", ""))
+                    or "unittest" in str(frame_obj.f_globals.get("__file__", ""))
+                )
+                and class_name
+                and (class_name.startswith("Test") or "test" in class_name.lower())
+            ):
                 test_method = function_name
                 if "self" in frame_locals:
                     with contextlib.suppress(AttributeError, TypeError):
