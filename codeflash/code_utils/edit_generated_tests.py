@@ -32,7 +32,8 @@ class CommentMapper(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
-        for inner_node in ast.walk(node):
+        # Optimize by iterating node.body directly instead of ast.walk
+        for inner_node in node.body:
             if isinstance(inner_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.visit_FunctionDef(inner_node)
         self.context_stack.pop()
@@ -55,7 +56,9 @@ class CommentMapper(ast.NodeVisitor):
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
         return self._process_function_def(node)
 
-    def _process_function_def(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    def _process_function_def(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
         test_qualified_name = ".".join(self.context_stack)
