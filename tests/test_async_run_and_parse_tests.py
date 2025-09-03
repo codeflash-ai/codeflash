@@ -4,12 +4,11 @@ import os
 from argparse import Namespace
 from pathlib import Path
 
-from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-
+from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators, inject_profiling_into_existing_test
 
 def test_async_bubble_sort_behavior_results() -> None:
     test_code = """import asyncio
@@ -117,13 +116,12 @@ async def test_async_sort():
         assert expected_stdout == results_list[0].stdout
 
 
-        if len(results_list) > 1:
-            assert results_list[1].id.function_getting_tested == "async_sorter"
-            assert results_list[1].id.test_function_name == "test_async_sort"
-            assert results_list[1].did_pass
+        assert results_list[1].id.function_getting_tested == "async_sorter"
+        assert results_list[1].id.test_function_name == "test_async_sort"
+        assert results_list[1].did_pass
 
-            expected_stdout2 = "codeflash stdout: Async sorting list\nresult: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]\n"
-            assert expected_stdout2 == results_list[1].stdout
+        expected_stdout2 = "codeflash stdout: Async sorting list\nresult: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]\n"
+        assert expected_stdout2 == results_list[1].stdout
 
     finally:
         # Restore original code
