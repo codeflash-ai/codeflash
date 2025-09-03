@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from math import ceil
 from pathlib import Path
-
+from random import shuffle
 
 def pytest_split(
     arguments: list[str], num_splits: int | None = None
@@ -32,7 +32,7 @@ def pytest_split(
 
     except ImportError:
         return None, None
-    test_files = []
+    test_files = set()
 
     # Find all test_*.py files recursively in the directory
     for test_path in test_paths:
@@ -41,12 +41,10 @@ def pytest_split(
             return None, None
         if _test_path.is_dir():
             # Find all test files matching the pattern test_*.py
-            test_files.extend(map(str, _test_path.rglob("test_*.py")))
+            test_files.update(map(str, _test_path.rglob("test_*.py")))
+            test_files.update(map(str, _test_path.rglob("*_test.py")))
         elif _test_path.is_file():
-            test_files.append(str(_test_path))
-
-    # Sort files for consistent ordering
-    test_files.sort()
+            test_files.add(str(_test_path))
 
     if not test_files:
         return [[]], None
@@ -55,11 +53,15 @@ def pytest_split(
     if num_splits is None:
         num_splits = os.cpu_count() or 4
 
+    #randomize to increase chances of all splits being balanced
+    test_files = list(test_files)
+    shuffle(test_files)
+
     # Ensure each split has at least 4 test files
     # If we have fewer test files than 4 * num_splits, reduce num_splits
     max_possible_splits = len(test_files) // 4
     if max_possible_splits == 0:
-        return [test_files], test_paths
+        return test_files, test_paths
 
     num_splits = min(num_splits, max_possible_splits)
 

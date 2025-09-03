@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 
 def main(args: Namespace | None = None) -> ArgumentParser:
-    start = time.time()
     parser = ArgumentParser(allow_abbrev=False)
     parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
@@ -106,25 +105,22 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             replay_test_paths = []
             if parsed_args.module and unknown_args[0] == "pytest":
                 pytest_splits, test_paths = pytest_split(unknown_args[1:])
-                print(pytest_splits)
 
             if len(pytest_splits) > 1:
                 processes = []
                 test_paths_set = set(test_paths)
                 result_pickle_file_paths = []
                 for i, test_split in enumerate(pytest_splits, start=1):
-                    result_pickle_file_path = get_run_tmp_file(f"tracer_results_file_{i}.pkl")
+                    result_pickle_file_path = get_run_tmp_file(Path(f"tracer_results_file_{i}.pkl"))
                     result_pickle_file_paths.append(result_pickle_file_path)
                     args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
                     outpath = parsed_args.outfile
                     outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
                     args_dict["output"] = str(outpath)
-                    added_paths = False
                     updated_sys_argv = []
                     for elem in sys.argv:
                         if elem in test_paths_set:
-                            if not added_paths:
-                                updated_sys_argv.extend(test_split)
+                            updated_sys_argv.extend(test_split)
                         else:
                             updated_sys_argv.append(elem)
                     args_dict["command"] = " ".join(updated_sys_argv)
@@ -152,7 +148,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     finally:
                         result_pickle_file_path.unlink(missing_ok=True)
             else:
-                result_pickle_file_path = get_run_tmp_file("tracer_results_file.pkl")
+                result_pickle_file_path = get_run_tmp_file(Path("tracer_results_file.pkl"))
                 args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
                 args_dict["output"] = str(parsed_args.outfile)
                 args_dict["command"] = " ".join(sys.argv)
@@ -176,7 +172,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     sys.exit(1)
                 finally:
                     result_pickle_file_path.unlink(missing_ok=True)
-            print(f"Took {time.time() - start}")
             if not parsed_args.trace_only and replay_test_paths:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
@@ -185,7 +180,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.telemetry.sentry import init_sentry
 
                 sys.argv = ["codeflash", "--replay-test", *replay_test_paths]
-                print(sys.argv)
                 args = parse_args()
                 paneled_text(
                     CODEFLASH_LOGO,
