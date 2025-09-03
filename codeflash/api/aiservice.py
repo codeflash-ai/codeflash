@@ -101,6 +101,7 @@ class AiServiceClient:
         trace_id: str,
         num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
+        *,
         is_async: bool = False,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.

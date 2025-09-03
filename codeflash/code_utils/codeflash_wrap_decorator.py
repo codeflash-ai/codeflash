@@ -103,8 +103,8 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
                     }
                 )
 
-            except Exception:
-                pass
+            except Exception:  # noqa: S112
+                continue
 
             frame = frame.f_back
 
