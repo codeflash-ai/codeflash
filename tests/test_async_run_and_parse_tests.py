@@ -5,7 +5,7 @@ from argparse import Namespace
 from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType
+from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators, inject_profiling_into_existing_test
