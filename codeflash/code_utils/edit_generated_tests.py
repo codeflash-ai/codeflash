@@ -33,8 +33,10 @@ class CommentMapper(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
         for inner_node in node.body:
-            if isinstance(inner_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node)
         self.context_stack.pop()
         return node
 
@@ -50,14 +52,14 @@ class CommentMapper(ast.NodeVisitor):
         return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
-        return self._process_function_def(node)
+        self._process_function_def_common(node)
+        return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
-        return self._process_function_def(node)
+        self._process_function_def_common(node)
+        return node
 
-    def _process_function_def(
-        self, node: ast.FunctionDef | ast.AsyncFunctionDef
-    ) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
         test_qualified_name = ".".join(self.context_stack)
@@ -83,7 +85,6 @@ class CommentMapper(ast.NodeVisitor):
                     self.results[line_node.lineno] = self.get_comment(match_key)
             i -= 1
         self.context_stack.pop()
-        return node
 
 
 def get_fn_call_linenos(
