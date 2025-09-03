@@ -1,10 +1,6 @@
 import asyncio
 
-from codeflash.code_utils.codeflash_wrap_decorator import \
-    codeflash_behavior_async
 
-
-@codeflash_behavior_async
 async def process_data_list(data_list):
     results = []
     
