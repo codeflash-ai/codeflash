@@ -9,7 +9,7 @@ import time
 from functools import cache
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import git
 from rich.prompt import Confirm

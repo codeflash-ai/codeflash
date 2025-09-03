@@ -4,6 +4,8 @@ import dataclasses
 import datetime
 import decimal
 import re
+from collections import deque
+
 import sys
 import uuid
 from enum import Enum, Flag, IntFlag, auto
@@ -1394,3 +1396,28 @@ def test_exceptions_comparator():
     module2 = ast.parse(code2)
 
     assert not comparator(module7, module2)
+
+def test_collections() -> None:
+    # Deque
+    a = deque([1, 2, 3])
+    b = deque([1, 2, 3])
+    c = deque([1, 2, 4])
+    d = deque([1, 2])
+    e = [1, 2, 3]
+    f = deque([1, 2, 3], maxlen=5)
+    assert comparator(a, b)
+    assert comparator(a, f)  # same elements, different maxlen is ok
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+    assert not comparator(a, e)
+
+    g = deque([{"a": 1}, {"b": 2}])
+    h = deque([{"a": 1}, {"b": 2}])
+    i = deque([{"a": 1}, {"b": 3}])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    empty_deque1 = deque()
+    empty_deque2 = deque()
+    assert comparator(empty_deque1, empty_deque2)
+    assert not comparator(empty_deque1, a)
