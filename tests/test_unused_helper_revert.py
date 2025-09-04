@@ -87,7 +87,7 @@ def helper_function_2(x):
 
     # Get original code context to find helper functions
     ctx_result = optimizer.get_code_optimization_context()
-    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
     code_context = ctx_result.unwrap()
 
@@ -194,7 +194,7 @@ def helper_function_2(x):
 
     # Get original code context
     ctx_result = optimizer.get_code_optimization_context()
-    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
     code_context = ctx_result.unwrap()
 
@@ -259,7 +259,7 @@ def helper_function_2(x):
 
     # Get original code context
     ctx_result = optimizer.get_code_optimization_context()
-    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+    assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
     code_context = ctx_result.unwrap()
 
@@ -345,7 +345,7 @@ def entrypoint_function(n):
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 
@@ -533,7 +533,7 @@ class Calculator:
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 
@@ -678,7 +678,7 @@ class Processor:
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 
@@ -1013,7 +1013,7 @@ def entrypoint_function(n):
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 
@@ -1173,7 +1173,7 @@ def entrypoint_function(n):
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 
@@ -1394,7 +1394,7 @@ class MathUtils:
 
         # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
-        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure().message}"
 
         code_context = ctx_result.unwrap()
 

@@ -361,7 +361,7 @@ class Optimizer:
                                         f"Optimizing {functions_to_optimize[i + 1].qualified_name}",
                                     )
                         else:
-                            logger.warning(best_optimization.failure())
+                            logger.warning(best_optimization.failure().message)
                             console.rule()
                             continue
                     finally:

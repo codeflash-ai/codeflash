@@ -1099,7 +1099,7 @@ def enter_api_key_and_save_to_rc() -> None:
     if is_successful(result):
         click.echo(result.unwrap())
     else:
-        click.echo(result.failure())
+        click.echo(result.failure().message)
         click.pause()
 
     os.environ["CODEFLASH_API_KEY"] = api_key

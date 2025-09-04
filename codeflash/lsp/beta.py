@@ -239,7 +239,7 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
 
         result = save_api_key_to_rc(api_key)
         if not is_successful(result):
-            return {"status": "error", "message": result.failure()}
+            return {"status": "error", "message": result.failure().message}
 
         # clear cache to ensure the new api key is used
         get_codeflash_api_key.cache_clear()
@@ -317,7 +317,11 @@ def perform_function_optimization(  # noqa: PLR0911
 
         initialization_result = function_optimizer.can_be_optimized()
         if not is_successful(initialization_result):
-            return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": initialization_result.failure().message,
+            }
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
@@ -325,7 +329,11 @@ def perform_function_optimization(  # noqa: PLR0911
             code_context, should_run_experiment=should_run_experiment
         )
         if not is_successful(test_setup_result):
-            return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": test_setup_result.failure().message,
+            }
         (
             generated_tests,
             function_to_concolic_tests,
@@ -348,7 +356,11 @@ def perform_function_optimization(  # noqa: PLR0911
         )
 
         if not is_successful(baseline_setup_result):
-            return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": baseline_setup_result.failure().message,
+            }
 
         (
             function_to_optimize_qualified_name,
