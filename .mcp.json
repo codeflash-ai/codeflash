@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "codeflash": {
+      "type": "stdio",
+      "command": "codeflash",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ],
+      "env": {}
+    }
+  }
+}
