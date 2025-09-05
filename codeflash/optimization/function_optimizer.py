@@ -39,6 +39,7 @@ from codeflash.code_utils.code_utils import (
     has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
+    unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -656,17 +657,12 @@ class FunctionOptimizer:
         if not valid_optimizations:
             return None
         # need to figure out the best candidate here before we return best_optimization
-        ranking = self.executor.submit(
-            ai_service_client.generate_ranking,
-            diffs=[],
-            optimization_ids=[],
-            speedups=[],
-            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-        )
-        print(ranking)
         # reassign the shorter code here
         valid_candidates_with_shorter_code = []
         diff_lens_list = []  # character level diff
+        speedups_list = []
+        optimization_ids = []
+        diff_strs = []
         runtimes_list = []
         for valid_opt in valid_optimizations:
             valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.flat.strip()))
@@ -690,12 +686,33 @@ class FunctionOptimizer:
             diff_lens_list.append(
                 diff_length(new_best_opt.candidate.source_code.flat, code_context.read_writable_code.flat)
             )  # char level diff
+            diff_strs.append(
+                unified_diff_strings(code_context.read_writable_code.flat, new_best_opt.candidate.source_code.flat)
+            )
+            speedups_list.append(
+                1
+                + performance_gain(
+                    original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=new_best_opt.runtime
+                )
+            )
+            optimization_ids.append(new_best_opt.candidate.optimization_id)
             runtimes_list.append(new_best_opt.runtime)
-        diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
-        runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
-        # TODO: better way to resolve conflicts with same min ranking
-        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
-        min_key = min(overall_ranking, key=overall_ranking.get)
+        ranking = self.executor.submit(
+            ai_service_client.generate_ranking,
+            diffs=diff_strs,
+            optimization_ids=optimization_ids,
+            speedups=speedups_list,
+            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+        )
+        ranking = [x - 1 for x in ranking]
+        if ranking:
+            min_key = ranking[0]
+        else:
+            diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
+            runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+            # TODO: better way to resolve conflicts with same min ranking
+            overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
+            min_key = min(overall_ranking, key=overall_ranking.get)
         best_optimization = valid_candidates_with_shorter_code[min_key]
         # reassign code string which is the shortest
         ai_service_client.log_results(
