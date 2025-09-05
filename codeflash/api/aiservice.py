@@ -354,7 +354,7 @@ class AiServiceClient:
         return ""
 
     def generate_ranking(  # noqa: D417
-        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[int]
+        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[float]
     ) -> list[int] | None:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
