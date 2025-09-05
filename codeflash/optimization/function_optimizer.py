@@ -656,6 +656,14 @@ class FunctionOptimizer:
         if not valid_optimizations:
             return None
         # need to figure out the best candidate here before we return best_optimization
+        ranking = self.executor.submit(
+            ai_service_client.generate_ranking,
+            diffs=[],
+            optimization_ids=[],
+            speedups=[],
+            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+        )
+        print(ranking)
         # reassign the shorter code here
         valid_candidates_with_shorter_code = []
         diff_lens_list = []  # character level diff
