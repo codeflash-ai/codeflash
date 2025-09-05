@@ -20,6 +20,7 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
+from codeflash.lsp.helpers import lsp_log
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -41,6 +42,12 @@ logging.basicConfig(
 
 logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
+
+real_info_log_fn = logger.info
+logger.info = lambda msg, *args, **kwargs: lsp_log(msg, real_info_log_fn, *args, **kwargs)
+
+real_debug_log_fn = logger.debug
+logger.debug = lambda msg, *args, **kwargs: lsp_log(msg, real_debug_log_fn, *args, **kwargs)
 
 
 def paneled_text(

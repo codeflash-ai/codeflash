@@ -111,7 +111,7 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
     from codeflash.code_utils.github_utils import require_github_app_or_exit
 
     is_init: bool = args.command.startswith("init") if args.command else False
-    if args.verbose:
+    if args.verbose or is_LSP_enabled():
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
         logging_config.set_level(logging.INFO, echo_setting=not is_init)

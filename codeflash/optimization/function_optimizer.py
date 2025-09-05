@@ -169,10 +169,12 @@ class CandidateProcessor:
         for candidate in refinement_response:
             self.candidate_queue.put(candidate)
 
-        self.candidate_len += len(refinement_response)
-        logger.info(
-            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
-        )
+        if len(refinement_response) > 0:
+            self.candidate_len += len(refinement_response)
+            logger.info(
+                f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
+            )
+
         self.refinement_done = True
 
         return self.get_next_candidate()
