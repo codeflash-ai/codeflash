@@ -171,9 +171,10 @@ class CandidateProcessor:
             self.candidate_queue.put(candidate)
 
         self.candidate_len += len(refinement_response)
-        logger.info(
-            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
-        )
+        if len(refinement_response) > 0:
+            logger.info(
+                f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
+            )
         self.refinement_done = True
 
         return self.get_next_candidate()
@@ -697,15 +698,17 @@ class FunctionOptimizer:
             )
             optimization_ids.append(new_best_opt.candidate.optimization_id)
             runtimes_list.append(new_best_opt.runtime)
-        ranking = self.executor.submit(
+        future_ranking = self.executor.submit(
             ai_service_client.generate_ranking,
             diffs=diff_strs,
             optimization_ids=optimization_ids,
             speedups=speedups_list,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
         )
-        ranking = [x - 1 for x in ranking]
+        concurrent.futures.wait([future_ranking])
+        ranking = future_ranking.result()
         if ranking:
+            ranking = [x - 1 for x in ranking]
             min_key = ranking[0]
         else:
             diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
