@@ -387,7 +387,7 @@ class AiServiceClient:
         logger.info("Generating ranking")
         console.rule()
         try:
-            response = self.make_ai_service_request("/ranker", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/rank", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating ranking: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
