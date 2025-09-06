@@ -15,8 +15,8 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import (
-    check_running_in_git_repo,
+from codeflash.code_utils.git_utils import check_running_in_git_repo
+from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
@@ -343,16 +343,18 @@ class Optimizer:
                             optimizations_found += 1
                             # create a diff patch for successful optimization
                             if self.current_worktree:
-                                read_writable_code = best_optimization.unwrap().code_context.read_writable_code
+                                best_opt = best_optimization.unwrap()
+                                read_writable_code = best_opt.code_context.read_writable_code
                                 relative_file_paths = [
                                     code_string.file_path for code_string in read_writable_code.code_strings
                                 ]
-                                patch_path = create_diff_patch_from_worktree(
+                                metadata = create_diff_patch_from_worktree(
                                     self.current_worktree,
                                     relative_file_paths,
-                                    self.current_function_optimizer.function_to_optimize.qualified_name,
+                                    fto_name=function_to_optimize.qualified_name,
+                                    metadata_input={},
                                 )
-                                self.patch_files.append(patch_path)
+                                self.patch_files.append(metadata["patch_path"])
                                 if i < len(functions_to_optimize) - 1:
                                     create_worktree_snapshot_commit(
                                         self.current_worktree,
