@@ -20,6 +20,23 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
 
+def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
+    """Return the unified diff between two code strings as a single string.
+
+    :param code1: First code string (original).
+    :param code2: Second code string (modified).
+    :param fromfile: Label for the first code string.
+    :param tofile: Label for the second code string.
+    :return: Unified diff as a string.
+    """
+    code1_lines = code1.splitlines(keepends=True)
+    code2_lines = code2.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(code1_lines, code2_lines, fromfile=fromfile, tofile=tofile, lineterm="")
+
+    return "".join(diff)
+
+
 def diff_length(a: str, b: str) -> int:
     """Compute the length (in characters) of the unified diff between two strings.
 
