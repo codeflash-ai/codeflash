@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
-import os
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -20,6 +20,7 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
+from codeflash.lsp.helpers import enhanced_log, is_LSP_enabled
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -30,7 +31,7 @@ DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
 
-if os.getenv("CODEFLASH_LSP"):
+if is_LSP_enabled():
     console.quiet = True
 
 logging.basicConfig(
@@ -41,6 +42,18 @@ logging.basicConfig(
 
 logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
+
+# override the logger to reformat the messages for the lsp
+for level in ("info", "debug", "warning", "error"):
+    real_fn = getattr(logger, level)
+    setattr(logger, level, lambda msg, *args, _real_fn=real_fn, **kwargs: enhanced_log(msg, _real_fn, *args, **kwargs))
+
+
+def lsp_log(serializable: dict[str, Any], *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+    if not is_LSP_enabled():
+        return
+    msg_str = json.dumps(serializable)
+    logger.info(msg_str, *args, **kwargs)
 
 
 def paneled_text(
@@ -62,8 +75,13 @@ def code_print(code_str: str) -> None:
     """Print code with syntax highlighting."""
     from rich.syntax import Syntax
 
+    formatted_code = Syntax(code_str, "python", line_numbers=True, theme="github-dark")
+    # if is_LSP_enabled():
+    #     logger.debug(formatted_code.__str__())
+    #     return
+
     console.rule()
-    console.print(Syntax(code_str, "python", line_numbers=True, theme="github-dark"))
+    console.print(formatted_code)
     console.rule()
 
 

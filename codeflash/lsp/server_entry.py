@@ -16,17 +16,15 @@ from codeflash.lsp.beta import server
 # Configure logging to stderr for VS Code output channel
 def setup_logging() -> logging.Logger:
     # Clear any existing handlers to prevent conflicts
-    root_logger = logging.getLogger()
+    root_logger = logging.getLogger("rich")
     root_logger.handlers.clear()
 
     # Set up stderr handler for VS Code output channel with [LSP-Server] prefix
     handler = logging.StreamHandler(sys.stderr)
-    # adding the :::: here for the client to easily extract the message from the log
-    handler.setFormatter(logging.Formatter("[LSP-Server] %(asctime)s [%(levelname)s]::::%(message)s"))
+    handler.setLevel(logging.DEBUG)
 
     # Configure root logger
     root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO)
 
     # Also configure the pygls logger specifically
     pygls_logger = logging.getLogger("pygls")
