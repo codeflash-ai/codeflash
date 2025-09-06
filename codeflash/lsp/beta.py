@@ -11,9 +11,17 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.code_utils.git_utils import create_diff_patch_from_worktree
+from codeflash.code_utils.git_worktree_utils import (
+    create_diff_patch_from_worktree,
+    get_patches_metadata,
+    overwrite_patch_metadata,
+)
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
-from codeflash.discovery.functions_to_optimize import filter_functions, get_functions_within_git_diff
+from codeflash.discovery.functions_to_optimize import (
+    filter_functions,
+    get_functions_inside_a_commit,
+    get_functions_within_git_diff,
+)
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -21,6 +29,8 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
     from lsprotocol import types
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 @dataclass
@@ -39,14 +49,40 @@ class ProvideApiKeyParams:
     api_key: str
 
 
+@dataclass
+class OnPatchAppliedParams:
+    patch_id: str
+
+
+@dataclass
+class OptimizableFunctionsInCommitParams:
+    commit_hash: str
+
+
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
 def get_functions_in_current_git_diff(
     server: CodeflashLanguageServer, _params: OptimizableFunctionsParams
-) -> dict[str, str | list[str]]:
+) -> dict[str, str | dict[str, list[str]]]:
     functions = get_functions_within_git_diff(uncommitted_changes=True)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+@server.feature("getOptimizableFunctionsInCommit")
+def get_functions_in_commit(
+    server: CodeflashLanguageServer, params: OptimizableFunctionsInCommitParams
+) -> dict[str, str | dict[str, list[str]]]:
+    functions = get_functions_inside_a_commit(params.commit_hash)
+    file_to_qualified_names = _group_functions_by_file(server, functions)
+    return {"functions": file_to_qualified_names, "status": "success"}
+
+
+def _group_functions_by_file(
+    server: CodeflashLanguageServer, functions: dict[str, list[FunctionToOptimize]]
+) -> dict[str, list[str]]:
     file_to_funcs_to_optimize, _ = filter_functions(
         modified_functions=functions,
         tests_root=server.optimizer.test_cfg.tests_root,
@@ -55,8 +91,10 @@ def get_functions_in_current_git_diff(
         module_root=server.optimizer.args.module_root,
         previous_checkpoint_functions={},
     )
-    qualified_names: list[str] = [func.qualified_name for funcs in file_to_funcs_to_optimize.values() for func in funcs]
-    return {"functions": qualified_names, "status": "success"}
+    file_to_qualified_names: dict[str, list[str]] = {
+        str(path): [f.qualified_name for f in funcs] for path, funcs in file_to_funcs_to_optimize.items()
+    }
+    return file_to_qualified_names
 
 
 @server.feature("getOptimizableFunctions")
@@ -216,6 +254,34 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
+@server.feature("retrieveSuccessfulOptimizations")
+def retrieve_successful_optimizations(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
+    metadata = get_patches_metadata()
+    return {"status": "success", "patches": metadata["patches"]}
+
+
+@server.feature("onPatchApplied")
+def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedParams) -> dict[str, str]:
+    # first remove the patch from the metadata
+    metadata = get_patches_metadata()
+
+    deleted_patch_file = None
+    new_patches = []
+    for patch in metadata["patches"]:
+        if patch["id"] == params.patch_id:
+            deleted_patch_file = patch["patch_path"]
+            continue
+        new_patches.append(patch)
+
+    # then remove the patch file
+    if deleted_patch_file:
+        overwrite_patch_metadata(new_patches)
+        patch_path = Path(deleted_patch_file)
+        patch_path.unlink(missing_ok=True)
+        return {"status": "success"}
+    return {"status": "error", "message": "Patch not found"}
+
+
 @server.feature("performFunctionOptimization")
 @server.thread()
 def perform_function_optimization(  # noqa: PLR0911
@@ -317,14 +383,24 @@ def perform_function_optimization(  # noqa: PLR0911
 
         # generate a patch for the optimization
         relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-        patch_file = create_diff_patch_from_worktree(
+
+        speedup = original_code_baseline.runtime / best_optimization.runtime
+
+        # get the original file path in the actual project (not in the worktree)
+        original_args, _ = server.optimizer.original_args_and_test_cfg
+        relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
+        original_file_path = Path(original_args.project_root / relative_file_path).resolve()
+
+        metadata = create_diff_patch_from_worktree(
             server.optimizer.current_worktree,
             relative_file_paths,
-            server.optimizer.current_function_optimizer.function_to_optimize.qualified_name,
+            metadata_input={
+                "fto_name": function_to_optimize_qualified_name,
+                "explanation": best_optimization.explanation_v2,
+                "file_path": str(original_file_path),
+                "speedup": speedup,
+            },
         )
-
-        optimized_source = best_optimization.candidate.source_code.markdown
-        speedup = original_code_baseline.runtime / best_optimization.runtime
 
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
@@ -333,8 +409,8 @@ def perform_function_optimization(  # noqa: PLR0911
             "status": "success",
             "message": "Optimization completed successfully",
             "extra": f"Speedup: {speedup:.2f}x faster",
-            "optimization": optimized_source,
-            "patch_file": str(patch_file),
+            "patch_file": metadata["patch_path"],
+            "patch_id": metadata["id"],
             "explanation": best_optimization.explanation_v2,
         }
     finally:
