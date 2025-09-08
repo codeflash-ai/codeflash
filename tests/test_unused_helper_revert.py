@@ -9,6 +9,8 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.context.unused_definition_remover import revert_unused_helper_functions
+
 
 
 @pytest.fixture
@@ -225,6 +227,15 @@ def helper_function_2(x):
 def test_no_unused_helpers_no_revert(temp_project):
     """Test that when all helpers are still used, nothing is reverted."""
     temp_dir, main_file, test_cfg = temp_project
+    
+    
+    # Store original content to verify nothing changes
+    original_content = main_file.read_text()
+    
+    revert_unused_helper_functions(temp_dir, [], {})
+    
+    # Verify the file content remains unchanged
+    assert main_file.read_text() == original_content, "File should remain unchanged when no helpers to revert"
 
     # Optimized version that still calls both helpers
     optimized_code = """
@@ -308,17 +319,23 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function.\"\"\"
     return x * 3
+
+def helper_function_1(y):  # Duplicate name to test line 575
+    \"\"\"Overloaded helper function.\"\"\"
+    return y + 10
 """)
 
-        # Optimized version that only calls one helper
+        # Optimized version that only calls one helper with aliased import
         optimized_code = """
 ```python:main.py
-from helpers import helper_function_1
+from helpers import helper_function_1 as h1
+import helpers as h_module
 
 def entrypoint_function(n):
-    \"\"\"Optimized function that only calls one helper.\"\"\"
-    result1 = helper_function_1(n)
-    return result1 + n * 3  # Inlined helper_function_2
+    \"\"\"Optimized function that only calls one helper with aliasing.\"\"\"
+    result1 = h1(n)  # Using aliased import
+    # Inlined helper_function_2 functionality: n * 3
+    return result1 + n * 3  # Fully inlined helper_function_2
 ```
 """
 
