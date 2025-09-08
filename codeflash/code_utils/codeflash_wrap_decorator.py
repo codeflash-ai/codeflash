@@ -299,6 +299,12 @@ def codeflash_performance_async(func: F) -> F:
         else:
             async_wrapper.index[test_id] = 0
 
+        # Initialize cumulative throughput tracking
+        if not hasattr(async_wrapper, "start_time"):
+            async_wrapper.start_time = time.perf_counter()
+        if not hasattr(async_wrapper, "total_operations"):
+            async_wrapper.total_operations = 0
+
         codeflash_test_index = async_wrapper.index[test_id]
         invocation_id = f"{line_id}_{codeflash_test_index}"
         test_stdout_tag = f"{test_module_name}:{(test_class_name + '.' if test_class_name else '')}{test_name}:{function_name}:{loop_index}:{invocation_id}"
@@ -319,7 +325,12 @@ def codeflash_performance_async(func: F) -> F:
         finally:
             gc.enable()
 
-        print(f"!######{test_stdout_tag}:{codeflash_duration}######!")
+        # Update cumulative throughput tracking
+        async_wrapper.total_operations += 1
+        elapsed_time = time.perf_counter() - async_wrapper.start_time
+        throughput = async_wrapper.total_operations / elapsed_time if elapsed_time > 0 else 0
+
+        print(f"!######{test_stdout_tag}:{codeflash_duration}:throughput_{throughput:.2f}_ops_per_sec######!")
 
         if exception:
             raise exception

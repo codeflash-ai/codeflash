@@ -37,7 +37,7 @@ def parse_func(file_path: Path) -> XMLParser:
 
 
 matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
-matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)(?::throughput_([\d\.]+)_ops_per_sec)?######!")
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -93,6 +93,7 @@ def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, tes
                         return_value=test_pickle,
                         timed_out=False,
                         verification_type=VerificationType.FUNCTION_CALL,
+                        throughput=None,
                     )
                 )
         except Exception as e:
@@ -160,6 +161,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     return_value=ret_val,
                     timed_out=False,
                     verification_type=VerificationType(verification_type) if verification_type else None,
+                    throughput=None,
                 )
             )
         except Exception:
@@ -293,6 +295,7 @@ def parse_test_xml(
                         return_value=None,
                         timed_out=timed_out,
                         stdout="",
+                        throughput=None,
                     )
                 )
 
@@ -300,15 +303,19 @@ def parse_test_xml(
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
                     end_match = end_matches.get(groups)
-                    iteration_id, runtime = groups[5], None
+                    iteration_id, runtime, throughput = groups[5], None, None
                     if end_match:
                         stdout = sys_stdout[match.end() : end_match.start()]
-                        split_val = end_match.groups()[5].split(":")
+                        end_groups = end_match.groups()
+                        split_val = end_groups[5].split(":")
                         if len(split_val) > 1:
                             iteration_id = split_val[0]
                             runtime = int(split_val[1])
                         else:
                             iteration_id, runtime = split_val[0], None
+                        # Extract throughput if present (group 6 is the throughput capture group)
+                        if len(end_groups) > 6 and end_groups[6] is not None:
+                            throughput = float(end_groups[6])
                     elif match_index == len(begin_matches) - 1:
                         stdout = sys_stdout[match.end() :]
                     else:
@@ -332,6 +339,7 @@ def parse_test_xml(
                             return_value=None,
                             timed_out=timed_out,
                             stdout=stdout,
+                            throughput=throughput,
                         )
                     )
 
@@ -420,6 +428,7 @@ def merge_test_results(
                         if result_bin.verification_type
                         else None,
                         stdout=xml_result.stdout,
+                        throughput=None,
                     )
                 )
         elif xml_results.test_results[0].id.iteration_id is not None:
@@ -450,6 +459,7 @@ def merge_test_results(
                         if bin_result.verification_type
                         else None,
                         stdout=xml_result.stdout,
+                        throughput=None,
                     )
                 )
         else:
@@ -477,6 +487,7 @@ def merge_test_results(
                         if bin_result.verification_type
                         else None,
                         stdout=xml_result.stdout,
+                        throughput=None,
                     )
                 )
 
