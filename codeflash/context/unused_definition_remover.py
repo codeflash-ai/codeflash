@@ -642,7 +642,10 @@ def detect_unused_helper_functions(
         # Find the optimized entrypoint function
         entrypoint_function_ast = None
         for node in ast.walk(optimized_ast):
-            if isinstance(node, ast.FunctionDef) and node.name == function_to_optimize.function_name:
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == function_to_optimize.function_name
+            ):
                 entrypoint_function_ast = node
                 break
 
