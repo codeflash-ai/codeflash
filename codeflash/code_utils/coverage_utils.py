@@ -14,7 +14,7 @@ def extract_dependent_function(main_function: str, code_context: CodeOptimizatio
     """Extract the single dependent function from the code context excluding the main function."""
     ast_tree = ast.parse(code_context.testgen_context_code)
 
-    dependent_functions = {node.name for node in ast_tree.body if isinstance(node, ast.FunctionDef)}
+    dependent_functions = {node.name for node in ast_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
     if main_function in dependent_functions:
         dependent_functions.discard(main_function)
