@@ -93,7 +93,9 @@ def async_speedup_critic(
         throughput_gain = (candidate_throughput - original_throughput) / original_throughput
         if throughput_gain > noise_floor:
             # Throughput improved above noise floor - accept optimization
-            return True if best_runtime_until_now is None else candidate_result.best_test_runtime < best_runtime_until_now
+            return (
+                True if best_runtime_until_now is None else candidate_result.best_test_runtime < best_runtime_until_now
+            )
 
     # Fall back to traditional runtime evaluation
     perf_gain = performance_gain(

@@ -37,7 +37,9 @@ def parse_func(file_path: Path) -> XMLParser:
 
 
 matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
-matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)(?::throughput_([\d\.]+)_ops_per_sec)?######!")
+matches_re_end = re.compile(
+    r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)(?::throughput_([\d\.]+)_ops_per_sec)?######!"
+)
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:

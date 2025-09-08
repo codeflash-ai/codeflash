@@ -265,7 +265,6 @@ class OptimFunctionCollector(cst.CSTVisitor):
             self.new_functions.append(node)
         return False
 
-
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
         if self.current_class:
             return False  # If already in a class, do not recurse deeper
@@ -315,7 +314,6 @@ class OptimFunctionReplacer(cst.CSTTransformer):
             return self.modified_init_functions[self.current_class]
 
         return updated_node
-
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:
         if self.current_class:
