@@ -19,6 +19,8 @@ from unittest import TestCase
 import pytest
 from pluggy import HookspecMarker
 
+from codeflash.code_utils.config_consts import CONSISTENT_DURATION_TOLERANCE, CONSISTENT_LOOP_COUNT
+
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
     from _pytest.main import Session
@@ -271,6 +273,8 @@ class PytestLoops:
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
+        durations: list[float] = []
+
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
@@ -284,9 +288,9 @@ class PytestLoops:
 
         count: int = 0
 
-        while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
+        while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
-            total_time = self._get_total_time(session)
+            loop_start = _ORIGINAL_TIME_TIME()
 
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
@@ -304,8 +308,22 @@ class PytestLoops:
                     raise session.Failed(session.shouldfail)
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
+
+            loop_end = _ORIGINAL_TIME_TIME()
+            loop_duration = loop_end - loop_start
+            durations.append(loop_duration)
+
+            # Consistency check
+            if len(durations) >= CONSISTENT_LOOP_COUNT:
+                recent = durations[-CONSISTENT_LOOP_COUNT:]
+                avg = sum(recent) / CONSISTENT_LOOP_COUNT
+                consistent = all(abs(d - avg) / avg <= CONSISTENT_DURATION_TOLERANCE for d in recent)
+                if consistent:
+                    break
+
             if self._timed_out(session, start_time, count):
-                break  # exit loop
+                break
+
             _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
         return True
 
