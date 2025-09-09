@@ -203,25 +203,24 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             assert path_obj.exists(), f"ignore-paths config must be a valid path. Path {path} does not exist"
             normalized_ignore_paths.append(path_obj.resolve())
         args.ignore_paths = normalized_ignore_paths
-    # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = Path(args.module_root).resolve()
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
-    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
+    root = project_root_from_pyproject_file(pyproject_file_path)
+    args.project_root = root
     args.tests_root = Path(args.tests_root).resolve()
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
-    args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
+    args.test_project_root = root
     if is_LSP_enabled():
         args.all = None
         return args
     return handle_optimize_all_arg_parsing(args)
 
 
-def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
-    if pyproject_file_path.parent == module_root:
-        return module_root
-    return module_root.parent.resolve()
+def project_root_from_pyproject_file(pyproject_file_path: Path) -> Path:
+    """Assume that the pyproject.toml file is in the root of the project."""
+    return pyproject_file_path.parent
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:

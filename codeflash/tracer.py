@@ -19,7 +19,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.cli import project_root_from_module_root
+from codeflash.cli_cmds.cli import project_root_from_pyproject_file
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
@@ -84,7 +84,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         parsed_args.outfile = Path(parsed_args.outfile).resolve()
     outfile = parsed_args.outfile
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
-    project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
+    project_root = project_root_from_pyproject_file(found_config_path)
     if len(unknown_args) > 0:
         try:
             result_pickle_file_path = get_run_tmp_file("tracer_results_file.pkl")
