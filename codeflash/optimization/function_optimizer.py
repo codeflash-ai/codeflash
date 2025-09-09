@@ -53,6 +53,7 @@ from codeflash.code_utils.edit_generated_tests import (
 )
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
@@ -1301,7 +1302,7 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "root_dir": self.project_root,
+            "root_dir": git_root_dir(),
         }
 
         raise_pr = not self.args.no_pr
