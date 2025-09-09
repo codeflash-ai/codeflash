@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from codeflash.code_utils.line_profile_utils import LineProfilerDecorator
 
+
+@codeflash_line_profile
 def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     if not articles:
         return set()

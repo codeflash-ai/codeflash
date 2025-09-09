@@ -36,10 +36,9 @@ def test_add_decorator_imports_helper_in_class():
                 original_helper_code[helper_function_path] = helper_code
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
-        expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
-
-from code_to_optimize.bubble_sort_in_class import BubbleSortClass
+        expected_code_main = f"""from code_to_optimize.bubble_sort_in_class import BubbleSortClass
+from codeflash.code_utils.line_profile_utils import LineProfilerDecorator
+codeflash_line_profile = LineProfilerDecorator('{line_profiler_output_file}')
 
 
 @codeflash_line_profile
@@ -47,7 +46,8 @@ def sort_classmethod(x):
     y = BubbleSortClass()
     return y.sorter(x)
 """
-        expected_code_helper = """from line_profiler import profile as codeflash_line_profile
+        expected_code_helper = """from codeflash.code_utils.line_profile_utils import LineProfilerDecorator
+codeflash_line_profile = LineProfilerDecorator('{line_profiler_output_file}')
 
 
 def hi():
