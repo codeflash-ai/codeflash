@@ -220,7 +220,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 
 def project_root_from_pyproject_file(pyproject_file_path: Path) -> Path:
     """Assume that the pyproject.toml file is in the root of the project."""
-    return pyproject_file_path.parent
+    return pyproject_file_path.parent.resolve()
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
