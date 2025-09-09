@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import subprocess
@@ -68,6 +69,12 @@ class DependencyManager(Enum):
     UNKNOWN = auto()
 
 
+def launch_mcp() -> None:
+    from myserver import mcp
+
+    mcp.run(transport="stdio")
+
+
 def init_codeflash() -> None:
     try:
         welcome_panel = Panel(
@@ -129,6 +136,9 @@ def init_codeflash() -> None:
             padding=(1, 2),
         )
         console.print(completion_panel)
+
+        # Ask about adding MCP server to Claude configuration
+        prompt_claude_mcp_setup()
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
         sys.exit(0)
@@ -1229,3 +1239,93 @@ def ask_for_telemetry() -> bool:
         default=True,
         show_default=True,
     )
+
+
+def prompt_claude_mcp_setup() -> None:
+    """Prompt user to add Codeflash MCP server to their Claude configuration."""
+    from rich.prompt import Confirm
+
+    mcp_panel = Panel(
+        Text(
+            "🤖 Claude Code Integration\n\n"
+            "Would you like to add the Codeflash MCP server to your Claude Code configuration?\n"
+            "This will allow Claude Code to use Codeflash's optimization tools directly.",
+            style="bright_blue",
+        ),
+        title="🚀 Claude Code MCP Setup",
+        border_style="bright_blue",
+    )
+    console.print(mcp_panel)
+    console.print()
+
+    setup_mcp = Confirm.ask("Add Codeflash MCP server to Claude Code configuration?", default=True, show_default=True)
+
+    if setup_mcp:
+        try:
+            add_mcp_server_to_claude_config()
+        except Exception as e:
+            logger.error(f"Failed to add MCP server to Claude configuration: {e}")
+            console.print(
+                Panel(
+                    Text(
+                        "❌ Failed to add MCP server to Claude configuration.\n\n"
+                        "You can manually add it later by updating your Claude Code settings.",
+                        style="red",
+                    ),
+                    title="⚠️ Setup Failed",
+                    border_style="red",
+                )
+            )
+    else:
+        skip_panel = Panel(
+            Text("⏩️ Skipping Claude Code MCP setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
+        )
+        console.print(skip_panel)
+
+
+def add_mcp_server_to_claude_config() -> None:
+    """Add the Codeflash MCP server to Claude Code configuration."""
+    claude_config_dir = Path.cwd()
+    config_file = claude_config_dir / ".mcp.json"
+
+    # Create MCP server configuration
+    # TODO we assume uv exists,
+    codeflash_server_entry = {"codeflash": {"type": "stdio", "command": "codeflash", "args": ["mcp"], "env": {}}}
+
+    # Read existing config or create new one
+    if config_file.exists():
+        try:
+            with config_file.open("r", encoding="utf8") as f:
+                updated_config = json.load(f)
+            if "mcpServers" not in updated_config:
+                updated_config["mcpServers"] = {}
+            updated_config["mcpServers"].update(codeflash_server_entry)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Could not read existing MCP config: {e}")
+            updated_config = {"mcpServers": codeflash_server_entry}
+    else:
+        updated_config = {"mcpServers": codeflash_server_entry}
+
+    # Write the updated configuration
+    try:
+        with config_file.open("w", encoding="utf8") as f:
+            json.dump(updated_config, f, indent=2)
+
+        success_panel = Panel(
+            Text(
+                f"✅ Successfully added Codeflash MCP server to Claude Code configuration!\n\n"
+                f"Configuration saved to: {config_file}\n\n"
+                f"You can now use Codeflash optimization tools directly in Claude Code.",
+                style="green",
+                justify="left",
+            ),
+            title="🎉 MCP Setup Complete!",
+            border_style="bright_green",
+        )
+        console.print(success_panel)
+
+    except OSError as e:
+        error_str = f"Failed to write Claude Code MCP configuration: {e}"
+        raise RuntimeError(error_str) from e
+
+    console.print()
