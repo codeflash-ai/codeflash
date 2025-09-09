@@ -1302,10 +1302,12 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "root_dir": git_root_dir(),
         }
 
         raise_pr = not self.args.no_pr
+
+        if raise_pr or self.args.staging_review:
+            data["root_dir"] = git_root_dir()
 
         if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
