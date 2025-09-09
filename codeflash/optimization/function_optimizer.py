@@ -566,11 +566,7 @@ class FunctionOptimizer:
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     benchmark_tree = None
                     if speedup_critic(
-                        candidate_result, 
-                        original_code_baseline.runtime, 
-                        None, 
-                        self.function_to_optimize,
-                        original_baseline_results=original_code_baseline
+                        candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the original code. 🚀")  # TODO: Change this description
                         tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")

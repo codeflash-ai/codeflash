@@ -552,7 +552,6 @@ class FunctionTestInvocation:
     timed_out: Optional[bool]
     verification_type: Optional[str] = VerificationType.FUNCTION_CALL
     stdout: Optional[str] = None
-    throughput: Optional[float] = None  # Operations per second
 
     @property
     def unique_invocation_loop_id(self) -> str:
