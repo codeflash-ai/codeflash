@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import gc
 import inspect
@@ -209,6 +210,7 @@ def extract_test_context_from_frame() -> tuple[str, str | None, str]:
 def codeflash_behavior_async(func: F) -> F:
     @wraps(func)
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        loop = asyncio.get_running_loop()
         function_name = func.__name__
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
         loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
@@ -241,15 +243,15 @@ def codeflash_behavior_async(func: F) -> F:
         )
 
         exception = None
-        counter = time.perf_counter_ns()
+        counter = loop.time()
         gc.disable()
         try:
             ret = func(*args, **kwargs)  # coroutine creation has some overhead, though it is very small
-            counter = time.perf_counter_ns()
+            counter = loop.time()
             return_value = await ret  # let's measure the actual execution time of the code
-            codeflash_duration = time.perf_counter_ns() - counter
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
         except Exception as e:
-            codeflash_duration = time.perf_counter_ns() - counter
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
             exception = e
         finally:
             gc.enable()
@@ -284,6 +286,7 @@ def codeflash_behavior_async(func: F) -> F:
 def codeflash_performance_async(func: F) -> F:
     @wraps(func)
     async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        loop = asyncio.get_running_loop()
         function_name = func.__name__
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
         loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
@@ -306,15 +309,15 @@ def codeflash_performance_async(func: F) -> F:
         print(f"!$######{test_stdout_tag}######$!")
 
         exception = None
-        counter = time.perf_counter_ns()
+        counter = loop.time()
         gc.disable()
         try:
             ret = func(*args, **kwargs)
-            counter = time.perf_counter_ns()
+            counter = loop.time()
             return_value = await ret
-            codeflash_duration = time.perf_counter_ns() - counter
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
         except Exception as e:
-            codeflash_duration = time.perf_counter_ns() - counter
+            codeflash_duration = int((loop.time() - counter) * 1_000_000_000)
             exception = e
         finally:
             gc.enable()

@@ -3588,3 +3588,40 @@ class ChildClass:
     
     # Should collect __init__ method
     assert "ParentClass" in collector.modified_init_functions
+
+
+
+def test_is_zero_diff_async_sleep():
+    original_code = '''
+import time
+
+async def task():
+    time.sleep(1)
+    return "done"
+'''
+    optimized_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert not is_zero_diff(original_code, optimized_code)
+
+def test_is_zero_diff_with_equivalent_code():
+    original_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    optimized_code = '''
+import asyncio
+
+async def task():
+    """A task that does something."""
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert is_zero_diff(original_code, optimized_code)
