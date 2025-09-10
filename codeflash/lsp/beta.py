@@ -194,7 +194,7 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
     except Exception:
         return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
-    return {"status": "success", "module_root": args.module_root}
+    return {"status": "success", "moduleRoot": args.module_root}
 
 
 def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -> dict[str, str]:
