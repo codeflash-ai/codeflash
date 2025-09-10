@@ -334,7 +334,7 @@ class FunctionOptimizer:
                 )
             )
             logger.info(f"Generated test {i + 1}/{count_tests}:")
-            code_print(generated_test.generated_original_test_source)
+            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
@@ -372,7 +372,11 @@ class FunctionOptimizer:
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-        code_print(code_context.read_writable_code.flat)
+        code_print(
+            code_context.read_writable_code.flat,
+            file_name=self.function_to_optimize.file_path,
+            function_name=self.function_to_optimize.function_name,
+        )
 
         test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
             code_context, should_run_experiment=should_run_experiment
@@ -496,7 +500,7 @@ class FunctionOptimizer:
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"Optimization candidate {candidate_index}/{processor.candidate_len}:")
-                code_print(candidate.source_code.flat)
+                code_print(candidate.source_code.flat, file_name=f"candidate_{candidate_index}.py")
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
                 try:

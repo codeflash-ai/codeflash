@@ -30,8 +30,9 @@ class LspMessage:
 
     def serialize(self) -> str:
         data = asdict(self)
-        data["type"] = self.type()
-        return json.dumps(data)
+        # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
+        ordered = {"type": self.type(), **data}
+        return json.dumps(ordered)
 
 
 @dataclass
@@ -45,7 +46,7 @@ class LspTextMessage(LspMessage):
 @dataclass
 class LspCodeMessage(LspMessage):
     code: str
-    path: Optional[Path] = None
+    file_name: Optional[Path] = None
     function_name: Optional[str] = None
 
     def type(self) -> str:
@@ -66,3 +67,8 @@ class LspStatsMessage(LspMessage):
 
     def type(self) -> str:
         return "stats"
+
+
+if __name__ == "__main__":
+    msg = LspTextMessage(text="Hello World")
+    print(msg.serialize())

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
 import logging
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -21,11 +20,14 @@ from rich.progress import (
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
 from codeflash.lsp.helpers import enhanced_log, is_LSP_enabled
+from codeflash.lsp.lsp_message import LspCodeMessage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
     from rich.progress import TaskID
+
+    from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
@@ -49,11 +51,11 @@ for level in ("info", "debug", "warning", "error"):
     setattr(logger, level, lambda msg, *args, _real_fn=real_fn, **kwargs: enhanced_log(msg, _real_fn, *args, **kwargs))
 
 
-def lsp_log(serializable: dict[str, Any], *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+def lsp_log(message: LspMessage, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
     if not is_LSP_enabled():
         return
-    msg_str = json.dumps(serializable)
-    logger.info(msg_str, *args, **kwargs)
+    json_msg = message.serialize()
+    logger.info(json_msg, *args, **kwargs)
 
 
 def paneled_text(
@@ -71,7 +73,10 @@ def paneled_text(
     console.print(panel)
 
 
-def code_print(code_str: str) -> None:
+def code_print(code_str: str, file_name: Optional[str] = None, function_name: Optional[str] = None) -> None:
+    if is_LSP_enabled():
+        lsp_log(LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name))
+        return
     """Print code with syntax highlighting."""
     from rich.syntax import Syntax
 
