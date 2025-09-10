@@ -1707,7 +1707,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -1783,7 +1782,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 print("Hello world")
 def some_fn():
     a=np.zeros(10)
@@ -1862,7 +1860,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -1940,7 +1937,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -2019,7 +2015,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -2106,7 +2101,6 @@ print("Hello world")
 
 a = 6
 
-print("Hello world")
 if 2<3:
     a=4
 else:
@@ -3452,4 +3446,158 @@ def hydrate_input_text_actions_with_field_names(
     new_code = main_file.read_text(encoding="utf-8")
     main_file.unlink(missing_ok=True)
 
+    assert new_code == expected
+
+def test_duplicate_global_assignments_when_reverting_helpers():
+    root_dir = Path(__file__).parent.parent.resolve()
+    main_file = Path(root_dir / "code_to_optimize/temp_main.py").resolve()
+
+    original_code = '''"""Chunking objects not specific to a particular chunking strategy."""
+from __future__ import annotations
+import collections
+import copy
+from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
+import regex
+from typing_extensions import Self, TypeAlias
+from unstructured.utils import lazyproperty
+from unstructured.documents.elements import Element
+# ================================================================================================
+# MODEL
+# ================================================================================================
+CHUNK_MAX_CHARS_DEFAULT: int = 500
+# ================================================================================================
+# PRE-CHUNKER
+# ================================================================================================
+class PreChunker:
+    """Gathers sequential elements into pre-chunks as length constraints allow.
+    The pre-chunker's responsibilities are:
+    - **Segregate semantic units.** Identify semantic unit boundaries and segregate elements on
+      either side of those boundaries into different sections. In this case, the primary indicator
+      of a semantic boundary is a `Title` element. A page-break (change in page-number) is also a
+      semantic boundary when `multipage_sections` is `False`.
+    - **Minimize chunk count for each semantic unit.** Group the elements within a semantic unit
+      into sections as big as possible without exceeding the chunk window size.
+    - **Minimize chunks that must be split mid-text.** Precompute the text length of each section
+      and only produce a section that exceeds the chunk window size when there is a single element
+      with text longer than that window.
+    A Table element is placed into a section by itself. CheckBox elements are dropped.
+    The "by-title" strategy specifies breaking on section boundaries; a `Title` element indicates
+    a new "section", hence the "by-title" designation.
+    """
+    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
+        self._elements = elements
+        self._opts = opts
+    @lazyproperty
+    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
+        """The semantic-boundary detectors to be applied to break pre-chunks."""
+        return self._opts.boundary_predicates
+    def _is_in_new_semantic_unit(self, element: Element) -> bool:
+        """True when `element` begins a new semantic unit such as a section or page."""
+        # -- all detectors need to be called to update state and avoid double counting
+        # -- boundaries that happen to coincide, like Table and new section on same element.
+        # -- Using `any()` would short-circuit on first True.
+        semantic_boundaries = [pred(element) for pred in self._boundary_predicates]
+        return any(semantic_boundaries)
+'''
+    main_file.write_text(original_code, encoding="utf-8")
+    optim_code = f'''```python:{main_file.relative_to(root_dir)}
+# ================================================================================================
+# PRE-CHUNKER
+# ================================================================================================
+from __future__ import annotations
+from typing import Iterable
+from unstructured.documents.elements import Element
+from unstructured.utils import lazyproperty
+class PreChunker:
+    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
+        self._elements = elements
+        self._opts = opts
+    @lazyproperty
+    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
+        """The semantic-boundary detectors to be applied to break pre-chunks."""
+        return self._opts.boundary_predicates
+    def _is_in_new_semantic_unit(self, element: Element) -> bool:
+        """True when `element` begins a new semantic unit such as a section or page."""
+        # Use generator expression for lower memory usage and avoid building intermediate list
+        for pred in self._boundary_predicates:
+            if pred(element):
+                return True
+        return False
+```
+'''
+
+    func = FunctionToOptimize(function_name="_is_in_new_semantic_unit", parents=[FunctionParent("PreChunker", "ClassDef")], file_path=main_file)
+    test_config = TestConfig(
+        tests_root=root_dir / "tests/pytest",
+        tests_project_rootdir=root_dir,
+        project_root_path=root_dir,
+        test_framework="pytest",
+        pytest_cmd="pytest",
+    )
+    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+
+    original_helper_code: dict[Path, str] = {}
+    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
+    for helper_function_path in helper_function_paths:
+        with helper_function_path.open(encoding="utf8") as f:
+            helper_code = f.read()
+            original_helper_code[helper_function_path] = helper_code
+
+    func_optimizer.args = Args()
+    func_optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optim_code), original_helper_code=original_helper_code
+    )
+
+
+    new_code = main_file.read_text(encoding="utf-8")
+    main_file.unlink(missing_ok=True)
+
+    expected = '''"""Chunking objects not specific to a particular chunking strategy."""
+from __future__ import annotations
+import collections
+import copy
+from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
+import regex
+from typing_extensions import Self, TypeAlias
+from unstructured.utils import lazyproperty
+from unstructured.documents.elements import Element
+# ================================================================================================
+# MODEL
+# ================================================================================================
+CHUNK_MAX_CHARS_DEFAULT: int = 500
+# ================================================================================================
+# PRE-CHUNKER
+# ================================================================================================
+class PreChunker:
+    """Gathers sequential elements into pre-chunks as length constraints allow.
+    The pre-chunker's responsibilities are:
+    - **Segregate semantic units.** Identify semantic unit boundaries and segregate elements on
+      either side of those boundaries into different sections. In this case, the primary indicator
+      of a semantic boundary is a `Title` element. A page-break (change in page-number) is also a
+      semantic boundary when `multipage_sections` is `False`.
+    - **Minimize chunk count for each semantic unit.** Group the elements within a semantic unit
+      into sections as big as possible without exceeding the chunk window size.
+    - **Minimize chunks that must be split mid-text.** Precompute the text length of each section
+      and only produce a section that exceeds the chunk window size when there is a single element
+      with text longer than that window.
+    A Table element is placed into a section by itself. CheckBox elements are dropped.
+    The "by-title" strategy specifies breaking on section boundaries; a `Title` element indicates
+    a new "section", hence the "by-title" designation.
+    """
+    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
+        self._elements = elements
+        self._opts = opts
+    @lazyproperty
+    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
+        """The semantic-boundary detectors to be applied to break pre-chunks."""
+        return self._opts.boundary_predicates
+    def _is_in_new_semantic_unit(self, element: Element) -> bool:
+        """True when `element` begins a new semantic unit such as a section or page."""
+        # Use generator expression for lower memory usage and avoid building intermediate list
+        for pred in self._boundary_predicates:
+            if pred(element):
+                return True
+        return False
+'''
     assert new_code == expected

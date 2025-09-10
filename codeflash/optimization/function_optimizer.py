@@ -822,7 +822,10 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: CodeStringsMarkdown, original_helper_code: str
+        self,
+        code_context: CodeOptimizationContext,
+        optimized_code: CodeStringsMarkdown,
+        original_helper_code: dict[Path, str],
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
