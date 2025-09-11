@@ -7,11 +7,11 @@ import time
 import requests
 from packaging import version
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.version import __version__
 
 # Simple cache to avoid checking too frequently
-_version_cache = {"version": '0.0.0', "timestamp": float(0)}
+_version_cache = {"version": "0.0.0", "timestamp": float(0)}
 _cache_duration = 3600  # 1 hour cache
 
 
@@ -22,20 +22,23 @@ def get_latest_version_from_pypi() -> str | None:
         The latest version string from PyPI, or None if the request fails.
 
     """
-    # Check cache first
     current_time = time.time()
-    if _version_cache["version"] is not None and current_time - _version_cache["timestamp"] < _cache_duration:
-        return _version_cache["version"]
+    # Use local variables for fast access
+    cache = _version_cache
+    cache_duration = _cache_duration
+
+    if cache["version"] is not None and current_time - cache["timestamp"] < cache_duration:
+        return cache["version"]
 
     try:
         response = requests.get("https://pypi.org/pypi/codeflash/json", timeout=2)
-        if response.status_code == 200:
+        if response.ok:
             data = response.json()
             latest_version = data["info"]["version"]
 
             # Update cache
-            _version_cache["version"] = latest_version
-            _version_cache["timestamp"] = current_time
+            cache["version"] = latest_version
+            cache["timestamp"] = current_time
 
             return latest_version
         logger.debug(f"Failed to fetch version from PyPI: {response.status_code}")
@@ -63,17 +66,19 @@ def check_for_newer_minor_version() -> None:
     if not latest_version:
         return
 
+    # Minimize attribute lookups
+    version_parse = version.parse
+    InvalidVersion = version.InvalidVersion
+
     try:
-        current_parsed = version.parse(__version__)
-        latest_parsed = version.parse(latest_version)
+        current_parsed = version_parse(__version__)
+        latest_parsed = version_parse(latest_version)
 
         # Check if there's a newer minor version available
         # We only notify for minor version updates, not patch updates
-        if latest_parsed > current_parsed: # < > == operators can be directly applied on version objects
-            logger.warning(
-                f"A newer version({latest_version}) of Codeflash is available, please update soon!"
-            )
+        if latest_parsed > current_parsed:
+            logger.warning(f"A newer version({latest_version}) of Codeflash is available, please update soon!")
 
-    except version.InvalidVersion as e:
+    except InvalidVersion as e:
         logger.debug(f"Invalid version format: {e}")
         return
