@@ -14,8 +14,6 @@ from __future__ import annotations
 import json
 import pickle
 import subprocess
-import time
-
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
