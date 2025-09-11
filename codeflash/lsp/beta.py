@@ -11,6 +11,7 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
+from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import (
     create_diff_patch_from_worktree,
     get_patches_metadata,
@@ -320,6 +321,12 @@ def perform_function_optimization(  # noqa: PLR0911
             return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+
+        code_print(
+            code_context.read_writable_code.flat,
+            file_name=current_function.file_path,
+            function_name=current_function.function_name,
+        )
 
         test_setup_result = function_optimizer.generate_and_instrument_tests(
             code_context, should_run_experiment=should_run_experiment

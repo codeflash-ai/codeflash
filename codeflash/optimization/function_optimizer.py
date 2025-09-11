@@ -365,6 +365,7 @@ class FunctionOptimizer:
             )
         )
 
+    # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):

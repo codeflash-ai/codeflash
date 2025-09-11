@@ -10,9 +10,8 @@ json_primitive_types = (str, float, int, bool)
 
 @dataclass
 class LspMessage:
-    takes_time: bool = field(
-        default=False, kw_only=True
-    )  # to show a loading indicator if the operation is taking time like generating candidates or tests
+    # to show a loading indicator if the operation is taking time like generating candidates or tests
+    takes_time: bool = field(default=False, kw_only=True)
 
     def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
         if isinstance(obj, list):
@@ -29,7 +28,7 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
-        data = asdict(self)
+        data = self._loop_through(asdict(self))
         # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
         return json.dumps(ordered)
@@ -67,8 +66,3 @@ class LspStatsMessage(LspMessage):
 
     def type(self) -> str:
         return "stats"
-
-
-if __name__ == "__main__":
-    msg = LspTextMessage(text="Hello World")
-    print(msg.serialize())

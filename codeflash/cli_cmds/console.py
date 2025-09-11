@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -19,7 +19,8 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
-from codeflash.lsp.helpers import enhanced_log, is_LSP_enabled
+from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.lsp_logger import enhanced_log
 from codeflash.lsp.lsp_message import LspCodeMessage
 
 if TYPE_CHECKING:
@@ -51,11 +52,11 @@ for level in ("info", "debug", "warning", "error"):
     setattr(logger, level, lambda msg, *args, _real_fn=real_fn, **kwargs: enhanced_log(msg, _real_fn, *args, **kwargs))
 
 
-def lsp_log(message: LspMessage, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+def lsp_log(message: LspMessage) -> None:
     if not is_LSP_enabled():
         return
     json_msg = message.serialize()
-    logger.info(json_msg, *args, **kwargs)
+    logger.info(json_msg)
 
 
 def paneled_text(
@@ -81,9 +82,6 @@ def code_print(code_str: str, file_name: Optional[str] = None, function_name: Op
     from rich.syntax import Syntax
 
     formatted_code = Syntax(code_str, "python", line_numbers=True, theme="github-dark")
-    # if is_LSP_enabled():
-    #     logger.debug(formatted_code.__str__())
-    #     return
 
     console.rule()
     console.print(formatted_code)
