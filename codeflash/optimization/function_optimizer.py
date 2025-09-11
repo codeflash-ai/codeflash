@@ -170,10 +170,12 @@ class CandidateProcessor:
         for candidate in refinement_response:
             self.candidate_queue.put(candidate)
 
-        self.candidate_len += len(refinement_response)
-        logger.info(
-            f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
-        )
+        if len(refinement_response) > 0:
+            self.candidate_len += len(refinement_response)
+            logger.info(
+                f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
+            )
+
         self.refinement_done = True
 
         return self.get_next_candidate()
@@ -1677,7 +1679,7 @@ class FunctionOptimizer:
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f"Nonzero return code {run_result.returncode} when running tests in "
+                f"!lsp:Nonzero return code {run_result.returncode} when running tests in "
                 f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
