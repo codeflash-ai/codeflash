@@ -53,6 +53,7 @@ from codeflash.code_utils.edit_generated_tests import (
 )
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
@@ -820,7 +821,10 @@ class FunctionOptimizer:
         return new_code, new_helper_code
 
     def replace_function_and_helpers_with_optimized_code(
-        self, code_context: CodeOptimizationContext, optimized_code: CodeStringsMarkdown, original_helper_code: str
+        self,
+        code_context: CodeOptimizationContext,
+        optimized_code: CodeStringsMarkdown,
+        original_helper_code: dict[Path, str],
     ) -> bool:
         did_update = False
         read_writable_functions_by_file_path = defaultdict(set)
@@ -1298,10 +1302,12 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "root_dir": self.project_root,
         }
 
         raise_pr = not self.args.no_pr
+
+        if raise_pr or self.args.staging_review:
+            data["root_dir"] = git_root_dir()
 
         if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote

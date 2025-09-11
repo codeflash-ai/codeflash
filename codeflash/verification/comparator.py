@@ -7,6 +7,7 @@ import enum
 import math
 import re
 import types
+from collections import ChainMap, OrderedDict, deque
 from typing import Any
 
 import sentry_sdk
@@ -70,7 +71,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
             if type_obj.__name__ != new_type_obj.__name__ or type_obj.__qualname__ != new_type_obj.__qualname__:
                 return False
-        if isinstance(orig, (list, tuple)):
+        if isinstance(orig, (list, tuple, deque, ChainMap)):
             if len(orig) != len(new):
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
@@ -93,6 +94,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 enum.Enum,
                 type,
                 range,
+                OrderedDict,
             ),
         ):
             return orig == new
