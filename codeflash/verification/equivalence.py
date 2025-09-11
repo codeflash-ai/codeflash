@@ -1,3 +1,4 @@
+import difflib
 import sys
 
 from codeflash.cli_cmds.console import logger
@@ -10,6 +11,7 @@ INCREASED_RECURSION_LIMIT = 5000
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> bool:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
+        logger.debug("One of the test results is empty, cannot compare.")
         return False  # empty test results are not equal
     original_recursion_limit = sys.getrecursionlimit()
     if original_recursion_limit < INCREASED_RECURSION_LIMIT:
@@ -33,6 +35,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             continue
         if original_test_result is None or cdd_test_result is None:
             are_equal = False
+            logger.debug("one of the test results is missing")
             break
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
@@ -67,6 +70,18 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
         ):
+            diff_lines = list(
+                difflib.unified_diff(
+                    original_test_result.stdout.splitlines(keepends=True),
+                    cdd_test_result.stdout.splitlines(keepends=True),
+                    fromfile="original_stdout",
+                    tofile="candidate_stdout",
+                    lineterm="",
+                )
+            )
+            diff_output = "".join(diff_lines) if diff_lines else "No diff available"
+
+            logger.debug("Test ID %s has different stdout.\nDiff:\n%s", test_id, diff_output)
             are_equal = False
             break
 
@@ -76,9 +91,16 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             TestType.GENERATED_REGRESSION,
             TestType.REPLAY_TEST,
         } and (cdd_test_result.did_pass != original_test_result.did_pass):
+            logger.debug(
+                "Test ID %s has different pass/fail status.\nOriginal did_pass: %s\nCandidate did_pass: %s",
+                test_id,
+                original_test_result.did_pass,
+                cdd_test_result.did_pass,
+            )
             are_equal = False
             break
     sys.setrecursionlimit(original_recursion_limit)
     if did_all_timeout:
+        logger.debug("All tests timed out in the original results, cannot compare.")
         return False
     return are_equal
