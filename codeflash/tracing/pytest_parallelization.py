@@ -5,6 +5,7 @@ from math import ceil
 from pathlib import Path
 from random import shuffle
 
+
 def pytest_split(
     arguments: list[str], num_splits: int | None = None
 ) -> tuple[list[list[str]] | None, list[str] | None]:
@@ -53,7 +54,7 @@ def pytest_split(
     if num_splits is None:
         num_splits = os.cpu_count() or 4
 
-    #randomize to increase chances of all splits being balanced
+    # randomize to increase chances of all splits being balanced
     test_files = list(test_files)
     shuffle(test_files)
 
