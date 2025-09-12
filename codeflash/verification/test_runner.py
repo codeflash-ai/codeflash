@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
+from codeflash.code_utils.config_consts import get_total_looping_time
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.models.models import TestFiles, TestType
 
@@ -37,7 +37,7 @@ def run_behavioral_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: int = get_total_looping_time(),
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
@@ -151,7 +151,7 @@ def run_line_profile_tests(
     cwd: Path,
     test_framework: str,
     *,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: float = get_total_looping_time(),
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
@@ -237,7 +237,7 @@ def run_benchmarking_tests(
     cwd: Path,
     test_framework: str,
     *,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: float = get_total_looping_time(),
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,

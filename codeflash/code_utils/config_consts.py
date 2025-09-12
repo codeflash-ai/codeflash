@@ -11,3 +11,26 @@ COVERAGE_THRESHOLD = 60.0
 MIN_TESTCASE_PASSED_THRESHOLD = 6
 REPEAT_OPTIMIZATION_PROBABILITY = 0.1
 DEFAULT_IMPORTANCE_THRESHOLD = 0.001
+
+# LSP-specific
+N_CANDIDATES_LSP = 3
+N_TESTS_TO_GENERATE_LSP = 1
+TOTAL_LOOPING_TIME_LSP = 5.0
+
+
+def get_n_candidates() -> int:
+    from codeflash.lsp.helpers import is_LSP_enabled
+
+    return N_CANDIDATES_LSP if is_LSP_enabled() else N_CANDIDATES
+
+
+def get_n_tests_to_generate() -> int:
+    from codeflash.lsp.helpers import is_LSP_enabled
+
+    return N_TESTS_TO_GENERATE_LSP if is_LSP_enabled() else N_TESTS_TO_GENERATE
+
+
+def get_total_looping_time() -> float:
+    from codeflash.lsp.helpers import is_LSP_enabled
+
+    return TOTAL_LOOPING_TIME_LSP if is_LSP_enabled() else TOTAL_LOOPING_TIME

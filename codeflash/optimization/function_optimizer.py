@@ -42,10 +42,10 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    N_CANDIDATES,
-    N_TESTS_TO_GENERATE,
     REPEAT_OPTIMIZATION_PROBABILITY,
-    TOTAL_LOOPING_TIME,
+    get_n_candidates,
+    get_n_tests_to_generate,
+    get_total_looping_time,
 )
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
@@ -227,8 +227,9 @@ class FunctionOptimizer:
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
+        n_tests = get_n_tests_to_generate()
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=N_TESTS_TO_GENERATE + 2 if self.experiment_id is None else N_TESTS_TO_GENERATE + 3
+            max_workers=n_tests + 2 if self.experiment_id is None else n_tests + 3
         )
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -278,17 +279,18 @@ class FunctionOptimizer:
         ]
     ]:
         """Generate and instrument tests, returning all necessary data for optimization."""
+        n_tests = get_n_tests_to_generate()
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
             )
-            for test_index in range(N_TESTS_TO_GENERATE)
+            for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
             )
-            for test_index in range(N_TESTS_TO_GENERATE)
+            for test_index in range(n_tests)
         ]
 
         with progress_bar(
@@ -971,7 +973,8 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet], str]:
-        assert len(generated_test_paths) == N_TESTS_TO_GENERATE
+        n_tests = get_n_tests_to_generate()
+        assert len(generated_test_paths) == n_tests
         console.rule()
         # Submit the test generation task as future
         future_tests = self.submit_test_generation_tasks(
@@ -981,12 +984,13 @@ class FunctionOptimizer:
             generated_test_paths,
             generated_perf_test_paths,
         )
+        n_candidates = get_n_candidates()
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
             read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
-            N_CANDIDATES,
+            n_candidates,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
         )
         future_candidates_exp = None
@@ -1001,7 +1005,7 @@ class FunctionOptimizer:
                 read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
-                N_CANDIDATES,
+                n_candidates,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
             )
             futures.append(future_candidates_exp)
@@ -1375,12 +1379,13 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
+                total_looping_time = get_total_looping_time()
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME,
+                    testing_time=total_looping_time,
                     enable_coverage=test_framework == "pytest",
                     code_context=code_context,
                 )
@@ -1407,7 +1412,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=0,
-                    testing_time=TOTAL_LOOPING_TIME,
+                    testing_time=total_looping_time,
                     enable_coverage=False,
                     code_context=code_context,
                 )
@@ -1415,7 +1420,7 @@ class FunctionOptimizer:
                 benchmarking_results = TestResults()
                 start_time: float = time.time()
                 for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                    if i >= 5 and time.time() - start_time >= total_looping_time * 1.5:
                         # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
@@ -1424,7 +1429,7 @@ class FunctionOptimizer:
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=0,
-                        testing_time=TOTAL_LOOPING_TIME,
+                        testing_time=total_looping_time,
                         enable_coverage=False,
                         code_context=code_context,
                         unittest_loop_index=i + 1,
@@ -1514,12 +1519,13 @@ class FunctionOptimizer:
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
 
+                total_looping_time = get_total_looping_time()
                 candidate_behavior_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
-                    testing_time=TOTAL_LOOPING_TIME,
+                    testing_time=total_looping_time,
                     enable_coverage=False,
                 )
             # Remove instrumentation
@@ -1548,7 +1554,7 @@ class FunctionOptimizer:
                     test_env=test_env,
                     test_files=self.test_files,
                     optimization_iteration=optimization_candidate_index,
-                    testing_time=TOTAL_LOOPING_TIME,
+                    testing_time=total_looping_time,
                     enable_coverage=False,
                 )
                 loop_count = (
@@ -1566,7 +1572,7 @@ class FunctionOptimizer:
                 start_time: float = time.time()
                 loop_count = 0
                 for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                    if i >= 5 and time.time() - start_time >= get_total_looping_time() * 1.5:
                         # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
@@ -1575,7 +1581,7 @@ class FunctionOptimizer:
                         test_env=test_env,
                         test_files=self.test_files,
                         optimization_iteration=optimization_candidate_index,
-                        testing_time=TOTAL_LOOPING_TIME,
+                        testing_time=get_total_looping_time(),
                         unittest_loop_index=i + 1,
                     )
                     loop_count = i + 1
@@ -1614,7 +1620,7 @@ class FunctionOptimizer:
         test_env: dict[str, str],
         test_files: TestFiles,
         optimization_iteration: int,
-        testing_time: float = TOTAL_LOOPING_TIME,
+        testing_time: float = get_total_looping_time(),
         *,
         enable_coverage: bool = False,
         pytest_min_loops: int = 5,
@@ -1753,6 +1759,9 @@ class FunctionOptimizer:
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
         try:
+            logger.info("Running line profiling to identify performance bottlenecks…")
+            console.rule()
+
             test_env = self.get_test_env(
                 codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
             )
@@ -1762,7 +1771,7 @@ class FunctionOptimizer:
                 test_env=test_env,
                 test_files=self.test_files,
                 optimization_iteration=0,
-                testing_time=TOTAL_LOOPING_TIME,
+                testing_time=get_total_looping_time(),
                 enable_coverage=False,
                 code_context=code_context,
                 line_profiler_output_file=line_profiler_output_file,
