@@ -539,7 +539,9 @@ class FunctionOptimizer:
                     ].markdown
                     optimizations_post[past_opt_id] = ast_code_to_id[normalized_code]["shorter_source_code"].markdown
                     new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
-                    if new_diff_len < ast_code_to_id[normalized_code]["diff_len"]:
+                    if (
+                        new_diff_len < ast_code_to_id[normalized_code]["diff_len"]
+                    ):  # new candidate has a shorter diff than the previously encountered one
                         ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
                         ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
                     continue
@@ -699,24 +701,26 @@ class FunctionOptimizer:
             )
             optimization_ids.append(new_best_opt.candidate.optimization_id)
             runtimes_list.append(new_best_opt.runtime)
-        future_ranking = self.executor.submit(
-            ai_service_client.generate_ranking,
-            diffs=diff_strs,
-            optimization_ids=optimization_ids,
-            speedups=speedups_list,
-            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
-        )
-        concurrent.futures.wait([future_ranking])
-        ranking = future_ranking.result()
-        if ranking:
-            ranking = [x - 1 for x in ranking]
-            min_key = ranking[0]
+        if len(optimization_ids) > 1:
+            future_ranking = self.executor.submit(
+                ai_service_client.generate_ranking,
+                diffs=diff_strs,
+                optimization_ids=optimization_ids,
+                speedups=speedups_list,
+                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            )
+            concurrent.futures.wait([future_ranking])
+            ranking = future_ranking.result()
+            if ranking:
+                min_key = ranking[0]
+            else:
+                diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
+                runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+                # TODO: better way to resolve conflicts with same min ranking
+                overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking}
+                min_key = min(overall_ranking, key=overall_ranking.get)
         else:
-            diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
-            runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
-            # TODO: better way to resolve conflicts with same min ranking
-            overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
-            min_key = min(overall_ranking, key=overall_ranking.get)
+            min_key = 0  # only one candidate in valid _opts, already returns if there are no valid candidates
         best_optimization = valid_candidates_with_shorter_code[min_key]
         # reassign code string which is the shortest
         ai_service_client.log_results(
