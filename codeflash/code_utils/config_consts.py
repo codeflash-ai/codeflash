@@ -15,7 +15,7 @@ DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 # LSP-specific
 N_CANDIDATES_LSP = 3
 N_TESTS_TO_GENERATE_LSP = 1
-TOTAL_LOOPING_TIME_LSP = 5.0
+TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in increase in performance reporting
 
 
 def get_n_candidates() -> int:
