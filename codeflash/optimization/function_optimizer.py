@@ -719,8 +719,10 @@ class FunctionOptimizer:
                 # TODO: better way to resolve conflicts with same min ranking
                 overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking}
                 min_key = min(overall_ranking, key=overall_ranking.get)
-        else:
+        elif len(optimization_ids) == 1:
             min_key = 0  # only one candidate in valid _opts, already returns if there are no valid candidates
+        else:  # 0? shouldn't happen but it's there to escape potential bugs
+            return None
         best_optimization = valid_candidates_with_shorter_code[min_key]
         # reassign code string which is the shortest
         ai_service_client.log_results(
