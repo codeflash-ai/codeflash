@@ -1199,6 +1199,7 @@ class FunctionOptimizer:
                 original_code_combined[explanation.file_path] = self.function_to_optimize_source_code
                 new_code_combined = new_helper_code.copy()
                 new_code_combined[explanation.file_path] = new_code
+                # TODO: calculate economic impact of optimization based on simple heuristics
                 self.process_review(
                     original_code_baseline,
                     best_optimization,
