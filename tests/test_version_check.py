@@ -120,87 +120,86 @@ class TestVersionCheck(unittest.TestCase):
         self.assertEqual(mock_get.call_count, 2)
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_newer_available(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_newer_available(self, mock_logger,mock_get_version):
         """Test warning message when newer minor version is available."""
         mock_get_version.return_value = "1.1.0"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_called_once()
-        call_args = mock_console.print.call_args[0][0]
-        self.assertIn("ℹ️  A newer version of Codeflash is available!", call_args)
-        self.assertIn("Current version: 1.0.0", call_args)
-        self.assertIn("Latest version: 1.1.0", call_args)
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args[0][0]
+        self.assertIn("of Codeflash is available, please update soon!", call_args)
+        self.assertIn("1.1.0", call_args)
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_newer_major_available(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_newer_major_available(self, mock_logger,mock_get_version):
         """Test warning message when newer major version is available."""
         mock_get_version.return_value = "2.0.0"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_called_once()
-        call_args = mock_console.print.call_args[0][0]
-        self.assertIn("ℹ️  A newer version of Codeflash is available!", call_args)
+        mock_logger.warning.assert_called_once()
+        call_args = mock_logger.warning.call_args[0][0]
+        self.assertIn("of Codeflash is available, please update soon!", call_args)
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.1.0')
-    def test_check_for_newer_minor_version_no_newer_available(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_no_newer_available(self, mock_logger,mock_get_version):
         """Test no warning when no newer version is available."""
         mock_get_version.return_value = "1.0.0"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
-    @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_patch_update_ignored(self, mock_console, mock_get_version):
+    @patch('codeflash.code_utils.version_check.logger')
+    @patch('codeflash.code_utils.version_check.__version__', '1.0.1')
+    def test_check_for_newer_minor_version_patch_update_ignored(self, mock_logger,mock_get_version):
         """Test that patch updates don't trigger warnings."""
         mock_get_version.return_value = "1.0.1"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_same_version(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_same_version(self, mock_logger,mock_get_version):
         """Test no warning when versions are the same."""
         mock_get_version.return_value = "1.0.0"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_no_latest_version(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_no_latest_version(self, mock_logger,mock_get_version):
         """Test no warning when latest version cannot be fetched."""
         mock_get_version.return_value = None
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
     @patch('codeflash.code_utils.version_check.get_latest_version_from_pypi')
-    @patch('codeflash.code_utils.version_check.console')
+    @patch('codeflash.code_utils.version_check.logger')
     @patch('codeflash.code_utils.version_check.__version__', '1.0.0')
-    def test_check_for_newer_minor_version_invalid_version_format(self, mock_console, mock_get_version):
+    def test_check_for_newer_minor_version_invalid_version_format(self, mock_logger,mock_get_version):
         """Test handling of invalid version format."""
         mock_get_version.return_value = "invalid-version"
 
         check_for_newer_minor_version()
 
-        mock_console.print.assert_not_called()
+        mock_logger.warning.assert_not_called()
 
 
 

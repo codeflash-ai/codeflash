@@ -7,11 +7,11 @@ import time
 import requests
 from packaging import version
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.version import __version__
 
 # Simple cache to avoid checking too frequently
-_version_cache = {"version": '0.0.0', "timestamp": float(0)}
+_version_cache = {"version": "0.0.0", "timestamp": float(0)}
 _cache_duration = 3600  # 1 hour cache
 
 
@@ -69,10 +69,8 @@ def check_for_newer_minor_version() -> None:
 
         # Check if there's a newer minor version available
         # We only notify for minor version updates, not patch updates
-        if latest_parsed > current_parsed: # < > == operators can be directly applied on version objects
-            logger.warning(
-                f"A newer version({latest_version}) of Codeflash is available, please update soon!"
-            )
+        if latest_parsed > current_parsed:  # < > == operators can be directly applied on version objects
+            logger.warning(f"A newer version({latest_version}) of Codeflash is available, please update soon!")
 
     except version.InvalidVersion as e:
         logger.debug(f"Invalid version format: {e}")
