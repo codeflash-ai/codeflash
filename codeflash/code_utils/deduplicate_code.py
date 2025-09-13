@@ -59,9 +59,11 @@ class VariableNormalizer(ast.NodeTransformer):
 
     def visit_ImportFrom(self, node):
         """Track imported names from modules"""
+        names_add = self.imports.add  # Localize method for faster access
+        # Use tuple unpacking and avoid attribute lookup in the loop
         for alias in node.names:
-            name = alias.asname if alias.asname else alias.name
-            self.imports.add(name)
+            asname = alias.asname
+            names_add(asname if asname is not None else alias.name)
         return node
 
     def visit_Global(self, node):
