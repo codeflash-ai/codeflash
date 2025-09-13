@@ -670,7 +670,7 @@ class FunctionOptimizer:
         diff_strs = []
         runtimes_list = []
         for valid_opt in valid_optimizations:
-            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.flat.strip()))
+            valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
