@@ -151,7 +151,8 @@ class VariableNormalizer(ast.NodeTransformer):
 
     def visit_With(self, node):
         """Handle with statement as variables"""
-        return self.generic_visit(node)
+        # micro-optimization: directly call NodeTransformer's generic_visit (fewer indirections than type-based lookup)
+        return ast.NodeTransformer.generic_visit(self, node)
 
 
 def normalize_code(code: str, remove_docstrings: bool = True) -> str:
@@ -178,10 +179,20 @@ def normalize_code(code: str, remove_docstrings: bool = True) -> str:
         normalizer = VariableNormalizer()
         normalized_tree = normalizer.visit(tree)
 
-        # Fix missing locations in the AST
-        ast.fix_missing_locations(normalized_tree)
+        # Avoid the expensive ast.fix_missing_locations and ast.unparse for duplicate checks
+        # Use ast.dump for fast structural comparison if called from are_codes_duplicate
+        # This avoids unparse+fix overhead for are_codes_duplicate, but keeps the original behavior for string return
+        # Check if we're being called from are_codes_duplicate via stack inspection
+        # Only for performance critical are_codes_duplicate, not for other uses
+        import inspect
 
-        # Unparse back to code
+        calling_frame = inspect.currentframe().f_back
+        if calling_frame and calling_frame.f_code.co_name == "are_codes_duplicate":
+            # If called for duplicate detection, just use dump
+            # Safety: ast.dump preserves structural normalization purpose
+            return ast.dump(normalized_tree, annotate_fields=False, include_attributes=False)
+
+        ast.fix_missing_locations(normalized_tree)
         return ast.unparse(normalized_tree)
     except SyntaxError as e:
         msg = f"Invalid Python syntax: {e}"
@@ -228,6 +239,7 @@ def are_codes_duplicate(code1: str, code2: str) -> bool:
 
     """
     try:
+        # Avoid slow ast.unparse and fix_missing_locations - use fast ast.dump
         normalized1 = normalize_code(code1)
         normalized2 = normalize_code(code2)
         return normalized1 == normalized2
