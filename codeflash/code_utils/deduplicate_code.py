@@ -52,9 +52,15 @@ class VariableNormalizer(ast.NodeTransformer):
 
     def visit_Import(self, node):
         """Track imported names"""
+        imports_add = self.imports.add  # Localize for faster access
         for alias in node.names:
-            name = alias.asname if alias.asname else alias.name
-            self.imports.add(name.split(".")[0])
+            asname = alias.asname
+            if asname:
+                imports_add(asname)
+            else:
+                name = alias.name
+                # Use partition, faster than split for a single separator
+                imports_add(name.partition(".")[0])
         return node
 
     def visit_ImportFrom(self, node):
