@@ -36,7 +36,8 @@ def generate_concolic_tests(
 
     if (
         test_cfg.concolic_test_root_dir
-        and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and isinstance(function_to_optimize_ast, ast.FunctionDef)  # Exclude async functions
+        and not isinstance(function_to_optimize_ast, ast.AsyncFunctionDef)
         and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
     ):
         logger.info("Generating concolic opcode coverage tests for the original code…")

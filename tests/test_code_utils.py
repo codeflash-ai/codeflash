@@ -20,7 +20,7 @@ from codeflash.code_utils.code_utils import (
     validate_python_code,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
-from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
+from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
 
 
 @pytest.fixture
@@ -306,6 +306,86 @@ def my_function():
 """)
 
     assert is_class_defined_in_file("MyClass", test_file) is False
+
+
+@pytest.fixture
+def mock_code_context():
+    """Mock CodeOptimizationContext for testing extract_dependent_function."""
+    from unittest.mock import MagicMock
+    from codeflash.models.models import CodeOptimizationContext
+    
+    context = MagicMock(spec=CodeOptimizationContext)
+    context.preexisting_objects = []
+    return context
+
+
+def test_extract_dependent_function_sync_and_async(mock_code_context):
+    """Test extract_dependent_function with both sync and async functions."""
+    # Test sync function extraction
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+def helper_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) == "helper_function"
+    
+    # Test async function extraction
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+async def async_helper_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) == "async_helper_function"
+
+
+def test_extract_dependent_function_edge_cases(mock_code_context):
+    """Test extract_dependent_function edge cases."""
+    # No dependent functions
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) is False
+    
+    # Multiple dependent functions
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+def helper1():
+    pass
+
+async def helper2():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) is False
+
+
+def test_extract_dependent_function_mixed_scenarios(mock_code_context):
+    """Test extract_dependent_function with mixed sync/async scenarios."""
+    # Async main with sync helper
+    mock_code_context.testgen_context_code = """
+async def async_main():
+    pass
+
+def sync_helper():
+    pass
+"""
+    assert extract_dependent_function("async_main", mock_code_context) == "sync_helper"
+    
+    # Only async functions
+    mock_code_context.testgen_context_code = """
+async def async_main():
+    pass
+
+async def async_helper():
+    pass
+"""
+    assert extract_dependent_function("async_main", mock_code_context) == "async_helper"
 
 
 def test_is_class_defined_in_file_with_non_existing_file() -> None:

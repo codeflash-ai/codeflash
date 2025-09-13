@@ -101,6 +101,8 @@ class AiServiceClient:
         trace_id: str,
         num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
+        *,
+        is_async: bool = False,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -131,6 +133,7 @@ class AiServiceClient:
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
+            "is_async": is_async,
         }
 
         logger.info("Generating optimized candidates…")
@@ -439,7 +442,9 @@ class AiServiceClient:
             "test_index": test_index,
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
+            "is_async": function_to_optimize.is_async,
         }
+
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:

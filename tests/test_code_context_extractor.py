@@ -12,7 +12,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
-from codeflash.code_utils.code_extractor import add_global_assignments
+from codeflash.code_utils.code_extractor import add_global_assignments, GlobalAssignmentCollector
 
 
 class HelperClass:
@@ -2482,3 +2482,148 @@ def test_circular_deps():
     assert "import ApiClient" not in new_code, "Error: Circular dependency found"
     
     assert "import urllib.parse" in new_code, "Make sure imports for optimization global assignments exist" 
+def test_global_assignment_collector_with_async_function():
+    """Test GlobalAssignmentCollector correctly identifies global assignments outside async functions."""
+    import libcst as cst
+    
+    source_code = """
+# Global assignment
+GLOBAL_VAR = "global_value"
+OTHER_GLOBAL = 42
+
+async def async_function():
+    # This should not be collected (inside async function)
+    local_var = "local_value"
+    INNER_ASSIGNMENT = "should_not_be_global"
+    return local_var
+
+# Another global assignment
+ANOTHER_GLOBAL = "another_global"
+"""
+    
+    tree = cst.parse_module(source_code)
+    collector = GlobalAssignmentCollector()
+    tree.visit(collector)
+    
+    # Should collect global assignments but not the ones inside async function
+    assert len(collector.assignments) == 3
+    assert "GLOBAL_VAR" in collector.assignments
+    assert "OTHER_GLOBAL" in collector.assignments
+    assert "ANOTHER_GLOBAL" in collector.assignments
+    
+    # Should not collect assignments from inside async function
+    assert "local_var" not in collector.assignments
+    assert "INNER_ASSIGNMENT" not in collector.assignments
+    
+    # Verify assignment order
+    expected_order = ["GLOBAL_VAR", "OTHER_GLOBAL", "ANOTHER_GLOBAL"]
+    assert collector.assignment_order == expected_order
+
+
+def test_global_assignment_collector_nested_async_functions():
+    """Test GlobalAssignmentCollector handles nested async functions correctly."""
+    import libcst as cst
+    
+    source_code = """
+# Global assignment
+CONFIG = {"key": "value"}
+
+def sync_function():
+    # Inside sync function - should not be collected
+    sync_local = "sync"
+    
+    async def nested_async():
+        # Inside nested async function - should not be collected
+        nested_var = "nested"
+        return nested_var
+    
+    return sync_local
+
+async def async_function():
+    # Inside async function - should not be collected
+    async_local = "async"
+    
+    def nested_sync():
+        # Inside nested function - should not be collected
+        deeply_nested = "deep"
+        return deeply_nested
+    
+    return async_local
+
+# Another global assignment
+FINAL_GLOBAL = "final"
+"""
+    
+    tree = cst.parse_module(source_code)
+    collector = GlobalAssignmentCollector()
+    tree.visit(collector)
+    
+    # Should only collect global-level assignments
+    assert len(collector.assignments) == 2
+    assert "CONFIG" in collector.assignments
+    assert "FINAL_GLOBAL" in collector.assignments
+    
+    # Should not collect any assignments from inside functions
+    assert "sync_local" not in collector.assignments
+    assert "nested_var" not in collector.assignments
+    assert "async_local" not in collector.assignments
+    assert "deeply_nested" not in collector.assignments
+
+
+def test_global_assignment_collector_mixed_async_sync_with_classes():
+    """Test GlobalAssignmentCollector with async functions, sync functions, and classes."""
+    import libcst as cst
+    
+    source_code = """
+# Global assignments
+GLOBAL_CONSTANT = "constant"
+
+class TestClass:
+    # Class-level assignment - should not be collected  
+    class_var = "class_value"
+    
+    def sync_method(self):
+        # Method assignment - should not be collected
+        method_var = "method"
+        return method_var
+    
+    async def async_method(self):
+        # Async method assignment - should not be collected
+        async_method_var = "async_method"
+        return async_method_var
+
+def sync_function():
+    # Function assignment - should not be collected
+    func_var = "function"
+    return func_var
+
+async def async_function():
+    # Async function assignment - should not be collected
+    async_func_var = "async_function"
+    return async_func_var
+
+# More global assignments
+ANOTHER_CONSTANT = 100
+FINAL_ASSIGNMENT = {"data": "value"}
+"""
+    
+    tree = cst.parse_module(source_code)
+    collector = GlobalAssignmentCollector()
+    tree.visit(collector)
+    
+    # Should only collect global-level assignments
+    assert len(collector.assignments) == 3
+    assert "GLOBAL_CONSTANT" in collector.assignments  
+    assert "ANOTHER_CONSTANT" in collector.assignments
+    assert "FINAL_ASSIGNMENT" in collector.assignments
+    
+    # Should not collect assignments from inside any scoped blocks
+    assert "class_var" not in collector.assignments
+    assert "method_var" not in collector.assignments
+    assert "async_method_var" not in collector.assignments
+    assert "func_var" not in collector.assignments
+    assert "async_func_var" not in collector.assignments
+    
+    # Verify correct order
+    expected_order = ["GLOBAL_CONSTANT", "ANOTHER_CONSTANT", "FINAL_ASSIGNMENT"]
+    assert collector.assignment_order == expected_order

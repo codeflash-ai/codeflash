@@ -32,9 +32,11 @@ class CommentMapper(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
-        for inner_node in ast.walk(node):
+        for inner_node in node.body:
             if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node)
         self.context_stack.pop()
         return node
 
@@ -50,6 +52,14 @@ class CommentMapper(ast.NodeVisitor):
         return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
         test_qualified_name = ".".join(self.context_stack)
@@ -60,8 +70,9 @@ class CommentMapper(ast.NodeVisitor):
                 j = len(line_node.body) - 1
                 while j >= 0:
                     compound_line_node: ast.stmt = line_node.body[j]
-                    internal_node: ast.AST
-                    for internal_node in ast.walk(compound_line_node):
+                    nodes_to_check = [compound_line_node]
+                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    for internal_node in nodes_to_check:
                         if isinstance(internal_node, (ast.stmt, ast.Assign)):
                             inv_id = str(i) + "_" + str(j)
                             match_key = key + "#" + inv_id
@@ -75,7 +86,6 @@ class CommentMapper(ast.NodeVisitor):
                     self.results[line_node.lineno] = self.get_comment(match_key)
             i -= 1
         self.context_stack.pop()
-        return node
 
 
 def get_fn_call_linenos(
@@ -201,7 +211,7 @@ def remove_functions_from_generated_tests(
     for generated_test in generated_tests.generated_tests:
         for test_function in test_functions_to_remove:
             function_pattern = re.compile(
-                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\ndef\s|$)",
+                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?(async\s+)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\n(async\s+)?def\s|$)",
                 re.DOTALL,
             )
 
