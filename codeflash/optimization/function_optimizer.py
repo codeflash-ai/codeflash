@@ -48,6 +48,7 @@ from codeflash.code_utils.config_consts import (
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME,
 )
+from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
     remove_functions_from_generated_tests,
@@ -519,7 +520,7 @@ class FunctionOptimizer:
                     )
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
-                normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
+                normalized_code = normalize_code(candidate.source_code.flat.strip())
                 if normalized_code in ast_code_to_id:
                     logger.info(
                         "Current candidate has been encountered before in testing, Skipping optimization candidate."
@@ -669,7 +670,7 @@ class FunctionOptimizer:
         diff_strs = []
         runtimes_list = []
         for valid_opt in valid_optimizations:
-            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.flat.strip()))
+            valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,

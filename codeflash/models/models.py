@@ -558,7 +558,7 @@ class FunctionTestInvocation:
         return f"{self.loop_index}:{self.id.id()}"
 
 
-class TestResults(BaseModel):  # noqa: PLW1641
+class TestResults(BaseModel):
     # don't modify these directly, use the add method
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
