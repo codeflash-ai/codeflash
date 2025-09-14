@@ -1552,6 +1552,8 @@ class FunctionOptimizer:
                 console.rule()
                 return Failure("Test results did not match the test results of the original code.")
 
+            # TODO: Add here a log message for benchmarking with takes_time tag.
+
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
@@ -1681,7 +1683,7 @@ class FunctionOptimizer:
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f"!lsp:Nonzero return code {run_result.returncode} when running tests in "
+                f"!lsp|tags|Nonzero return code {run_result.returncode} when running tests in "
                 f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"

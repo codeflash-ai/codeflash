@@ -1,32 +1,61 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.lsp.lsp_message import LspTextMessage
 
-skip_lsp_log_prefix = "!lsp:"
+
+@dataclass
+class LspMessageTags:
+    # always set default values for message tags
+    not_lsp: bool = False
+    loading: bool = False
+
+
+def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
+    if not isinstance(msg, str):
+        return LspMessageTags(), msg
+
+    parts = msg.split("|tags|")
+    if len(parts) == 2:
+        message_tags = LspMessageTags()
+        tags = [tag.strip() for tag in parts[0].split(",")]
+        if "!lsp" in tags:
+            message_tags.not_lsp = True
+        if "loading" in tags:
+            message_tags.loading = True
+        return message_tags, parts[1]
+
+    return LspMessageTags(), msg
 
 
 def enhanced_log(msg: str, actual_log_fn: Callable[[str, Any, Any], None], *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
     lsp_enabled = is_LSP_enabled()
-    str_msg = isinstance(msg, str)
-    # if the message starts with !lsp:, it won't be sent to the client
-    skip_lsp_log = str_msg and msg.strip().startswith(skip_lsp_log_prefix)
-
-    if skip_lsp_log:
-        # get the message without the prefix
-        msg = msg[len(skip_lsp_log_prefix) :]
-
-    # normal cli mode
-    if not lsp_enabled:
+    if not lsp_enabled or not isinstance(msg, str):
         actual_log_fn(msg, *args, **kwargs)
         return
 
-    #### LSP mode ####
-    if skip_lsp_log or not str_msg:
+    is_lsp_json_message = msg.startswith('{"type"')
+    is_normal_text_message = not is_lsp_json_message
+
+    tags = LspMessageTags()
+    clean_msg = msg
+
+    if is_normal_text_message:
+        tags, clean_msg = extract_tags(msg)
+
+    # normal cli mode
+    if not lsp_enabled:
+        actual_log_fn(clean_msg, *args, **kwargs)
         return
 
-    if not msg.startswith("{"):
-        # it is not a json message, use a text message
-        msg = LspTextMessage(text=msg).serialize()
+    #### LSP mode ####
+    if tags.not_lsp:
+        return
 
-    actual_log_fn(msg, *args, **kwargs)
+    if is_normal_text_message:
+        clean_msg = LspTextMessage(text=clean_msg, takes_time=tags.loading).serialize()
+
+    actual_log_fn(clean_msg, *args, **kwargs)

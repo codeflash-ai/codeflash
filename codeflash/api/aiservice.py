@@ -331,7 +331,7 @@ class AiServiceClient:
             "original_explanation": original_explanation,
             "dependency_code": dependency_code,
         }
-        logger.info("Generating explanation")
+        logger.info("loading|tags|Generating explanation")
         console.rule()
         try:
             response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
