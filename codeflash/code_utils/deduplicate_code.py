@@ -154,7 +154,7 @@ class VariableNormalizer(ast.NodeTransformer):
         return self.generic_visit(node)
 
 
-def normalize_code(code: str, remove_docstrings: bool = True) -> str:
+def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: bool = False) -> str:
     """Normalize Python code by parsing, cleaning, and normalizing only variable names.
     Function names, class names, and parameters are preserved.
 
@@ -177,6 +177,9 @@ def normalize_code(code: str, remove_docstrings: bool = True) -> str:
         # Normalize variable names
         normalizer = VariableNormalizer()
         normalized_tree = normalizer.visit(tree)
+        if return_ast_dump:
+            # This is faster than unparsing etc
+            return ast.dump(normalized_tree, annotate_fields=False, include_attributes=False)
 
         # Fix missing locations in the AST
         ast.fix_missing_locations(normalized_tree)
@@ -190,16 +193,25 @@ def normalize_code(code: str, remove_docstrings: bool = True) -> str:
 
 def remove_docstrings_from_ast(node):
     """Remove docstrings from AST nodes."""
-    # Process all nodes in the tree, but avoid recursion
-    for current_node in ast.walk(node):
-        if isinstance(current_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)):
+    # Only FunctionDef, AsyncFunctionDef, ClassDef, and Module can contain docstrings in their body[0]
+    node_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)
+    # Use our own stack-based DFS instead of ast.walk for efficiency
+    stack = [node]
+    while stack:
+        current_node = stack.pop()
+        if isinstance(current_node, node_types):
+            # Remove docstring if it's the first stmt in body
+            body = current_node.body
             if (
-                current_node.body
-                and isinstance(current_node.body[0], ast.Expr)
-                and isinstance(current_node.body[0].value, ast.Constant)
-                and isinstance(current_node.body[0].value.value, str)
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
             ):
-                current_node.body = current_node.body[1:]
+                current_node.body = body[1:]
+            # Only these nodes can nest more docstring-containing nodes
+            # Add their body elements to stack, avoiding unnecessary traversal
+            stack.extend([child for child in body if isinstance(child, node_types)])
 
 
 def get_code_fingerprint(code: str) -> str:
@@ -228,8 +240,8 @@ def are_codes_duplicate(code1: str, code2: str) -> bool:
 
     """
     try:
-        normalized1 = normalize_code(code1)
-        normalized2 = normalize_code(code2)
+        normalized1 = normalize_code(code1, return_ast_dump=True)
+        normalized2 = normalize_code(code2, return_ast_dump=True)
         return normalized1 == normalized2
     except Exception:
         return False
