@@ -66,8 +66,8 @@ class VariableNormalizer(ast.NodeTransformer):
 
     def visit_Global(self, node):
         """Track global variable declarations"""
-        for name in node.names:
-            self.global_vars.add(name)
+        # Avoid repeated .add calls by using set.update with list
+        self.global_vars.update(node.names)
         return node
 
     def visit_Nonlocal(self, node):
