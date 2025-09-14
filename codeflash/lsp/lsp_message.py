@@ -5,7 +5,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from codeflash.lsp.helpers import replace_quotes_with_backticks, simplify_worktree_paths
+
 json_primitive_types = (str, float, int, bool)
+max_code_lines_before_collapse = 45
 
 
 @dataclass
@@ -28,6 +31,15 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
+        if isinstance(self, LspTextMessage):
+            self.text = simplify_worktree_paths(self.text)
+            self.text = replace_quotes_with_backticks(self.text)
+        if isinstance(self, LspCodeMessage):
+            self.file_name = simplify_worktree_paths(str(self.file_name), highlight=False)
+        if isinstance(self, LspMarkdownMessage):
+            self.markdown = simplify_worktree_paths(self.markdown)
+            self.markdown = replace_quotes_with_backticks(self.markdown)
+
         data = self._loop_through(asdict(self))
         # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
@@ -47,9 +59,18 @@ class LspCodeMessage(LspMessage):
     code: str
     file_name: Optional[Path] = None
     function_name: Optional[str] = None
+    collapsed: bool = False
+    lines_count: Optional[int] = None
 
     def type(self) -> str:
         return "code"
+
+    def serialize(self) -> str:
+        code_lines_length = len(self.code.split("\n"))
+        self.lines_count = code_lines_length
+        if code_lines_length > max_code_lines_before_collapse:
+            self.collapsed = True
+        return super().serialize()
 
 
 @dataclass

@@ -21,7 +21,7 @@ from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.lsp.lsp_logger import enhanced_log
-from codeflash.lsp.lsp_message import LspCodeMessage
+from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -100,6 +100,11 @@ def progress_bar(
     If revert_to_print is True, falls back to printing a single logger.info message
     instead of showing a progress bar.
     """
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=message, takes_time=True))
+        yield
+        return
+
     if revert_to_print:
         logger.info(message)
 

@@ -192,7 +192,7 @@ class Optimizer:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
 
-        logger.info(f"Examining file {original_module_path!s}…")
+        logger.info(f"Examining file {original_module_path!s} …")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
