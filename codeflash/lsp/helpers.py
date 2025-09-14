@@ -2,6 +2,10 @@ import os
 import re
 from functools import lru_cache
 
+_double_quote_pat = re.compile(r'"(.*?)"')
+
+_single_quote_pat = re.compile(r"'(.*?)'")
+
 
 @lru_cache(maxsize=1)
 def is_LSP_enabled() -> bool:
@@ -23,6 +27,6 @@ def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: F
 
 def replace_quotes_with_backticks(text: str) -> str:
     # double-quoted strings
-    text = re.sub(r'"(.*?)"', r"`\1`", text)
+    text = _double_quote_pat.sub(r"`\1`", text)
     # single-quoted strings
-    return re.sub(r"'(.*?)'", r"`\1`", text)
+    return _single_quote_pat.sub(r"`\1`", text)
