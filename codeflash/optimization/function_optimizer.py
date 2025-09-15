@@ -516,7 +516,7 @@ class FunctionOptimizer:
                     )
                     if not did_update:
                         logger.warning(
-                            "No functions were replaced in the optimized code. Skipping optimization candidate."
+                            "lsp|tags|No functions were replaced in the optimized code. Skipping optimization candidate."
                         )
                         console.rule()
                         continue
