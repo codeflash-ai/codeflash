@@ -504,7 +504,7 @@ class FunctionOptimizer:
                 candidate_index += 1
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                logger.info(f"Optimization candidate {candidate_index}/{processor.candidate_len}:")
+                logger.info(f"h3|tags|Optimization candidate {candidate_index}/{processor.candidate_len}:")
                 code_print(candidate.source_code.flat, file_name=f"candidate_{candidate_index}.py")
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
@@ -1586,7 +1586,7 @@ class FunctionOptimizer:
                 console.rule()
                 return Failure("Test results did not match the test results of the original code.")
 
-            logger.info(f"loading|tags|Running performance tests for candidate {optimization_candidate_index}.")
+            logger.info(f"loading|tags|Running performance tests for candidate {optimization_candidate_index}. ⚡️")
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(

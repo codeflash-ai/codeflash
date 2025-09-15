@@ -35,8 +35,8 @@ def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str)
             continue
         passed = report[test_type]["passed"]
         failed = report[test_type]["failed"]
-        # if passed == 0 and failed == 0:
-        #     continue
+        if passed == 0 and failed == 0:
+            continue
         lines.append(f"| {test_type.to_name()} | {passed} | {failed} |")
     table = "\n".join(lines)
     return f"### {title}\n{table}"
