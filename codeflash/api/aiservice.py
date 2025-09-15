@@ -133,7 +133,6 @@ class AiServiceClient:
             "repo_name": git_repo_name,
         }
 
-        logger.info("Generating optimized candidates…")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
@@ -144,8 +143,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated `{len(optimizations_json)}` candidate optimizations.")
-            console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
             return self._get_valid_candidates(optimizations_json)
@@ -194,7 +191,7 @@ class AiServiceClient:
             "lsp_mode": is_LSP_enabled(),
         }
 
-        logger.info("Generating optimized candidates…")
+        logger.info("loading|tags|Generating optimized candidates using line profiler information…")
         console.rule()
         if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
@@ -209,7 +206,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
             console.rule()
             return self._get_valid_candidates(optimizations_json)
         try:

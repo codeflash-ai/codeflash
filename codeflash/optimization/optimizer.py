@@ -192,7 +192,7 @@ class Optimizer:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
 
-        logger.info(f"Examining file {original_module_path!s} …")
+        logger.info(f"loading|tags|Examining file {original_module_path!s}")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
@@ -237,6 +237,7 @@ class Optimizer:
     ) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
+        logger.info("loading|tags|Scanning project for tests to guide optimization.")
         console.rule()
         start_time = time.time()
         function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(

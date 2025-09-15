@@ -49,7 +49,13 @@ logging.getLogger("parso").setLevel(logging.WARNING)
 # override the logger to reformat the messages for the lsp
 for level in ("info", "debug", "warning", "error"):
     real_fn = getattr(logger, level)
-    setattr(logger, level, lambda msg, *args, _real_fn=real_fn, **kwargs: enhanced_log(msg, _real_fn, *args, **kwargs))
+    setattr(
+        logger,
+        level,
+        lambda msg, _real_fn=real_fn, _level=level, *args, **kwargs: enhanced_log(
+            msg, _real_fn, _level, *args, **kwargs
+        ),
+    )
 
 
 def lsp_log(message: LspMessage) -> None:

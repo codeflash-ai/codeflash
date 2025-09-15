@@ -13,6 +13,23 @@ class LspMessageTags:
     not_lsp: bool = False
     loading: bool = False
 
+    h1: bool = False
+    h2: bool = False
+    h3: bool = False
+    h4: bool = False
+
+
+def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
+    if tags.h1:
+        return "# " + msg
+    if tags.h2:
+        return "## " + msg
+    if tags.h3:
+        return "### " + msg
+    if tags.h4:
+        return "#### " + msg
+    return msg
+
 
 def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
     if not isinstance(msg, str):
@@ -26,12 +43,29 @@ def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
             message_tags.not_lsp = True
         if "loading" in tags:
             message_tags.loading = True
+        if "h1" in tags:
+            message_tags.h1 = True
+        if "h2" in tags:
+            message_tags.h2 = True
+        if "h3" in tags:
+            message_tags.h3 = True
+        if "h4" in tags:
+            message_tags.h4 = True
         return message_tags, parts[1]
 
     return LspMessageTags(), msg
 
 
-def enhanced_log(msg: str, actual_log_fn: Callable[[str, Any, Any], None], *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+supported_lsp_log_levels = ("info", "debug")
+
+
+def enhanced_log(
+    msg: str,
+    actual_log_fn: Callable[[str, Any, Any], None],
+    level: str,
+    *args: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> None:
     lsp_enabled = is_LSP_enabled()
     if not lsp_enabled or not isinstance(msg, str):
         actual_log_fn(msg, *args, **kwargs)
@@ -52,10 +86,11 @@ def enhanced_log(msg: str, actual_log_fn: Callable[[str, Any, Any], None], *args
         return
 
     #### LSP mode ####
-    if tags.not_lsp:
+    if tags.not_lsp or level not in supported_lsp_log_levels:
         return
 
     if is_normal_text_message:
+        clean_msg = add_heading_tags(clean_msg, tags)
         clean_msg = LspTextMessage(text=clean_msg, takes_time=tags.loading).serialize()
 
     actual_log_fn(clean_msg, *args, **kwargs)

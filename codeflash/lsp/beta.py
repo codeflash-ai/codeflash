@@ -158,20 +158,6 @@ def initialize_function_optimization(
     return {"functionName": params.functionName, "status": "success"}
 
 
-@server.feature("discoverFunctionTests")
-def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
-    fto = server.optimizer.current_function_being_optimized
-    optimizable_funcs = {fto.file_path: [fto]}
-
-    devnull_writer = open(os.devnull, "w")  # noqa
-    with contextlib.redirect_stdout(devnull_writer):
-        function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
-
-    server.optimizer.discovered_tests = function_to_tests
-
-    return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
-
-
 @server.feature("validateProject")
 def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
@@ -301,6 +287,12 @@ def perform_function_optimization(  # noqa: PLR0911
             }
 
         module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
+        if not module_prep_result:
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": "Failed to prepare module for optimization",
+            }
 
         validated_original_code, original_module_ast = module_prep_result
 
@@ -309,7 +301,7 @@ def perform_function_optimization(  # noqa: PLR0911
             function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
             original_module_ast=original_module_ast,
             original_module_path=current_function.file_path,
-            function_to_tests=server.optimizer.discovered_tests or {},
+            function_to_tests={},
         )
 
         server.optimizer.current_function_optimizer = function_optimizer
@@ -327,6 +319,13 @@ def perform_function_optimization(  # noqa: PLR0911
             file_name=current_function.file_path,
             function_name=current_function.function_name,
         )
+
+        optimizable_funcs = {current_function.file_path: [current_function]}
+
+        devnull_writer = open(os.devnull, "w")  # noqa
+        with contextlib.redirect_stdout(devnull_writer):
+            function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+            function_optimizer.function_to_tests = function_to_tests
 
         test_setup_result = function_optimizer.generate_and_instrument_tests(
             code_context, should_run_experiment=should_run_experiment

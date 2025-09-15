@@ -2,9 +2,13 @@ import os
 import re
 from functools import lru_cache
 
-_double_quote_pat = re.compile(r'"(.*?)"')
+from rich.tree import Tree
 
+from codeflash.models.test_type import TestType
+
+_double_quote_pat = re.compile(r'"(.*?)"')
 _single_quote_pat = re.compile(r"'(.*?)'")
+worktree_path_regex = re.compile(r'\/[^"]*worktrees\/[^"]\S*')
 
 
 @lru_cache(maxsize=1)
@@ -12,7 +16,30 @@ def is_LSP_enabled() -> bool:
     return os.getenv("CODEFLASH_LSP", default="false").lower() == "true"
 
 
-worktree_path_regex = re.compile(r'\/[^"]*worktrees\/[^"]\S*')
+def tree_to_markdown(tree: Tree, level: int = 0) -> str:
+    """Convert a rich Tree into a Markdown bullet list."""
+    indent = "  " * level
+    if level == 0:
+        lines: list[str] = [f"{indent}### {tree.label}"]
+    else:
+        lines: list[str] = [f"{indent}- {tree.label}"]
+    for child in tree.children:
+        lines.extend(tree_to_markdown(child, level + 1).splitlines())
+    return "\n".join(lines)
+
+
+def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str) -> str:
+    lines = ["| Test Type | Passed ✅ | Failed ❌ |", "|-----------|--------|--------|"]
+    for test_type in TestType:
+        if test_type is TestType.INIT_STATE_TEST:
+            continue
+        passed = report[test_type]["passed"]
+        failed = report[test_type]["failed"]
+        # if passed == 0 and failed == 0:
+        #     continue
+        lines.append(f"| {test_type.to_name()} | {passed} | {failed} |")
+    table = "\n".join(lines)
+    return f"### {title}\n{table}"
 
 
 def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002

@@ -22,7 +22,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, progress_bar
+from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
@@ -61,6 +61,8 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
+from codeflash.lsp.helpers import is_LSP_enabled, tree_to_markdown
+from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -146,6 +148,8 @@ class CandidateProcessor:
         logger.debug("all candidates processed, await candidates from line profiler")
         concurrent.futures.wait([self.future_line_profile_results])
         line_profile_results = self.future_line_profile_results.result()
+
+        logger.info(f"Generated {len(line_profile_results)} candidate optimizations using line profiler information.")
 
         for candidate in line_profile_results:
             self.candidate_queue.put(candidate)
@@ -573,7 +577,7 @@ class FunctionOptimizer:
                     )
                     speedup_ratios[candidate.optimization_id] = perf_gain
 
-                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
+                    tree = Tree(f"Candidate #{candidate_index} - Runtime Information ⌛")
                     benchmark_tree = None
                     if speedup_critic(
                         candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
@@ -646,7 +650,11 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
-                    console.print(tree)
+
+                    if is_LSP_enabled():
+                        lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
+                    else:
+                        console.print(tree)
                     if self.args.benchmark and benchmark_tree:
                         console.print(benchmark_tree)
                     console.rule()
@@ -739,28 +747,51 @@ class FunctionOptimizer:
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
     ) -> None:
-        explanation_panel = Panel(
-            f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
-            f"📈 {explanation.perf_improvement_line}\n"
-            f"Explanation: \n{explanation.to_console_string()}",
-            title="Optimization Summary",
-            border_style="green",
-        )
+        if is_LSP_enabled():
+            md_lines = [
+                "### ⚡️ Optimization Summary",
+                f"Function: `{self.function_to_optimize.qualified_name}`",
+                f"File: `{explanation.file_path}`",
+                f"Performance: {explanation.perf_improvement_line}",
+                "",
+                "#### Explanation\n",
+                explanation.to_console_string(),
+            ]
 
-        if self.args.no_pr:
-            tests_panel = Panel(
-                Syntax(
-                    "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
-                    "python",
-                    line_numbers=True,
-                ),
-                title="Validated Tests",
-                border_style="blue",
+            # TODO: display the tests
+            # if generated_tests.generated_tests:
+            #     md_lines.append("\n### Validated Tests")
+            #     md_lines.append("```python")
+            #     for test in generated_tests.generated_tests:
+            #         md_lines.append(test.generated_original_test_source)
+            #     md_lines.append("```")
+
+            markdown_output = "\n".join(md_lines)
+            lsp_log(LspMarkdownMessage(markdown=markdown_output))
+        else:
+            # normal console output
+            explanation_panel = Panel(
+                f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
+                f"📈 {explanation.perf_improvement_line}\n"
+                f"Explanation: \n{explanation.to_console_string()}",
+                title="Optimization Summary",
+                border_style="green",
             )
 
-            console.print(Group(explanation_panel, tests_panel))
-        else:
-            console.print(explanation_panel)
+            if self.args.no_pr:
+                tests_panel = Panel(
+                    Syntax(
+                        "\n".join([test.generated_original_test_source for test in generated_tests.generated_tests]),
+                        "python",
+                        line_numbers=True,
+                    ),
+                    title="Validated Tests",
+                    border_style="blue",
+                )
+
+                console.print(Group(explanation_panel, tests_panel))
+            else:
+                console.print(explanation_panel)
 
         ph(
             "cli-optimize-success",
@@ -1021,6 +1052,9 @@ class FunctionOptimizer:
 
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
+        logger.info(f"Generated '{len(candidates)}' candidate optimizations.")
+        console.rule()
+
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
 
@@ -1052,7 +1086,7 @@ class FunctionOptimizer:
             logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
             return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
-        logger.info(f"Generated {len(tests)} tests for {self.function_to_optimize.function_name}")
+        logger.info(f"Generated '{len(tests)}' tests for {self.function_to_optimize.function_name}")
         console.rule()
         generated_tests = GeneratedTestsList(generated_tests=tests)
         result = (
@@ -1168,7 +1202,7 @@ class FunctionOptimizer:
             )
 
             if best_optimization:
-                logger.info("Best candidate:")
+                logger.info("h2|tags|Best candidate 🚀:")
                 code_print(best_optimization.candidate.source_code.flat)
                 processed_benchmark_info = None
                 if self.args.benchmark:
@@ -1540,19 +1574,19 @@ class FunctionOptimizer:
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
-                    title="Behavioral Test Results for candidate",
+                    title=f"Behavioral Test Results for candidate {optimization_candidate_index}.",
                 )
             )
             console.rule()
             if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
-                logger.info("Test results matched!")
+                logger.info("h3|tags|Test results matched ✅")
                 console.rule()
             else:
-                logger.info("Test results did not match the test results of the original code.")
+                logger.info("h4|tags|Test results did not match the test results of the original code ❌")
                 console.rule()
                 return Failure("Test results did not match the test results of the original code.")
 
-            # TODO: Add here a log message for benchmarking with takes_time tag.
+            logger.info(f"loading|tags|Running performance tests for candidate {optimization_candidate_index}.")
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(

@@ -31,19 +31,12 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
-        if isinstance(self, LspTextMessage):
-            self.text = simplify_worktree_paths(self.text)
-            self.text = replace_quotes_with_backticks(self.text)
-        if isinstance(self, LspCodeMessage):
-            self.file_name = simplify_worktree_paths(str(self.file_name), highlight=False)
-        if isinstance(self, LspMarkdownMessage):
-            self.markdown = simplify_worktree_paths(self.markdown)
-            self.markdown = replace_quotes_with_backticks(self.markdown)
-
         data = self._loop_through(asdict(self))
         # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
-        return json.dumps(ordered)
+        return (
+            json.dumps(ordered) + "\u241f"
+        )  # \u241F is the message delimiter becuase it can be more than one message sent over the same message
 
 
 @dataclass
@@ -52,6 +45,11 @@ class LspTextMessage(LspMessage):
 
     def type(self) -> str:
         return "text"
+
+    def serialize(self) -> str:
+        self.text = simplify_worktree_paths(self.text)
+        self.text = replace_quotes_with_backticks(self.text)
+        return super().serialize()
 
 
 @dataclass
@@ -70,6 +68,7 @@ class LspCodeMessage(LspMessage):
         self.lines_count = code_lines_length
         if code_lines_length > max_code_lines_before_collapse:
             self.collapsed = True
+        self.file_name = simplify_worktree_paths(str(self.file_name), highlight=False)
         return super().serialize()
 
 
@@ -80,10 +79,7 @@ class LspMarkdownMessage(LspMessage):
     def type(self) -> str:
         return "markdown"
 
-
-@dataclass
-class LspStatsMessage(LspMessage):
-    stats: dict[str, Any]
-
-    def type(self) -> str:
-        return "stats"
+    def serialize(self) -> str:
+        self.markdown = simplify_worktree_paths(self.markdown)
+        self.markdown = replace_quotes_with_backticks(self.markdown)
+        return super().serialize()
