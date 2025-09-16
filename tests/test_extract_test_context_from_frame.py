@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -127,7 +128,7 @@ class TestExtractTestContextFromFrame:
     
     def test_direct_test_function_call(self):
         def test_example_function():
-            return extract_test_context_from_frame()
+            return extract_test_context_from_frame(Path("/tmp/tests"))
         
         result = test_example_function()
         module_name, class_name, function_name = result
@@ -139,7 +140,7 @@ class TestExtractTestContextFromFrame:
     def test_with_test_class_method(self):
         class TestExampleClass:
             def test_method(self):
-                return extract_test_context_from_frame()
+                return extract_test_context_from_frame(Path("/tmp/tests"))
         
         instance = TestExampleClass()
         result = instance.test_method()
@@ -150,7 +151,7 @@ class TestExtractTestContextFromFrame:
         assert function_name == "test_method"
     
     def test_function_without_test_prefix(self):
-        result = extract_test_context_from_frame()
+        result = extract_test_context_from_frame(Path("/tmp/tests"))
         module_name, class_name, function_name = result
         
         assert module_name == __name__
@@ -169,12 +170,12 @@ class TestExtractTestContextFromFrame:
         mock_current_frame.return_value = mock_frame
         
         with pytest.raises(RuntimeError, match="No test function found in call stack"):
-            extract_test_context_from_frame()
+            extract_test_context_from_frame(Path("/tmp/tests"))
     
     def test_real_call_stack_context(self):
         def nested_function():
             def deeper_function():
-                return extract_test_context_from_frame()
+                return extract_test_context_from_frame(Path("/tmp/tests"))
             return deeper_function()
         
         result = nested_function()
@@ -191,7 +192,7 @@ class TestIntegrationScenarios:
     def test_pytest_class_method_scenario(self):
         class TestExampleIntegration:
             def test_integration_method(self):
-                return extract_test_context_from_frame()
+                return extract_test_context_from_frame(Path("/tmp/tests"))
         
         instance = TestExampleIntegration()
         result = instance.test_integration_method()
@@ -205,7 +206,7 @@ class TestIntegrationScenarios:
         def outer_helper():
             def inner_helper():
                 def deepest_helper():
-                    return extract_test_context_from_frame()
+                    return extract_test_context_from_frame(Path("/tmp/tests"))
                 return deepest_helper()
             return inner_helper()
         
