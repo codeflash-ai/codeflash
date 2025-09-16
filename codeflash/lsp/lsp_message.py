@@ -42,7 +42,7 @@ class LspMessage:
 
 @dataclass
 class LspTextMessage(LspMessage):
-    text: str
+    text: str = ""
 
     def type(self) -> str:
         return "text"
@@ -55,7 +55,7 @@ class LspTextMessage(LspMessage):
 
 @dataclass
 class LspCodeMessage(LspMessage):
-    code: str
+    code: str = ""
     file_name: Optional[Path] = None
     function_name: Optional[str] = None
     collapsed: bool = False
@@ -75,7 +75,7 @@ class LspCodeMessage(LspMessage):
 
 @dataclass
 class LspMarkdownMessage(LspMessage):
-    markdown: str
+    markdown: str = ""
 
     def type(self) -> str:
         return "markdown"
