@@ -14,7 +14,7 @@ max_code_lines_before_collapse = 45
 @dataclass
 class LspMessage:
     # to show a loading indicator if the operation is taking time like generating candidates or tests
-    takes_time: bool = field(default=False, kw_only=True)
+    takes_time: bool = field(default=False)
 
     def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
         if isinstance(obj, list):
@@ -35,8 +35,9 @@ class LspMessage:
         # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
         return (
-            json.dumps(ordered) + "\u241f"
-        )  # \u241F is the message delimiter becuase it can be more than one message sent over the same message
+            json.dumps(ordered)
+            + "\u241f"  # \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
+        )
 
 
 @dataclass

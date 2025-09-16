@@ -1241,7 +1241,7 @@ class FunctionOptimizer:
             )
 
             if best_optimization:
-                logger.info("h2|tags|Best candidate 🚀:")
+                logger.info("h2|tags|Best candidate 🚀")
                 code_print(best_optimization.candidate.source_code.flat)
                 processed_benchmark_info = None
                 if self.args.benchmark:

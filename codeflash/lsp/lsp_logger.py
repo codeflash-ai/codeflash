@@ -39,7 +39,6 @@ def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
     parts = msg.split("|tags|")
     if len(parts) == 2:
         message_tags = LspMessageTags()
-        # Use set for O(1) lookups and remove whitespace in a single pass
         tags = {tag.strip() for tag in parts[0].split(",")}
         if "!lsp" in tags:
             message_tags.not_lsp = True
