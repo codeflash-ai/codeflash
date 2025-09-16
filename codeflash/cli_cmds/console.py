@@ -87,10 +87,8 @@ def code_print(code_str: str, file_name: Optional[str] = None, function_name: Op
     """Print code with syntax highlighting."""
     from rich.syntax import Syntax
 
-    formatted_code = Syntax(code_str, "python", line_numbers=True, theme="github-dark")
-
     console.rule()
-    console.print(formatted_code)
+    console.print(Syntax(code_str, "python", line_numbers=True, theme="github-dark"))
     console.rule()
 
 

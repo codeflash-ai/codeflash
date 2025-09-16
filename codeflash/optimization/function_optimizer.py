@@ -152,8 +152,6 @@ class CandidateProcessor:
         concurrent.futures.wait([self.future_line_profile_results])
         line_profile_results = self.future_line_profile_results.result()
 
-        logger.info(f"Generated {len(line_profile_results)} candidate optimizations using line profiler information.")
-
         for candidate in line_profile_results:
             self.candidate_queue.put(candidate)
 
@@ -517,7 +515,7 @@ class FunctionOptimizer:
                     )
                     if not did_update:
                         logger.warning(
-                            "lsp|tags|No functions were replaced in the optimized code. Skipping optimization candidate."
+                            "force_lsp|tags|No functions were replaced in the optimized code. Skipping optimization candidate."
                         )
                         console.rule()
                         continue
@@ -1085,7 +1083,7 @@ class FunctionOptimizer:
 
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"Generated '{len(candidates)}' candidate optimizations.")
+        logger.info(f"lsp|tags|Generated '{len(candidates)}' candidate optimizations.")
         console.rule()
 
         if not candidates:

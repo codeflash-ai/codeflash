@@ -11,7 +11,8 @@ from codeflash.lsp.lsp_message import LspTextMessage
 class LspMessageTags:
     # always set default values for message tags
     not_lsp: bool = False  # !lsp           (prevent the message from being sent to the LSP)
-    force_lsp: bool = False  # lsp            (you can use this to force a message to be sent to the LSP even if the level is not supported)
+    lsp: bool = False  # lsp                (lsp only)
+    force_lsp: bool = False  # force_lsp    (you can use this to force a message to be sent to the LSP even if the level is not supported)
     loading: bool = False  # loading        (you can use this to indicate that the message is a loading message)
 
     h1: bool = False  # h1
@@ -33,9 +34,6 @@ def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
 
 
 def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
-    if not isinstance(msg, str):
-        return None, msg
-
     parts = msg.split("|tags|")
     if len(parts) == 2:
         message_tags = LspMessageTags()
@@ -43,6 +41,8 @@ def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
         if "!lsp" in tags:
             message_tags.not_lsp = True
         if "lsp" in tags:
+            message_tags.lsp = True
+        if "force_lsp" in tags:
             message_tags.force_lsp = True
         if "loading" in tags:
             message_tags.loading = True
@@ -63,16 +63,21 @@ supported_lsp_log_levels = ("info", "debug")
 
 
 def enhanced_log(
-    msg: str,
+    msg: str | Any,  # noqa: ANN401
     actual_log_fn: Callable[[str, Any, Any], None],
     level: str,
     *args: Any,  # noqa: ANN401
     **kwargs: Any,  # noqa: ANN401
 ) -> None:
-    lsp_enabled = is_LSP_enabled()
-    tags, clean_msg = extract_tags(msg)
+    if not isinstance(msg, str):
+        actual_log_fn(msg, *args, **kwargs)
+        return
 
-    if not lsp_enabled or not isinstance(clean_msg, str):
+    tags, clean_msg = extract_tags(msg)
+    lsp_enabled = is_LSP_enabled()
+    lsp_only = tags and tags.lsp
+
+    if not lsp_enabled and not lsp_only:
         actual_log_fn(clean_msg, *args, **kwargs)
         return
 

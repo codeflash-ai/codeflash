@@ -16,7 +16,7 @@ from codeflash.lsp.beta import server
 # Configure logging to stderr for VS Code output channel
 def setup_logging() -> logging.Logger:
     # Clear any existing handlers to prevent conflicts
-    root_logger = logging.getLogger("rich")
+    root_logger = logging.getLogger()
     root_logger.handlers.clear()
 
     # Set up stderr handler for VS Code output channel with [LSP-Server] prefix
