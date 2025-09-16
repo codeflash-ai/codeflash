@@ -151,7 +151,13 @@ class VariableNormalizer(ast.NodeTransformer):
 
     def visit_With(self, node):  # noqa : ANN001, ANN201
         """Handle with statement as variables."""
-        return self.generic_visit(node)
+        # Direct traversal to avoid generic_visit overhead
+        for item in node.items:
+            if item.optional_vars is not None:
+                item.optional_vars = self.visit(item.optional_vars)
+        for i, stmt in enumerate(node.body):
+            node.body[i] = self.visit(stmt)
+        return node
 
 
 def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: bool = False) -> str:  # noqa : FBT002, FBT001
