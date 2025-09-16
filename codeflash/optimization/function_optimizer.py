@@ -39,6 +39,7 @@ from codeflash.code_utils.code_utils import (
     has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
+    unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
@@ -47,12 +48,14 @@ from codeflash.code_utils.config_consts import (
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME,
 )
+from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
     remove_functions_from_generated_tests,
 )
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
@@ -173,12 +176,11 @@ class CandidateProcessor:
         for candidate in refinement_response:
             self.candidate_queue.put(candidate)
 
+        self.candidate_len += len(refinement_response)
         if len(refinement_response) > 0:
-            self.candidate_len += len(refinement_response)
             logger.info(
                 f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
             )
-
         self.refinement_done = True
 
         return self.get_next_candidate()
@@ -527,7 +529,7 @@ class FunctionOptimizer:
                     )
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
-                normalized_code = ast.unparse(ast.parse(candidate.source_code.flat.strip()))
+                normalized_code = normalize_code(candidate.source_code.flat.strip())
                 if normalized_code in ast_code_to_id:
                     logger.info(
                         "Current candidate has been encountered before in testing, Skipping optimization candidate."
@@ -547,7 +549,9 @@ class FunctionOptimizer:
                     ].markdown
                     optimizations_post[past_opt_id] = ast_code_to_id[normalized_code]["shorter_source_code"].markdown
                     new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
-                    if new_diff_len < ast_code_to_id[normalized_code]["diff_len"]:
+                    if (
+                        new_diff_len < ast_code_to_id[normalized_code]["diff_len"]
+                    ):  # new candidate has a shorter diff than the previously encountered one
                         ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
                         ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
                     continue
@@ -674,9 +678,12 @@ class FunctionOptimizer:
         # reassign the shorter code here
         valid_candidates_with_shorter_code = []
         diff_lens_list = []  # character level diff
+        speedups_list = []
+        optimization_ids = []
+        diff_strs = []
         runtimes_list = []
         for valid_opt in valid_optimizations:
-            valid_opt_normalized_code = ast.unparse(ast.parse(valid_opt.candidate.source_code.flat.strip()))
+            valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
             new_candidate_with_shorter_code = OptimizedCandidate(
                 source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
@@ -697,12 +704,39 @@ class FunctionOptimizer:
             diff_lens_list.append(
                 diff_length(new_best_opt.candidate.source_code.flat, code_context.read_writable_code.flat)
             )  # char level diff
+            diff_strs.append(
+                unified_diff_strings(code_context.read_writable_code.flat, new_best_opt.candidate.source_code.flat)
+            )
+            speedups_list.append(
+                1
+                + performance_gain(
+                    original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=new_best_opt.runtime
+                )
+            )
+            optimization_ids.append(new_best_opt.candidate.optimization_id)
             runtimes_list.append(new_best_opt.runtime)
-        diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
-        runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
-        # TODO: better way to resolve conflicts with same min ranking
-        overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking.keys()}  # noqa: SIM118
-        min_key = min(overall_ranking, key=overall_ranking.get)
+        if len(optimization_ids) > 1:
+            future_ranking = self.executor.submit(
+                ai_service_client.generate_ranking,
+                diffs=diff_strs,
+                optimization_ids=optimization_ids,
+                speedups=speedups_list,
+                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            )
+            concurrent.futures.wait([future_ranking])
+            ranking = future_ranking.result()
+            if ranking:
+                min_key = ranking[0]
+            else:
+                diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
+                runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+                # TODO: better way to resolve conflicts with same min ranking
+                overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking}
+                min_key = min(overall_ranking, key=overall_ranking.get)
+        elif len(optimization_ids) == 1:
+            min_key = 0  # only one candidate in valid _opts, already returns if there are no valid candidates
+        else:  # 0? shouldn't happen but it's there to escape potential bugs
+            return None
         best_optimization = valid_candidates_with_shorter_code[min_key]
         # reassign code string which is the shortest
         ai_service_client.log_results(
@@ -1342,10 +1376,12 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "root_dir": self.project_root,
         }
 
         raise_pr = not self.args.no_pr
+
+        if raise_pr or self.args.staging_review:
+            data["root_dir"] = git_root_dir()
 
         if raise_pr and not self.args.staging_review:
             data["git_remote"] = self.args.git_remote
