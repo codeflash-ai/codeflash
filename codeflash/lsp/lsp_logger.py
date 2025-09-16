@@ -33,6 +33,7 @@ def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
     return msg
 
 
+# TODO: Make this work when optimizing extract_tags from lsp code message that has |tags|
 def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
     parts = msg.split("|tags|")
     if len(parts) == 2:
