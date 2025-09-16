@@ -26,6 +26,7 @@ from codeflash.verification.coverage_utils import CoverageUtils
 if TYPE_CHECKING:
     import subprocess
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, CoverageData, TestFiles
     from codeflash.verification.verification_utils import TestConfig
 
@@ -38,6 +39,44 @@ def parse_func(file_path: Path) -> XMLParser:
 
 matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######\$!\n")
 matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
+
+
+def calculate_async_throughput_from_stdout(stdout: str, async_function_names: set[str]) -> dict[str, int]:
+    if not stdout or not async_function_names:
+        return {}
+
+    throughput_counts = {}
+
+    # Find all complete performance tag pairs (start + end)
+    begin_matches = list(matches_re_start.finditer(stdout))
+    end_matches = set()
+
+    for match in matches_re_end.finditer(stdout):
+        groups = match.groups()
+        # Remove timing info from the last group to match start tags
+        # End format: 'iteration_id:timing_info', Start format: 'iteration_id'
+        # We need to remove only the last ':timing_info' part
+        last_group = groups[5]
+        split_parts = last_group.split(":")
+        if len(split_parts) > 2:  # Has timing info (format: prefix:suffix:timing)
+            # Reconstruct without the timing info (last part)
+            iteration_id = ":".join(split_parts[:-1])
+            normalized_groups = (*groups[:5], iteration_id)
+        else:
+            normalized_groups = groups
+        end_matches.add(normalized_groups)
+
+    # Count complete tags for async functions only
+    for begin_match in begin_matches:
+        groups = begin_match.groups()
+        function_getting_tested = groups[4]
+
+        if function_getting_tested in async_function_names and groups in end_matches:
+            if function_getting_tested not in throughput_counts:
+                throughput_counts[function_getting_tested] = 0
+            throughput_counts[function_getting_tested] += 1
+
+    return throughput_counts
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -495,7 +534,10 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
-) -> tuple[TestResults, CoverageData | None]:
+    function_to_optimize: FunctionToOptimize | None = None,
+    *,
+    calculate_throughput: bool = False,
+) -> tuple[TestResults, CoverageData | None, dict[str, int]]:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_files=test_files,
@@ -532,6 +574,18 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
+    # Calculate throughput for async functions only when requested (during performance testing)
+    throughput_counts = {}
+    if calculate_throughput and function_to_optimize and function_to_optimize.is_async:
+        logger.info(f"Calculating throughput for async function: {function_to_optimize.function_name}")
+        all_stdout = ""
+        for result in results.test_results:
+            if result.stdout:
+                all_stdout += result.stdout
+
+        async_function_names = {function_to_optimize.function_name}
+        throughput_counts = calculate_async_throughput_from_stdout(all_stdout, async_function_names)
+
     all_args = False
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
@@ -543,4 +597,5 @@ def parse_test_results(
             function_name=function_name,
         )
         coverage.log_coverage()
+    # return results, coverage if all_args else None, throughput_counts
     return results, coverage if all_args else None
