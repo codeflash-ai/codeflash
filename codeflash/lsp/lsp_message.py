@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,7 +14,7 @@ max_code_lines_before_collapse = 45
 @dataclass
 class LspMessage:
     # to show a loading indicator if the operation is taking time like generating candidates or tests
-    takes_time: bool = field(default=False)
+    takes_time: bool = False
 
     def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
         if isinstance(obj, list):
