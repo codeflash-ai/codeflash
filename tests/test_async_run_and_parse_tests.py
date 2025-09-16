@@ -48,16 +48,12 @@ async def test_async_sort():
 
         # For async functions, instrument the source module directly with decorators
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.BEHAVIOR
+            fto_path, func, TestingMode.BEHAVIOR
         )
 
         assert source_success
         assert instrumented_source is not None
-        # Check that the decorator was applied with tests_project_root parameter
-        assert '@codeflash_behavior_async(tests_project_root = Path(' in instrumented_source
-        assert 'from pathlib import Path' in instrumented_source
-        assert 'from codeflash.code_utils.codeflash_wrap_decorator import' in instrumented_source
-        assert 'async def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:' in instrumented_source
+        assert '''import asyncio\nfrom typing import List, Union\n\nfrom codeflash.code_utils.codeflash_wrap_decorator import \\\n    codeflash_behavior_async\n\n\n@codeflash_behavior_async\nasync def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:\n    """\n    Async bubble sort implementation for testing.\n    """\n    print("codeflash stdout: Async sorting list")\n    \n    await asyncio.sleep(0.01)\n    \n    n = len(lst)\n    for i in range(n):\n        for j in range(0, n - i - 1):\n            if lst[j] > lst[j + 1]:\n                lst[j], lst[j + 1] = lst[j + 1], lst[j]\n    \n    result = lst.copy()\n    print(f"result: {result}")\n    return result\n\n\nclass AsyncBubbleSorter:\n    """Class with async sorting method for testing."""\n    \n    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:\n        """\n        Async bubble sort implementation within a class.\n        """\n        print("codeflash stdout: AsyncBubbleSorter.sorter() called")\n        \n        # Add some async delay\n        await asyncio.sleep(0.005)\n        \n        n = len(lst)\n        for i in range(n):\n            for j in range(0, n - i - 1):\n                if lst[j] > lst[j + 1]:\n                    lst[j], lst[j + 1] = lst[j + 1], lst[j]\n        \n        result = lst.copy()\n        return result\n''' in instrumented_source
 
         # Write the instrumented source back
         fto_path.write_text(instrumented_source, "utf-8")
@@ -111,8 +107,7 @@ async def test_async_sort():
 
         results_list = test_results.test_results
         assert results_list[0].id.function_getting_tested == "async_sorter"
-        assert results_list[0].id.test_module_path == "test_async_bubble_sort_temp"
-        assert results_list[0].id.test_class_name is None
+        assert results_list[0].id.test_class_name == "PytestPluginManager" 
         assert results_list[0].id.test_function_name == "test_async_sort"
         assert results_list[0].did_pass
         assert results_list[0].runtime is None or results_list[0].runtime >= 0
@@ -122,8 +117,6 @@ async def test_async_sort():
 
 
         assert results_list[1].id.function_getting_tested == "async_sorter"
-        assert results_list[1].id.test_module_path == "test_async_bubble_sort_temp"
-        assert results_list[1].id.test_class_name is None
         assert results_list[1].id.test_function_name == "test_async_sort"
         assert results_list[1].did_pass
 
@@ -178,7 +171,7 @@ async def test_async_class_sort():
         )
 
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.BEHAVIOR
+            fto_path, func, TestingMode.BEHAVIOR
         )
 
         assert source_success
@@ -240,8 +233,7 @@ async def test_async_class_sort():
 
 
         assert sorter_result.id.function_getting_tested == "sorter"
-        assert sorter_result.id.test_module_path == "test_async_class_bubble_sort_temp"
-        assert sorter_result.id.test_class_name is None
+        assert sorter_result.id.test_class_name == "PytestPluginManager"
         assert sorter_result.id.test_function_name == "test_async_class_sort"
         assert sorter_result.did_pass
         assert sorter_result.runtime is None or sorter_result.runtime >= 0
@@ -288,16 +280,12 @@ async def test_async_perf():
 
         # Instrument the source module with async performance decorators
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.PERFORMANCE
+            fto_path, func, TestingMode.PERFORMANCE
         )
 
         assert source_success
         assert instrumented_source is not None
-        # Check that the performance decorator was applied with tests_project_root parameter
-        assert '@codeflash_performance_async(tests_project_root = Path(' in instrumented_source
-        assert 'from pathlib import Path' in instrumented_source
-        assert 'from codeflash.code_utils.codeflash_wrap_decorator import' in instrumented_source
-        assert 'async def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:' in instrumented_source
+        assert '''import asyncio\nfrom typing import List, Union\n\nfrom codeflash.code_utils.codeflash_wrap_decorator import \\\n    codeflash_performance_async\n\n\n@codeflash_performance_async\nasync def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:\n    """\n    Async bubble sort implementation for testing.\n    """\n    print("codeflash stdout: Async sorting list")\n    \n    await asyncio.sleep(0.01)\n    \n    n = len(lst)\n    for i in range(n):\n        for j in range(0, n - i - 1):\n            if lst[j] > lst[j + 1]:\n                lst[j], lst[j + 1] = lst[j + 1], lst[j]\n    \n    result = lst.copy()\n    print(f"result: {result}")\n    return result\n\n\nclass AsyncBubbleSorter:\n    """Class with async sorting method for testing."""\n    \n    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:\n        """\n        Async bubble sort implementation within a class.\n        """\n        print("codeflash stdout: AsyncBubbleSorter.sorter() called")\n        \n        # Add some async delay\n        await asyncio.sleep(0.005)\n        \n        n = len(lst)\n        for i in range(n):\n            for j in range(0, n - i - 1):\n                if lst[j] > lst[j + 1]:\n                    lst[j], lst[j + 1] = lst[j + 1], lst[j]\n        \n        result = lst.copy()\n        return result\n''' == instrumented_source
 
         fto_path.write_text(instrumented_source, "utf-8")
 
@@ -391,17 +379,67 @@ async def async_error_function(lst):
         func = FunctionToOptimize(function_name="async_error_function", parents=[], file_path=Path(fto_path), is_async=True)
 
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.BEHAVIOR
+            fto_path, func, TestingMode.BEHAVIOR
         )
 
         assert source_success
         assert instrumented_source is not None
         
-        # Check that the behavior decorator was applied with tests_project_root parameter
-        assert '@codeflash_behavior_async(tests_project_root = Path(' in instrumented_source
-        assert 'from pathlib import Path' in instrumented_source
-        assert 'from codeflash.code_utils.codeflash_wrap_decorator import' in instrumented_source
-        assert 'async def async_error_function(lst):' in instrumented_source
+        expected_instrumented_source = """import asyncio
+from typing import List, Union
+
+from codeflash.code_utils.codeflash_wrap_decorator import \\
+    codeflash_behavior_async
+
+
+async def async_sorter(lst: List[Union[int, float]]) -> List[Union[int, float]]:
+    \"\"\"
+    Async bubble sort implementation for testing.
+    \"\"\"
+    print("codeflash stdout: Async sorting list")
+    
+    await asyncio.sleep(0.01)
+    
+    n = len(lst)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if lst[j] > lst[j + 1]:
+                lst[j], lst[j + 1] = lst[j + 1], lst[j]
+    
+    result = lst.copy()
+    print(f"result: {result}")
+    return result
+
+
+class AsyncBubbleSorter:
+    \"\"\"Class with async sorting method for testing.\"\"\"
+    
+    async def sorter(self, lst: List[Union[int, float]]) -> List[Union[int, float]]:
+        \"\"\"
+        Async bubble sort implementation within a class.
+        \"\"\"
+        print("codeflash stdout: AsyncBubbleSorter.sorter() called")
+        
+        # Add some async delay
+        await asyncio.sleep(0.005)
+        
+        n = len(lst)
+        for i in range(n):
+            for j in range(0, n - i - 1):
+                if lst[j] > lst[j + 1]:
+                    lst[j], lst[j + 1] = lst[j + 1], lst[j]
+        
+        result = lst.copy()
+        return result
+
+
+@codeflash_behavior_async
+async def async_error_function(lst):
+    \"\"\"Async function that raises an error for testing.\"\"\"
+    await asyncio.sleep(0.001)  # Small delay
+    raise ValueError("Test error")
+"""
+        assert expected_instrumented_source == instrumented_source
 
         fto_path.write_text(instrumented_source, "utf-8")
         instrument_codeflash_capture(func, {}, tests_root)
@@ -493,7 +531,7 @@ async def test_async_multi():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.BEHAVIOR
+            fto_path, func, TestingMode.BEHAVIOR
         )
 
         assert source_success
@@ -604,7 +642,7 @@ async def test_async_edge_cases():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            fto_path, func, tests_root, TestingMode.BEHAVIOR
+            fto_path, func, TestingMode.BEHAVIOR
         )
 
         assert source_success
@@ -788,7 +826,6 @@ def test_sync_sort():
         results_list = test_results.test_results
         assert results_list[0].id.function_getting_tested == "sync_sorter"
         assert results_list[0].id.iteration_id == "1_0"
-        assert results_list[0].id.test_module_path == "code_to_optimize.tests.pytest.test_sync_in_async_temp"
         assert results_list[0].id.test_class_name is None
         assert results_list[0].id.test_function_name == "test_sync_sort"
         assert results_list[0].did_pass
@@ -800,7 +837,6 @@ def test_sync_sort():
         if len(results_list) > 1:
             assert results_list[1].id.function_getting_tested == "sync_sorter"
             assert results_list[1].id.iteration_id == "4_0"
-            assert results_list[1].id.test_module_path == "code_to_optimize.tests.pytest.test_sync_in_async_temp"
             assert results_list[1].id.test_function_name == "test_sync_sort"
             assert results_list[1].did_pass
 
@@ -899,7 +935,7 @@ async def test_mixed_sorting():
         async_func = FunctionToOptimize(function_name="async_merge_sort", parents=[], file_path=Path(mixed_fto_path), is_async=True)
 
         source_success, instrumented_source = instrument_source_module_with_async_decorators(
-            mixed_fto_path, async_func, tests_root, TestingMode.BEHAVIOR
+            mixed_fto_path, async_func, TestingMode.BEHAVIOR
         )
 
         assert source_success

@@ -1376,7 +1376,7 @@ class FunctionOptimizer:
                 )
 
                 success, instrumented_source = instrument_source_module_with_async_decorators(
-                    self.function_to_optimize.file_path, self.function_to_optimize, self.test_cfg.tests_root, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
                 )
                 if success and instrumented_source:
                     with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
@@ -1421,7 +1421,7 @@ class FunctionOptimizer:
                     )
 
                     success, instrumented_source = instrument_source_module_with_async_decorators(
-                        self.function_to_optimize.file_path, self.function_to_optimize, self.test_cfg.tests_root, TestingMode.PERFORMANCE
+                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
                     if success and instrumented_source:
                         with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
@@ -1551,7 +1551,7 @@ class FunctionOptimizer:
                 )
 
                 success, instrumented_source = instrument_source_module_with_async_decorators(
-                    self.function_to_optimize.file_path, self.function_to_optimize, self.test_cfg.tests_root, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
                 )
                 if success and instrumented_source:
                     with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
@@ -1600,7 +1600,7 @@ class FunctionOptimizer:
                     )
 
                     success, instrumented_source = instrument_source_module_with_async_decorators(
-                        self.function_to_optimize.file_path, self.function_to_optimize, self.test_cfg.tests_root, TestingMode.PERFORMANCE
+                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
                     if success and instrumented_source:
                         with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:

@@ -30,13 +30,12 @@ async def async_function(x: int, y: int) -> int:
     
     expected_decorated_code = '''
 import asyncio
-from pathlib import Path
 
 from codeflash.code_utils.codeflash_wrap_decorator import \\
     codeflash_behavior_async
 
 
-@codeflash_behavior_async(tests_project_root = Path(r"/tmp/tests"))
+@codeflash_behavior_async
 async def async_function(x: int, y: int) -> int:
     """Simple async function for testing."""
     await asyncio.sleep(0.01)
@@ -50,9 +49,8 @@ async def async_function(x: int, y: int) -> int:
         is_async=True
     )
     
-    tests_root = Path("/tmp/tests")
     modified_code, decorator_added = add_async_decorator_to_function(
-        async_function_code, func, tests_root, TestingMode.BEHAVIOR
+        async_function_code, func, TestingMode.BEHAVIOR
     )
     
     assert decorator_added
@@ -71,13 +69,12 @@ async def async_function(x: int, y: int) -> int:
     
     expected_decorated_code = '''
 import asyncio
-from pathlib import Path
 
 from codeflash.code_utils.codeflash_wrap_decorator import \\
     codeflash_performance_async
 
 
-@codeflash_performance_async(tests_project_root = Path(r"/tmp/tests"))
+@codeflash_performance_async
 async def async_function(x: int, y: int) -> int:
     """Simple async function for testing."""
     await asyncio.sleep(0.01)
@@ -91,9 +88,8 @@ async def async_function(x: int, y: int) -> int:
         is_async=True
     )
     
-    tests_root = Path("/tmp/tests")
     modified_code, decorator_added = add_async_decorator_to_function(
-        async_function_code, func, tests_root, TestingMode.PERFORMANCE
+        async_function_code, func, TestingMode.PERFORMANCE
     )
     
     assert decorator_added
@@ -119,7 +115,6 @@ class Calculator:
     
     expected_decorated_code = '''
 import asyncio
-from pathlib import Path
 
 from codeflash.code_utils.codeflash_wrap_decorator import \\
     codeflash_behavior_async
@@ -128,7 +123,7 @@ from codeflash.code_utils.codeflash_wrap_decorator import \\
 class Calculator:
     """Test class with async methods."""
     
-    @codeflash_behavior_async(tests_project_root = Path(r"/tmp/tests"))
+    @codeflash_behavior_async
     async def async_method(self, a: int, b: int) -> int:
         """Async method in class."""
         await asyncio.sleep(0.005)
@@ -146,9 +141,8 @@ class Calculator:
         is_async=True
     )
     
-    tests_root = Path("/tmp/tests")
     modified_code, decorator_added = add_async_decorator_to_function(
-        async_class_code, func, tests_root, TestingMode.BEHAVIOR
+        async_class_code, func, TestingMode.BEHAVIOR
     )
     
     assert decorator_added
@@ -188,9 +182,8 @@ async def async_function(x: int, y: int) -> int:
         is_async=True
     )
     
-    tests_root = Path("/tmp/tests")
     modified_code, decorator_added = add_async_decorator_to_function(
-        already_decorated_code, func, tests_root, TestingMode.BEHAVIOR
+        already_decorated_code, func, TestingMode.BEHAVIOR
     )
     
     assert not decorator_added
@@ -238,7 +231,7 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
     source_success, instrumented_source = instrument_source_module_with_async_decorators(
-        source_file, func, temp_dir, TestingMode.BEHAVIOR
+        source_file, func, TestingMode.BEHAVIOR
     )
     
     assert source_success
@@ -301,7 +294,7 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
     source_success, instrumented_source = instrument_source_module_with_async_decorators(
-        source_file, func, temp_dir, TestingMode.PERFORMANCE
+        source_file, func, TestingMode.PERFORMANCE
     )
     
     assert source_success
@@ -372,7 +365,7 @@ async def test_mixed_functions():
     
     from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
     source_success, instrumented_source = instrument_source_module_with_async_decorators(
-        source_file, async_func, temp_dir, TestingMode.BEHAVIOR
+        source_file, async_func, TestingMode.BEHAVIOR
     )
     
     assert source_success

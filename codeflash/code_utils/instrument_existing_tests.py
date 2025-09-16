@@ -332,7 +332,7 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
 
 
 def instrument_source_module_with_async_decorators(
-    source_path: Path, function_to_optimize: FunctionToOptimize, tests_project_root: Path, mode: TestingMode = TestingMode.BEHAVIOR
+    source_path: Path, function_to_optimize: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
 ) -> tuple[bool, str | None]:
     if not function_to_optimize.is_async:
         return False, None
@@ -341,7 +341,7 @@ def instrument_source_module_with_async_decorators(
         with source_path.open(encoding="utf8") as f:
             source_code = f.read()
 
-        modified_code, decorator_added = add_async_decorator_to_function(source_code, function_to_optimize, tests_project_root, mode)
+        modified_code, decorator_added = add_async_decorator_to_function(source_code, function_to_optimize, mode)
 
         if decorator_added:
             return True, modified_code
@@ -770,20 +770,18 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
 class AsyncDecoratorAdder(cst.CSTTransformer):
     """Transformer that adds async decorator to async function definitions."""
 
-    def __init__(self, function: FunctionToOptimize, tests_project_root: Path, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
+    def __init__(self, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
         """Initialize the transformer.
 
         Args:
         ----
             function: The FunctionToOptimize object representing the target async function.
             mode: The testing mode to determine which decorator to apply.
-            tests_project_root: The root path for tests, used to compute relative module names.
 
         """
         super().__init__()
         self.function = function
         self.mode = mode
-        self.tests_project_root = tests_project_root
         self.qualified_name_parts = function.qualified_name.split(".")
         self.context_stack = []
         self.added_decorator = False
@@ -816,25 +814,7 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
 
             # Only add the decorator if it's not already there
             if not has_decorator:
-                # Always create parameterized decorator with tests_project_root (required)
-                if self.tests_project_root is None:
-                    raise ValueError("tests_project_root is required for async decorators")
-                    
-                decorator_call = cst.Call(
-                    func=cst.Name(value=self.decorator_name),
-                    args=[
-                        cst.Arg(
-                            keyword=cst.Name("tests_project_root"),
-                            value=cst.Call(
-                                func=cst.Name("Path"),
-                                args=[
-                                    cst.Arg(value=cst.SimpleString(f'r"{self.tests_project_root}"'))
-                                ]
-                            )
-                        )
-                    ]
-                )
-                new_decorator = cst.Decorator(decorator=decorator_call)
+                new_decorator = cst.Decorator(decorator=cst.Name(value=self.decorator_name))
 
                 # Add our new decorator to the existing decorators
                 updated_decorators = [new_decorator, *list(updated_node.decorators)]
@@ -868,7 +848,6 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
     def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
         self.mode = mode
         self.has_import = False
-        self.has_path_import = False
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         # Check if the async decorator import is already present
@@ -887,41 +866,26 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
             for import_alias in node.names:
                 if import_alias.name.value == decorator_name:
                     self.has_import = True
-        
-        # Check if Path is already imported from pathlib
-        if (
-            isinstance(node.module, cst.Name)
-            and node.module.value == "pathlib"
-            and not isinstance(node.names, cst.ImportStar)
-        ):
-            for import_alias in node.names:
-                if import_alias.name.value == "Path":
-                    self.has_path_import = True
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
-        new_imports = []
-        
-        # Add decorator import if not present
-        if not self.has_import:
-            decorator_name = (
-                "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-            )
-            decorator_import = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")
-            new_imports.append(decorator_import)
-        
-        # Always add Path import if not present (required for parameterized decorators)
-        if not self.has_path_import:
-            path_import = cst.parse_statement("from pathlib import Path")
-            new_imports.append(path_import)
-        
-        if new_imports:
-            return updated_node.with_changes(body=[*new_imports, *list(updated_node.body)])
-        
-        return updated_node
+        # If the import is already there, don't add it again
+        if self.has_import:
+            return updated_node
+
+        # Choose import based on mode
+        decorator_name = (
+            "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
+        )
+
+        # Parse the import statement into a CST node
+        import_node = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")
+
+        # Add the import to the module's body
+        return updated_node.with_changes(body=[import_node, *list(updated_node.body)])
 
 
 def add_async_decorator_to_function(
-    source_code: str, function: FunctionToOptimize, tests_project_root: Path, mode: TestingMode = TestingMode.BEHAVIOR
+    source_code: str, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
 ) -> tuple[str, bool]:
     """Add async decorator to an async function definition.
 
@@ -930,7 +894,6 @@ def add_async_decorator_to_function(
         source_code: The source code to modify.
         function: The FunctionToOptimize object representing the target async function.
         mode: The testing mode to determine which decorator to apply.
-        tests_project_root: The root path for tests, used to compute relative module names.
 
     Returns:
     -------
@@ -944,7 +907,7 @@ def add_async_decorator_to_function(
         module = cst.parse_module(source_code)
 
         # Add the decorator to the function
-        decorator_transformer = AsyncDecoratorAdder(function, tests_project_root, mode)
+        decorator_transformer = AsyncDecoratorAdder(function, mode)
         module = module.visit(decorator_transformer)
 
         # Add the import if decorator was added

@@ -52,7 +52,7 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.mark.asyncio
     async def test_behavior_async_basic_function(self, test_env_setup, temp_db_path):
         
-        @codeflash_behavior_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_behavior_async
         async def simple_async_add(a: int, b: int) -> int:
             await asyncio.sleep(0.001)
             return a + b
@@ -100,7 +100,7 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.mark.asyncio
     async def test_behavior_async_exception_handling(self, test_env_setup, temp_db_path):
         
-        @codeflash_behavior_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_behavior_async
         async def async_divide(a: int, b: int) -> float:
             await asyncio.sleep(0.001)
             if b == 0:
@@ -138,7 +138,7 @@ class TestAsyncWrapperSQLiteValidation:
     async def test_performance_async_no_database_storage(self, test_env_setup, temp_db_path, capsys):
         """Test performance async decorator doesn't store to database."""
         
-        @codeflash_performance_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_performance_async
         async def async_multiply(a: int, b: int) -> int:
             """Async function for performance testing."""
             await asyncio.sleep(0.002)
@@ -166,7 +166,7 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.mark.asyncio
     async def test_multiple_calls_indexing(self, test_env_setup, temp_db_path):
         
-        @codeflash_behavior_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_behavior_async
         async def async_increment(value: int) -> int:
             await asyncio.sleep(0.001)
             return value + 1
@@ -203,7 +203,7 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.mark.asyncio
     async def test_complex_async_function_with_kwargs(self, test_env_setup, temp_db_path):
         
-        @codeflash_behavior_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_behavior_async
         async def complex_async_func(
             pos_arg: str,
             *args: int,
@@ -251,7 +251,7 @@ class TestAsyncWrapperSQLiteValidation:
     @pytest.mark.asyncio
     async def test_database_schema_validation(self, test_env_setup, temp_db_path):
         
-        @codeflash_behavior_async(tests_project_root=Path("/tmp/tests"))
+        @codeflash_behavior_async
         async def schema_test_func() -> str:
             return "schema_test"
         
@@ -281,7 +281,7 @@ class TestAsyncWrapperSQLiteValidation:
     def test_sync_test_context_extraction(self):
         from codeflash.code_utils.codeflash_wrap_decorator import extract_test_context_from_frame
         
-        test_module, test_class, test_func = extract_test_context_from_frame(Path("/tmp/tests"))
+        test_module, test_class, test_func = extract_test_context_from_frame()
         assert test_module == __name__
         assert test_class == "TestAsyncWrapperSQLiteValidation"
         assert test_func == "test_sync_test_context_extraction"
