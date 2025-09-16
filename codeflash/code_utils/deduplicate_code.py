@@ -54,7 +54,9 @@ class VariableNormalizer(ast.NodeTransformer):
         """Track imported names."""
         for alias in node.names:
             name = alias.asname if alias.asname else alias.name
-            self.imports.add(name.split(".")[0])
+            if "." in name:
+                name = name.split(".", 1)[0]
+            self.imports.add(name)
         return node
 
     def visit_ImportFrom(self, node):  # noqa : ANN001, ANN201
