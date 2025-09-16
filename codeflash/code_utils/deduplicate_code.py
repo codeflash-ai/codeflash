@@ -70,10 +70,10 @@ class VariableNormalizer(ast.NodeTransformer):
         self.global_vars.update(node.names)
         return node
 
-    def visit_Nonlocal(self, node):  # noqa : ANN001, ANN201
+    def visit_Nonlocal(self, node):
         """Track nonlocal variable declarations."""
-        for name in node.names:
-            self.nonlocal_vars.add(name)
+        # Using set.update for batch insertion (faster than add-in-loop)
+        self.nonlocal_vars.update(node.names)
         return node
 
     def visit_FunctionDef(self, node):  # noqa : ANN001, ANN201
