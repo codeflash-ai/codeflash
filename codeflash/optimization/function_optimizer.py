@@ -339,6 +339,7 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
         if concolic_test_str:
+            # no concolic tests in lsp mode
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
 
@@ -1240,7 +1241,11 @@ class FunctionOptimizer:
 
             if best_optimization:
                 logger.info("h2|tags|Best candidate 🚀")
-                code_print(best_optimization.candidate.source_code.flat)
+                code_print(
+                    best_optimization.candidate.source_code.flat,
+                    file_name="best_candidate.py",
+                    function_name=self.function_to_optimize.function_name,
+                )
                 processed_benchmark_info = None
                 if self.args.benchmark:
                     processed_benchmark_info = process_benchmark_data(
