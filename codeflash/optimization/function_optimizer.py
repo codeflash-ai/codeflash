@@ -319,10 +319,9 @@ class FunctionOptimizer:
 
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = generated_results.unwrap()
-        count_tests = len(generated_tests.generated_tests)
-        if concolic_test_str:
-            count_tests += 1
+        count_tests, generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = (
+            generated_results.unwrap()
+        )
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
@@ -789,7 +788,7 @@ class FunctionOptimizer:
                 f"Performance: {explanation.perf_improvement_line}",
                 "",
                 "#### Explanation\n",
-                explanation.to_console_string(),
+                explanation.__str__(),
             ]
 
             # TODO: display the tests
@@ -807,7 +806,7 @@ class FunctionOptimizer:
             explanation_panel = Panel(
                 f"⚡️ Optimization successful! 📄 {self.function_to_optimize.qualified_name} in {explanation.file_path}\n"
                 f"📈 {explanation.perf_improvement_line}\n"
-                f"Explanation: \n{explanation.to_console_string()}",
+                f"Explanation: \n{explanation.__str__()}",
                 title="Optimization Summary",
                 border_style="green",
             )
@@ -1120,10 +1119,16 @@ class FunctionOptimizer:
             logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
             return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
-        logger.info(f"Generated '{len(tests)}' tests for {self.function_to_optimize.function_name}")
+
+        count_tests = len(tests)
+        if concolic_test_str:
+            count_tests += 1
+
+        logger.info(f"Generated '{count_tests}' tests for {self.function_to_optimize.function_name}")
         console.rule()
         generated_tests = GeneratedTestsList(generated_tests=tests)
         result = (
+            count_tests,
             generated_tests,
             function_to_concolic_tests,
             concolic_test_str,
@@ -1622,7 +1627,7 @@ class FunctionOptimizer:
                 console.rule()
                 return Failure("Test results did not match the test results of the original code.")
 
-            logger.info(f"loading|tags|Running performance tests for candidate {optimization_candidate_index}. ⚡️")
+            logger.info(f"loading|tags|Running performance tests ⚡️ for candidate {optimization_candidate_index}.")
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.lsp.lsp_message import LspTextMessage
@@ -10,9 +10,9 @@ from codeflash.lsp.lsp_message import LspTextMessage
 @dataclass
 class LspMessageTags:
     # always set default values for message tags
-    not_lsp: bool = False  # !lsp         (prevent the message from being sent to the LSP)
-    force_lsp: bool = False  # lsp          (you can use this to force a message to be sent to the LSP even if the level is not supported)
-    loading: bool = False  # loading      (you can use this to indicate that the message is a loading message)
+    not_lsp: bool = False  # !lsp           (prevent the message from being sent to the LSP)
+    force_lsp: bool = False  # lsp            (you can use this to force a message to be sent to the LSP even if the level is not supported)
+    loading: bool = False  # loading        (you can use this to indicate that the message is a loading message)
 
     h1: bool = False  # h1
     h2: bool = False  # h2
@@ -32,14 +32,15 @@ def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
     return msg
 
 
-def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
+def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
     if not isinstance(msg, str):
-        return LspMessageTags(), msg
+        return None, msg
 
     parts = msg.split("|tags|")
     if len(parts) == 2:
         message_tags = LspMessageTags()
-        tags = [tag.strip() for tag in parts[0].split(",")]
+        # Use set for O(1) lookups and remove whitespace in a single pass
+        tags = {tag.strip() for tag in parts[0].split(",")}
         if "!lsp" in tags:
             message_tags.not_lsp = True
         if "lsp" in tags:
@@ -56,7 +57,7 @@ def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
             message_tags.h4 = True
         return message_tags, parts[1]
 
-    return LspMessageTags(), msg
+    return None, msg
 
 
 supported_lsp_log_levels = ("info", "debug")
@@ -70,31 +71,23 @@ def enhanced_log(
     **kwargs: Any,  # noqa: ANN401
 ) -> None:
     lsp_enabled = is_LSP_enabled()
-    if not lsp_enabled or not isinstance(msg, str):
-        actual_log_fn(msg, *args, **kwargs)
-        return
+    tags, clean_msg = extract_tags(msg)
 
-    is_lsp_json_message = msg.startswith('{"type"')
-    is_normal_text_message = not is_lsp_json_message
-
-    tags = LspMessageTags()
-    clean_msg = msg
-
-    if is_normal_text_message:
-        tags, clean_msg = extract_tags(msg)
-
-    # normal cli mode
-    if not lsp_enabled:
+    if not lsp_enabled or not isinstance(clean_msg, str):
         actual_log_fn(clean_msg, *args, **kwargs)
         return
 
     #### LSP mode ####
+    is_lsp_json_message = clean_msg.startswith('{"type"')
+    is_normal_text_message = not is_lsp_json_message
+    final_tags = tags if tags else LspMessageTags()
+
     unsupported_level = level not in supported_lsp_log_levels
-    if not tags.force_lsp and (tags.not_lsp or unsupported_level):
+    if not final_tags.force_lsp and (final_tags.not_lsp or unsupported_level):
         return
 
     if is_normal_text_message:
-        clean_msg = add_heading_tags(clean_msg, tags)
-        clean_msg = LspTextMessage(text=clean_msg, takes_time=tags.loading).serialize()
+        clean_msg = add_heading_tags(clean_msg, final_tags)
+        clean_msg = LspTextMessage(text=clean_msg, takes_time=final_tags.loading).serialize()
 
     actual_log_fn(clean_msg, *args, **kwargs)

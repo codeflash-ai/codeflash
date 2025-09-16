@@ -41,7 +41,7 @@ class Explanation:
     def speedup_pct(self) -> str:
         return f"{self.speedup * 100:,.0f}%"
 
-    def to_console_string(self) -> str:
+    def __str__(self) -> str:
         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
         original_runtime_human = humanize_runtime(self.original_runtime_ns)

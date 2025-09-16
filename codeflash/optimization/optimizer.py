@@ -237,16 +237,16 @@ class Optimizer:
     ) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
         from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
-        logger.info("loading|tags|Scanning project for tests to guide optimization.")
         console.rule()
-        start_time = time.time()
-        function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(
-            self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
-        )
-        console.rule()
-        logger.info(
-            f"Discovered {num_discovered_tests} existing unit tests and {num_discovered_replay_tests} replay tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
-        )
+        with progress_bar("Scanning project for tests to guide optimization."):
+            start_time = time.time()
+            function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(
+                self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
+            )
+            console.rule()
+            logger.info(
+                f"Discovered {num_discovered_tests} existing unit tests and {num_discovered_replay_tests} replay tests in {(time.time() - start_time):.1f}s at {self.test_cfg.tests_root}"
+            )
         console.rule()
         ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
         return function_to_tests, num_discovered_tests
