@@ -53,6 +53,17 @@ class LspTextMessage(LspMessage):
         return super().serialize()
 
 
+# TODO: use it instead of the lspcodemessage to display multiple files in the same message
+class LspMultiCodeMessage(LspMessage):
+    files: list[LspCodeMessage]
+
+    def type(self) -> str:
+        return "code"
+
+    def serialize(self) -> str:
+        return super().serialize()
+
+
 @dataclass
 class LspCodeMessage(LspMessage):
     code: str = ""

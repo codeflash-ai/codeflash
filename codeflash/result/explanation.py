@@ -97,10 +97,11 @@ class Explanation:
             + self.raw_explanation_message
             + " \n\n"
             + (
-                "The new optimized code was tested for correctness. The results are listed below.\n" + test_report_str
-                if is_LSP_enabled()
                 # in the lsp (extension) we display the test results before the optimization summary
-                else ""
+                ""
+                if is_LSP_enabled()
+                else "The new optimized code was tested for correctness. The results are listed below.\n"
+                + test_report_str
             )
         )
 
