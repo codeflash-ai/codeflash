@@ -468,7 +468,7 @@ class PytestLoops:
         os.environ["CODEFLASH_TEST_FUNCTION"] = test_function_name
 
     @pytest.hookimpl(trylast=True)
-    def pytest_runtest_teardown(self, item: pytest.Item) -> None:
+    def pytest_runtest_teardown(self, item: pytest.Item) -> None:  # noqa: ARG002
         """Clean up test context environment variables after each test."""
         for var in ["CODEFLASH_TEST_MODULE", "CODEFLASH_TEST_CLASS", "CODEFLASH_TEST_FUNCTION"]:
             os.environ.pop(var, None)

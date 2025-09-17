@@ -1778,9 +1778,8 @@ class FunctionOptimizer:
             )
             # Return the test results for async throughput calculation
             return results, coverage_results, results if isinstance(results, TestResults) else None
-        else:
-            results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
-            return results, coverage_results, None
+        results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
+        return results, coverage_results, None
 
     def submit_test_generation_tasks(
         self,

@@ -83,7 +83,8 @@ end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######!
 
 
 def calculate_function_throughput_from_stdout(stdout: str, function_name: str) -> int:
-    """A completed execution is defined as having both a start tag and matching end tag:
+    """Calculate function throughput from stdout. A completed execution is defined as having both a start tag and matching end tag.
+
     Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
     End:   !######test_module:test_function:function_name:loop_index:iteration_id######!
     """
