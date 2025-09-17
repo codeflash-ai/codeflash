@@ -1504,16 +1504,15 @@ class FunctionOptimizer:
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
             async_throughput = None
-            if self.function_to_optimize.is_async and benchmarking_results:
+            if self.function_to_optimize.is_async:
                 all_stdout = ""
                 for result in benchmarking_results.test_results:
                     if result.stdout:
                         all_stdout += result.stdout
 
-                if all_stdout:
-                    async_throughput = calculate_function_throughput_from_stdout(
-                        all_stdout, self.function_to_optimize.function_name
-                    )
+                async_throughput = calculate_function_throughput_from_stdout(
+                    all_stdout, self.function_to_optimize.function_name
+                )
 
             if self.args.benchmark:
                 replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
