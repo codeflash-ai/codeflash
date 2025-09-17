@@ -26,7 +26,6 @@ from codeflash.verification.coverage_utils import CoverageUtils
 if TYPE_CHECKING:
     import subprocess
 
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext, CoverageData, TestFiles
     from codeflash.verification.verification_utils import TestConfig
 
@@ -77,6 +76,31 @@ def calculate_async_throughput_from_stdout(stdout: str, async_function_names: se
             throughput_counts[function_getting_tested] += 1
 
     return throughput_counts
+
+
+start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######!")
+
+
+def calculate_function_throughput_from_stdout(stdout: str, function_name: str) -> int:
+    """A completed execution is defined as having both a start tag and matching end tag:
+    Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
+    End:   !######test_module:test_function:function_name:loop_index:iteration_id######!
+    """
+    start_matches = start_pattern.findall(stdout)
+    end_matches = end_pattern.findall(stdout)
+    end_matches_set = set(end_matches)
+
+    # Count completed executions for the specific function only
+    function_throughput = 0
+
+    for start_match in start_matches:
+        # Check if this execution is for the function we're interested in and has a matching end tag
+        # function_name is at index 2 in the match tuple
+        if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
+            function_throughput += 1
+
+    return function_throughput
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -534,10 +558,7 @@ def parse_test_results(
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
     unittest_loop_index: int | None = None,
-    function_to_optimize: FunctionToOptimize | None = None,
-    *,
-    calculate_throughput: bool = False,
-) -> tuple[TestResults, CoverageData | None, dict[str, int]]:
+) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_files=test_files,
@@ -574,18 +595,6 @@ def parse_test_results(
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
 
-    # Calculate throughput for async functions only when requested (during performance testing)
-    throughput_counts = {}
-    if calculate_throughput and function_to_optimize and function_to_optimize.is_async:
-        logger.info(f"Calculating throughput for async function: {function_to_optimize.function_name}")
-        all_stdout = ""
-        for result in results.test_results:
-            if result.stdout:
-                all_stdout += result.stdout
-
-        async_function_names = {function_to_optimize.function_name}
-        throughput_counts = calculate_async_throughput_from_stdout(all_stdout, async_function_names)
-
     all_args = False
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
@@ -597,5 +606,4 @@ def parse_test_results(
             function_name=function_name,
         )
         coverage.log_coverage()
-    # return results, coverage if all_args else None, throughput_counts
     return results, coverage if all_args else None
