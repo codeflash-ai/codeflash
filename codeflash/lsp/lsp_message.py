@@ -58,7 +58,7 @@ class LspMultiCodeMessage(LspMessage):
     files: list[LspCodeMessage]
 
     def type(self) -> str:
-        return "code"
+        return self._type
 
     def serialize(self) -> str:
         return super().serialize()
@@ -92,6 +92,8 @@ class LspMarkdownMessage(LspMessage):
         return "markdown"
 
     def serialize(self) -> str:
-        self.markdown = simplify_worktree_paths(self.markdown)
-        self.markdown = replace_quotes_with_backticks(self.markdown)
+        if "worktrees/" in self.markdown and "/" in self.markdown:
+            self.markdown = simplify_worktree_paths(self.markdown)
+        if '"' in self.markdown or "'" in self.markdown:
+            self.markdown = replace_quotes_with_backticks(self.markdown)
         return super().serialize()
