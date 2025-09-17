@@ -1388,7 +1388,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
-                behavioral_results, coverage_results = self.run_and_parse_tests(
+                behavioral_results, coverage_results, behavioral_test_results_for_throughput = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
@@ -1409,6 +1409,8 @@ class FunctionOptimizer:
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
+            benchmarking_test_results_for_throughput = None
+
             if test_framework == "pytest":
                 line_profile_results = self.line_profiler_step(
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
@@ -1431,7 +1433,7 @@ class FunctionOptimizer:
                         )
 
                 try:
-                    benchmarking_results, _ = self.run_and_parse_tests(
+                    benchmarking_results, _, benchmarking_test_results_for_throughput = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1455,7 +1457,7 @@ class FunctionOptimizer:
                         # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, _ = self.run_and_parse_tests(
+                    unittest_loop_results, _, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1502,6 +1504,10 @@ class FunctionOptimizer:
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
+            async_throughput = self.calculate_async_throughput(
+                behavioral_test_results_for_throughput, benchmarking_test_results_for_throughput
+            )
+
             if self.args.benchmark:
                 replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
                     self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
@@ -1517,6 +1523,7 @@ class FunctionOptimizer:
                         runtime=total_timing,
                         coverage_results=coverage_results,
                         line_profile_results=line_profile_results,
+                        async_throughput=async_throughput,
                     ),
                     functions_to_remove,
                 )
@@ -1564,7 +1571,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
-                candidate_behavior_results, _ = self.run_and_parse_tests(
+                candidate_behavior_results, _, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
@@ -1610,7 +1617,7 @@ class FunctionOptimizer:
                         )
 
                 try:
-                    candidate_benchmarking_results, _ = self.run_and_parse_tests(
+                    candidate_benchmarking_results, _, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1643,7 +1650,7 @@ class FunctionOptimizer:
                         # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, cov = self.run_and_parse_tests(
+                    unittest_loop_results, cov, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1695,7 +1702,7 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
         line_profiler_output_file: Path | None = None,
-    ) -> tuple[TestResults | dict, CoverageData | None]:
+    ) -> tuple[TestResults | dict, CoverageData | None, TestResults | None]:
         coverage_database_file = None
         coverage_config_file = None
         try:
@@ -1741,7 +1748,7 @@ class FunctionOptimizer:
             logger.exception(
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
-            return TestResults(), None
+            return TestResults(), None, None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
                 f"Nonzero return code {run_result.returncode} when running tests in "
@@ -1769,9 +1776,11 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
             )
+            # Return the test results for async throughput calculation
+            return results, coverage_results, results if isinstance(results, TestResults) else None
         else:
             results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
-        return results, coverage_results
+            return results, coverage_results, None
 
     def submit_test_generation_tasks(
         self,
@@ -1822,6 +1831,31 @@ class FunctionOptimizer:
             test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
 
+    def calculate_async_throughput(
+        self, behavioral_test_results: TestResults | None, benchmarking_test_results: TestResults | None
+    ) -> dict[str, int] | None:
+        if not self.function_to_optimize.is_async:
+            return None
+
+        from codeflash.verification.parse_test_output import calculate_function_throughput_from_stdout
+
+        all_stdout = ""
+
+        for test_results in [behavioral_test_results, benchmarking_test_results]:
+            if test_results:
+                for result in test_results.test_results:
+                    if result.stdout:
+                        all_stdout += result.stdout
+
+        if not all_stdout:
+            return None
+
+        function_throughput = calculate_function_throughput_from_stdout(
+            all_stdout, self.function_to_optimize.function_name
+        )
+
+        return {self.function_to_optimize.function_name: function_throughput} if function_throughput > 0 else None
+
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
@@ -1830,7 +1864,7 @@ class FunctionOptimizer:
                 codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
             )
             line_profiler_output_file = add_decorator_imports(self.function_to_optimize, code_context)
-            line_profile_results, _ = self.run_and_parse_tests(
+            line_profile_results, _, _ = self.run_and_parse_tests(
                 testing_type=TestingMode.LINE_PROFILE,
                 test_env=test_env,
                 test_files=self.test_files,
