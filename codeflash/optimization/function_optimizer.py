@@ -1672,6 +1672,19 @@ class FunctionOptimizer:
                 console.rule()
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+
+            candidate_async_throughput = None
+            if self.function_to_optimize.is_async and candidate_benchmarking_results:
+                all_stdout = ""
+                for result in candidate_benchmarking_results.test_results:
+                    if result.stdout:
+                        all_stdout += result.stdout
+
+
+                candidate_async_throughput = calculate_function_throughput_from_stdout(
+                    all_stdout, self.function_to_optimize.function_name
+                )
+
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
                     self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
@@ -1691,6 +1704,7 @@ class FunctionOptimizer:
                     else None,
                     optimization_candidate_index=optimization_candidate_index,
                     total_candidate_timing=total_candidate_timing,
+                    async_throughput=candidate_async_throughput,
                 )
             )
 
