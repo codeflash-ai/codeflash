@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import BenchmarkDetail, TestResults
 
 
@@ -87,11 +87,7 @@ class Explanation:
             benchmark_info = cast("StringIO", console.file).getvalue() + "\n"  # Cast for mypy
 
         test_report = self.winning_behavior_test_results.get_test_pass_fail_report_by_type()
-        test_report_str = (
-            report_to_markdown_table(test_report, "Test Results")
-            if is_LSP_enabled()
-            else TestResults.report_to_string(test_report)
-        )
+        test_report_str = TestResults.report_to_string(test_report)
 
         return (
             f"Optimized {self.function_name} in {self.file_path}\n"
@@ -100,8 +96,12 @@ class Explanation:
             + (benchmark_info if benchmark_info else "")
             + self.raw_explanation_message
             + " \n\n"
-            + "The new optimized code was tested for correctness. The results are listed below.\n"
-            + test_report_str
+            + (
+                "The new optimized code was tested for correctness. The results are listed below.\n" + test_report_str
+                if is_LSP_enabled()
+                # in the lsp (extension) we display the test results before the optimization summary
+                else ""
+            )
         )
 
     def explanation_message(self) -> str:

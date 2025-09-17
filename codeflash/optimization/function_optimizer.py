@@ -42,6 +42,7 @@ from codeflash.code_utils.code_utils import (
     unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
+    COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     N_CANDIDATES,
     N_TESTS_TO_GENERATE,
@@ -64,8 +65,8 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.lsp.helpers import is_LSP_enabled, tree_to_markdown
-from codeflash.lsp.lsp_message import LspMarkdownMessage
+from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
+from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -163,6 +164,7 @@ class CandidateProcessor:
 
     def _process_refinement_results(self) -> OptimizedCandidate | None:
         """Process refinement results and add to queue."""
+        logger.info("loading|Refining generated code for improved quality and performance...")
         concurrent.futures.wait(self.future_all_refinements)
         refinement_response = []
 
@@ -504,7 +506,7 @@ class FunctionOptimizer:
                 candidate_index += 1
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                logger.info(f"h3|tags|Optimization candidate {candidate_index}/{processor.candidate_len}:")
+                logger.info(f"h3|Optimization candidate {candidate_index}/{processor.candidate_len}:")
                 code_print(candidate.source_code.flat, file_name=f"candidate_{candidate_index}.py")
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
@@ -516,7 +518,7 @@ class FunctionOptimizer:
                     )
                     if not did_update:
                         logger.warning(
-                            "force_lsp|tags|No functions were replaced in the optimized code. Skipping optimization candidate."
+                            "force_lsp|No functions were replaced in the optimized code. Skipping optimization candidate."
                         )
                         console.rule()
                         continue
@@ -790,16 +792,29 @@ class FunctionOptimizer:
                 explanation.__str__(),
             ]
 
-            # TODO: display the tests
-            # if generated_tests.generated_tests:
-            #     md_lines.append("\n### Validated Tests")
-            #     md_lines.append("```python")
-            #     for test in generated_tests.generated_tests:
-            #         md_lines.append(test.generated_original_test_source)
-            #     md_lines.append("```")
+            optimization_summary_markdown = "\n".join(md_lines)
+            tests_messages: list[LspCodeMessage] = []
 
-            markdown_output = "\n".join(md_lines)
-            lsp_log(LspMarkdownMessage(markdown=markdown_output))
+            if generated_tests.generated_tests:
+                tests_messages.extend(
+                    [
+                        LspCodeMessage(code=test.generated_original_test_source, file_name=f"test_{i + 1}.py")
+                        for i, test in enumerate(generated_tests.generated_tests)
+                    ]
+                )
+
+            logger.info("h3|Validated Tests")
+            test_report = explanation.winning_behavior_test_results.get_test_pass_fail_report_by_type()
+            test_report_md = report_to_markdown_table(test_report, "")
+
+            # displaying tests summary
+            lsp_log(LspMarkdownMessage(markdown=test_report_md))
+            for test in tests_messages:
+                lsp_log(test)
+
+            # displaying optimization summary
+            lsp_log(LspMarkdownMessage(markdown=optimization_summary_markdown))
+
         else:
             # normal console output
             explanation_panel = Panel(
@@ -1084,7 +1099,7 @@ class FunctionOptimizer:
 
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"lsp|tags|Generated '{len(candidates)}' candidate optimizations.")
+        logger.info(f"lsp|Generated '{len(candidates)}' candidate optimizations.")
         console.rule()
 
         if not candidates:
@@ -1240,7 +1255,7 @@ class FunctionOptimizer:
             )
 
             if best_optimization:
-                logger.info("h2|tags|Best candidate 🚀")
+                logger.info("h2|Best candidate 🚀")
                 code_print(
                     best_optimization.candidate.source_code.flat,
                     file_name="best_candidate.py",
@@ -1452,13 +1467,13 @@ class FunctionOptimizer:
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
-        with progress_bar(f"Establishing original code baseline for {self.function_to_optimize.function_name}"):
-            assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
-            success = True
+        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        success = True
 
-            test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
+        test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-            # Instrument codeflash capture
+        # Instrument codeflash capture
+        with progress_bar("Running tests to establish original code behavior..."):
             try:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
@@ -1477,19 +1492,24 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
-            if not behavioral_results:
-                logger.warning(
-                    f"Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
-                )
-                console.rule()
-                return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-            if not coverage_critic(coverage_results, self.args.test_framework):
-                return Failure("The threshold for test coverage was not met.")
-            if test_framework == "pytest":
+        if not behavioral_results:
+            logger.warning(
+                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+            )
+            console.rule()
+            return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
+        if not coverage_critic(coverage_results, self.args.test_framework):
+            return Failure(
+                f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
+            )
+
+        if test_framework == "pytest":
+            with progress_bar("Performing detailed line profiling..."):
                 line_profile_results = self.line_profiler_step(
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
                 )
-                console.rule()
+            console.rule()
+            with progress_bar("Running performance benchmarks..."):
                 benchmarking_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
@@ -1499,14 +1519,15 @@ class FunctionOptimizer:
                     enable_coverage=False,
                     code_context=code_context,
                 )
-            else:
-                benchmarking_results = TestResults()
-                start_time: float = time.time()
-                for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
-                        # * 1.5 to give unittest a bit more time to run
-                        break
-                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+        else:
+            benchmarking_results = TestResults()
+            start_time: float = time.time()
+            for i in range(100):
+                if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME * 1.5:
+                    # * 1.5 to give unittest a bit more time to run
+                    break
+                test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
+                with progress_bar("Running performance benchmarks..."):
                     unittest_loop_results, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
@@ -1519,60 +1540,55 @@ class FunctionOptimizer:
                     )
                     benchmarking_results.merge(unittest_loop_results)
 
-            console.print(
-                TestResults.report_to_tree(
-                    behavioral_results.get_test_pass_fail_report_by_type(),
-                    title="Overall test results for original code",
-                )
+        console.print(
+            TestResults.report_to_tree(
+                behavioral_results.get_test_pass_fail_report_by_type(), title="Overall test results for original code"
             )
+        )
+        console.rule()
+
+        total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
+        functions_to_remove = [
+            result.id.test_function_name
+            for result in behavioral_results
+            if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
+        ]
+        if total_timing == 0:
+            logger.warning("The overall summed benchmark runtime of the original function is 0, couldn't run tests.")
             console.rule()
-
-            total_timing = benchmarking_results.total_passed_runtime()  # caution: doesn't handle the loop index
-            functions_to_remove = [
-                result.id.test_function_name
-                for result in behavioral_results
-                if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
-            ]
-            if total_timing == 0:
-                logger.warning(
-                    "The overall summed benchmark runtime of the original function is 0, couldn't run tests."
-                )
-                console.rule()
-                success = False
-            if not total_timing:
-                logger.warning("Failed to run the tests for the original function, skipping optimization")
-                console.rule()
-                success = False
-            if not success:
-                return Failure("Failed to establish a baseline for the original code.")
-
-            loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
-            logger.info(
-                f"Original code summed runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
-                f"{humanize_runtime(total_timing)} per full loop"
-            )
+            success = False
+        if not total_timing:
+            logger.warning("Failed to run the tests for the original function, skipping optimization")
             console.rule()
-            logger.debug(f"Total original code runtime (ns): {total_timing}")
+            success = False
+        if not success:
+            return Failure("Failed to establish a baseline for the original code.")
 
-            if self.args.benchmark:
-                replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
-                    self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
-                )
-            return Success(
-                (
-                    OriginalCodeBaseline(
-                        behavior_test_results=behavioral_results,
-                        benchmarking_test_results=benchmarking_results,
-                        replay_benchmarking_test_results=replay_benchmarking_test_results
-                        if self.args.benchmark
-                        else None,
-                        runtime=total_timing,
-                        coverage_results=coverage_results,
-                        line_profile_results=line_profile_results,
-                    ),
-                    functions_to_remove,
-                )
+        loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
+        logger.info(
+            f"h2|⌚ Original code summed runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
+            f"{humanize_runtime(total_timing)} per full loop"
+        )
+        console.rule()
+        logger.debug(f"Total original code runtime (ns): {total_timing}")
+
+        if self.args.benchmark:
+            replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
+                self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
             )
+        return Success(
+            (
+                OriginalCodeBaseline(
+                    behavior_test_results=behavioral_results,
+                    benchmarking_test_results=benchmarking_results,
+                    replay_benchmarking_test_results=replay_benchmarking_test_results if self.args.benchmark else None,
+                    runtime=total_timing,
+                    coverage_results=coverage_results,
+                    line_profile_results=line_profile_results,
+                ),
+                functions_to_remove,
+            )
+        )
 
     def run_optimized_candidate(
         self,
@@ -1618,19 +1634,19 @@ class FunctionOptimizer:
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
-                    title=f"Behavioral Test Results for candidate {optimization_candidate_index}.",
+                    title=f"Behavioral Test Results for candidate {optimization_candidate_index}",
                 )
             )
             console.rule()
             if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
-                logger.info("h3|tags|Test results matched ✅")
+                logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                logger.info("h4|tags|Test results did not match the test results of the original code ❌")
+                logger.info("h4|Test results did not match the test results of the original code ❌")
                 console.rule()
                 return Failure("Test results did not match the test results of the original code.")
 
-            logger.info(f"loading|tags|Running performance tests ⚡️ for candidate {optimization_candidate_index}.")
+            logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 
             if test_framework == "pytest":
                 candidate_benchmarking_results, _ = self.run_and_parse_tests(
@@ -1660,7 +1676,7 @@ class FunctionOptimizer:
                         # * 1.5 to give unittest a bit more time to run
                         break
                     test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, cov = self.run_and_parse_tests(
+                    unittest_loop_results, _cov = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1761,7 +1777,7 @@ class FunctionOptimizer:
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
             logger.debug(
-                f"!lsp|tags|Nonzero return code {run_result.returncode} when running tests in "
+                f"!lsp|Nonzero return code {run_result.returncode} when running tests in "
                 f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"

@@ -39,7 +39,9 @@ def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str)
             continue
         lines.append(f"| {test_type.to_name()} | {passed} | {failed} |")
     table = "\n".join(lines)
-    return f"### {title}\n{table}"
+    if title:
+        return f"### {title}\n{table}"
+    return table
 
 
 def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002

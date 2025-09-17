@@ -62,7 +62,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
     )
 
     if not uni_diff_text.strip():
-        logger.info("!lsp|tags|No uncommitted changes to copy to worktree.")
+        logger.info("!lsp|No uncommitted changes to copy to worktree.")
         return worktree_dir
 
     # Write the diff to a temporary file

@@ -14,11 +14,17 @@ class LspMessageTags:
     lsp: bool = False  # lsp                (lsp only)
     force_lsp: bool = False  # force_lsp    (you can use this to force a message to be sent to the LSP even if the level is not supported)
     loading: bool = False  # loading        (you can use this to indicate that the message is a loading message)
-
+    highlight: bool = False  # highlight    (you can use this to highlight the message by wrapping it in ``)
     h1: bool = False  # h1
     h2: bool = False  # h2
     h3: bool = False  # h3
     h4: bool = False  # h4
+
+
+def add_highlight_tags(msg: str, tags: LspMessageTags) -> str:
+    if tags.highlight:
+        return "`" + msg + "`"
+    return msg
 
 
 def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
@@ -33,9 +39,9 @@ def add_heading_tags(msg: str, tags: LspMessageTags) -> str:
     return msg
 
 
-# TODO: Make this work when optimizing extract_tags from lsp code message that has |tags|
 def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
-    parts = msg.split("|tags|")
+    delimiter = "|"
+    parts = msg.split(delimiter)
     if len(parts) == 2:
         message_tags = LspMessageTags()
         tags = {tag.strip() for tag in parts[0].split(",")}
@@ -47,6 +53,8 @@ def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
             message_tags.force_lsp = True
         if "loading" in tags:
             message_tags.loading = True
+        if "highlight" in tags:
+            message_tags.highlight = True
         if "h1" in tags:
             message_tags.h1 = True
         if "h2" in tags:
@@ -55,7 +63,7 @@ def extract_tags(msg: str) -> tuple[Optional[LspMessageTags], str]:
             message_tags.h3 = True
         if "h4" in tags:
             message_tags.h4 = True
-        return message_tags, parts[1]
+        return message_tags, delimiter.join(parts[1:])
 
     return None, msg
 
@@ -74,17 +82,21 @@ def enhanced_log(
         actual_log_fn(msg, *args, **kwargs)
         return
 
-    tags, clean_msg = extract_tags(msg)
+    is_lsp_json_message = msg.startswith('{"type"')
+    is_normal_text_message = not is_lsp_json_message
+
+    # extract tags only from the text messages (not the json ones)
+    tags, clean_msg = extract_tags(msg) if is_normal_text_message else (None, msg)
+
     lsp_enabled = is_LSP_enabled()
     lsp_only = tags and tags.lsp
 
     if not lsp_enabled and not lsp_only:
+        # normal logging
         actual_log_fn(clean_msg, *args, **kwargs)
         return
 
     #### LSP mode ####
-    is_lsp_json_message = clean_msg.startswith('{"type"')
-    is_normal_text_message = not is_lsp_json_message
     final_tags = tags if tags else LspMessageTags()
 
     unsupported_level = level not in supported_lsp_log_levels
@@ -93,6 +105,7 @@ def enhanced_log(
 
     if is_normal_text_message:
         clean_msg = add_heading_tags(clean_msg, final_tags)
+        clean_msg = add_highlight_tags(clean_msg, final_tags)
         clean_msg = LspTextMessage(text=clean_msg, takes_time=final_tags.loading).serialize()
 
     actual_log_fn(clean_msg, *args, **kwargs)
