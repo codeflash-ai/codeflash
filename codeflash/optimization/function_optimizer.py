@@ -84,7 +84,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
-from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.parse_test_output import calculate_function_throughput_from_stdout, parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
@@ -1388,7 +1388,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
-                behavioral_results, coverage_results, behavioral_test_results_for_throughput = self.run_and_parse_tests(
+                behavioral_results, coverage_results, _ = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
                     test_files=self.test_files,
@@ -1409,7 +1409,6 @@ class FunctionOptimizer:
                 return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
             if not coverage_critic(coverage_results, self.args.test_framework):
                 return Failure("The threshold for test coverage was not met.")
-            benchmarking_test_results_for_throughput = None
 
             if test_framework == "pytest":
                 line_profile_results = self.line_profiler_step(
@@ -1433,7 +1432,7 @@ class FunctionOptimizer:
                         )
 
                 try:
-                    benchmarking_results, _, benchmarking_test_results_for_throughput = self.run_and_parse_tests(
+                    benchmarking_results, _, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1504,9 +1503,17 @@ class FunctionOptimizer:
             console.rule()
             logger.debug(f"Total original code runtime (ns): {total_timing}")
 
-            async_throughput = self.calculate_async_throughput(
-                behavioral_test_results_for_throughput, benchmarking_test_results_for_throughput
-            )
+            async_throughput = None
+            if self.function_to_optimize.is_async and benchmarking_results:
+                all_stdout = ""
+                for result in benchmarking_results.test_results:
+                    if result.stdout:
+                        all_stdout += result.stdout
+
+                if all_stdout:
+                    async_throughput = calculate_function_throughput_from_stdout(
+                        all_stdout, self.function_to_optimize.function_name
+                    )
 
             if self.args.benchmark:
                 replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
@@ -1776,8 +1783,7 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
             )
-            # Return the test results for async throughput calculation
-            return results, coverage_results, results if isinstance(results, TestResults) else None
+            return results, coverage_results, None
         results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
         return results, coverage_results, None
 
@@ -1829,31 +1835,6 @@ class FunctionOptimizer:
         else:
             test_env["PYTHONPATH"] += os.pathsep + str(self.args.project_root)
         return test_env
-
-    def calculate_async_throughput(
-        self, behavioral_test_results: TestResults | None, benchmarking_test_results: TestResults | None
-    ) -> dict[str, int] | None:
-        if not self.function_to_optimize.is_async:
-            return None
-
-        from codeflash.verification.parse_test_output import calculate_function_throughput_from_stdout
-
-        all_stdout = ""
-
-        for test_results in [behavioral_test_results, benchmarking_test_results]:
-            if test_results:
-                for result in test_results.test_results:
-                    if result.stdout:
-                        all_stdout += result.stdout
-
-        if not all_stdout:
-            return None
-
-        function_throughput = calculate_function_throughput_from_stdout(
-            all_stdout, self.function_to_optimize.function_name
-        )
-
-        return {self.function_to_optimize.function_name: function_throughput} if function_throughput > 0 else None
 
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int

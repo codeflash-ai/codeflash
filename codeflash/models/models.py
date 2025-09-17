@@ -380,7 +380,7 @@ class OriginalCodeBaseline(BaseModel):
     line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
-    async_throughput: Optional[dict[str, int]] = None
+    async_throughput: Optional[int] = None
 
 
 class CoverageStatus(Enum):
