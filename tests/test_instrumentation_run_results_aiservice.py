@@ -170,7 +170,7 @@ def test_single_element_list():
         a = BubbleSorter()
         function_to_optimize = FunctionToOptimize("sorter", fto_path, [FunctionParent("BubbleSorter", "ClassDef")])
         func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results, coverage_data = func_opt.run_and_parse_tests(
+        test_results, coverage_data, _ = func_opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -210,7 +210,7 @@ class BubbleSorter:
                         """
         fto_path.write_text(optimized_code_mutated_attr, "utf-8")
         func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_mutated_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_mutated_attr, coverage_data, _ = func_opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -311,7 +311,7 @@ def test_single_element_list():
             ]
         )
         func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results, coverage_data = func_opt.run_and_parse_tests(
+        test_results, coverage_data, _ = func_opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -388,7 +388,7 @@ class BubbleSorter:
             )
         )
         func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_mutated_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_mutated_attr, coverage_data, _ = func_opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -441,7 +441,7 @@ class BubbleSorter:
             )
         )
         func_opt = opt.create_function_optimizer(function_to_optimize)
-        test_results_new_attr, coverage_data = func_opt.run_and_parse_tests(
+        test_results_new_attr, coverage_data, _ = func_opt.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,

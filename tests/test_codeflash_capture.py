@@ -459,7 +459,7 @@ class MyClass:
                 )
             ]
         )
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -492,7 +492,7 @@ class MyClass:
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "16_0"
 
-        test_results2, _ = func_optimizer.run_and_parse_tests(
+        test_results2, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -580,7 +580,7 @@ class MyClass(ParentClass):
                 )
             ]
         )
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -614,7 +614,7 @@ class MyClass(ParentClass):
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "16_0"
 
-        results2, _ = func_optimizer.run_and_parse_tests(
+        results2, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -705,7 +705,7 @@ class MyClass:
                 )
             ]
         )
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -741,7 +741,7 @@ class MyClass:
         assert test_results[2].id.function_getting_tested == "some_function"
         assert test_results[2].id.iteration_id == "12_2"  # Third call
 
-        test_results2, _ = func_optimizer.run_and_parse_tests(
+        test_results2, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -867,7 +867,7 @@ class AnotherHelperClass:
             ]
         )
 
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -888,7 +888,7 @@ class AnotherHelperClass:
         assert test_results[3].id.function_getting_tested == "AnotherHelperClass.__init__"
         assert test_results[3].verification_type == VerificationType.INIT_STATE_HELPER
 
-        results2, _ = func_optimizer.run_and_parse_tests(
+        results2, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -1026,7 +1026,7 @@ class AnotherHelperClass:
         }
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
 
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -1078,7 +1078,7 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
-        modified_test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        modified_test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -1117,7 +1117,7 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
-        mutated_test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        mutated_test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -1155,7 +1155,7 @@ class MyClass:
             Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
         }
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
-        no_helper1_test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        no_helper1_test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,

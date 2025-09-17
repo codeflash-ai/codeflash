@@ -92,7 +92,7 @@ async def test_async_sort():
             ]
         )
 
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -107,7 +107,7 @@ async def test_async_sort():
 
         results_list = test_results.test_results
         assert results_list[0].id.function_getting_tested == "async_sorter"
-        assert results_list[0].id.test_class_name == "PytestPluginManager" 
+        assert results_list[0].id.test_class_name is None
         assert results_list[0].id.test_function_name == "test_async_sort"
         assert results_list[0].did_pass
         assert results_list[0].runtime is None or results_list[0].runtime >= 0
@@ -211,7 +211,7 @@ async def test_async_class_sort():
             ]
         )
 
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -233,7 +233,7 @@ async def test_async_class_sort():
 
 
         assert sorter_result.id.function_getting_tested == "sorter"
-        assert sorter_result.id.test_class_name == "PytestPluginManager"
+        assert sorter_result.id.test_class_name is None
         assert sorter_result.id.test_function_name == "test_async_class_sort"
         assert sorter_result.did_pass
         assert sorter_result.runtime is None or sorter_result.runtime >= 0
@@ -320,7 +320,7 @@ async def test_async_perf():
             ]
         )
 
-        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -473,7 +473,7 @@ async def async_error_function(lst):
             ]
         )
 
-        test_results, _ = func_optimizer.run_and_parse_tests(
+        test_results, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -567,7 +567,7 @@ async def test_async_multi():
             ]
         )
 
-        test_results, _ = func_optimizer.run_and_parse_tests(
+        test_results, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -678,7 +678,7 @@ async def test_async_edge_cases():
             ]
         )
 
-        test_results, _ = func_optimizer.run_and_parse_tests(
+        test_results, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -810,7 +810,7 @@ def test_sync_sort():
             ]
         )
 
-        test_results, _ = func_optimizer.run_and_parse_tests(
+        test_results, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -976,7 +976,7 @@ async def test_mixed_sorting():
             ]
         )
 
-        test_results, _ = func_optimizer.run_and_parse_tests(
+        test_results, _, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,

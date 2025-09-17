@@ -377,7 +377,7 @@ def test_run_and_parse_picklepatch() -> None:
                 )
             ]
         )
-        test_results_unused_socket, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results_unused_socket, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -402,7 +402,7 @@ def bubble_sort_with_unused_socket(data_container):
     return sorted(numbers)
 """)
         # Run optimized code for unused socket
-        optimized_test_results_unused_socket, coverage_data = func_optimizer.run_and_parse_tests(
+        optimized_test_results_unused_socket, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -454,7 +454,7 @@ def bubble_sort_with_unused_socket(data_container):
                 )
             ]
         )
-        test_results_used_socket, coverage_data = func_optimizer.run_and_parse_tests(
+        test_results_used_socket, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -485,7 +485,7 @@ def bubble_sort_with_used_socket(data_container):
         """)
 
         # Run test for optimized function code that uses the socket. This should fail, as the PicklePlaceholder is accessed.
-        optimized_test_results_used_socket, coverage_data = func_optimizer.run_and_parse_tests(
+        optimized_test_results_used_socket, coverage_data, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
