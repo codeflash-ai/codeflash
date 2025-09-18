@@ -30,11 +30,9 @@ def get_run_tmp_file(file_path: Path) -> Path:  # moved from codeflash/code_util
     return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 
-def extract_test_context_from_frame() -> tuple[str, str | None, str]:
-    # test_module = os.environ.get("CODEFLASH_TEST_MODULE")
+def extract_test_context_from_env() -> tuple[str, str | None, str]:
     test_module = os.environ["CODEFLASH_TEST_MODULE"]
     test_class = os.environ.get("CODEFLASH_TEST_CLASS", None)
-    # test_function = os.environ.get("CODEFLASH_TEST_FUNCTION")
     test_function = os.environ["CODEFLASH_TEST_FUNCTION"]
 
     if test_module and test_function:
@@ -52,7 +50,7 @@ def codeflash_behavior_async(func: F) -> F:
         function_name = func.__name__
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
         loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
-        test_module_name, test_class_name, test_name = extract_test_context_from_frame()
+        test_module_name, test_class_name, test_name = extract_test_context_from_env()
 
         test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
 
@@ -129,7 +127,7 @@ def codeflash_performance_async(func: F) -> F:
         line_id = f"{func.__name__}_{func.__code__.co_firstlineno}"
         loop_index = int(os.environ["CODEFLASH_LOOP_INDEX"])
 
-        test_module_name, test_class_name, test_name = extract_test_context_from_frame()
+        test_module_name, test_class_name, test_name = extract_test_context_from_env()
 
         test_id = f"{test_module_name}:{test_class_name}:{test_name}:{line_id}:{loop_index}"
 
