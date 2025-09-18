@@ -94,10 +94,13 @@ def calculate_function_throughput_from_stdout(stdout: str, function_name: str) -
 
     # Count completed executions for the specific function only
     function_throughput = 0
-
+    logger.info(f"Total start matches: {len(start_matches)}, Total end matches: {len(end_matches)}")
     for start_match in start_matches:
         # Check if this execution is for the function we're interested in and has a matching end tag
         # function_name is at index 2 in the match tuple
+        logger.info(f"Start match: {start_match}")
+        logger.info(f"End matches: {end_matches_set}")
+        logger.info(f"Function name: {function_name}")
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
             function_throughput += 1
 

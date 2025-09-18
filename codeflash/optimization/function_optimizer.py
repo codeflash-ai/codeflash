@@ -77,7 +77,13 @@ from codeflash.models.models import (
     TestType,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import (
+    coverage_critic,
+    performance_gain,
+    quantity_of_tests_critic,
+    speedup_critic,
+    throughput_gain,
+)
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
@@ -566,7 +572,11 @@ class FunctionOptimizer:
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information")
                     benchmark_tree = None
                     if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
+                        candidate_result,
+                        original_code_baseline.runtime,
+                        best_runtime_until_now=None,
+                        original_async_throughput=original_code_baseline.async_throughput,
+                        best_throughput_until_now=None,
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the original code. 🚀")  # TODO: Change this description
                         tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
@@ -577,6 +587,19 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                        logger.info(f"orig_async_throughput: {original_code_baseline.async_throughput}")
+                        logger.info(f"candidate_result.async_throughput: {candidate_result.async_throughput}")
+                        if (
+                            original_code_baseline.async_throughput is not None
+                            and candidate_result.async_throughput is not None
+                        ):
+                            throughput_gain_value = throughput_gain(
+                                original_throughput=original_code_baseline.async_throughput,
+                                optimized_throughput=candidate_result.async_throughput,
+                            )
+                            tree.add(f"Original async throughput: {original_code_baseline.async_throughput} executions")
+                            tree.add(f"Optimized async throughput: {candidate_result.async_throughput} executions")
+                            tree.add(f"Throughput improvement: {throughput_gain_value * 100:.1f}%")
                         line_profile_test_results = self.line_profiler_step(
                             code_context=code_context,
                             original_helper_code=original_helper_code,
@@ -1509,10 +1532,12 @@ class FunctionOptimizer:
                 for result in benchmarking_results.test_results:
                     if result.stdout:
                         all_stdout += result.stdout
-
+                logger.info("Calculating async function throughput from test output...")
+                logger.info(f"All stdout for async throughput calculation:\n{all_stdout}")
                 async_throughput = calculate_function_throughput_from_stdout(
                     all_stdout, self.function_to_optimize.function_name
                 )
+                logger.info(f"Original async function throughput: {async_throughput} calls/second")
 
             if self.args.benchmark:
                 replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
@@ -1679,7 +1704,6 @@ class FunctionOptimizer:
                 for result in candidate_benchmarking_results.test_results:
                     if result.stdout:
                         all_stdout += result.stdout
-
 
                 candidate_async_throughput = calculate_function_throughput_from_stdout(
                     all_stdout, self.function_to_optimize.function_name
