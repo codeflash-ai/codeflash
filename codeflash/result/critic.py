@@ -75,18 +75,21 @@ def speedup_critic(
 
     # Async throughput evaluation (if throughput data is available)
     throughput_improved = True  # Default to True if no throughput data
-    throughput_is_best = True   # Default to True if no throughput data
+    throughput_is_best = True  # Default to True if no throughput data
 
     if original_async_throughput is not None and candidate_result.async_throughput is not None:
         if original_async_throughput > 0:  # Avoid division by zero
             throughput_gain_value = throughput_gain(
-                original_throughput=original_async_throughput,
-                optimized_throughput=candidate_result.async_throughput
+                original_throughput=original_async_throughput, optimized_throughput=candidate_result.async_throughput
             )
             throughput_improved = throughput_gain_value > MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD
-            logger.debug(f"Async throughput gain: {throughput_gain_value * 100:.1f}% (original: {original_async_throughput}, optimized: {candidate_result.async_throughput})")
+            logger.debug(
+                f"Async throughput gain: {throughput_gain_value * 100:.1f}% (original: {original_async_throughput}, optimized: {candidate_result.async_throughput})"
+            )
 
-        throughput_is_best = best_throughput_until_now is None or candidate_result.async_throughput > best_throughput_until_now
+        throughput_is_best = (
+            best_throughput_until_now is None or candidate_result.async_throughput > best_throughput_until_now
+        )
 
     # For async functions with throughput data, both runtime and throughput should improve
     # For sync functions or when throughput data is unavailable, only runtime matters

@@ -434,7 +434,7 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -469,7 +469,7 @@ def test_sort():
         with test_path_perf.open("w") as f:
             f.write(new_perf_test)
 
-        test_results_perf, _, _ = func_optimizer.run_and_parse_tests(
+        test_results_perf, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -521,7 +521,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
-        line_profile_results, _, _ = func_optimizer.run_and_parse_tests(
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
             test_files=test_files,
@@ -677,7 +677,7 @@ def test_sort_parametrized(input, expected_output):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -731,7 +731,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
 
-        test_results_perf, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results_perf, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -788,7 +788,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
-        line_profile_results, _, _ = func_optimizer.run_and_parse_tests(
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
             test_files=test_files,
@@ -962,7 +962,7 @@ def test_sort_parametrized_loop(input, expected_output):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1053,7 +1053,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
         assert test_results[5].did_pass
         assert test_results[5].stdout == out_str
 
-        test_results, _, _ = func_optimizer.run_and_parse_tests(
+        test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1143,7 +1143,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
-        line_profile_results, _, _ = func_optimizer.run_and_parse_tests(
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
             test_files=test_files,
@@ -1315,7 +1315,7 @@ def test_sort():
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1357,7 +1357,7 @@ def test_sort():
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1421,7 +1421,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
                 original_helper_code[helper_function_path] = helper_code
         computed_fn_opt = True
         line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
-        line_profile_results, _, _ = func_optimizer.run_and_parse_tests(
+        line_profile_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.LINE_PROFILE,
             test_env=test_env,
             test_files=test_files,
@@ -1623,7 +1623,7 @@ class TestPigLatin(unittest.TestCase):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1673,7 +1673,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         )
         assert test_results[2].runtime > 0
         assert test_results[2].did_pass
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -1882,7 +1882,7 @@ class TestPigLatin(unittest.TestCase):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -1937,7 +1937,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
 """
         assert test_results[2].stdout == out_str
 
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -2145,7 +2145,7 @@ class TestPigLatin(unittest.TestCase):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.BEHAVIOR,
             test_files=test_files,
@@ -2200,7 +2200,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
 """
         assert test_results[2].stdout == out_str
 
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             test_env=test_env,
             testing_type=TestingMode.PERFORMANCE,
             test_files=test_files,
@@ -2406,7 +2406,7 @@ class TestPigLatin(unittest.TestCase):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=f, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=test_files,
@@ -2493,7 +2493,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
         )
         assert test_results[5].runtime > 0
         assert test_results[5].did_pass
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -3058,7 +3058,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
                 )
             ]
         )
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,
@@ -3185,7 +3185,7 @@ class TestPigLatin(unittest.TestCase):
             pytest_cmd="pytest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
             test_env=test_env,
             test_files=test_files,

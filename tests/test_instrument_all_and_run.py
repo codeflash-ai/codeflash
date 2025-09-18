@@ -160,7 +160,7 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -205,7 +205,7 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 """
         assert test_results[1].stdout == out_str
-        results2, _, _ = func_optimizer.run_and_parse_tests(
+        results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -331,7 +331,7 @@ def test_sort():
                 )
             ]
         )
-        test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -376,7 +376,7 @@ def test_sort():
         assert test_results[3].did_pass
         assert test_results[3].stdout == """codeflash stdout : BubbleSorter.sorter() called\n"""
 
-        results2, _, _ = func_optimizer.run_and_parse_tests(
+        results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
@@ -439,7 +439,7 @@ class BubbleSorter:
                 )
             ]
         )
-        new_test_results, coverage_data, _ = func_optimizer.run_and_parse_tests(
+        new_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
             test_env=test_env,
             test_files=func_optimizer.test_files,
