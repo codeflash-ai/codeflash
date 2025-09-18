@@ -133,7 +133,7 @@ class AiServiceClient:
             "repo_name": git_repo_name,
         }
 
-        logger.info("Generating optimized candidates…")
+        logger.info("!lsp|Generating optimized candidates…")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
@@ -144,10 +144,10 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            logger.info(f"!lsp|Generated {len(optimizations_json)} candidate optimizations.")
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
             return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
@@ -194,7 +194,6 @@ class AiServiceClient:
             "lsp_mode": is_LSP_enabled(),
         }
 
-        logger.info("Generating optimized candidates…")
         console.rule()
         if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
@@ -209,7 +208,9 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
+            logger.info(
+                f"!lsp|Generated {len(optimizations_json)} candidate optimizations using line profiler information."
+            )
             console.rule()
             return self._get_valid_candidates(optimizations_json)
         try:
@@ -331,7 +332,7 @@ class AiServiceClient:
             "original_explanation": original_explanation,
             "dependency_code": dependency_code,
         }
-        logger.info("Generating explanation")
+        logger.info("loading|Generating explanation")
         console.rule()
         try:
             response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
@@ -376,7 +377,7 @@ class AiServiceClient:
             "optimization_ids": optimization_ids,
             "python_version": platform.python_version(),
         }
-        logger.info("Generating ranking")
+        logger.info("loading|Generating ranking")
         console.rule()
         try:
             response = self.make_ai_service_request("/rank", payload=payload, timeout=60)

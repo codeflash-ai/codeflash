@@ -4,13 +4,14 @@ import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
+from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import (
     create_diff_patch_from_worktree,
     get_patches_metadata,
@@ -103,6 +104,8 @@ def get_optimizable_functions(
 ) -> dict[str, list[str]]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
+    if not server.optimizer:
+        return {"status": "error", "message": "optimizer not initialized"}
 
     server.optimizer.args.file = file_path
     server.optimizer.args.function = None  # Always get ALL functions, not just one
@@ -157,20 +160,6 @@ def initialize_function_optimization(
     return {"functionName": params.functionName, "status": "success"}
 
 
-@server.feature("discoverFunctionTests")
-def discover_function_tests(server: CodeflashLanguageServer, params: FunctionOptimizationParams) -> dict[str, str]:
-    fto = server.optimizer.current_function_being_optimized
-    optimizable_funcs = {fto.file_path: [fto]}
-
-    devnull_writer = open(os.devnull, "w")  # noqa
-    with contextlib.redirect_stdout(devnull_writer):
-        function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
-
-    server.optimizer.discovered_tests = function_to_tests
-
-    return {"functionName": params.functionName, "status": "success", "discovered_tests": num_discovered_tests}
-
-
 @server.feature("validateProject")
 def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
@@ -194,11 +183,13 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
     except Exception:
         return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
-    return {"status": "success"}
+    return {"status": "success", "moduleRoot": args.module_root}
 
 
-def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -> dict[str, str]:
-    user_id = get_user_id()
+def _initialize_optimizer_if_api_key_is_valid(
+    server: CodeflashLanguageServer, api_key: Optional[str] = None
+) -> dict[str, str]:
+    user_id = get_user_id(api_key=api_key)
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
 
@@ -237,19 +228,19 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         if not api_key.startswith("cf-"):
             return {"status": "error", "message": "Api key is not valid"}
 
-        result = save_api_key_to_rc(api_key)
-        if not is_successful(result):
-            return {"status": "error", "message": result.failure()}
-
         # clear cache to ensure the new api key is used
         get_codeflash_api_key.cache_clear()
         get_user_id.cache_clear()
 
-        init_result = _initialize_optimizer_if_api_key_is_valid(server)
+        init_result = _initialize_optimizer_if_api_key_is_valid(server, api_key)
         if init_result["status"] == "error":
             return {"status": "error", "message": "Api key is not valid"}
 
-        return {"status": "success", "message": "Api key saved successfully", "user_id": init_result["user_id"]}
+        user_id = init_result["user_id"]
+        result = save_api_key_to_rc(api_key)
+        if not is_successful(result):
+            return {"status": "error", "message": result.failure()}
+        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
     except Exception:
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
@@ -300,6 +291,12 @@ def perform_function_optimization(  # noqa: PLR0911
             }
 
         module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
+        if not module_prep_result:
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": "Failed to prepare module for optimization",
+            }
 
         validated_original_code, original_module_ast = module_prep_result
 
@@ -308,7 +305,7 @@ def perform_function_optimization(  # noqa: PLR0911
             function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
             original_module_ast=original_module_ast,
             original_module_path=current_function.file_path,
-            function_to_tests=server.optimizer.discovered_tests or {},
+            function_to_tests={},
         )
 
         server.optimizer.current_function_optimizer = function_optimizer
@@ -320,6 +317,19 @@ def perform_function_optimization(  # noqa: PLR0911
             return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
 
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+
+        code_print(
+            code_context.read_writable_code.flat,
+            file_name=current_function.file_path,
+            function_name=current_function.function_name,
+        )
+
+        optimizable_funcs = {current_function.file_path: [current_function]}
+
+        devnull_writer = open(os.devnull, "w")  # noqa
+        with contextlib.redirect_stdout(devnull_writer):
+            function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+            function_optimizer.function_to_tests = function_to_tests
 
         test_setup_result = function_optimizer.generate_and_instrument_tests(
             code_context, should_run_experiment=should_run_experiment
