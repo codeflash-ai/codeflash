@@ -40,6 +40,73 @@ matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)
 matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
 
 
+def calculate_async_throughput_from_stdout(stdout: str, async_function_names: set[str]) -> dict[str, int]:
+    if not stdout or not async_function_names:
+        return {}
+
+    throughput_counts = {}
+
+    # Find all complete performance tag pairs (start + end)
+    begin_matches = list(matches_re_start.finditer(stdout))
+    end_matches = set()
+
+    for match in matches_re_end.finditer(stdout):
+        groups = match.groups()
+        # Remove timing info from the last group to match start tags
+        # End format: 'iteration_id:timing_info', Start format: 'iteration_id'
+        # We need to remove only the last ':timing_info' part
+        last_group = groups[5]
+        split_parts = last_group.split(":")
+        if len(split_parts) > 2:  # Has timing info (format: prefix:suffix:timing)
+            # Reconstruct without the timing info (last part)
+            iteration_id = ":".join(split_parts[:-1])
+            normalized_groups = (*groups[:5], iteration_id)
+        else:
+            normalized_groups = groups
+        end_matches.add(normalized_groups)
+
+    # Count complete tags for async functions only
+    for begin_match in begin_matches:
+        groups = begin_match.groups()
+        function_getting_tested = groups[4]
+
+        if function_getting_tested in async_function_names and groups in end_matches:
+            if function_getting_tested not in throughput_counts:
+                throughput_counts[function_getting_tested] = 0
+            throughput_counts[function_getting_tested] += 1
+
+    return throughput_counts
+
+
+start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######!")
+
+
+def calculate_function_throughput_from_stdout(stdout: str, function_name: str) -> int:
+    """Calculate function throughput from stdout. A completed execution is defined as having both a start tag and matching end tag.
+
+    Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
+    End:   !######test_module:test_function:function_name:loop_index:iteration_id######!
+    """
+    start_matches = start_pattern.findall(stdout)
+    end_matches = end_pattern.findall(stdout)
+    end_matches_set = set(end_matches)
+
+    # Count completed executions for the specific function only
+    function_throughput = 0
+    logger.info(f"Total start matches: {len(start_matches)}, Total end matches: {len(end_matches)}")
+    for start_match in start_matches:
+        # Check if this execution is for the function we're interested in and has a matching end tag
+        # function_name is at index 2 in the match tuple
+        logger.info(f"Start match: {start_match}")
+        logger.info(f"End matches: {end_matches_set}")
+        logger.info(f"Function name: {function_name}")
+        if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
+            function_throughput += 1
+
+    return function_throughput
+
+
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
     test_results = TestResults()
     if not file_location.exists():

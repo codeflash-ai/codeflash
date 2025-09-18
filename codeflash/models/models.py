@@ -274,6 +274,7 @@ class OptimizedCandidateResult(BaseModel):
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     optimization_candidate_index: int
     total_candidate_timing: int
+    async_throughput: Optional[int] = None
 
 
 class GeneratedTests(BaseModel):
@@ -380,6 +381,7 @@ class OriginalCodeBaseline(BaseModel):
     line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
+    async_throughput: Optional[int] = None
 
 
 class CoverageStatus(Enum):

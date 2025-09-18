@@ -70,7 +70,11 @@
                 "request": "launch",
                 "program": "${workspaceFolder:codeflash}/codeflash/main.py",
                 "args": [
-                    "--file", "src/async_examples/shocker.py", "--verbose"
+                    "--file",
+                    "src/async_examples/concurrency.py",
+                    "--function",
+                    "task",
+                    "--verbose"
                 ],
                 "cwd": "${input:chooseCwd}",
                 "console": "integratedTerminal",

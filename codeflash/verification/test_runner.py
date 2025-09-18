@@ -98,7 +98,7 @@ def run_behavioral_tests(
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
-
+            logger.info(f"{' '.join(coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files)}")
             results = execute_test_subprocess(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
