@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+import sys
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.lsp.lsp_message import LspTextMessage
+
+root_logger = None
 
 
 @dataclass
@@ -109,3 +113,27 @@ def enhanced_log(
         clean_msg = LspTextMessage(text=clean_msg, takes_time=final_tags.loading).serialize()
 
     actual_log_fn(clean_msg, *args, **kwargs)
+
+
+# Configure logging to stderr for VS Code output channel
+def setup_logging() -> logging.Logger:
+    global root_logger  # noqa: PLW0603
+    if root_logger:
+        return root_logger
+    # Clear any existing handlers to prevent conflicts
+    logger = logging.getLogger()
+    logger.handlers.clear()
+
+    # Set up stderr handler for VS Code output channel with [LSP-Server] prefix
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.DEBUG)
+
+    # Configure root logger
+    logger.addHandler(handler)
+
+    # Also configure the pygls logger specifically
+    pygls_logger = logging.getLogger("pygls")
+    pygls_logger.setLevel(logging.INFO)
+
+    root_logger = logger
+    return logger

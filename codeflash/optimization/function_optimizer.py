@@ -164,7 +164,8 @@ class CandidateProcessor:
 
     def _process_refinement_results(self) -> OptimizedCandidate | None:
         """Process refinement results and add to queue."""
-        logger.info("loading|Refining generated code for improved quality and performance...")
+        if self.future_all_refinements:
+            logger.info("loading|Refining generated code for improved quality and performance...")
         concurrent.futures.wait(self.future_all_refinements)
         refinement_response = []
 

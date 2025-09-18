@@ -4,7 +4,7 @@ import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import git
 from pygls import uris
@@ -104,6 +104,8 @@ def get_optimizable_functions(
 ) -> dict[str, list[str]]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
     server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
+    if not server.optimizer:
+        return {"status": "error", "message": "optimizer not initialized"}
 
     server.optimizer.args.file = file_path
     server.optimizer.args.function = None  # Always get ALL functions, not just one
@@ -184,8 +186,10 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
     return {"status": "success", "moduleRoot": args.module_root}
 
 
-def _initialize_optimizer_if_api_key_is_valid(server: CodeflashLanguageServer) -> dict[str, str]:
-    user_id = get_user_id()
+def _initialize_optimizer_if_api_key_is_valid(
+    server: CodeflashLanguageServer, api_key: Optional[str] = None
+) -> dict[str, str]:
+    user_id = get_user_id(api_key=api_key)
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
 
@@ -224,19 +228,19 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         if not api_key.startswith("cf-"):
             return {"status": "error", "message": "Api key is not valid"}
 
-        result = save_api_key_to_rc(api_key)
-        if not is_successful(result):
-            return {"status": "error", "message": result.failure()}
-
         # clear cache to ensure the new api key is used
         get_codeflash_api_key.cache_clear()
         get_user_id.cache_clear()
 
-        init_result = _initialize_optimizer_if_api_key_is_valid(server)
+        init_result = _initialize_optimizer_if_api_key_is_valid(server, api_key)
         if init_result["status"] == "error":
             return {"status": "error", "message": "Api key is not valid"}
 
-        return {"status": "success", "message": "Api key saved successfully", "user_id": init_result["user_id"]}
+        user_id = init_result["user_id"]
+        result = save_api_key_to_rc(api_key)
+        if not is_successful(result):
+            return {"status": "error", "message": result.failure()}
+        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
     except Exception:
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
