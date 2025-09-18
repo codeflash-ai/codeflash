@@ -17,7 +17,7 @@ from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
-    has_any_async_functions,
+    validate_python_code,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
@@ -445,25 +445,41 @@ def test_Grammar_copy():
     assert cleaned_code == expected_cleaned_code.strip()
 
 
-def test_has_any_async_functions_with_async_code() -> None:
+def test_validate_python_code_valid() -> None:
+    code = "def hello():\n    return 'world'"
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_invalid() -> None:
+    code = "def hello(:\n    return 'world'"
+    with pytest.raises(ValueError, match="Invalid Python code"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_empty() -> None:
+    code = ""
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_complex_invalid() -> None:
+    code = "if True\n    print('missing colon')"
+    with pytest.raises(ValueError, match="Invalid Python code.*line 1.*column 8"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_valid_complex() -> None:
     code = """
-def normal_function():
-    pass
-
-async def async_function():
-    pass
+def calculate(a, b):
+    if a > b:
+        return a + b
+    else:
+        return a * b
+        
+class MyClass:
+    def __init__(self):
+        self.value = 42
 """
-    result = has_any_async_functions(code)
-    assert result is True
-
-
-def test_has_any_async_functions_without_async_code() -> None:
-    code = """
-def normal_function():
-    pass
-
-def another_function():
-    pass
-"""
-    result = has_any_async_functions(code)
-    assert result is False
+    result = validate_python_code(code)
+    assert result == code
