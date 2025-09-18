@@ -353,6 +353,51 @@ class AiServiceClient:
         console.rule()
         return ""
 
+    def generate_ranking(  # noqa: D417
+        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[float]
+    ) -> list[int] | None:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - trace_id : unique uuid of function
+        - diffs : list of unified diff strings of opt candidates
+        - speedups : list of speedups of opt candidates
+
+        Returns
+        -------
+        - List[int]: Ranking of opt candidates in decreasing order
+
+        """
+        payload = {
+            "trace_id": trace_id,
+            "diffs": diffs,
+            "speedups": speedups,
+            "optimization_ids": optimization_ids,
+            "python_version": platform.python_version(),
+        }
+        logger.info("Generating ranking")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/rank", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating ranking: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return None
+
+        if response.status_code == 200:
+            ranking: list[int] = response.json()["ranking"]
+            console.rule()
+            return ranking
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating ranking: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return None
+
     def log_results(  # noqa: D417
         self,
         function_trace_id: str,
