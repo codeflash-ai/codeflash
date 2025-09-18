@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import os
 import re
-import shutil
 import subprocess
 import sys
 from enum import Enum, auto
@@ -24,7 +23,8 @@ from rich.text import Text
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
-from codeflash.cli_cmds.console import console, logger, progress_bar
+from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.vscode import install_vscode_extension
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
@@ -803,41 +803,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
-
-
-def install_vscode_extension() -> None:
-    vscode_path = shutil.which("code")
-    if not vscode_path:
-        return
-
-    error = ""
-    with progress_bar("Installing Codeflash for VSCode…"):
-        try:
-            result = subprocess.run(
-                [vscode_path, "--install-extension", "codeflash.codeflash", "--force"],
-                check=True,
-                text=True,
-                timeout=60,
-                capture_output=True,
-            )
-        except subprocess.TimeoutExpired:
-            error = "Installation timed out."
-        except subprocess.CalledProcessError as e:
-            error = e.stderr or "Unknown error."
-
-    if error:
-        ph("vscode-extension-install-failed", {"error": error.strip()})
-        click.echo(
-            "Failed to install Codeflash for VSCode. Please try installing it manually from the Marketplace: https://marketplace.visualstudio.com/items?itemName=codeflash.codeflash"
-        )
-        click.echo(error.strip())
-    else:
-        output = (result.stdout or "").lower()
-        if "already installed" in output:
-            click.echo("✅ Codeflash for VSCode is already installed.")
-            return
-        ph("vscode-extension-installed")
-        click.echo("✅ Installed the latest version of Codeflash for VSCode.")
 
 
 def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:  # noqa: PLR0911
