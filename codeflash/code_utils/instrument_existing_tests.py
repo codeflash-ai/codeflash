@@ -365,15 +365,15 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
             targets=[ast.Name(id="test_id", ctx=ast.Store())],
             value=ast.JoinedStr(
                 values=[
-                    ast.FormattedValue(value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_test_module_name", ctx=ast.Load()), conversion=-1),
                     ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="test_class_name", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_test_class_name", ctx=ast.Load()), conversion=-1),
                     ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_test_name", ctx=ast.Load()), conversion=-1),
                     ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_line_id", ctx=ast.Load()), conversion=-1),
                     ast.Constant(value=":"),
-                    ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_loop_index", ctx=ast.Load()), conversion=-1),
                 ]
             ),
             lineno=lineno + 1,
@@ -453,7 +453,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
             targets=[ast.Name(id="invocation_id", ctx=ast.Store())],
             value=ast.JoinedStr(
                 values=[
-                    ast.FormattedValue(value=ast.Name(id="line_id", ctx=ast.Load()), conversion=-1),
+                    ast.FormattedValue(value=ast.Name(id="codeflash_line_id", ctx=ast.Load()), conversion=-1),
                     ast.Constant(value="_"),
                     ast.FormattedValue(value=ast.Name(id="codeflash_test_index", ctx=ast.Load()), conversion=-1),
                 ]
@@ -466,13 +466,15 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                     targets=[ast.Name(id="test_stdout_tag", ctx=ast.Store())],
                     value=ast.JoinedStr(
                         values=[
-                            ast.FormattedValue(value=ast.Name(id="test_module_name", ctx=ast.Load()), conversion=-1),
+                            ast.FormattedValue(
+                                value=ast.Name(id="codeflash_test_module_name", ctx=ast.Load()), conversion=-1
+                            ),
                             ast.Constant(value=":"),
                             ast.FormattedValue(
                                 value=ast.IfExp(
-                                    test=ast.Name(id="test_class_name", ctx=ast.Load()),
+                                    test=ast.Name(id="codeflash_test_class_name", ctx=ast.Load()),
                                     body=ast.BinOp(
-                                        left=ast.Name(id="test_class_name", ctx=ast.Load()),
+                                        left=ast.Name(id="codeflash_test_class_name", ctx=ast.Load()),
                                         op=ast.Add(),
                                         right=ast.Constant(value="."),
                                     ),
@@ -480,11 +482,15 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                                 ),
                                 conversion=-1,
                             ),
-                            ast.FormattedValue(value=ast.Name(id="test_name", ctx=ast.Load()), conversion=-1),
+                            ast.FormattedValue(value=ast.Name(id="codeflash_test_name", ctx=ast.Load()), conversion=-1),
                             ast.Constant(value=":"),
-                            ast.FormattedValue(value=ast.Name(id="function_name", ctx=ast.Load()), conversion=-1),
+                            ast.FormattedValue(
+                                value=ast.Name(id="codeflash_function_name", ctx=ast.Load()), conversion=-1
+                            ),
                             ast.Constant(value=":"),
-                            ast.FormattedValue(value=ast.Name(id="loop_index", ctx=ast.Load()), conversion=-1),
+                            ast.FormattedValue(
+                                value=ast.Name(id="codeflash_loop_index", ctx=ast.Load()), conversion=-1
+                            ),
                             ast.Constant(value=":"),
                             ast.FormattedValue(value=ast.Name(id="invocation_id", ctx=ast.Load()), conversion=-1),
                         ]
@@ -537,7 +543,7 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                 ast.Assign(
                     targets=[ast.Name(id="return_value", ctx=ast.Store())],
                     value=ast.Call(
-                        func=ast.Name(id="wrapped", ctx=ast.Load()),
+                        func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
                         args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
                         keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
                     ),
@@ -664,11 +670,11 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
                             ast.Constant(value="INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"),
                             ast.Tuple(
                                 elts=[
-                                    ast.Name(id="test_module_name", ctx=ast.Load()),
-                                    ast.Name(id="test_class_name", ctx=ast.Load()),
-                                    ast.Name(id="test_name", ctx=ast.Load()),
-                                    ast.Name(id="function_name", ctx=ast.Load()),
-                                    ast.Name(id="loop_index", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_test_module_name", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_test_class_name", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_test_name", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_function_name", ctx=ast.Load()),
+                                    ast.Name(id="codeflash_loop_index", ctx=ast.Load()),
                                     ast.Name(id="invocation_id", ctx=ast.Load()),
                                     ast.Name(id="codeflash_duration", ctx=ast.Load()),
                                     ast.Name(id="pickled_return_value", ctx=ast.Load()),
@@ -707,13 +713,13 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.Fun
         name="codeflash_wrap",
         args=ast.arguments(
             args=[
-                ast.arg(arg="wrapped", annotation=None),
-                ast.arg(arg="test_module_name", annotation=None),
-                ast.arg(arg="test_class_name", annotation=None),
-                ast.arg(arg="test_name", annotation=None),
-                ast.arg(arg="function_name", annotation=None),
-                ast.arg(arg="line_id", annotation=None),
-                ast.arg(arg="loop_index", annotation=None),
+                ast.arg(arg="codeflash_wrapped", annotation=None),
+                ast.arg(arg="codeflash_test_module_name", annotation=None),
+                ast.arg(arg="codeflash_test_class_name", annotation=None),
+                ast.arg(arg="codeflash_test_name", annotation=None),
+                ast.arg(arg="codeflash_function_name", annotation=None),
+                ast.arg(arg="codeflash_line_id", annotation=None),
+                ast.arg(arg="codeflash_loop_index", annotation=None),
                 *([ast.arg(arg="codeflash_cur", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
                 *([ast.arg(arg="codeflash_con", annotation=None)] if mode == TestingMode.BEHAVIOR else []),
             ],
