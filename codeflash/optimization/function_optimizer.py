@@ -649,16 +649,14 @@ class FunctionOptimizer:
                     if self.args.benchmark and benchmark_tree:
                         console.print(benchmark_tree)
                     console.rule()
-
-                self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                )
             except KeyboardInterrupt as e:
-                self.write_code_and_helpers(
-                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                )
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
+            finally:
+                # reset for the next candidate
+                self.write_code_and_helpers(
+                    self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                )
         if not valid_optimizations:
             return None
         # need to figure out the best candidate here before we return best_optimization
