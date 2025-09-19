@@ -18,10 +18,8 @@ from codeflash.telemetry.sentry import init_sentry
 
 def main() -> None:
     """Entry point for the codeflash command-line interface."""
-    paneled_text(
-        CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
-    )
     args = parse_args()
+    print_codeflash_banner()
 
     # Check for newer version for all commands
     check_for_newer_minor_version()
@@ -48,6 +46,12 @@ def main() -> None:
         from codeflash.optimization import optimizer
 
         optimizer.run_with_args(args)
+
+
+def print_codeflash_banner() -> None:
+    paneled_text(
+        CODEFLASH_LOGO, panel_args={"title": "https://codeflash.ai", "expand": False}, text_args={"style": "bold gold3"}
+    )
 
 
 if __name__ == "__main__":
