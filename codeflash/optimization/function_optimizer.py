@@ -45,6 +45,7 @@ from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     REPEAT_OPTIMIZATION_PROBABILITY,
     get_n_candidates,
+    get_n_candidates_lp,
     get_n_tests_to_generate,
     get_total_looping_time,
 )
@@ -476,7 +477,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=10,
+            num_candidates=get_n_candidates_lp(),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
