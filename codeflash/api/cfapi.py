@@ -40,6 +40,7 @@ def make_cfapi_request(
     payload: dict[str, Any] | None = None,
     extra_headers: dict[str, str] | None = None,
     *,
+    api_key: str | None = None,
     suppress_errors: bool = False,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
@@ -51,7 +52,7 @@ def make_cfapi_request(
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+    cfapi_headers = {"Authorization": f"Bearer {api_key or get_codeflash_api_key()}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
     try:
@@ -83,7 +84,7 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id() -> Optional[str]:
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :return: The userid or None if the request fails.
@@ -91,7 +92,9 @@ def get_user_id() -> Optional[str]:
     if not ensure_codeflash_api_key():
         return None
 
-    response = make_cfapi_request(endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__})
+    response = make_cfapi_request(
+        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key
+    )
     if response.status_code == 200:
         if "min_version" not in response.text:
             return response.text

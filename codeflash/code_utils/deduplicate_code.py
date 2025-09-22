@@ -1,31 +1,31 @@
 import ast
 import hashlib
-from typing import Dict, Set
 
 
 class VariableNormalizer(ast.NodeTransformer):
     """Normalizes only local variable names in AST to canonical forms like var_0, var_1, etc.
+
     Preserves function names, class names, parameters, built-ins, and imported names.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.var_counter = 0
-        self.var_mapping: Dict[str, str] = {}
+        self.var_mapping: dict[str, str] = {}
         self.scope_stack = []
         self.builtins = set(dir(__builtins__))
-        self.imports: Set[str] = set()
-        self.global_vars: Set[str] = set()
-        self.nonlocal_vars: Set[str] = set()
-        self.parameters: Set[str] = set()  # Track function parameters
+        self.imports: set[str] = set()
+        self.global_vars: set[str] = set()
+        self.nonlocal_vars: set[str] = set()
+        self.parameters: set[str] = set()  # Track function parameters
 
-    def enter_scope(self):
-        """Enter a new scope (function/class)"""
+    def enter_scope(self):  # noqa : ANN201
+        """Enter a new scope (function/class)."""
         self.scope_stack.append(
             {"var_mapping": dict(self.var_mapping), "var_counter": self.var_counter, "parameters": set(self.parameters)}
         )
 
-    def exit_scope(self):
-        """Exit current scope and restore parent scope"""
+    def exit_scope(self):  # noqa : ANN201
+        """Exit current scope and restore parent scope."""
         if self.scope_stack:
             scope = self.scope_stack.pop()
             self.var_mapping = scope["var_mapping"]
@@ -33,7 +33,7 @@ class VariableNormalizer(ast.NodeTransformer):
             self.parameters = scope["parameters"]
 
     def get_normalized_name(self, name: str) -> str:
-        """Get or create normalized name for a variable"""
+        """Get or create normalized name for a variable."""
         # Don't normalize if it's a builtin, import, global, nonlocal, or parameter
         if (
             name in self.builtins
@@ -50,34 +50,34 @@ class VariableNormalizer(ast.NodeTransformer):
             self.var_counter += 1
         return self.var_mapping[name]
 
-    def visit_Import(self, node):
-        """Track imported names"""
+    def visit_Import(self, node):  # noqa : ANN001, ANN201
+        """Track imported names."""
         for alias in node.names:
             name = alias.asname if alias.asname else alias.name
             self.imports.add(name.split(".")[0])
         return node
 
-    def visit_ImportFrom(self, node):
-        """Track imported names from modules"""
+    def visit_ImportFrom(self, node):  # noqa : ANN001, ANN201
+        """Track imported names from modules."""
         for alias in node.names:
             name = alias.asname if alias.asname else alias.name
             self.imports.add(name)
         return node
 
-    def visit_Global(self, node):
-        """Track global variable declarations"""
+    def visit_Global(self, node):  # noqa : ANN001, ANN201
+        """Track global variable declarations."""
         # Avoid repeated .add calls by using set.update with list
         self.global_vars.update(node.names)
         return node
 
-    def visit_Nonlocal(self, node):
-        """Track nonlocal variable declarations"""
-        for name in node.names:
-            self.nonlocal_vars.add(name)
+    def visit_Nonlocal(self, node):  # noqa : ANN001, ANN201
+        """Track nonlocal variable declarations."""
+        # Using set.update for batch insertion (faster than add-in-loop)
+        self.nonlocal_vars.update(node.names)
         return node
 
-    def visit_FunctionDef(self, node):
-        """Process function but keep function name and parameters unchanged"""
+    def visit_FunctionDef(self, node):  # noqa : ANN001, ANN201
+        """Process function but keep function name and parameters unchanged."""
         self.enter_scope()
 
         # Track all parameters (don't modify them)
@@ -95,19 +95,19 @@ class VariableNormalizer(ast.NodeTransformer):
         self.exit_scope()
         return node
 
-    def visit_AsyncFunctionDef(self, node):
-        """Handle async functions same as regular functions"""
+    def visit_AsyncFunctionDef(self, node):  # noqa : ANN001, ANN201
+        """Handle async functions same as regular functions."""
         return self.visit_FunctionDef(node)
 
-    def visit_ClassDef(self, node):
-        """Process class but keep class name unchanged"""
+    def visit_ClassDef(self, node):  # noqa : ANN001, ANN201
+        """Process class but keep class name unchanged."""
         self.enter_scope()
         node = self.generic_visit(node)
         self.exit_scope()
         return node
 
-    def visit_Name(self, node):
-        """Normalize variable names in Name nodes"""
+    def visit_Name(self, node):  # noqa : ANN001, ANN201
+        """Normalize variable names in Name nodes."""
         if isinstance(node.ctx, (ast.Store, ast.Del)):
             # For assignments and deletions, check if we should normalize
             if (
@@ -118,20 +118,20 @@ class VariableNormalizer(ast.NodeTransformer):
                 and node.id not in self.nonlocal_vars
             ):
                 node.id = self.get_normalized_name(node.id)
-        elif isinstance(node.ctx, ast.Load):
+        elif isinstance(node.ctx, ast.Load):  # noqa : SIM102
             # For loading, use existing mapping if available
             if node.id in self.var_mapping:
                 node.id = self.var_mapping[node.id]
         return node
 
-    def visit_ExceptHandler(self, node):
-        """Normalize exception variable names"""
+    def visit_ExceptHandler(self, node):  # noqa : ANN001, ANN201
+        """Normalize exception variable names."""
         if node.name:
             node.name = self.get_normalized_name(node.name)
         return self.generic_visit(node)
 
-    def visit_comprehension(self, node):
-        """Normalize comprehension target variables"""
+    def visit_comprehension(self, node):  # noqa : ANN001, ANN201
+        """Normalize comprehension target variables."""
         # Create new scope for comprehension
         old_mapping = dict(self.var_mapping)
         old_counter = self.var_counter
@@ -144,23 +144,25 @@ class VariableNormalizer(ast.NodeTransformer):
         self.var_counter = old_counter
         return node
 
-    def visit_For(self, node):
-        """Handle for loop target variables"""
+    def visit_For(self, node):  # noqa : ANN001, ANN201
+        """Handle for loop target variables."""
         # The target in a for loop is a local variable that should be normalized
         return self.generic_visit(node)
 
-    def visit_With(self, node):
-        """Handle with statement as variables"""
+    def visit_With(self, node):  # noqa : ANN001, ANN201
+        """Handle with statement as variables."""
         return self.generic_visit(node)
 
 
-def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: bool = False) -> str:
+def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: bool = False) -> str:  # noqa : FBT002, FBT001
     """Normalize Python code by parsing, cleaning, and normalizing only variable names.
+
     Function names, class names, and parameters are preserved.
 
     Args:
         code: Python source code as string
         remove_docstrings: Whether to remove docstrings
+        return_ast_dump: return_ast_dump
 
     Returns:
         Normalized code as string
@@ -191,7 +193,7 @@ def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: b
         raise ValueError(msg) from e
 
 
-def remove_docstrings_from_ast(node):
+def remove_docstrings_from_ast(node):  # noqa : ANN001, ANN201
     """Remove docstrings from AST nodes."""
     # Only FunctionDef, AsyncFunctionDef, ClassDef, and Module can contain docstrings in their body[0]
     node_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)
@@ -242,6 +244,7 @@ def are_codes_duplicate(code1: str, code2: str) -> bool:
     try:
         normalized1 = normalize_code(code1, return_ast_dump=True)
         normalized2 = normalize_code(code2, return_ast_dump=True)
-        return normalized1 == normalized2
     except Exception:
         return False
+    else:
+        return normalized1 == normalized2

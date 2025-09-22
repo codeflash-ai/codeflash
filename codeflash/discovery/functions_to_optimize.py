@@ -173,7 +173,7 @@ def get_functions_to_optimize(
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
-            logger.info("Finding all functions in the module '%s'…", optimize_all)
+            logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
             console.rule()
             functions = get_all_files_and_functions(Path(optimize_all))
         elif replay_test:
@@ -181,7 +181,7 @@ def get_functions_to_optimize(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
             )
         elif file is not None:
-            logger.info("Finding all functions in the file '%s'…", file)
+            logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             functions = find_all_functions_in_file(file)
             if only_get_this_function is not None:
@@ -219,7 +219,7 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
 
-        logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
             console.rule()

@@ -9,7 +9,7 @@ from codeflash.code_utils.config_consts import (
     MIN_IMPROVEMENT_THRESHOLD,
     MIN_TESTCASE_PASSED_THRESHOLD,
 )
-from codeflash.models.models import TestType
+from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from codeflash.models.models import CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
