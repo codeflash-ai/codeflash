@@ -1692,6 +1692,7 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
 
+            candidate_async_throughput = None
             if self.function_to_optimize.is_async:
                 candidate_async_throughput = calculate_function_throughput_from_test_results(
                     candidate_benchmarking_results, self.function_to_optimize.function_name
