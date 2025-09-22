@@ -77,6 +77,10 @@ async def test_async_sort():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_bubble_sort_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_sort"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         # Create function optimizer and set up test files
@@ -197,6 +201,10 @@ async def test_async_class_sort():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_class_bubble_sort_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_class_sort"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -306,6 +314,10 @@ async def test_async_perf():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_perf_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_perf"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -459,6 +471,10 @@ async def async_error_function(lst):
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_error_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_error"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -553,6 +569,10 @@ async def test_async_multi():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "3"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_multi_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_multi"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -664,6 +684,10 @@ async def test_async_edge_cases():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_async_edge_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_async_edge_cases"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -796,6 +820,10 @@ def test_sync_sort():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_sync_in_async_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_sync_sort"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(func)
@@ -962,6 +990,10 @@ async def test_mixed_sorting():
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
         test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_env["CODEFLASH_TEST_MODULE"] = "code_to_optimize.tests.pytest.test_mixed_sort_temp"
+        test_env["CODEFLASH_TEST_CLASS"] = ""
+        test_env["CODEFLASH_TEST_FUNCTION"] = "test_mixed_sorting"
+        test_env["CODEFLASH_CURRENT_LINE_ID"] = "0"
         test_type = TestType.EXISTING_UNIT_TEST
 
         func_optimizer = opt.create_function_optimizer(async_func)
