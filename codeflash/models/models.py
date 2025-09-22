@@ -100,6 +100,7 @@ class BestOptimization(BaseModel):
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
     line_profiler_test_results: dict
+    async_throughput: Optional[int] = None
 
 
 @dataclass(frozen=True)

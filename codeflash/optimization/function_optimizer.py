@@ -635,6 +635,7 @@ class FunctionOptimizer:
                             replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                            async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
                         # queue corresponding refined optimization for best optimization
@@ -697,6 +698,7 @@ class FunctionOptimizer:
                 replay_performance_gain=valid_opt.replay_performance_gain,
                 winning_benchmarking_test_results=valid_opt.winning_benchmarking_test_results,
                 winning_replay_benchmarking_test_results=valid_opt.winning_replay_benchmarking_test_results,
+                async_throughput=valid_opt.async_throughput,
             )
             valid_candidates_with_shorter_code.append(new_best_opt)
             diff_lens_list.append(
@@ -1281,6 +1283,23 @@ class FunctionOptimizer:
             original_runtimes_all=original_runtime_by_test,
             optimized_runtimes_all=optimized_runtime_by_test,
         )
+        original_throughput_str = None
+        optimized_throughput_str = None
+        throughput_improvement_str = None
+        
+        if (
+            self.function_to_optimize.is_async
+            and original_code_baseline.async_throughput is not None
+            and best_optimization.async_throughput is not None
+        ):
+            original_throughput_str = f"{original_code_baseline.async_throughput} operations/second"
+            optimized_throughput_str = f"{best_optimization.async_throughput} operations/second"
+            throughput_improvement_value = throughput_gain(
+                original_throughput=original_code_baseline.async_throughput,
+                optimized_throughput=best_optimization.async_throughput,
+            )
+            throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
+        
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
@@ -1294,6 +1313,9 @@ class FunctionOptimizer:
             annotated_tests=generated_tests_str,
             optimization_id=best_optimization.candidate.optimization_id,
             original_explanation=best_optimization.candidate.explanation,
+            original_throughput=original_throughput_str,
+            optimized_throughput=optimized_throughput_str,
+            throughput_improvement=throughput_improvement_str,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
