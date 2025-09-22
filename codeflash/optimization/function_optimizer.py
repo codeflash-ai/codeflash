@@ -1509,7 +1509,7 @@ class FunctionOptimizer:
             )
 
         if test_framework == "pytest":
-            with progress_bar("Performing detailed line profiling..."):
+            with progress_bar("Running line profiling to identify performance bottlenecks..."):
                 line_profile_results = self.line_profiler_step(
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
                 )
