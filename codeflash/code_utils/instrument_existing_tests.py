@@ -291,6 +291,139 @@ class InjectPerfOnly(ast.NodeTransformer):
         return node
 
 
+class AsyncCallInstrumenter(ast.NodeTransformer):
+    def __init__(
+        self,
+        function: FunctionToOptimize,
+        module_path: str,
+        test_framework: str,
+        call_positions: list[CodePosition],
+        mode: TestingMode = TestingMode.BEHAVIOR,
+    ) -> None:
+        self.mode = mode
+        self.function_object = function
+        self.class_name = None
+        self.only_function_name = function.function_name
+        self.module_path = module_path
+        self.test_framework = test_framework
+        self.call_positions = call_positions
+        self.did_instrument = False
+        # Track function call count per test function
+        self.async_call_counter: dict[str, int] = {}
+        if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
+            self.class_name = function.top_level_parent_name
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        # Add timeout decorator for unittest test classes if needed
+        if self.test_framework == "unittest":
+            for item in node.body:
+                if (
+                    isinstance(item, ast.FunctionDef)
+                    and item.name.startswith("test_")
+                    and not any(
+                        isinstance(d, ast.Call)
+                        and isinstance(d.func, ast.Name)
+                        and d.func.id == "timeout_decorator.timeout"
+                        for d in item.decorator_list
+                    )
+                ):
+                    timeout_decorator = ast.Call(
+                        func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
+                        args=[ast.Constant(value=15)],
+                        keywords=[],
+                    )
+                    item.decorator_list.append(timeout_decorator)
+        return self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        if not node.name.startswith("test_"):
+            return node
+
+        return self._process_test_function(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        # Only process test functions
+        if not node.name.startswith("test_"):
+            return node
+
+        return self._process_test_function(node)
+
+    def _process_test_function(
+        self, node: ast.AsyncFunctionDef | ast.FunctionDef
+    ) -> ast.AsyncFunctionDef | ast.FunctionDef:
+        if self.test_framework == "unittest" and not any(
+            isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "timeout_decorator.timeout"
+            for d in node.decorator_list
+        ):
+            timeout_decorator = ast.Call(
+                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
+                args=[ast.Constant(value=15)],
+                keywords=[],
+            )
+            node.decorator_list.append(timeout_decorator)
+
+        # Initialize counter for this test function
+        if node.name not in self.async_call_counter:
+            self.async_call_counter[node.name] = 0
+
+        new_body = []
+
+        for i, stmt in enumerate(node.body):
+            transformed_stmt, added_env_assignment = self._instrument_statement(stmt, node.name)
+
+            if added_env_assignment:
+                current_call_index = self.async_call_counter[node.name]
+                self.async_call_counter[node.name] += 1
+
+                env_assignment = ast.Assign(
+                    targets=[
+                        ast.Subscript(
+                            value=ast.Attribute(
+                                value=ast.Name(id="os", ctx=ast.Load()), attr="environ", ctx=ast.Load()
+                            ),
+                            slice=ast.Constant(value="CODEFLASH_CURRENT_LINE_ID"),
+                            ctx=ast.Store(),
+                        )
+                    ],
+                    value=ast.Constant(value=f"{current_call_index}"),
+                    lineno=stmt.lineno if hasattr(stmt, "lineno") else 1,
+                )
+                new_body.append(env_assignment)
+                self.did_instrument = True
+
+            new_body.append(transformed_stmt)
+
+        node.body = new_body
+        return node
+
+    def _instrument_statement(self, stmt: ast.stmt, node_name: str) -> tuple[ast.stmt, bool]:
+        for node in ast.walk(stmt):
+            if (
+                isinstance(node, ast.Await)
+                and isinstance(node.value, ast.Call)
+                and self._is_target_call(node.value)
+                and self._call_in_positions(node.value)
+            ):
+                # Check if this call is in one of our target positions
+                return stmt, True  # Return original statement but signal we added env var
+
+        return stmt, False
+
+    def _is_target_call(self, call_node: ast.Call) -> bool:
+        """Check if this call node is calling our target async function."""
+        if isinstance(call_node.func, ast.Name):
+            return call_node.func.id == self.function_object.function_name
+        if isinstance(call_node.func, ast.Attribute):
+            return call_node.func.attr == self.function_object.function_name
+        return False
+
+    def _call_in_positions(self, call_node: ast.Call) -> bool:
+        if not hasattr(call_node, "lineno") or not hasattr(call_node, "col_offset"):
+            return False
+
+        return node_in_call_position(call_node, self.call_positions)
+
+
 class FunctionImportedAsVisitor(ast.NodeVisitor):
     """Checks if a function has been imported as an alias. We only care about the alias then.
 
@@ -352,6 +485,44 @@ def instrument_source_module_with_async_decorators(
         return False, None
 
 
+def inject_async_profiling_into_existing_test(
+    test_path: Path,
+    call_positions: list[CodePosition],
+    function_to_optimize: FunctionToOptimize,
+    tests_project_root: Path,
+    test_framework: str,
+    mode: TestingMode = TestingMode.BEHAVIOR,
+) -> tuple[bool, str | None]:
+    """Inject profiling for async function calls by setting environment variables before each call."""
+    with test_path.open(encoding="utf8") as f:
+        test_code = f.read()
+
+    try:
+        tree = ast.parse(test_code)
+    except SyntaxError:
+        logger.exception(f"Syntax error in code in file - {test_path}")
+        return False, None
+
+    test_module_path = module_name_from_file_path(test_path, tests_project_root)
+    import_visitor = FunctionImportedAsVisitor(function_to_optimize)
+    import_visitor.visit(tree)
+    func = import_visitor.imported_as
+
+    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, test_framework, call_positions, mode=mode)
+    tree = async_instrumenter.visit(tree)
+
+    if not async_instrumenter.did_instrument:
+        return False, None
+
+    # Add necessary imports
+    new_imports = [ast.Import(names=[ast.alias(name="os")])]
+    if test_framework == "unittest":
+        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
+
+    tree.body = [*new_imports, *tree.body]
+    return True, isort.code(ast.unparse(tree), float_to_top=True)
+
+
 def inject_profiling_into_existing_test(
     test_path: Path,
     call_positions: list[CodePosition],
@@ -361,7 +532,9 @@ def inject_profiling_into_existing_test(
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
-        return False, None
+        return inject_async_profiling_into_existing_test(
+            test_path, call_positions, function_to_optimize, tests_project_root, test_framework, mode
+        )
 
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
