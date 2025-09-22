@@ -27,6 +27,7 @@ class TestAsyncWrapperSQLiteValidation:
             "CODEFLASH_TEST_MODULE": __name__,
             "CODEFLASH_TEST_CLASS": "TestAsyncWrapperSQLiteValidation",
             "CODEFLASH_TEST_FUNCTION": request.node.name,
+            "CODEFLASH_CURRENT_LINE_ID": "test_unit",
         }
         
         for key, value in test_env.items():
@@ -60,6 +61,7 @@ class TestAsyncWrapperSQLiteValidation:
             await asyncio.sleep(0.001)
             return a + b
 
+        os.environ['CODEFLASH_CURRENT_LINE_ID'] = 'simple_async_add_59'
         result = await simple_async_add(5, 3)
         
         assert result == 8
