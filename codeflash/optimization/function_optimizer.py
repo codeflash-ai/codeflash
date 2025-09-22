@@ -90,7 +90,7 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
-from codeflash.verification.parse_test_output import calculate_function_throughput_from_stdout, parse_test_results
+from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results, parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
@@ -1528,14 +1528,9 @@ class FunctionOptimizer:
 
             async_throughput = None
             if self.function_to_optimize.is_async:
-                all_stdout = ""
-                for result in benchmarking_results.test_results:
-                    if result.stdout:
-                        all_stdout += result.stdout
                 logger.info("Calculating async function throughput from test output...")
-                logger.info(f"All stdout for async throughput calculation:\n{all_stdout}")
-                async_throughput = calculate_function_throughput_from_stdout(
-                    all_stdout, self.function_to_optimize.function_name
+                async_throughput = calculate_function_throughput_from_test_results(
+                    benchmarking_results, self.function_to_optimize.function_name
                 )
                 logger.info(f"Original async function throughput: {async_throughput} calls/second")
 
@@ -1700,13 +1695,8 @@ class FunctionOptimizer:
 
             candidate_async_throughput = None
             if self.function_to_optimize.is_async and candidate_benchmarking_results:
-                all_stdout = ""
-                for result in candidate_benchmarking_results.test_results:
-                    if result.stdout:
-                        all_stdout += result.stdout
-
-                candidate_async_throughput = calculate_function_throughput_from_stdout(
-                    all_stdout, self.function_to_optimize.function_name
+                candidate_async_throughput = calculate_function_throughput_from_test_results(
+                    candidate_benchmarking_results, self.function_to_optimize.function_name
                 )
 
             if self.args.benchmark:
