@@ -1528,7 +1528,6 @@ class FunctionOptimizer:
 
             async_throughput = None
             if self.function_to_optimize.is_async:
-                logger.info("Calculating async function throughput from test output...")
                 async_throughput = calculate_function_throughput_from_test_results(
                     benchmarking_results, self.function_to_optimize.function_name
                 )
@@ -1693,11 +1692,11 @@ class FunctionOptimizer:
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
 
-            candidate_async_throughput = None
-            if self.function_to_optimize.is_async and candidate_benchmarking_results:
+            if self.function_to_optimize.is_async:
                 candidate_async_throughput = calculate_function_throughput_from_test_results(
                     candidate_benchmarking_results, self.function_to_optimize.function_name
                 )
+                logger.info(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
 
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
