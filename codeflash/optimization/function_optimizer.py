@@ -1810,6 +1810,8 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
             )
+            if testing_type == TestingMode.PERFORMANCE:
+                results.perf_stdout = run_result.stdout
             return results, coverage_results
         results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
         return results, coverage_results

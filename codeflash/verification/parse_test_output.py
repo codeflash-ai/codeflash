@@ -51,13 +51,9 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
     Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
     End:   !######test_module:test_function:function_name:loop_index:iteration_id######!
     """
-    all_stdout = ""
-    for result in test_results.test_results:
-        if result.stdout:
-            all_stdout += result.stdout
-
-    start_matches = start_pattern.findall(all_stdout)
-    end_matches = end_pattern.findall(all_stdout)
+    logger.info(test_results.perf_stdout)
+    start_matches = start_pattern.findall(test_results.perf_stdout or "")
+    end_matches = end_pattern.findall(test_results.perf_stdout or "")
     end_matches_set = set(end_matches)
 
     function_throughput = 0
@@ -66,7 +62,8 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
             logger.info(f"Matched start-end pair for function '{function_name}': {start_match}")
             function_throughput += 1
-
+    logger.info(f"Function '{function_name}' throughput: {function_throughput}")
+    raise SystemExit
     return function_throughput
 
 

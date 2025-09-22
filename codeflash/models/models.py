@@ -565,6 +565,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+    perf_stdout: Optional[str] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
