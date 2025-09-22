@@ -91,8 +91,10 @@ def speedup_critic(
         )
 
     if original_async_throughput is not None and candidate_result.async_throughput is not None:
-        # prioritize throughput improvement
-        return (throughput_improved and throughput_is_best) and (runtime_improved or runtime_is_best)
+        # When throughput data is available, accept if EITHER throughput OR runtime improves significantly
+        throughput_acceptance = throughput_improved and throughput_is_best
+        runtime_acceptance = runtime_improved and runtime_is_best
+        return throughput_acceptance or runtime_acceptance
     return runtime_improved and runtime_is_best
 
 

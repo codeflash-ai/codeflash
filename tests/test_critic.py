@@ -480,7 +480,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         disable_gh_action_noise=True
     )
 
-    # Test case 2: Runtime improves but throughput doesn't meet threshold
+    # Test case 2: Runtime improves significantly, throughput doesn't meet threshold (should pass)
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=8000,  # 20% runtime improvement
@@ -491,7 +491,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         async_throughput=105,  # Only 5% throughput improvement (below 10% threshold)
     )
 
-    assert not speedup_critic(
+    assert speedup_critic(
         candidate_result=candidate_result,
         original_code_runtime=original_code_runtime,
         best_runtime_until_now=None,
@@ -500,7 +500,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         disable_gh_action_noise=True
     )
 
-    # Test case 3: Throughput improves but runtime doesn't meet threshold
+    # Test case 3: Throughput improves significantly, runtime doesn't meet threshold (should pass)
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
         best_test_runtime=9800,  # Only 2% runtime improvement (below 5% threshold)
@@ -511,7 +511,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         async_throughput=120,  # 20% throughput improvement
     )
 
-    assert not speedup_critic(
+    assert speedup_critic(
         candidate_result=candidate_result,
         original_code_runtime=original_code_runtime,
         best_runtime_until_now=None,
@@ -565,7 +565,7 @@ def test_speedup_critic_with_async_throughput() -> None:
     assert not speedup_critic(
         candidate_result=candidate_result,
         original_code_runtime=original_code_runtime,
-        best_runtime_until_now=None,
+        best_runtime_until_now=7000,  # Better runtime already exists
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=120,  # Better throughput already exists
         disable_gh_action_noise=True
