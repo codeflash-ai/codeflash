@@ -41,29 +41,26 @@ matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)####
 
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
-end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######!")
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
 
 
 def calculate_function_throughput_from_test_results(test_results: TestResults, function_name: str) -> int:
-    """Calculate function throughput from TestResults by extracting stdout.
+    """Calculate function throughput from TestResults by extracting performance stdout.
 
-    A completed execution is defined as having both a start tag and matching end tag.
+    A completed execution is defined as having both a start tag and matching end tag from performance wrappers.
     Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
-    End:   !######test_module:test_function:function_name:loop_index:iteration_id######!
+    End:   !######test_module:test_function:function_name:loop_index:iteration_id:duration######!
     """
-    logger.info(test_results.perf_stdout)
     start_matches = start_pattern.findall(test_results.perf_stdout or "")
     end_matches = end_pattern.findall(test_results.perf_stdout or "")
-    end_matches_set = set(end_matches)
+
+    end_matches_truncated = [end_match[:5] for end_match in end_matches]
+    end_matches_set = set(end_matches_truncated)
 
     function_throughput = 0
-    logger.info(f"Total start matches: {len(start_matches)}, Total end matches: {len(end_matches)}")
     for start_match in start_matches:
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
-            logger.info(f"Matched start-end pair for function '{function_name}': {start_match}")
             function_throughput += 1
-    logger.info(f"Function '{function_name}' throughput: {function_throughput}")
-    raise SystemExit
     return function_throughput
 
 
