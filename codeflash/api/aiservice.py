@@ -10,7 +10,7 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.config_consts import get_n_candidates, get_n_candidates_lp
+from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE, N_CANDIDATES_LP_EFFECTIVE
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -132,7 +132,7 @@ class AiServiceClient:
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
-            "n_candidates": get_n_candidates(),
+            "n_candidates": N_CANDIDATES_EFFECTIVE,
         }
 
         logger.info("Generating optimized candidates…")
@@ -194,7 +194,7 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
-            "n_candidates_lp": get_n_candidates_lp(),
+            "n_candidates_lp": N_CANDIDATES_LP_EFFECTIVE,
         }
 
         logger.info("Generating optimized candidates…")

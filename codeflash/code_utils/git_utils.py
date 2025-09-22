@@ -16,7 +16,7 @@ from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_consts import get_n_candidates
+from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE
 
 if TYPE_CHECKING:
     from git import Repo
@@ -164,7 +164,7 @@ def create_git_worktrees(
 ) -> tuple[Path | None, list[Path]]:
     if git_root and worktree_root_dir:
         worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
-        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(get_n_candidates() + 1)]
+        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES_EFFECTIVE + 1)]
         for worktree in worktrees:
             subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
     else:
