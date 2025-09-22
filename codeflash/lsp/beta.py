@@ -24,7 +24,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
-from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
+from codeflash.lsp.server import CodeflashLanguageServer
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -67,7 +67,8 @@ class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
 
-server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+# server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+server = CodeflashLanguageServer("codeflash-language-server", "v1.0")
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
@@ -378,7 +379,7 @@ def perform_function_optimization(  # noqa: PLR0911
 
         devnull_writer = open(os.devnull, "w")  # noqa
         with contextlib.redirect_stdout(devnull_writer):
-            function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+            function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
             function_optimizer.function_to_tests = function_to_tests
 
         test_setup_result = function_optimizer.generate_and_instrument_tests(

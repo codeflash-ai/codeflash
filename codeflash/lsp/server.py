@@ -2,25 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
-from pygls.protocol import LanguageServerProtocol, lsp_method
+from lsprotocol.types import LogMessageParams, MessageType
+from pygls.protocol import LanguageServerProtocol
 from pygls.server import LanguageServer
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    from lsprotocol.types import InitializeParams, InitializeResult
 
     from codeflash.optimization.optimizer import Optimizer
 
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
-
-    @lsp_method(INITIALIZE)
-    def lsp_initialize(self, params: InitializeParams) -> InitializeResult:
-        initialize_result: InitializeResult = super().lsp_initialize(params)
-        return initialize_result
 
 
 class CodeflashLanguageServer(LanguageServer):
