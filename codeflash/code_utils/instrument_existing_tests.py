@@ -368,7 +368,7 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
 
         new_body = []
 
-        for i, stmt in enumerate(node.body):
+        for _i, stmt in enumerate(node.body):
             transformed_stmt, added_env_assignment = self._instrument_statement(stmt, node.name)
 
             if added_env_assignment:
@@ -396,7 +396,7 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         node.body = new_body
         return node
 
-    def _instrument_statement(self, stmt: ast.stmt, node_name: str) -> tuple[ast.stmt, bool]:
+    def _instrument_statement(self, stmt: ast.stmt, _node_name: str) -> tuple[ast.stmt, bool]:
         for node in ast.walk(stmt):
             if (
                 isinstance(node, ast.Await)
