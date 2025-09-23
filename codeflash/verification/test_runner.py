@@ -66,7 +66,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}"
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
