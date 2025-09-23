@@ -523,9 +523,12 @@ def discover_tests_unittest(
 
 
 def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
-    function_parts = function_name.split("_")
-    if len(function_parts) > 1 and function_parts[-1].isdigit():
-        return True, "_".join(function_parts[:-1]), function_parts[-1]
+    if "_" not in function_name:
+        return False, function_name, None
+
+    function_parts = function_name.rsplit("_", 1)
+    if len(function_parts) == 2 and function_parts[1].isdigit():
+        return True, function_parts[0], function_parts[1]
 
     return False, function_name, None
 
