@@ -363,7 +363,6 @@ class FunctionCalledInTest:
     tests_in_file: TestsInFile
     position: CodePosition
 
-
 @dataclass(frozen=True)
 class CodePosition:
     line_no: int
