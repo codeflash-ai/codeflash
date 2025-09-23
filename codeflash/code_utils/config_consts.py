@@ -19,26 +19,17 @@ N_TESTS_TO_GENERATE_LSP = 2
 TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in increase in performance reporting
 N_CANDIDATES_LP_LSP = 3
 
+MAX_N_CANDIDATES = 5
+MAX_N_CANDIDATES_LP = 6
 
-def get_n_candidates() -> int:
+try:
     from codeflash.lsp.helpers import is_LSP_enabled
 
-    return N_CANDIDATES_LSP if is_LSP_enabled() else N_CANDIDATES
+    _IS_LSP_ENABLED = is_LSP_enabled()
+except ImportError:
+    _IS_LSP_ENABLED = False
 
-
-def get_n_candidates_lp() -> int:
-    from codeflash.lsp.helpers import is_LSP_enabled
-
-    return N_CANDIDATES_LP_LSP if is_LSP_enabled() else N_CANDIDATES_LP
-
-
-def get_n_tests_to_generate() -> int:
-    from codeflash.lsp.helpers import is_LSP_enabled
-
-    return N_TESTS_TO_GENERATE_LSP if is_LSP_enabled() else N_TESTS_TO_GENERATE
-
-
-def get_total_looping_time() -> float:
-    from codeflash.lsp.helpers import is_LSP_enabled
-
-    return TOTAL_LOOPING_TIME_LSP if is_LSP_enabled() else TOTAL_LOOPING_TIME
+N_CANDIDATES_EFFECTIVE = min(N_CANDIDATES_LSP if _IS_LSP_ENABLED else N_CANDIDATES, MAX_N_CANDIDATES)
+N_CANDIDATES_LP_EFFECTIVE = min(N_CANDIDATES_LP_LSP if _IS_LSP_ENABLED else N_CANDIDATES_LP, MAX_N_CANDIDATES_LP)
+N_TESTS_TO_GENERATE_EFFECTIVE = N_TESTS_TO_GENERATE_LSP if _IS_LSP_ENABLED else N_TESTS_TO_GENERATE
+TOTAL_LOOPING_TIME_EFFECTIVE = TOTAL_LOOPING_TIME_LSP if _IS_LSP_ENABLED else TOTAL_LOOPING_TIME
