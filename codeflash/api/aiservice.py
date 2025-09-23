@@ -4,14 +4,15 @@ import json
 import os
 import platform
 import time
-from typing import TYPE_CHECKING, Any
-
+from typing import TYPE_CHECKING, Any, Literal
+from pathlib import Path
 import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
@@ -19,8 +20,6 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import AIServiceRefinerRequest
@@ -513,91 +512,45 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
-    def get_optimization_impact(self, original_code, new_code, explanation, existing_tests_source, generated_original_test_source, function_trace_id, coverage_message, replay_tests, concolic_tests) -> list[OptimizedCandidate]:
+    def get_optimization_impact(self, original_code, new_code, explanation, existing_tests_source, generated_original_test_source, function_trace_id, coverage_message, replay_tests, concolic_tests, root_dir, original_line_profiler_results, optimized_line_profiler_results) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
         Args:
-        request: A list of optimization candidate details for refinement
+        PrComment args
 
         Returns:
         -------
-        - List[OptimizationCandidate]: A list of Optimization Candidates.
+        - 'high','medium' or 'low' optimization impact
 
         """
-        # """{
-        #     "original_code": original_code_combined,
-        #     "new_code": new_code_combined,
-        #     "explanation": new_explanation,
-        #     "existing_tests_source": existing_tests,
-        #     "generated_original_test_source": generated_tests_str,
-        #     "function_trace_id": self.function_trace_id[:-4] + exp_type
-        #     if self.experiment_id
-        #     else self.function_trace_id,
-        #     "coverage_message": coverage_message,
-        #     "replay_tests": replay_tests,
-        #     "concolic_tests": concolic_tests,
-        # }"""
-        # logger.info("Creating a new PR with the optimized code...")
-        # console.rule()
-        # owner, repo = get_repo_owner_and_name(git_repo, git_remote)
-        # logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
-        # console.rule()
-        # if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
-        #     logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
-        #     return
-        # relative_path = explanation.file_path.relative_to(root_dir).as_posix()
-        # base_branch = get_current_branch()
-        # build_file_changes = {
-        #     Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
-        #         oldContent=original_code[p], newContent=new_code[p]
-        #     )
-        #     for p in original_code
-        # }
-        #
-        # response = cfapi.create_pr(
-        #     owner=owner,
-        #     repo=repo,
-        #     base_branch=base_branch,
-        #     file_changes=build_file_changes,
-        #     pr_comment=PrComment(
-        #         optimization_explanation=explanation.explanation_message(),
-        #         best_runtime=explanation.best_runtime_ns,
-        #         original_runtime=explanation.original_runtime_ns,
-        #         function_name=explanation.function_name,
-        #         relative_file_path=relative_path,
-        #         speedup_x=explanation.speedup_x,
-        #         speedup_pct=explanation.speedup_pct,
-        #         winning_behavior_test_results=explanation.winning_behavior_test_results,
-        #         winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-        #         benchmark_details=explanation.benchmark_details,
-        #     ),
-        #     existing_tests=existing_tests_source,
-        #     generated_tests=generated_original_test_source,
-        #     trace_id=function_trace_id,
-        #     coverage_message=coverage_message,
-        #     replay_tests=replay_tests,
-        #     concolic_tests=concolic_tests,
-        # )
-        # if response.ok:
-        #     pr_id = response.text
-        #     pr_url = github_pr_url(owner, repo, pr_id)
-        #     logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
-        # else:
-        #     logger.error(
-        #         f"Optimization was successful, but I failed to create a PR with the optimized code."
-        #         f" Response from server was: {response.text}"
-        #     )
-        # console.rule()
         logger.info("!lsp|Computing Optimization Impact…")
+        original_code_str = ''
+        new_code_str = ''
+        for p in original_code:
+            original_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
+            original_code_str += '\n'
+            original_code_str += original_code[p]
+        for p in new_code:
+            new_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
+            new_code_str += '\n'
+            new_code_str += new_code[p]
+
         payload = {
-            "original_code": original_code,
-            "new_code": new_code,
-            "existing_tests_source": existing_tests_source,
-            "generated_original_test_source": generated_original_test_source,
-            "function_trace_id": function_trace_id,
+            "original_code": original_code_str,
+            "optimized_code": new_code_str,
+            "existing_tests": existing_tests_source,
+            "generated_tests": generated_original_test_source,
+            "trace_id": function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "speedup": f"{1+float(explanation.speedup):.2f}x",
+            "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
+            "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
+            "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
+            "original_runtime": humanize_runtime(explanation.original_runtime_ns),
+            "original_line_profiler_results":original_line_profiler_results,
+            "optimized_line_profiler_results":optimized_line_profiler_results
         }
         console.rule()
         try:
@@ -617,7 +570,7 @@ class AiServiceClient:
         logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return []
+        return ''
 
 
 class LocalAiServiceClient(AiServiceClient):
