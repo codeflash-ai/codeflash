@@ -1407,9 +1407,12 @@ class FunctionOptimizer:
 
         if raise_pr:
             # modify argument of staging vs pr based on the impact
-            opt_impact_response = self.aiservice_client.get_optimization_impact(**data, original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],)
-            if opt_impact_response in ['low', 'medium']:
+            opt_impact_response = self.aiservice_client.get_optimization_impact(
+                **data,
+                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+            )
+            if opt_impact_response in ["low", "medium"]:
                 raise_pr = False
                 self.args.staging_review = True
 

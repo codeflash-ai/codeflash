@@ -4,8 +4,9 @@ import json
 import os
 import platform
 import time
-from typing import TYPE_CHECKING, Any, Literal
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
 import requests
 from pydantic.json import pydantic_encoder
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import AIServiceRefinerRequest
+    from codeflash.result.explanation import Explanation
 
 
 class AiServiceClient:
@@ -512,11 +514,36 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
-    def get_optimization_impact(self, original_code, new_code, explanation, existing_tests_source, generated_original_test_source, function_trace_id, coverage_message, replay_tests, concolic_tests, root_dir, original_line_profiler_results, optimized_line_profiler_results) -> str:
+    def get_optimization_impact(
+        self,
+        original_code: dict[Path, str],
+        new_code: dict[Path, str],
+        explanation: Explanation,
+        existing_tests_source: str,
+        generated_original_test_source: str,
+        function_trace_id: str,
+        coverage_message: str,
+        replay_tests: str,
+        concolic_tests: str,
+        root_dir: Path,
+        original_line_profiler_results: str,
+        optimized_line_profiler_results: str,
+    ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
         Args:
-        PrComment args
+        original_code: dict,
+        new_code: dict,
+        explanation: Explanation,
+        existing_tests_source: str,
+        generated_original_test_source: str,
+        function_trace_id: str,
+        coverage_message: str,
+        replay_tests: str,
+        concolic_tests: str,
+        root_dir: Path,
+        original_line_profiler_results: str,
+        optimized_line_profiler_results: str,
 
         Returns:
         -------
@@ -524,16 +551,16 @@ class AiServiceClient:
 
         """
         logger.info("!lsp|Computing Optimization Impact…")
-        original_code_str = ''
-        new_code_str = ''
-        for p in original_code:
+        original_code_str = ""
+        new_code_str = ""
+        for p, code in original_code.items():
             original_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
-            original_code_str += '\n'
-            original_code_str += original_code[p]
-        for p in new_code:
+            original_code_str += "\n"
+            original_code_str += code
+        for p, code in new_code.items():
             new_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
-            new_code_str += '\n'
-            new_code_str += new_code[p]
+            new_code_str += "\n"
+            new_code_str += code
 
         payload = {
             "original_code": original_code_str,
@@ -544,13 +571,13 @@ class AiServiceClient:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "speedup": f"{1+float(explanation.speedup):.2f}x",
+            "speedup": f"{1 + float(explanation.speedup):.2f}x",
             "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
-            "original_line_profiler_results":original_line_profiler_results,
-            "optimized_line_profiler_results":optimized_line_profiler_results
+            "original_line_profiler_results": original_line_profiler_results,
+            "optimized_line_profiler_results": optimized_line_profiler_results,
         }
         console.rule()
         try:
@@ -558,19 +585,18 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return ''
+            return ""
 
         if response.status_code == 200:
-            impact = response.json()["impact"]
-            return impact
+            return cast("str", response.json()["impact"])
         try:
-            error = response.json()["error"]
+            error = cast("str", response.json()["error"])
         except Exception:
             error = response.text
         logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return ''
+        return ""
 
 
 class LocalAiServiceClient(AiServiceClient):
