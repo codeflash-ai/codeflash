@@ -6,14 +6,14 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
-        file_path="workload.py",
-        expected_unit_tests=1,
+        file_path="main.py",
+        expected_unit_tests=0,
         min_improvement_x=0.1,
         coverage_expectations=[
             CoverageExpectation(
-                function_name="process_data_list",
+                function_name="retry_with_backoff",
                 expected_coverage=100.0,
-                expected_lines=[5, 7, 8, 9, 10, 12],
+                expected_lines=[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
             )
         ],
     )
