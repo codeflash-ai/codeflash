@@ -37,6 +37,7 @@ def run_behavioral_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
+    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
@@ -65,6 +66,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}"
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -149,6 +151,7 @@ def run_line_profile_tests(
     cwd: Path,
     test_framework: str,
     *,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
@@ -183,6 +186,7 @@ def run_line_profile_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
