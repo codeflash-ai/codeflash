@@ -109,7 +109,7 @@ class TestsCache:
 
     def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest] | None:
         cache_key = (file_path, file_hash)
-        if cache_key in self._memory_cache:
+        if cache_key in self.memory_cache:
             return self.memory_cache[cache_key]
 
         self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
