@@ -658,6 +658,15 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                        if (
+                            original_code_baseline.async_throughput is not None
+                            and candidate_result.async_throughput is not None
+                        ):
+                            throughput_gain_value = throughput_gain(
+                                original_throughput=original_code_baseline.async_throughput,
+                                optimized_throughput=candidate_result.async_throughput,
+                            )
+                            tree.add(f"Throughput gain: {throughput_gain_value * 100:.1f}%")
                     console.print(tree)
                     if self.args.benchmark and benchmark_tree:
                         console.print(benchmark_tree)
@@ -1199,6 +1208,8 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
+                    original_async_throughput=original_code_baseline.async_throughput,
+                    best_async_throughput=best_optimization.async_throughput,
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
@@ -1284,7 +1295,7 @@ class FunctionOptimizer:
         original_throughput_str = None
         optimized_throughput_str = None
         throughput_improvement_str = None
-        
+
         if (
             self.function_to_optimize.is_async
             and original_code_baseline.async_throughput is not None
@@ -1297,7 +1308,7 @@ class FunctionOptimizer:
                 optimized_throughput=best_optimization.async_throughput,
             )
             throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
-        
+
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
@@ -1324,6 +1335,8 @@ class FunctionOptimizer:
             function_name=explanation.function_name,
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
+            original_async_throughput=explanation.original_async_throughput,
+            best_async_throughput=explanation.best_async_throughput,
         )
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 
@@ -1551,7 +1564,8 @@ class FunctionOptimizer:
                 async_throughput = calculate_function_throughput_from_test_results(
                     benchmarking_results, self.function_to_optimize.function_name
                 )
-                logger.info(f"Original async function throughput: {async_throughput} calls/second")
+                logger.debug(f"Original async function throughput: {async_throughput} calls/second")
+                console.rule()
 
             if self.args.benchmark:
                 replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(

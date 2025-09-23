@@ -82,9 +82,6 @@ def speedup_critic(
                 original_throughput=original_async_throughput, optimized_throughput=candidate_result.async_throughput
             )
             throughput_improved = throughput_gain_value > MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD
-            logger.info(
-                f"Async throughput gain: {throughput_gain_value * 100:.1f}% (original: {original_async_throughput}, optimized: {candidate_result.async_throughput})"
-            )
 
         throughput_is_best = (
             best_throughput_until_now is None or candidate_result.async_throughput > best_throughput_until_now
