@@ -1401,6 +1401,11 @@ class FunctionOptimizer:
         }
 
         raise_pr = not self.args.no_pr
+        # modify argument of staging vs pr based on the impact
+        opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+        if opt_impact_response in ['medium', 'low']:
+            raise_pr = False
+            self.args.staging_review = True
 
         if raise_pr or self.args.staging_review:
             data["root_dir"] = git_root_dir()

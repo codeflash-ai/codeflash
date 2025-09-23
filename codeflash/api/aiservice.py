@@ -513,6 +513,112 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
+    def get_optimization_impact(self, original_code, new_code, explanation, existing_tests_source, generated_original_test_source, function_trace_id, coverage_message, replay_tests, concolic_tests) -> list[OptimizedCandidate]:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Args:
+        request: A list of optimization candidate details for refinement
+
+        Returns:
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        # """{
+        #     "original_code": original_code_combined,
+        #     "new_code": new_code_combined,
+        #     "explanation": new_explanation,
+        #     "existing_tests_source": existing_tests,
+        #     "generated_original_test_source": generated_tests_str,
+        #     "function_trace_id": self.function_trace_id[:-4] + exp_type
+        #     if self.experiment_id
+        #     else self.function_trace_id,
+        #     "coverage_message": coverage_message,
+        #     "replay_tests": replay_tests,
+        #     "concolic_tests": concolic_tests,
+        # }"""
+        # logger.info("Creating a new PR with the optimized code...")
+        # console.rule()
+        # owner, repo = get_repo_owner_and_name(git_repo, git_remote)
+        # logger.info(f"Pushing to {git_remote} - Owner: {owner}, Repo: {repo}")
+        # console.rule()
+        # if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
+        #     logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
+        #     return
+        # relative_path = explanation.file_path.relative_to(root_dir).as_posix()
+        # base_branch = get_current_branch()
+        # build_file_changes = {
+        #     Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
+        #         oldContent=original_code[p], newContent=new_code[p]
+        #     )
+        #     for p in original_code
+        # }
+        #
+        # response = cfapi.create_pr(
+        #     owner=owner,
+        #     repo=repo,
+        #     base_branch=base_branch,
+        #     file_changes=build_file_changes,
+        #     pr_comment=PrComment(
+        #         optimization_explanation=explanation.explanation_message(),
+        #         best_runtime=explanation.best_runtime_ns,
+        #         original_runtime=explanation.original_runtime_ns,
+        #         function_name=explanation.function_name,
+        #         relative_file_path=relative_path,
+        #         speedup_x=explanation.speedup_x,
+        #         speedup_pct=explanation.speedup_pct,
+        #         winning_behavior_test_results=explanation.winning_behavior_test_results,
+        #         winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+        #         benchmark_details=explanation.benchmark_details,
+        #     ),
+        #     existing_tests=existing_tests_source,
+        #     generated_tests=generated_original_test_source,
+        #     trace_id=function_trace_id,
+        #     coverage_message=coverage_message,
+        #     replay_tests=replay_tests,
+        #     concolic_tests=concolic_tests,
+        # )
+        # if response.ok:
+        #     pr_id = response.text
+        #     pr_url = github_pr_url(owner, repo, pr_id)
+        #     logger.info(f"Successfully created a new PR #{pr_id} with the optimized code: {pr_url}")
+        # else:
+        #     logger.error(
+        #         f"Optimization was successful, but I failed to create a PR with the optimized code."
+        #         f" Response from server was: {response.text}"
+        #     )
+        # console.rule()
+        logger.info("!lsp|Computing Optimization Impact…")
+        payload = {
+            "original_code": original_code,
+            "new_code": new_code,
+            "existing_tests_source": existing_tests_source,
+            "generated_original_test_source": generated_original_test_source,
+            "function_trace_id": function_trace_id,
+            "coverage_message": coverage_message,
+            "replay_tests": replay_tests,
+            "concolic_tests": concolic_tests,
+        }
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization refinements: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return ''
+
+        if response.status_code == 200:
+            impact = response.json()["impact"]
+            return impact
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
 
 class LocalAiServiceClient(AiServiceClient):
     """Client for interacting with the local AI service."""
