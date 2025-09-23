@@ -24,7 +24,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
-from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
+from codeflash.lsp.server import CodeflashLanguageServer
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -51,6 +51,13 @@ class ProvideApiKeyParams:
 
 
 @dataclass
+class ValidateProjectParams:
+    root_path_abs: str
+    config_file: Optional[str] = None
+    skip_validation: bool = False
+
+
+@dataclass
 class OnPatchAppliedParams:
     patch_id: str
 
@@ -60,7 +67,8 @@ class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
 
-server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+# server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+server = CodeflashLanguageServer("codeflash-language-server", "v1.0")
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
@@ -160,17 +168,60 @@ def initialize_function_optimization(
     return {"functionName": params.functionName, "status": "success"}
 
 
-@server.feature("validateProject")
-def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizationParams) -> dict[str, str]:
+def _find_pyproject_toml(workspace_path: str) -> Path | None:
+    workspace_path_obj = Path(workspace_path)
+    max_depth = 2
+    base_depth = len(workspace_path_obj.parts)
+
+    for root, dirs, files in os.walk(workspace_path_obj):
+        depth = len(Path(root).parts) - base_depth
+        if depth > max_depth:
+            # stop going deeper into this branch
+            dirs.clear()
+            continue
+
+        if "pyproject.toml" in files:
+            file_path = Path(root) / "pyproject.toml"
+            with file_path.open("r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    if line.strip() == "[tool.codeflash]":
+                        return file_path.resolve()
+    return None
+
+
+# should be called the first thing to initialize and validate the project
+@server.feature("initProject")
+def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams) -> dict[str, str]:
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
 
+    pyproject_toml_path: Path | None = getattr(params, "config_file", None)
+
+    if server.args is None:
+        if pyproject_toml_path is not None:
+            # if there is a config file provided use it
+            server.prepare_optimizer_arguments(pyproject_toml_path)
+        else:
+            # otherwise look for it
+            pyproject_toml_path = _find_pyproject_toml(params.root_path_abs)
+            server.show_message_log(f"Found pyproject.toml at: {pyproject_toml_path}", "Info")
+            if pyproject_toml_path:
+                server.prepare_optimizer_arguments(pyproject_toml_path)
+            else:
+                return {
+                    "status": "error",
+                    "message": "No pyproject.toml found in workspace.",
+                }  # TODO: enhancec this message to say there is not tool.codeflash in pyproject.toml or smth
+
+    if getattr(params, "skip_validation", False):
+        return {"status": "success", "moduleRoot": server.args.module_root, "pyprojectPath": pyproject_toml_path}
+
     server.show_message_log("Validating project...", "Info")
-    config = is_valid_pyproject_toml(server.args.config_file)
+    config = is_valid_pyproject_toml(pyproject_toml_path)
     if config is None:
         server.show_message_log("pyproject.toml is not valid", "Error")
         return {
             "status": "error",
-            "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions
+            "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions,
         }
 
     args = process_args(server)
@@ -183,7 +234,7 @@ def validate_project(server: CodeflashLanguageServer, _params: FunctionOptimizat
     except Exception:
         return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
-    return {"status": "success", "moduleRoot": args.module_root}
+    return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path}
 
 
 def _initialize_optimizer_if_api_key_is_valid(
@@ -328,7 +379,7 @@ def perform_function_optimization(  # noqa: PLR0911
 
         devnull_writer = open(os.devnull, "w")  # noqa
         with contextlib.redirect_stdout(devnull_writer):
-            function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+            function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
             function_optimizer.function_to_tests = function_to_tests
 
         test_setup_result = function_optimizer.generate_and_instrument_tests(
