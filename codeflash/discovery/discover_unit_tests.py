@@ -54,7 +54,6 @@ class TestsCache:
     def __init__(self) -> None:
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
-
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS discovered_tests(
@@ -76,7 +75,9 @@ class TestsCache:
             ON discovered_tests (file_path, file_hash)
             """
         )
+
         self._memory_cache = {}
+        self._hash_cache = {}
 
     def insert_test(
         self,
@@ -107,11 +108,16 @@ class TestsCache:
         )
         self.connection.commit()
 
-    def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest]:
+    def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest] | None:
         cache_key = (file_path, file_hash)
         if cache_key in self._memory_cache:
             return self._memory_cache[cache_key]
+
         self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
+        rows = self.cur.fetchall()
+        if not rows:
+            return None
+
         result = [
             FunctionCalledInTest(
                 tests_in_file=TestsInFile(
@@ -119,13 +125,13 @@ class TestsCache:
                 ),
                 position=CodePosition(line_no=row[7], col_no=row[8]),
             )
-            for row in self.cur.fetchall()
+            for row in rows
         ]
         self._memory_cache[cache_key] = result
         return result
 
     @staticmethod
-    def compute_file_hash(path: str) -> str:
+    def compute_file_hash(path: str | Path) -> str:
         h = hashlib.sha256(usedforsecurity=False)
         with Path(path).open("rb") as f:
             while True:
@@ -521,7 +527,7 @@ def process_test_files(
     file_to_test_map: dict[Path, list[TestsInFile]],
     cfg: TestConfig,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     import jedi
 
     project_root_path = cfg.project_root_path
@@ -536,29 +542,51 @@ def process_test_files(
     num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
 
+    tests_cache = TestsCache()
+
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
+            file_hash = TestsCache.compute_file_hash(test_file)
+
+            cached_tests = tests_cache.get_tests_for_file(str(test_file), file_hash)
+
+            if cached_tests:
+                # Rebuild function_to_test_map from cached data
+                tests_cache.cur.execute(
+                    "SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (str(test_file), file_hash)
+                )
+                for row in tests_cache.cur.fetchall():
+                    qualified_name_with_modules_from_root = row[2]
+                    test_type = TestType(int(row[6]))
+
+                    function_called_in_test = FunctionCalledInTest(
+                        tests_in_file=TestsInFile(
+                            test_file=test_file, test_class=row[4], test_function=row[5], test_type=test_type
+                        ),
+                        position=CodePosition(line_no=row[7], col_no=row[8]),
+                    )
+
+                    function_to_test_map[qualified_name_with_modules_from_root].add(function_called_in_test)
+                    if test_type == TestType.REPLAY_TEST:
+                        num_discovered_replay_tests += 1
+                    num_discovered_tests += 1
+
+                progress.advance(task_id)
+                continue
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
                 test_functions = set()
 
-                # Single call to get all names with references and definitions
-                all_names = script.get_names(all_scopes=True, references=True, definitions=True)
+                all_names = script.get_names(all_scopes=True, references=True)
+                all_defs = script.get_names(all_scopes=True, definitions=True)
+                all_names_top = script.get_names(all_scopes=True)
 
-                # Filter once and create lookup dictionaries
-                top_level_functions = {}
-                top_level_classes = {}
-                all_defs = []
+                top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+                top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
 
-                for name in all_names:
-                    if name.type == "function":
-                        top_level_functions[name.name] = name
-                        all_defs.append(name)
-                    elif name.type == "class":
-                        top_level_classes[name.name] = name
             except Exception as e:
                 logger.debug(f"Failed to get jedi script for {test_file}: {e}")
                 progress.advance(task_id)
@@ -680,6 +708,18 @@ def process_test_files(
                                     position=CodePosition(line_no=name.line, col_no=name.column),
                                 )
                             )
+                            tests_cache.insert_test(
+                                file_path=str(test_file),
+                                file_hash=file_hash,
+                                qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
+                                function_name=scope,
+                                test_class=test_func.test_class or "",
+                                test_function=scope_test_function,
+                                test_type=test_func.test_type,
+                                line_number=name.line,
+                                col_number=name.column,
+                            )
+
                             if test_func.test_type == TestType.REPLAY_TEST:
                                 num_discovered_replay_tests += 1
 
@@ -689,5 +729,7 @@ def process_test_files(
                     continue
 
             progress.advance(task_id)
+
+    tests_cache.close()
 
     return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests
