@@ -128,7 +128,6 @@ class TestsCache:
                     test_file=Path(row[0]), test_class=row[4], test_function=row[5], test_type=TestType(int(row[6]))
                 ),
                 position=CodePosition(line_no=row[7], col_no=row[8]),
-                qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
             )
             function_to_test_map[qualified_name_with_modules_from_root].add(function_called_in_test)
 
@@ -702,7 +701,6 @@ def process_test_files(
                                         test_type=test_func.test_type,
                                     ),
                                     position=CodePosition(line_no=name.line, col_no=name.column),
-                                    qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
                                 )
                             )
                             tests_cache.insert_test(
