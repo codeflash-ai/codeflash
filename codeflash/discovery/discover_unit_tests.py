@@ -76,8 +76,7 @@ class TestsCache:
             """
         )
 
-        self._memory_cache = {}
-        self._hash_cache = {}
+        self.memory_cache = {}
 
     def insert_test(
         self,
@@ -111,7 +110,7 @@ class TestsCache:
     def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest] | None:
         cache_key = (file_path, file_hash)
         if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
+            return self.memory_cache[cache_key]
 
         self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
         rows = self.cur.fetchall()
@@ -127,7 +126,7 @@ class TestsCache:
             )
             for row in rows
         ]
-        self._memory_cache[cache_key] = result
+        self.memory_cache[cache_key] = result
         return result
 
     @staticmethod
@@ -384,7 +383,7 @@ def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
@@ -421,9 +420,11 @@ def discover_tests_pytest(
                 f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}\n {error_section}"
             )
             if "ModuleNotFoundError" in result.stdout:
-                match = ImportErrorPattern.search(result.stdout).group()
-                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
-                console.print(panel)
+                match = ImportErrorPattern.search(result.stdout)
+                if match:
+                    error_message = match.group()
+                    panel = Panel(Text.from_markup(f"⚠️  {error_message} ", style="bold red"), expand=False)
+                    console.print(panel)
 
         elif 0 <= exitcode <= 5:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}")
@@ -460,7 +461,7 @@ def discover_tests_unittest(
     cfg: TestConfig,
     discover_only_these_tests: list[str] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
     tests: unittest.TestSuite = loader.discover(str(tests_root))
@@ -516,9 +517,9 @@ def discover_tests_unittest(
 
 
 def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
-    function_name = function_name.split("_")
-    if len(function_name) > 1 and function_name[-1].isdigit():
-        return True, "_".join(function_name[:-1]), function_name[-1]
+    function_parts = function_name.split("_")
+    if len(function_parts) > 1 and function_parts[-1].isdigit():
+        return True, "_".join(function_parts[:-1]), function_parts[-1]
 
     return False, function_name, None
 
