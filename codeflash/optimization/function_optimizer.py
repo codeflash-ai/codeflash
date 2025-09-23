@@ -587,8 +587,6 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
-                        logger.info(f"orig_async_throughput: {original_code_baseline.async_throughput}")
-                        logger.info(f"candidate_result.async_throughput: {candidate_result.async_throughput}")
                         if (
                             original_code_baseline.async_throughput is not None
                             and candidate_result.async_throughput is not None
@@ -1719,7 +1717,7 @@ class FunctionOptimizer:
                 candidate_async_throughput = calculate_function_throughput_from_test_results(
                     candidate_benchmarking_results, self.function_to_optimize.function_name
                 )
-                logger.info(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
+                logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
 
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
