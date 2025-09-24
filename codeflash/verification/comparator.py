@@ -61,6 +61,13 @@ try:
 except ImportError:
     HAS_JAX = False
 
+try:
+    import attrs  # type: ignore
+
+    HAS_ATTRS = True
+except ImportError:
+    HAS_ATTRS = False
+
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
@@ -234,6 +241,27 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             ),
         ):
             return orig == new
+
+        if hasattr(orig, "__attrs_attrs__") and hasattr(new, "__attrs_attrs__"):
+            orig_dict = {}
+            new_dict = {}
+
+            for attr in orig.__attrs_attrs__:
+                if attr.eq:
+                    attr_name = attr.name
+                    orig_dict[attr_name] = getattr(orig, attr_name, None)
+                    new_dict[attr_name] = getattr(new, attr_name, None)
+
+            if superset_obj:
+                new_attrs_dict = {}
+                for attr in new.__attrs_attrs__:
+                    if attr.eq:
+                        attr_name = attr.name
+                        new_attrs_dict[attr_name] = getattr(new, attr_name, None)
+                return all(
+                    k in new_attrs_dict and comparator(v, new_attrs_dict[k], superset_obj) for k, v in orig_dict.items()
+                )
+            return comparator(orig_dict, new_dict, superset_obj)
 
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(
