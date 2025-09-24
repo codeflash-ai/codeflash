@@ -298,6 +298,9 @@ class AiServiceClient:
         annotated_tests: str,
         optimization_id: str,
         original_explanation: str,
+        original_throughput: str | None = None,
+        optimized_throughput: str | None = None,
+        throughput_improvement: str | None = None,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -314,6 +317,9 @@ class AiServiceClient:
         - annotated_tests: str - test functions annotated with runtime
         - optimization_id: str - unique id of opt candidate
         - original_explanation: str - original_explanation generated for the opt candidate
+        - original_throughput: str | None - throughput for the baseline code (operations per second)
+        - optimized_throughput: str | None - throughput for the optimized code (operations per second)
+        - throughput_improvement: str | None - throughput improvement percentage
 
         Returns
         -------
@@ -333,6 +339,9 @@ class AiServiceClient:
             "optimization_id": optimization_id,
             "original_explanation": original_explanation,
             "dependency_code": dependency_code,
+            "original_throughput": original_throughput,
+            "optimized_throughput": optimized_throughput,
+            "throughput_improvement": throughput_improvement,
         }
         logger.info("Generating explanation")
         console.rule()

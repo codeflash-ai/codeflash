@@ -19,11 +19,15 @@ from codeflash.verification.codeflash_capture import VerificationType
 class TestAsyncWrapperSQLiteValidation:
 
     @pytest.fixture
-    def test_env_setup(self):
+    def test_env_setup(self, request):
         original_env = {}
         test_env = {
             "CODEFLASH_LOOP_INDEX": "1",
             "CODEFLASH_TEST_ITERATION": "0",
+            "CODEFLASH_TEST_MODULE": __name__,
+            "CODEFLASH_TEST_CLASS": "TestAsyncWrapperSQLiteValidation",
+            "CODEFLASH_TEST_FUNCTION": request.node.name,
+            "CODEFLASH_CURRENT_LINE_ID": "test_unit",
         }
         
         for key, value in test_env.items():
@@ -57,6 +61,7 @@ class TestAsyncWrapperSQLiteValidation:
             await asyncio.sleep(0.001)
             return a + b
 
+        os.environ['CODEFLASH_CURRENT_LINE_ID'] = 'simple_async_add_59'
         result = await simple_async_add(5, 3)
         
         assert result == 8
@@ -278,10 +283,3 @@ class TestAsyncWrapperSQLiteValidation:
         assert columns == expected_columns
         con.close()
 
-    def test_sync_test_context_extraction(self):
-        from codeflash.code_utils.codeflash_wrap_decorator import extract_test_context_from_frame
-        
-        test_module, test_class, test_func = extract_test_context_from_frame()
-        assert test_module == __name__
-        assert test_class == "TestAsyncWrapperSQLiteValidation"
-        assert test_func == "test_sync_test_context_extraction"

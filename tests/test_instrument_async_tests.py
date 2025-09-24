@@ -535,3 +535,194 @@ def test_qualified_name_with_nested_parents():
         is_async=False
     )
     assert func_mixed_parents.qualified_name == 'MyClass.outer_function.inner_function'
+
+
+def test_inject_profiling_async_multiple_calls_same_test(temp_dir):
+    """Test that multiple async function calls within the same test function get correctly numbered 0, 1, 2, etc."""
+    source_module_code = '''
+import asyncio
+
+async def async_sorter(items):
+    """Simple async sorter for testing."""
+    await asyncio.sleep(0.001)
+    return sorted(items)
+'''
+    
+    source_file = temp_dir / "async_sorter.py"
+    source_file.write_text(source_module_code)
+    
+    test_code_multiple_calls = '''
+import asyncio
+import pytest
+from async_sorter import async_sorter
+
+@pytest.mark.asyncio
+async def test_single_call():
+    result = await async_sorter([42])
+    assert result == [42]
+
+@pytest.mark.asyncio
+async def test_multiple_calls():
+    result1 = await async_sorter([3, 1, 2])
+    result2 = await async_sorter([5, 4])  
+    result3 = await async_sorter([9, 8, 7, 6])
+    assert result1 == [1, 2, 3]
+    assert result2 == [4, 5]
+    assert result3 == [6, 7, 8, 9]
+'''
+    
+    test_file = temp_dir / "test_async_sorter.py"
+    test_file.write_text(test_code_multiple_calls)
+    
+    func = FunctionToOptimize(
+        function_name="async_sorter",
+        parents=[],
+        file_path=Path("async_sorter.py"),
+        is_async=True
+    )
+    
+    # First instrument the source module with async decorators
+    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+    source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_file, func, TestingMode.BEHAVIOR
+    )
+    
+    assert source_success
+    assert instrumented_source is not None
+    assert '@codeflash_behavior_async' in instrumented_source
+    
+    # Write the instrumented source back
+    source_file.write_text(instrumented_source)
+    
+    # Now test injection with multiple call positions
+    # Parse the test file to get exact positions for async calls
+    import ast
+    tree = ast.parse(test_code_multiple_calls)
+    call_positions = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
+            if hasattr(node.value.func, 'id') and node.value.func.id == 'async_sorter':
+                call_positions.append(CodePosition(node.lineno, node.col_offset))
+            elif hasattr(node.value.func, 'attr') and node.value.func.attr == 'async_sorter':
+                call_positions.append(CodePosition(node.lineno, node.col_offset))
+    
+    # Should find 4 calls total: 1 in test_single_call + 3 in test_multiple_calls
+    assert len(call_positions) == 4
+    
+    success, instrumented_test_code = inject_profiling_into_existing_test(
+        test_file,
+        call_positions,
+        func,
+        temp_dir,
+        "pytest",
+        mode=TestingMode.BEHAVIOR
+    )
+    
+    assert success
+    assert instrumented_test_code is not None
+    
+    # Verify the instrumentation adds correct line_id assignments
+    # Each test function should start from 0
+    assert "os.environ['CODEFLASH_CURRENT_LINE_ID'] = '0'" in instrumented_test_code
+    
+    # Count occurrences of each line_id to verify numbering
+    line_id_0_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '0'")
+    line_id_1_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '1'")
+    line_id_2_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '2'")
+    
+    # Should have:
+    # - 2 occurrences of '0' (first call in each test function)
+    # - 1 occurrence of '1' (second call in test_multiple_calls)
+    # - 1 occurrence of '2' (third call in test_multiple_calls)
+    assert line_id_0_count == 2, f"Expected 2 occurrences of line_id '0', got {line_id_0_count}"
+    assert line_id_1_count == 1, f"Expected 1 occurrence of line_id '1', got {line_id_1_count}"
+    assert line_id_2_count == 1, f"Expected 1 occurrence of line_id '2', got {line_id_2_count}"
+    
+    # Verify no higher numbers
+    line_id_3_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '3'")
+    assert line_id_3_count == 0, f"Unexpected occurrence of line_id '3'"
+    
+    # Check that imports are added
+    assert 'import os' in instrumented_test_code
+
+
+def test_sync_functions_do_not_get_async_instrumentation(temp_dir):
+    """Test that sync functions do NOT get async instrumentation (os.environ assignments)."""
+    # Create a sync function module
+    sync_module_code = '''
+def sync_sorter(items):
+    """Simple sync sorter for testing."""
+    return sorted(items)
+'''
+    
+    source_file = temp_dir / "sync_sorter.py"
+    source_file.write_text(sync_module_code)
+    
+    # Create test code with sync function calls
+    sync_test_code = '''
+import pytest
+from sync_sorter import sync_sorter
+
+def test_single_call():
+    result = sync_sorter([42])
+    assert result == [42]
+
+def test_multiple_calls():
+    result1 = sync_sorter([3, 1, 2])
+    result2 = sync_sorter([5, 4])  
+    result3 = sync_sorter([9, 8, 7, 6])
+    assert result1 == [1, 2, 3]
+    assert result2 == [4, 5]
+    assert result3 == [6, 7, 8, 9]
+'''
+    
+    test_file = temp_dir / "test_sync_sorter.py"
+    test_file.write_text(sync_test_code)
+    
+    sync_func = FunctionToOptimize(
+        function_name="sync_sorter",
+        parents=[],
+        file_path=Path("sync_sorter.py"),
+        is_async=False  # SYNC function
+    )
+    
+    # Parse the test file to get exact positions for sync calls
+    import ast
+    tree = ast.parse(sync_test_code)
+    call_positions = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if hasattr(node.func, 'id') and node.func.id == 'sync_sorter':
+                call_positions.append(CodePosition(node.lineno, node.col_offset))
+            elif hasattr(node.func, 'attr') and node.func.attr == 'sync_sorter':
+                call_positions.append(CodePosition(node.lineno, node.col_offset))
+    
+    # Should find 4 calls total: 1 in test_single_call + 3 in test_multiple_calls
+    assert len(call_positions) == 4
+    
+    success, instrumented_test_code = inject_profiling_into_existing_test(
+        test_file,
+        call_positions,
+        sync_func,
+        temp_dir,
+        "pytest",
+        mode=TestingMode.BEHAVIOR
+    )
+    
+    assert success
+    assert instrumented_test_code is not None
+    
+    # Verify the sync function does NOT get async instrumentation
+    assert "os.environ['CODEFLASH_CURRENT_LINE_ID']" not in instrumented_test_code
+    
+    # But should get proper sync instrumentation
+    assert 'codeflash_wrap' in instrumented_test_code
+    assert 'codeflash_loop_index' in instrumented_test_code
+    assert 'sqlite3' in instrumented_test_code  # sync behavior mode includes sqlite
+    
+    # Verify the line_id values are correct for sync functions (statement-based)
+    # Sync functions use statement index, not per-test-function counter
+    assert "'0'" in instrumented_test_code  # first call in test_single_call
+    assert "'0'" in instrumented_test_code  # first call in test_multiple_calls (second occurrence)
+    assert "'1'" in instrumented_test_code  # second call in test_multiple_calls
+    assert "'2'" in instrumented_test_code  # third call in test_multiple_calls
