@@ -397,7 +397,9 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         return node
 
     def _instrument_statement(self, stmt: ast.stmt, _node_name: str) -> tuple[ast.stmt, bool]:
-        for node in ast.walk(stmt):
+        stack = [stmt]
+        while stack:
+            node = stack.pop()
             if (
                 isinstance(node, ast.Await)
                 and isinstance(node.value, ast.Call)
@@ -406,7 +408,7 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
             ):
                 # Check if this call is in one of our target positions
                 return stmt, True  # Return original statement but signal we added env var
-
+            stack.extend(ast.iter_child_nodes(node))
         return stmt, False
 
     def _is_target_call(self, call_node: ast.Call) -> bool:
