@@ -10,6 +10,8 @@ from codeflash.lsp.helpers import replace_quotes_with_backticks, simplify_worktr
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
 
+message_delimiter = "\u241f"
+
 
 @dataclass
 class LspMessage:
@@ -35,8 +37,9 @@ class LspMessage:
         # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
         return (
-            json.dumps(ordered)
-            + "\u241f"  # \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
+            message_delimiter
+            + json.dumps(ordered)
+            + message_delimiter  # \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
         )
 
 
@@ -92,6 +95,7 @@ class LspMarkdownMessage(LspMessage):
         return "markdown"
 
     def serialize(self) -> str:
+        # Side effect required, must preserve for behavioral correctness
         self.markdown = simplify_worktree_paths(self.markdown)
         self.markdown = replace_quotes_with_backticks(self.markdown)
         return super().serialize()
