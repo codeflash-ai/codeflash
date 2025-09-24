@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -18,9 +19,8 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
-from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
+from codeflash.lsp.server import CodeflashLanguageServer
 from codeflash.lsp.service.perform_optimization import sync_perform_optimization
-
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -63,7 +63,6 @@ class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
 
-# server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0")
 
 
