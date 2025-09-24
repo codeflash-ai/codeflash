@@ -369,7 +369,11 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         new_body = []
 
         for _i, stmt in enumerate(node.body):
-            transformed_stmt, added_env_assignment = self._instrument_statement(stmt, node.name)
+            # Skip expensive _instrument_statement call if statement doesn't contain await
+            contains_await = any(isinstance(n, ast.Await) for n in ast.iter_child_nodes(stmt))
+            transformed_stmt, added_env_assignment = (
+                self._instrument_statement(stmt, node.name) if contains_await else (stmt, False)
+            )
 
             if added_env_assignment:
                 current_call_index = self.async_call_counter[node.name]
