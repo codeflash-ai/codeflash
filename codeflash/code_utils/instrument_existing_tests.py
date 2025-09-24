@@ -351,47 +351,52 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
     def _process_test_function(
         self, node: ast.AsyncFunctionDef | ast.FunctionDef
     ) -> ast.AsyncFunctionDef | ast.FunctionDef:
-        if self.test_framework == "unittest" and not any(
-            isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "timeout_decorator.timeout"
-            for d in node.decorator_list
-        ):
-            timeout_decorator = ast.Call(
-                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                args=[ast.Constant(value=15)],
-                keywords=[],
-            )
-            node.decorator_list.append(timeout_decorator)
+        # Check if we need to insert a timeout_decorator only once
+        if self.test_framework == "unittest":
+            decorator_list = node.decorator_list
+            # Use tuple to avoid function call lookup inside loop
+            timeout_name = "timeout_decorator.timeout"
+            timeout_decorator_needed = True
+            for d in decorator_list:
+                if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == timeout_name:
+                    timeout_decorator_needed = False
+                    break
+            if timeout_decorator_needed:
+                timeout_decorator = ast.Call(
+                    func=ast.Name(id=timeout_name, ctx=ast.Load()), args=[ast.Constant(value=15)], keywords=[]
+                )
+                decorator_list.append(timeout_decorator)
 
         # Initialize counter for this test function
-        if node.name not in self.async_call_counter:
-            self.async_call_counter[node.name] = 0
+        counter = self.async_call_counter.setdefault(node.name, 0)
 
         new_body = []
+        append_new_body = new_body.append  # Localize for loop
 
-        for _i, stmt in enumerate(node.body):
+        # Hoist values used for env_assignment construction
+        os_environ_attr = ast.Attribute(value=ast.Name(id="os", ctx=ast.Load()), attr="environ", ctx=ast.Load())
+        codeflash_key = ast.Constant(value="CODEFLASH_CURRENT_LINE_ID")
+
+        for stmt in node.body:
             transformed_stmt, added_env_assignment = self._instrument_statement(stmt, node.name)
 
             if added_env_assignment:
-                current_call_index = self.async_call_counter[node.name]
-                self.async_call_counter[node.name] += 1
+                current_call_index = counter
+                counter += 1
 
                 env_assignment = ast.Assign(
-                    targets=[
-                        ast.Subscript(
-                            value=ast.Attribute(
-                                value=ast.Name(id="os", ctx=ast.Load()), attr="environ", ctx=ast.Load()
-                            ),
-                            slice=ast.Constant(value="CODEFLASH_CURRENT_LINE_ID"),
-                            ctx=ast.Store(),
-                        )
-                    ],
+                    targets=[ast.Subscript(value=os_environ_attr, slice=codeflash_key, ctx=ast.Store())],
                     value=ast.Constant(value=f"{current_call_index}"),
                     lineno=stmt.lineno if hasattr(stmt, "lineno") else 1,
                 )
-                new_body.append(env_assignment)
+                append_new_body(env_assignment)
                 self.did_instrument = True
 
-            new_body.append(transformed_stmt)
+            append_new_body(transformed_stmt)
+
+        # Update the counter outside the loop only if instrumented
+        if counter != self.async_call_counter[node.name]:
+            self.async_call_counter[node.name] = counter
 
         node.body = new_body
         return node
