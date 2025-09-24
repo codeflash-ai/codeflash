@@ -42,6 +42,7 @@ def get_codeflash_api_key() -> str:
     if env_api_key and not shell_api_key:
         try:
             from codeflash.either import is_successful
+
             result = save_api_key_to_rc(env_api_key)
             if is_successful(result):
                 logger.debug(f"Automatically saved API key from environment to shell config: {result.unwrap()}")

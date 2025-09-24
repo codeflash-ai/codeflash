@@ -124,7 +124,7 @@ def setup_logging() -> logging.Logger:
     logger = logging.getLogger()
     logger.handlers.clear()
 
-    # Set up stderr handler for VS Code output channel with [LSP-Server] prefix
+    # Set up stderr handler for VS Code output channel
     handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(logging.DEBUG)
 

@@ -1,45 +1,19 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
-from pygls import uris
-from pygls.protocol import LanguageServerProtocol, lsp_method
+from lsprotocol.types import LogMessageParams, MessageType
+from pygls.protocol import LanguageServerProtocol
 from pygls.server import LanguageServer
 
 if TYPE_CHECKING:
-    from lsprotocol.types import InitializeParams, InitializeResult
+    from pathlib import Path
 
     from codeflash.optimization.optimizer import Optimizer
 
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
-
-    @lsp_method(INITIALIZE)
-    def lsp_initialize(self, params: InitializeParams) -> InitializeResult:
-        server = self._server
-        initialize_result: InitializeResult = super().lsp_initialize(params)
-
-        workspace_uri = params.root_uri
-        if workspace_uri:
-            workspace_path = uris.to_fs_path(workspace_uri)
-            pyproject_toml_path = self._find_pyproject_toml(workspace_path)
-            if pyproject_toml_path:
-                server.prepare_optimizer_arguments(pyproject_toml_path)
-            else:
-                server.show_message("No pyproject.toml found in workspace.")
-        else:
-            server.show_message("No workspace URI provided.")
-
-        return initialize_result
-
-    def _find_pyproject_toml(self, workspace_path: str) -> Path | None:
-        workspace_path_obj = Path(workspace_path)
-        for file_path in workspace_path_obj.rglob("pyproject.toml"):
-            return file_path.resolve()
-        return None
 
 
 class CodeflashLanguageServer(LanguageServer):
