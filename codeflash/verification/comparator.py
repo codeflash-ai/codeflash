@@ -61,13 +61,6 @@ try:
 except ImportError:
     HAS_JAX = False
 
-try:
-    import attrs  # type: ignore
-
-    HAS_ATTRS = True
-except ImportError:
-    HAS_ATTRS = False
-
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
