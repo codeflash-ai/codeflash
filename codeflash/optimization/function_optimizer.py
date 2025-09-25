@@ -309,7 +309,7 @@ class FunctionOptimizer:
             revert_to_print=bool(get_pr_number()),
         ):
             generated_results = self.generate_tests_and_optimizations(
-                testgen_context_code=code_context.testgen_context_code,
+                testgen_context=code_context.testgen_context,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 helper_functions=code_context.helper_functions,
@@ -345,7 +345,6 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
         if concolic_test_str:
-            # no concolic tests in lsp mode
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
 
@@ -946,7 +945,7 @@ class FunctionOptimizer:
 
         return Success(
             CodeOptimizationContext(
-                testgen_context_code=new_code_ctx.testgen_context_code,
+                testgen_context=new_code_ctx.testgen_context,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 hashing_code_context=new_code_ctx.hashing_code_context,
@@ -1053,7 +1052,7 @@ class FunctionOptimizer:
 
     def generate_tests_and_optimizations(
         self,
-        testgen_context_code: str,
+        testgen_context: CodeStringsMarkdown,
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
@@ -1067,7 +1066,7 @@ class FunctionOptimizer:
         # Submit the test generation task as future
         future_tests = self.submit_test_generation_tasks(
             self.executor,
-            testgen_context_code,
+            testgen_context.markdown,
             [definition.fully_qualified_name for definition in helper_functions],
             generated_test_paths,
             generated_perf_test_paths,

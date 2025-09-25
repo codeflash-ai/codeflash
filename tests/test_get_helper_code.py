@@ -241,7 +241,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         code_context = ctx_result.unwrap()
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
         assert (
-                code_context.testgen_context_code
+                code_context.testgen_context
                 == f'''_P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
@@ -409,7 +409,7 @@ def test_bubble_sort_deps() -> None:
         pytest.fail()
     code_context = ctx_result.unwrap()
     assert (
-            code_context.testgen_context_code
+            code_context.testgen_context
             == """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
 

@@ -114,32 +114,32 @@ def get_code_optimization_context(
             read_only_context_code = ""
 
     # Extract code context for testgen
-    testgen_code_markdown = extract_code_string_context_from_files(
+    testgen_context = extract_code_markdown_context_from_files(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,
         project_root_path,
         remove_docstrings=False,
         code_context_type=CodeContextType.TESTGEN,
     )
-    testgen_context_code = testgen_code_markdown.code
-    testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
-    if testgen_context_code_tokens > testgen_token_limit:
-        testgen_code_markdown = extract_code_string_context_from_files(
+    testgen_markdown_code = testgen_context.markdown
+    testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
+    if testgen_code_token_length > testgen_token_limit:
+        testgen_context = extract_code_markdown_context_from_files(
             helpers_of_fto_dict,
             helpers_of_helpers_dict,
             project_root_path,
             remove_docstrings=True,
             code_context_type=CodeContextType.TESTGEN,
         )
-        testgen_context_code = testgen_code_markdown.code
-        testgen_context_code_tokens = encoded_tokens_len(testgen_context_code)
-        if testgen_context_code_tokens > testgen_token_limit:
+        testgen_markdown_code = testgen_context.markdown
+        testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
+        if testgen_code_token_length > testgen_token_limit:
             raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
     return CodeOptimizationContext(
-        testgen_context_code=testgen_context_code,
+        testgen_context=testgen_context,
         read_writable_code=final_read_writable_code,
         read_only_context_code=read_only_context_code,
         hashing_code_context=code_hash_context,

@@ -827,7 +827,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.testgen_context_code.rstrip() == get_code_output.rstrip()
+    assert code_context.testgen_context.rstrip() == get_code_output.rstrip()
 
 
 def test_code_replacement11() -> None:
