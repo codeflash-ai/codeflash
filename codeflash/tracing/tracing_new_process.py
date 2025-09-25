@@ -239,7 +239,7 @@ class Tracer:
                 )
             self.con.commit()
 
-            self.make_pstats_compatible()  # Modifies self.stats and self.timings in-memory
+            # self.make_pstats_compatible()  # Modifies self.stats and self.timings in-memory
             # self.print_stats("tottime")  # Uses self.stats, prints to console
 
             cur = self.con.cursor()  # New cursor
