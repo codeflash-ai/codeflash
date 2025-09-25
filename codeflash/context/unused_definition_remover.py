@@ -612,11 +612,16 @@ def _analyze_imports_in_optimized_code(
     return dict(imported_names_map)
 
 
-def find_target_node(root: ast.AST, function_to_optimize: FunctionToOptimize) -> Optional[ast.FunctionDef]:
-    def _find(node: ast.AST, parents: list[FunctionParent]) -> Optional[ast.FunctionDef]:
+def find_target_node(
+    root: ast.AST, function_to_optimize: FunctionToOptimize
+) -> Optional[ast.FunctionDef | ast.AsyncFunctionDef]:
+    def _find(node: ast.AST, parents: list[FunctionParent]) -> Optional[ast.FunctionDef | ast.AsyncFunctionDef]:
         if not parents:
             for child in getattr(node, "body", []):
-                if isinstance(child, ast.FunctionDef) and child.name == function_to_optimize.function_name:
+                if (
+                    isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and child.name == function_to_optimize.function_name
+                ):
                     return child
             return None
 
