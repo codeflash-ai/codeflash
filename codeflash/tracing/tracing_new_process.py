@@ -175,11 +175,11 @@ class Tracer:
 
         self.con = sqlite3.connect(self.output_file, check_same_thread=False)
         cur = self.con.cursor()
+
         cur.execute("""PRAGMA synchronous = OFF""")
         cur.execute("""PRAGMA journal_mode = WAL""")
-        cur.execute("""PRAGMA busy_timeout = 30000""")  # 30 second timeout for locks
-        cur.execute("""PRAGMA wal_autocheckpoint = 1000""")  # Checkpoint every 1000 pages
-
+        cur.execute("""PRAGMA temp_store = MEMORY""")
+        cur.execute("""PRAGMA mmap_size = 30000000000""")
         # TODO: Check out if we need to export the function test name as well
         cur.execute(
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
