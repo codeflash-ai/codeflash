@@ -76,6 +76,7 @@ class Tracer:
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
         command: str = "",
+        cleanup_db: bool = True,  # noqa: FBT001, FBT002
     ) -> None:
         """Use this class to trace function calls.
 
@@ -86,6 +87,7 @@ class Tracer:
         :param timeout: Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing
                     stops and normal execution continues. If this is None then no timeout applies
         :param command: The command that initiated the tracing (for metadata storage)
+        :param cleanup_db: Whether to clean up database files after replay test creation (default: True)
         """
         if functions is None:
             functions = []
@@ -94,7 +96,14 @@ class Tracer:
                 "Codeflash: Tracer disabled by environment variable CODEFLASH_TRACER_DISABLE", style="bold red"
             )
             disable = True
+
+        # Check environment variable for database cleanup behavior
+        if os.environ.get("CODEFLASH_KEEP_TRACE_DB", "0") == "1":
+            cleanup_db = False
+            console.print("[yellow]Database cleanup disabled by CODEFLASH_KEEP_TRACE_DB environment variable[/yellow]")
+
         self.disable = disable
+        self.cleanup_db = cleanup_db
         self._db_lock: threading.Lock | None = None
         if self.disable:
             return
@@ -298,6 +307,10 @@ class Tracer:
             soft_wrap=False,
             overflow="ignore",
         )
+
+        if self.cleanup_db:
+            self._cleanup_database_files()
+
         pickle_data = {"replay_test_file_path": self.replay_test_file_path}
         import pickle
 
@@ -801,6 +814,31 @@ class Tracer:
             for callcnt in callers.values():
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
+
+    def _cleanup_database_files(self) -> None:
+        files_to_clean = [
+            self.output_file,
+            self.output_file.with_suffix(self.output_file.suffix + "-wal"),
+            self.output_file.with_suffix(self.output_file.suffix + "-shm"),
+        ]
+
+        total_size_mb = 0
+        cleaned_files = []
+
+        for file_path in files_to_clean:
+            if file_path.exists():
+                try:
+                    file_size_mb = file_path.stat().st_size / (1024 * 1024)
+                    total_size_mb += file_size_mb
+                    file_path.unlink()
+                    cleaned_files.append(file_path.name)
+                except OSError as e:
+                    console.print(f"[yellow]Warning: Could not remove {file_path}: {e}[/yellow]")
+
+        if cleaned_files:
+            console.print(
+                f"[green]Cleaned up database files ({', '.join(cleaned_files)}) - freed {total_size_mb:.2f} MB[/green]"
+            )
 
     def sanitize_to_filename(self, arg: str) -> str:
         # Replace newlines with underscores
