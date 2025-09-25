@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from collections import defaultdict
+from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
@@ -45,6 +46,18 @@ class FakeFrame:
         self.f_code = code
         self.f_back = prior
         self.f_locals: dict = {}
+
+
+def patch_ap_scheduler() -> None:
+    if find_spec("apscheduler") is None:
+
+        import apscheduler.schedulers.background as bg
+        import apscheduler.schedulers.blocking as bb
+        from apscheduler.schedulers import base
+
+        bg.BackgroundScheduler.start = lambda _, *_a, **_k: None
+        bb.BlockingScheduler.start = lambda _, *_a, **_k: None
+        base.BaseScheduler.add_job = lambda _, *_a, **_k: None
 
 
 # Debug this file by simply adding print statements. This file is not meant to be debugged by the debugger.
@@ -839,6 +852,7 @@ if __name__ == "__main__":
         }
     args_dict["config"]["module_root"] = Path(args_dict["config"]["module_root"])
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
+    patch_ap_scheduler()
     tracer = Tracer(
         config=args_dict["config"],
         output=Path(args_dict["output"]),
