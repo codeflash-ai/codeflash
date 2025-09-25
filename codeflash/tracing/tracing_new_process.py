@@ -173,6 +173,10 @@ class Tracer:
             "CREATE TABLE function_calls(type TEXT, function TEXT, classname TEXT, filename TEXT, "
             "line_number INTEGER, last_frame_address INTEGER, time_ns INTEGER, args BLOB)"
         )
+        cur.execute("CREATE INDEX idx_function_filename_time ON function_calls(function, filename, time_ns)")
+        cur.execute(
+            "CREATE INDEX idx_function_filename_class_time ON function_calls(function, filename, classname, time_ns)"
+        )
 
         # Create metadata table to store command information
         cur.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT)")
