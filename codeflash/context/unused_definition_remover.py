@@ -612,6 +612,34 @@ def _analyze_imports_in_optimized_code(
     return dict(imported_names_map)
 
 
+def find_target_node(
+    root: ast.AST, function_to_optimize: FunctionToOptimize
+) -> Optional[ast.FunctionDef | ast.AsyncFunctionDef]:
+    parents = function_to_optimize.parents
+    node = root
+    for parent in parents:
+        # Fast loop: directly look for the matching ClassDef in node.body
+        body = getattr(node, "body", None)
+        if not body:
+            return None
+        for child in body:
+            if isinstance(child, ast.ClassDef) and child.name == parent.name:
+                node = child
+                break
+        else:
+            return None
+
+    # Now node is either the root or the target parent class; look for function
+    body = getattr(node, "body", None)
+    if not body:
+        return None
+    target_name = function_to_optimize.function_name
+    for child in body:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == target_name:
+            return child
+    return None
+
+
 def detect_unused_helper_functions(
     function_to_optimize: FunctionToOptimize,
     code_context: CodeOptimizationContext,
@@ -641,11 +669,7 @@ def detect_unused_helper_functions(
         optimized_ast = ast.parse(optimized_code)
 
         # Find the optimized entrypoint function
-        entrypoint_function_ast = None
-        for node in ast.walk(optimized_ast):
-            if isinstance(node, ast.FunctionDef) and node.name == function_to_optimize.function_name:
-                entrypoint_function_ast = node
-                break
+        entrypoint_function_ast = find_target_node(optimized_ast, function_to_optimize)
 
         if not entrypoint_function_ast:
             logger.debug(f"Could not find entrypoint function {function_to_optimize.function_name} in optimized code")
