@@ -50,7 +50,6 @@ class FakeFrame:
 
 def patch_ap_scheduler() -> None:
     if find_spec("apscheduler"):
-
         import apscheduler.schedulers.background as bg
         import apscheduler.schedulers.blocking as bb
         from apscheduler.schedulers import base
