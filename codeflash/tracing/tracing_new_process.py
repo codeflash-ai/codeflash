@@ -49,7 +49,7 @@ class FakeFrame:
 
 
 def patch_ap_scheduler() -> None:
-    if find_spec("apscheduler") is None:
+    if find_spec("apscheduler"):
 
         import apscheduler.schedulers.background as bg
         import apscheduler.schedulers.blocking as bb
@@ -833,6 +833,7 @@ class Tracer:
 if __name__ == "__main__":
     args_dict = json.loads(sys.argv[-1])
     sys.argv = sys.argv[1:-1]
+    patch_ap_scheduler()
     if args_dict["module"]:
         import runpy
 
@@ -852,7 +853,6 @@ if __name__ == "__main__":
         }
     args_dict["config"]["module_root"] = Path(args_dict["config"]["module_root"])
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
-    patch_ap_scheduler()
     tracer = Tracer(
         config=args_dict["config"],
         output=Path(args_dict["output"]),
