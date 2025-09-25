@@ -160,8 +160,9 @@ def test_class_method_dependencies() -> None:
     )
     assert code_context.helper_functions[0].qualified_name == "Graph.topologicalSortUtil"
     assert (
-        code_context.testgen_context
-        == """from collections import defaultdict
+        code_context.testgen_context.flat
+        == """# file: test_function_dependencies.py
+from collections import defaultdict
 
 class Graph:
     def __init__(self, vertices):
@@ -220,8 +221,9 @@ def test_recursive_function_context() -> None:
     assert code_context.helper_functions[0].fully_qualified_name == "test_function_dependencies.C.calculate_something_3"
     assert code_context.helper_functions[1].fully_qualified_name == "test_function_dependencies.C.recursive"
     assert (
-        code_context.testgen_context
-        == """class C:
+        code_context.testgen_context.flat
+        == """# file: test_function_dependencies.py
+class C:
     def calculate_something_3(self, num):
         return num + 1
 

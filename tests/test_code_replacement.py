@@ -797,7 +797,8 @@ class MainClass:
 
 
 def test_code_replacement10() -> None:
-    get_code_output = """from __future__ import annotations
+    get_code_output = """# file: test_code_replacement.py
+from __future__ import annotations
 
 class HelperClass:
     def __init__(self, name):
@@ -827,7 +828,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.testgen_context.rstrip() == get_code_output.rstrip()
+    assert code_context.testgen_context.flat.rstrip() == get_code_output.rstrip()
 
 
 def test_code_replacement11() -> None:
