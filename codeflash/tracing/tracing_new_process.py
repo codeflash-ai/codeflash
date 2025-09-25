@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 from rich.align import Align
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from codeflash.cli_cmds.console import console
@@ -707,55 +706,55 @@ class Tracer:
 
             console.print(Align.center(Panel(summary, border_style="blue", width=80, padding=(0, 2), expand=False)))
 
-            table = Table(
-                show_header=True,
-                header_style="bold magenta",
-                border_style="blue",
-                title="[bold]Function Profile[/bold] (ordered by internal time)",
-                title_style="cyan",
-                caption=f"Showing top {min(25, len(self.stats))} of {len(self.stats)} functions",
-            )
+            # table = Table(
+            #     show_header=True,
+            #     header_style="bold magenta",
+            #     border_style="blue",
+            #     title="[bold]Function Profile[/bold] (ordered by internal time)",
+            #     title_style="cyan",
+            #     caption=f"Showing top {min(25, len(self.stats))} of {len(self.stats)} functions",
+            # )
 
-            table.add_column("Calls", justify="right", style="green", width=10)
-            table.add_column("Time (ms)", justify="right", style="cyan", width=10)
-            table.add_column("Per Call", justify="right", style="cyan", width=10)
-            table.add_column("Cum (ms)", justify="right", style="yellow", width=10)
-            table.add_column("Cum/Call", justify="right", style="yellow", width=10)
-            table.add_column("Function", style="blue")
+            # table.add_column("Calls", justify="right", style="green", width=10)
+            # table.add_column("Time (ms)", justify="right", style="cyan", width=10)
+            # table.add_column("Per Call", justify="right", style="cyan", width=10)
+            # table.add_column("Cum (ms)", justify="right", style="yellow", width=10)
+            # table.add_column("Cum/Call", justify="right", style="yellow", width=10)
+            # table.add_column("Function", style="blue")
 
-            sorted_stats = sorted(
-                ((func, stats) for func, stats in self.stats.items() if isinstance(func, tuple) and len(func) == 3),
-                key=lambda x: x[1][2],  # Sort by tt (internal time)
-                reverse=True,
-            )[:25]  # Limit to top 25
+            # sorted_stats = sorted(
+            #     ((func, stats) for func, stats in self.stats.items() if isinstance(func, tuple) and len(func) == 3),
+            #     key=lambda x: x[1][2],  # Sort by tt (internal time)
+            #     reverse=True,
+            # )[:25]  # Limit to top 25
 
-            # Format and add each row to the table
-            for func, (cc, nc, tt, ct, _) in sorted_stats:
-                filename, lineno, funcname = func
+            # # Format and add each row to the table
+            # for func, (cc, nc, tt, ct, _) in sorted_stats:
+            #     filename, lineno, funcname = func
 
-                # Format calls - show recursive format if different
-                calls_str = f"{cc}/{nc}" if cc != nc else f"{cc:,}"
+            #     # Format calls - show recursive format if different
+            #     calls_str = f"{cc}/{nc}" if cc != nc else f"{cc:,}"
 
-                # Convert to milliseconds
-                tt_ms = tt / 1e6
-                ct_ms = ct / 1e6
+            #     # Convert to milliseconds
+            #     tt_ms = tt / 1e6
+            #     ct_ms = ct / 1e6
 
-                # Calculate per-call times
-                per_call = tt_ms / cc if cc > 0 else 0
-                cum_per_call = ct_ms / nc if nc > 0 else 0
-                base_filename = Path(filename).name
-                file_link = f"[link=file://{filename}]{base_filename}[/link]"
+            #     # Calculate per-call times
+            #     per_call = tt_ms / cc if cc > 0 else 0
+            #     cum_per_call = ct_ms / nc if nc > 0 else 0
+            #     base_filename = Path(filename).name
+            #     file_link = f"[link=file://{filename}]{base_filename}[/link]"
 
-                table.add_row(
-                    calls_str,
-                    f"{tt_ms:.3f}",
-                    f"{per_call:.3f}",
-                    f"{ct_ms:.3f}",
-                    f"{cum_per_call:.3f}",
-                    f"{funcname} [dim]({file_link}:{lineno})[/dim]",
-                )
+            #     table.add_row(
+            #         calls_str,
+            #         f"{tt_ms:.3f}",
+            #         f"{per_call:.3f}",
+            #         f"{ct_ms:.3f}",
+            #         f"{cum_per_call:.3f}",
+            #         f"{funcname} [dim]({file_link}:{lineno})[/dim]",
+            #     )
 
-            console.print(Align.center(table))
+            # console.print(Align.center(table))
 
         except Exception as e:
             console.print(f"[bold red]Error in stats processing:[/bold red] {e}")
