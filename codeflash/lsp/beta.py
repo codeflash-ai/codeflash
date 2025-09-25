@@ -327,7 +327,7 @@ async def perform_function_optimization(
     try:
         result = await loop.run_in_executor(None, sync_perform_optimization, server, params)
     except asyncio.CancelledError:
-        return {"status": "info", "message": "Task was forcefully canceled"}
+        return {"status": "canceled", "message": "Task was canceled"}
     else:
         return result
     finally:
