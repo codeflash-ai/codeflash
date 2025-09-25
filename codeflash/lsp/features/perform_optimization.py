@@ -2,6 +2,7 @@ import contextlib
 import os
 from pathlib import Path
 
+from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer
@@ -9,7 +10,9 @@ from codeflash.lsp.server import CodeflashLanguageServer
 
 # ruff: noqa: PLR0911, ANN001
 def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:
+    server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
     current_function = server.optimizer.current_function_being_optimized
+
     if not current_function:
         server.show_message_log(f"No current function being optimized for {params.functionName}", "Error")
         return {
@@ -35,6 +38,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         original_module_path=current_function.file_path,
         function_to_tests={},
     )
+
     server.optimizer.current_function_optimizer = function_optimizer
     if not function_optimizer:
         return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
@@ -45,11 +49,17 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
 
     should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
-    # All the synchronous, potentially blocking calls
+    code_print(
+        code_context.read_writable_code.flat,
+        file_name=current_function.file_path,
+        function_name=current_function.function_name,
+    )
+
     optimizable_funcs = {current_function.file_path: [current_function]}
+
     devnull_writer = open(os.devnull, "w")  # noqa
     with contextlib.redirect_stdout(devnull_writer):
-        function_to_tests, num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
+        function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
         function_optimizer.function_to_tests = function_to_tests
 
     test_setup_result = function_optimizer.generate_and_instrument_tests(
@@ -57,7 +67,6 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
     )
     if not is_successful(test_setup_result):
         return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
-
     (
         generated_tests,
         function_to_concolic_tests,
@@ -112,9 +121,10 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
             "status": "error",
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
-
+    # generate a patch for the optimization
     relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
     speedup = original_code_baseline.runtime / best_optimization.runtime
+    # get the original file path in the actual project (not in the worktree)
     original_args, _ = server.optimizer.original_args_and_test_cfg
     relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
     original_file_path = Path(original_args.project_root / relative_file_path).resolve()
@@ -129,8 +139,8 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
             "speedup": speedup,
         },
     )
-    server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
+    server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
     return {
         "functionName": params.functionName,
         "status": "success",

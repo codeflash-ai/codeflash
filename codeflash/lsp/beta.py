@@ -19,8 +19,8 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
+from codeflash.lsp.features.perform_optimization import sync_perform_optimization
 from codeflash.lsp.server import CodeflashLanguageServer
-from codeflash.lsp.service.perform_optimization import sync_perform_optimization
 
 if TYPE_CHECKING:
     from argparse import Namespace
