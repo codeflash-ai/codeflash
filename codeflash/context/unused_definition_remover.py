@@ -15,7 +15,7 @@ from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import CodeOptimizationContext, FunctionSource
+    from codeflash.models.models import CodeOptimizationContext, FunctionParent, FunctionSource
 
 
 @dataclass
@@ -612,6 +612,23 @@ def _analyze_imports_in_optimized_code(
     return dict(imported_names_map)
 
 
+def find_target_node(root: ast.AST, function_to_optimize: FunctionToOptimize) -> Optional[ast.FunctionDef]:
+    def _find(node: ast.AST, parents: list[FunctionParent]) -> Optional[ast.FunctionDef]:
+        if not parents:
+            for child in getattr(node, "body", []):
+                if isinstance(child, ast.FunctionDef) and child.name == function_to_optimize.function_name:
+                    return child
+            return None
+
+        parent = parents[0]
+        for child in getattr(node, "body", []):
+            if isinstance(child, ast.ClassDef) and child.name == parent.name:
+                return _find(child, parents[1:])
+        return None
+
+    return _find(root, function_to_optimize.parents)
+
+
 def detect_unused_helper_functions(
     function_to_optimize: FunctionToOptimize,
     code_context: CodeOptimizationContext,
@@ -641,11 +658,7 @@ def detect_unused_helper_functions(
         optimized_ast = ast.parse(optimized_code)
 
         # Find the optimized entrypoint function
-        entrypoint_function_ast = None
-        for node in ast.walk(optimized_ast):
-            if isinstance(node, ast.FunctionDef) and node.name == function_to_optimize.function_name:
-                entrypoint_function_ast = node
-                break
+        entrypoint_function_ast = find_target_node(optimized_ast, function_to_optimize)
 
         if not entrypoint_function_ast:
             logger.debug(f"Could not find entrypoint function {function_to_optimize.function_name} in optimized code")
