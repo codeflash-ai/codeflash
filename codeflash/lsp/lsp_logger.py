@@ -89,7 +89,7 @@ def enhanced_log(
         actual_log_fn(msg, *args, **kwargs)
         return
 
-    is_lsp_json_message = msg.startswith(message_delimiter)
+    is_lsp_json_message = msg.startswith(message_delimiter) and msg.endswith(message_delimiter)
     is_normal_text_message = not is_lsp_json_message
 
     # Extract tags only from text messages
