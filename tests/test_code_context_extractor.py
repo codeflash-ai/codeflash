@@ -1827,7 +1827,7 @@ def get_system_details():
         hashing_context = code_ctx.hashing_code_context
         # The expected contexts
         expected_read_write_context = f"""
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
 import utility_module
 
 class Calculator:
@@ -2096,7 +2096,7 @@ def select_precision(precision, fallback_precision):
     else:
         return DEFAULT_PRECISION
 ```
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{main_file_path.resolve().relative_to(opt.args.project_root.resolve())}
 import utility_module
 
 class Calculator:
