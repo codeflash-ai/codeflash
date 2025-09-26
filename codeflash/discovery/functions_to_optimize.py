@@ -86,6 +86,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
+                    is_async=bool(node.asynchronous),
                 )
             )
 
@@ -101,6 +102,15 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
+            )
+
+    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
+        # Check if the async function has a return statement and add it to the list
+        if function_has_return_statement(node) and not function_is_a_property(node):
+            self.functions.append(
+                FunctionToOptimize(
+                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
+                )
             )
 
     def generic_visit(self, node: ast.AST) -> None:
@@ -122,6 +132,7 @@ class FunctionToOptimize:
         parents: A list of parent scopes, which could be classes or functions.
         starting_line: The starting line number of the function in the file.
         ending_line: The ending line number of the function in the file.
+        is_async: Whether this function is defined as async.
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -134,6 +145,7 @@ class FunctionToOptimize:
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
+    is_async: bool = False
 
     @property
     def top_level_parent_name(self) -> str:
@@ -147,7 +159,11 @@ class FunctionToOptimize:
 
     @property
     def qualified_name(self) -> str:
-        return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
+        if not self.parents:
+            return self.function_name
+        # Join all parent names with dots to handle nested classes properly
+        parent_path = ".".join(parent.name for parent in self.parents)
+        return f"{parent_path}.{self.function_name}"
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
@@ -411,11 +427,27 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                 )
             )
 
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        if self.class_name is None and node.name == self.function_name:
+            self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                )
+            )
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
         if node.name == self.class_name:
             for body_node in node.body:
-                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                if (
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and body_node.name == self.function_name
+                ):
                     self.is_top_level = True
                     if any(
                         isinstance(decorator, ast.Name) and decorator.id == "classmethod"
@@ -433,7 +465,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
-                    isinstance(body_node, ast.FunctionDef)
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and body_node.name == self.function_name
                     and body_node.lineno in {self.line_no, self.line_no + 1}
                     and any(
