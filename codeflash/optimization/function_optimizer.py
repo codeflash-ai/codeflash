@@ -84,14 +84,20 @@ from codeflash.models.models import (
     TestType,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
-from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import (
+    coverage_critic,
+    performance_gain,
+    quantity_of_tests_critic,
+    speedup_critic,
+    throughput_gain,
+)
 from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
-from codeflash.verification.parse_test_output import parse_test_results
+from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results, parse_test_results
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
@@ -582,7 +588,11 @@ class FunctionOptimizer:
                     tree = Tree(f"Candidate #{candidate_index} - Runtime Information ⌛")
                     benchmark_tree = None
                     if speedup_critic(
-                        candidate_result, original_code_baseline.runtime, best_runtime_until_now=None
+                        candidate_result,
+                        original_code_baseline.runtime,
+                        best_runtime_until_now=None,
+                        original_async_throughput=original_code_baseline.async_throughput,
+                        best_throughput_until_now=None,
                     ) and quantity_of_tests_critic(candidate_result):
                         tree.add("This candidate is faster than the original code. 🚀")  # TODO: Change this description
                         tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
@@ -597,7 +607,6 @@ class FunctionOptimizer:
                             original_code_baseline.async_throughput is not None
                             and candidate_result.async_throughput is not None
                         ):
-                            from codeflash.result.critic import throughput_gain
                             throughput_gain_value = throughput_gain(
                                 original_throughput=original_code_baseline.async_throughput,
                                 optimized_throughput=candidate_result.async_throughput,
@@ -669,7 +678,6 @@ class FunctionOptimizer:
                             original_code_baseline.async_throughput is not None
                             and candidate_result.async_throughput is not None
                         ):
-                            from codeflash.result.critic import throughput_gain
                             throughput_gain_value = throughput_gain(
                                 original_throughput=original_code_baseline.async_throughput,
                                 optimized_throughput=candidate_result.async_throughput,
@@ -1301,6 +1309,8 @@ class FunctionOptimizer:
                     function_name=function_to_optimize_qualified_name,
                     file_path=self.function_to_optimize.file_path,
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
+                    original_async_throughput=original_code_baseline.async_throughput,
+                    best_async_throughput=best_optimization.async_throughput,
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
@@ -1383,6 +1393,23 @@ class FunctionOptimizer:
             original_runtimes_all=original_runtime_by_test,
             optimized_runtimes_all=optimized_runtime_by_test,
         )
+        original_throughput_str = None
+        optimized_throughput_str = None
+        throughput_improvement_str = None
+
+        if (
+            self.function_to_optimize.is_async
+            and original_code_baseline.async_throughput is not None
+            and best_optimization.async_throughput is not None
+        ):
+            original_throughput_str = f"{original_code_baseline.async_throughput} operations/second"
+            optimized_throughput_str = f"{best_optimization.async_throughput} operations/second"
+            throughput_improvement_value = throughput_gain(
+                original_throughput=original_code_baseline.async_throughput,
+                optimized_throughput=best_optimization.async_throughput,
+            )
+            throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
+
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
@@ -1396,6 +1423,9 @@ class FunctionOptimizer:
             annotated_tests=generated_tests_str,
             optimization_id=best_optimization.candidate.optimization_id,
             original_explanation=best_optimization.candidate.explanation,
+            original_throughput=original_throughput_str,
+            optimized_throughput=optimized_throughput_str,
+            throughput_improvement=throughput_improvement_str,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
@@ -1406,6 +1436,8 @@ class FunctionOptimizer:
             function_name=explanation.function_name,
             file_path=explanation.file_path,
             benchmark_details=explanation.benchmark_details,
+            original_async_throughput=explanation.original_async_throughput,
+            best_async_throughput=explanation.best_async_throughput,
         )
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 
@@ -1633,6 +1665,14 @@ class FunctionOptimizer:
         console.rule()
         logger.debug(f"Total original code runtime (ns): {total_timing}")
 
+        async_throughput = None
+        if self.function_to_optimize.is_async:
+            async_throughput = calculate_function_throughput_from_test_results(
+                benchmarking_results, self.function_to_optimize.function_name
+            )
+            logger.debug(f"Original async function throughput: {async_throughput} calls/second")
+            console.rule()
+
         if self.args.benchmark:
             replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
                 self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
@@ -1646,6 +1686,7 @@ class FunctionOptimizer:
                     runtime=total_timing,
                     coverage_results=coverage_results,
                     line_profile_results=line_profile_results,
+                    async_throughput=async_throughput,
                 ),
                 functions_to_remove,
             )
@@ -1792,6 +1833,14 @@ class FunctionOptimizer:
                 console.rule()
 
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
+
+            candidate_async_throughput = None
+            if self.function_to_optimize.is_async:
+                candidate_async_throughput = calculate_function_throughput_from_test_results(
+                    candidate_benchmarking_results, self.function_to_optimize.function_name
+                )
+                logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
+
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
                     self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
@@ -1811,6 +1860,7 @@ class FunctionOptimizer:
                     else None,
                     optimization_candidate_index=optimization_candidate_index,
                     total_candidate_timing=total_candidate_timing,
+                    async_throughput=candidate_async_throughput,
                 )
             )
 
@@ -1902,8 +1952,10 @@ class FunctionOptimizer:
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
             )
-        else:
-            results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
+            if testing_type == TestingMode.PERFORMANCE:
+                results.perf_stdout = run_result.stdout
+            return results, coverage_results
+        results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
         return results, coverage_results
 
     def submit_test_generation_tasks(
