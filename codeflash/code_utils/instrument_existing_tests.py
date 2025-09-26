@@ -351,29 +351,45 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
     def _process_test_function(
         self, node: ast.AsyncFunctionDef | ast.FunctionDef
     ) -> ast.AsyncFunctionDef | ast.FunctionDef:
-        if self.test_framework == "unittest" and not any(
-            isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "timeout_decorator.timeout"
-            for d in node.decorator_list
-        ):
-            timeout_decorator = ast.Call(
-                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                args=[ast.Constant(value=15)],
-                keywords=[],
-            )
-            node.decorator_list.append(timeout_decorator)
+        # Hoist values for a small performance gain inside the method
+        async_call_counter = self.async_call_counter
+        node_name = node.name
+
+        # Fast path: check if this needs timeout_decorator injection (unittest only, and not already decorated)
+        if self.test_framework == "unittest":
+            needs_timeout = True
+            for d in node.decorator_list:
+                if (
+                    isinstance(d, ast.Call)
+                    and isinstance(d.func, ast.Name)
+                    and d.func.id == "timeout_decorator.timeout"
+                ):
+                    needs_timeout = False
+                    break
+            if needs_timeout:
+                timeout_decorator = ast.Call(
+                    func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
+                    args=[ast.Constant(value=15)],
+                    keywords=[],
+                )
+                node.decorator_list.append(timeout_decorator)
 
         # Initialize counter for this test function
-        if node.name not in self.async_call_counter:
-            self.async_call_counter[node.name] = 0
+        if node_name not in async_call_counter:
+            async_call_counter[node_name] = 0
+        call_index = async_call_counter[node_name]
 
         new_body = []
 
-        for _i, stmt in enumerate(node.body):
-            transformed_stmt, added_env_assignment = self._instrument_statement(stmt, node.name)
+        # Local references for methods (small speedup)
+        _instrument_statement = self._instrument_statement
+        append_new_body = new_body.append
 
+        for stmt in node.body:
+            transformed_stmt, added_env_assignment = _instrument_statement(stmt, node_name)
             if added_env_assignment:
-                current_call_index = self.async_call_counter[node.name]
-                self.async_call_counter[node.name] += 1
+                current_call_index = call_index
+                call_index += 1
 
                 env_assignment = ast.Assign(
                     targets=[
@@ -388,25 +404,30 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
                     value=ast.Constant(value=f"{current_call_index}"),
                     lineno=stmt.lineno if hasattr(stmt, "lineno") else 1,
                 )
-                new_body.append(env_assignment)
+                append_new_body(env_assignment)
                 self.did_instrument = True
 
-            new_body.append(transformed_stmt)
+            append_new_body(transformed_stmt)
 
+        async_call_counter[node_name] = call_index
         node.body = new_body
         return node
 
     def _instrument_statement(self, stmt: ast.stmt, _node_name: str) -> tuple[ast.stmt, bool]:
-        for node in ast.walk(stmt):
-            if (
-                isinstance(node, ast.Await)
-                and isinstance(node.value, ast.Call)
-                and self._is_target_call(node.value)
-                and self._call_in_positions(node.value)
-            ):
-                # Check if this call is in one of our target positions
-                return stmt, True  # Return original statement but signal we added env var
-
+        # Performance optimization: specialized scan for the awaited target function call, short-circuit asap.
+        for node in ast.iter_child_nodes(stmt):
+            stack = [node]
+            while stack:
+                n = stack.pop()
+                if (
+                    isinstance(n, ast.Await)
+                    and isinstance(n.value, ast.Call)
+                    and self._is_target_call(n.value)
+                    and self._call_in_positions(n.value)
+                ):
+                    return stmt, True  # Return original statement but signal we added env var
+                # Avoiding ast.walk overhead: iter_child_nodes is a generator, faster than walk for local subtree
+                stack.extend(ast.iter_child_nodes(n))
         return stmt, False
 
     def _is_target_call(self, call_node: ast.Call) -> bool:
