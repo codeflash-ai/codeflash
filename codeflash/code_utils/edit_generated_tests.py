@@ -61,31 +61,53 @@ class CommentMapper(ast.NodeVisitor):
 
     def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.context_stack.append(node.name)
-        i = len(node.body) - 1
+        node_body = node.body
+        len_body = len(node_body)
         test_qualified_name = ".".join(self.context_stack)
-        key = test_qualified_name + "#" + str(self.abs_path)
+        key_base = test_qualified_name + "#" + str(self.abs_path)
+        original_runtimes = self.original_runtimes
+        optimized_runtimes = self.optimized_runtimes
+        results = self.results
+        get_comment = self.get_comment
+
+        # Move reusable string formatting and dict lookups into local variables
+        i = len_body - 1
+        APPEND = self.context_stack.append
+        POP = self.context_stack.pop
+
+        # Optimize attribute lookup
+        isinstance_stmt = ast.stmt
+        isinstance_assign = ast.Assign
+        isinstance_control = (ast.With, ast.For, ast.While, ast.If)
+
         while i >= 0:
-            line_node = node.body[i]
-            if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
-                j = len(line_node.body) - 1
+            line_node = node_body[i]
+            if isinstance(line_node, isinstance_control):
+                control_body = line_node.body
+                len_ctrl = len(control_body)
+                j = len_ctrl - 1
                 while j >= 0:
-                    compound_line_node: ast.stmt = line_node.body[j]
+                    compound_line_node: ast.stmt = control_body[j]
+                    # Gather compound_line_node and its body nodes (if any)
                     nodes_to_check = [compound_line_node]
-                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    body_attr = getattr(compound_line_node, "body", None)
+                    if body_attr:
+                        nodes_to_check.extend(body_attr)
                     for internal_node in nodes_to_check:
-                        if isinstance(internal_node, (ast.stmt, ast.Assign)):
-                            inv_id = str(i) + "_" + str(j)
-                            match_key = key + "#" + inv_id
-                            if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                                self.results[internal_node.lineno] = self.get_comment(match_key)
+                        if isinstance(internal_node, (isinstance_stmt, isinstance_assign)):
+                            inv_id = f"{i}_{j}"
+                            match_key = f"{key_base}#{inv_id}"
+                            if match_key in original_runtimes and match_key in optimized_runtimes:
+                                # Only calculate and assign if both runtimes exist
+                                results[internal_node.lineno] = get_comment(match_key)
                     j -= 1
             else:
                 inv_id = str(i)
-                match_key = key + "#" + inv_id
-                if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                    self.results[line_node.lineno] = self.get_comment(match_key)
+                match_key = f"{key_base}#{inv_id}"
+                if match_key in original_runtimes and match_key in optimized_runtimes:
+                    results[line_node.lineno] = get_comment(match_key)
             i -= 1
-        self.context_stack.pop()
+        POP()
 
 
 def get_fn_call_linenos(
