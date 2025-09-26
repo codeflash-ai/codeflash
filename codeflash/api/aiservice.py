@@ -10,6 +10,7 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE, N_CANDIDATES_LP_EFFECTIVE
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -134,9 +135,10 @@ class AiServiceClient:
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
             "is_async": is_async,
+            "n_candidates": N_CANDIDATES_EFFECTIVE,
         }
 
-        logger.info("Generating optimized candidates…")
+        logger.info("!lsp|Generating optimized candidates…")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
@@ -147,10 +149,10 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations.")
+            logger.info(f"!lsp|Generated {len(optimizations_json)} candidate optimizations.")
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(f"Generating optimizations took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
             return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
@@ -195,9 +197,9 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
+            "n_candidates_lp": N_CANDIDATES_LP_EFFECTIVE,
         }
 
-        logger.info("Generating optimized candidates…")
         console.rule()
         if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
@@ -212,7 +214,9 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(f"Generated {len(optimizations_json)} candidate optimizations using line profiler information.")
+            logger.info(
+                f"!lsp|Generated {len(optimizations_json)} candidate optimizations using line profiler information."
+            )
             console.rule()
             return self._get_valid_candidates(optimizations_json)
         try:
@@ -343,7 +347,7 @@ class AiServiceClient:
             "optimized_throughput": optimized_throughput,
             "throughput_improvement": throughput_improvement,
         }
-        logger.info("Generating explanation")
+        logger.info("loading|Generating explanation")
         console.rule()
         try:
             response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
@@ -364,6 +368,51 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return ""
+
+    def generate_ranking(  # noqa: D417
+        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[float]
+    ) -> list[int] | None:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - trace_id : unique uuid of function
+        - diffs : list of unified diff strings of opt candidates
+        - speedups : list of speedups of opt candidates
+
+        Returns
+        -------
+        - List[int]: Ranking of opt candidates in decreasing order
+
+        """
+        payload = {
+            "trace_id": trace_id,
+            "diffs": diffs,
+            "speedups": speedups,
+            "optimization_ids": optimization_ids,
+            "python_version": platform.python_version(),
+        }
+        logger.info("loading|Generating ranking")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/rank", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating ranking: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return None
+
+        if response.status_code == 200:
+            ranking: list[int] = response.json()["ranking"]
+            console.rule()
+            return ranking
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating ranking: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return None
 
     def log_results(  # noqa: D417
         self,

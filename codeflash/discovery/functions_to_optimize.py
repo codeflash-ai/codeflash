@@ -189,7 +189,7 @@ def get_functions_to_optimize(
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
-            logger.info("Finding all functions in the module '%s'…", optimize_all)
+            logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
             console.rule()
             functions = get_all_files_and_functions(Path(optimize_all))
         elif replay_test:
@@ -197,7 +197,7 @@ def get_functions_to_optimize(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
             )
         elif file is not None:
-            logger.info("Finding all functions in the file '%s'…", file)
+            logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             functions = find_all_functions_in_file(file)
             if only_get_this_function is not None:
@@ -235,7 +235,7 @@ def get_functions_to_optimize(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
 
-        logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
             console.rule()
@@ -248,7 +248,16 @@ def get_functions_to_optimize(
 
 def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
-    modified_functions: dict[str, list[FunctionToOptimize]] = {}
+    return get_functions_within_lines(modified_lines)
+
+
+def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
+    modified_lines: dict[str, list[int]] = get_git_diff(only_this_commit=commit_hash)
+    return get_functions_within_lines(modified_lines)
+
+
+def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str, list[FunctionToOptimize]]:
+    functions: dict[str, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
         if not path.exists():
@@ -262,14 +271,14 @@ def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[F
                 continue
             function_lines = FunctionVisitor(file_path=str(path))
             wrapper.visit(function_lines)
-            modified_functions[str(path)] = [
+            functions[str(path)] = [
                 function_to_optimize
                 for function_to_optimize in function_lines.functions
                 if (start_line := function_to_optimize.starting_line) is not None
                 and (end_line := function_to_optimize.ending_line) is not None
                 and any(start_line <= line <= end_line for line in lines_in_file)
             ]
-    return modified_functions
+    return functions
 
 
 def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:

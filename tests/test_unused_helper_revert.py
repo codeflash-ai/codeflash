@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeStringsMarkdown
+from codeflash.models.models import CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.context.unused_definition_remover import revert_unused_helper_functions
@@ -1479,6 +1479,8 @@ class MathUtils:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+# ===== Async-related tests (merged) =====
+
 def test_async_entrypoint_with_async_helpers():
     """Test that unused async helper functions are correctly detected when entrypoint is async."""
     temp_dir = Path(tempfile.mkdtemp())
@@ -1544,14 +1546,16 @@ async def async_entrypoint(n):
             function_to_optimize_source_code=main_file.read_text(),
         )
 
-        # Get original code context
         ctx_result = optimizer.get_code_optimization_context()
         assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
-
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
 
         # Should detect async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1640,7 +1644,11 @@ def sync_entrypoint(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
 
         # Should detect async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1749,7 +1757,11 @@ async def mixed_entrypoint(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
 
         # Should detect both sync_helper_2 and async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1847,7 +1859,11 @@ class AsyncProcessor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
 
         # Should detect async_helper_method_2 as unused (sync_helper_method may not be discovered as helper)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -2057,7 +2073,11 @@ async def async_entrypoint_with_generators(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
 
         # Should detect another_coroutine_helper as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -2067,5 +2087,151 @@ async def async_entrypoint_with_generators(n):
 
     finally:
         # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# ===== Other merged tests (non-async) =====
+
+def test_unused_helper_detection_with_duplicated_function_name_in_different_classes():
+    """Sanity test for LSP-related helper usage; ensure detection doesn't crash and returns no unused helpers."""
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""from __future__ import annotations
+import json
+from helpers import replace_quotes_with_backticks, simplify_worktree_paths
+from dataclasses import asdict, dataclass
+
+@dataclass
+class LspMessage:
+
+    def serialize(self) -> str:
+        data = self._loop_through(asdict(self))
+        # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
+        ordered = {"type": self.type(), **data}
+        return (
+            message_delimiter
+            + json.dumps(ordered)
+            + message_delimiter
+        )
+
+@dataclass
+class LspMarkdownMessage(LspMessage):
+
+    def serialize(self) -> str:
+        self.markdown = simplify_worktree_paths(self.markdown)
+        self.markdown = replace_quotes_with_backticks(self.markdown)
+        return super().serialize()
+""")
+
+        helpers_file = temp_dir / "helpers.py"
+        helpers_file.write_text("""def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
+    path_in_msg = worktree_path_regex.search(msg)
+    if path_in_msg:
+        last_part_of_path = path_in_msg.group(0).split("/")[-1]
+        if highlight:
+            last_part_of_path = f"`{last_part_of_path}`"
+        return msg.replace(path_in_msg.group(0), last_part_of_path)
+    return msg
+
+
+def replace_quotes_with_backticks(text: str) -> str:
+    # double-quoted strings
+    text = _double_quote_pat.sub(r"`\1`", text)
+    # single-quoted strings
+    return _single_quote_pat.sub(r"`\1`", text)
+""")
+
+        optimized_code = """
+```python:main.py
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+
+from codeflash.lsp.helpers import (replace_quotes_with_backticks,
+                                   simplify_worktree_paths)
+
+
+@dataclass
+class LspMessage:
+
+    def serialize(self) -> str:
+        # Use local variable to minimize lookup costs and avoid unnecessary dictionary unpacking
+        data = self._loop_through(asdict(self))
+        msg_type = self.type()
+        ordered = {'type': msg_type}
+        ordered.update(data)
+        return (
+            message_delimiter
+            + json.dumps(ordered)
+            + message_delimiter  # \u241F is the message delimiter because it can be more than one message sent over the same message, so we need something to separate each message
+        )
+
+@dataclass
+class LspMarkdownMessage(LspMessage):
+
+    def serialize(self) -> str:
+        # Side effect required, must preserve for behavioral correctness
+        self.markdown = simplify_worktree_paths(self.markdown)
+        self.markdown = replace_quotes_with_backticks(self.markdown)
+        return super().serialize()
+```
+```python:helpers.py
+def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
+    m = worktree_path_regex.search(msg)
+    if m:
+        # More efficient way to get last path part
+        last_part_of_path = m.group(0).rpartition('/')[-1]
+        if highlight:
+            last_part_of_path = f"`{last_part_of_path}`"
+        return msg.replace(m.group(0), last_part_of_path)
+    return msg
+
+def replace_quotes_with_backticks(text: str) -> str:
+    # Efficient string substitution, reduces intermediate string allocations
+    return _single_quote_pat.sub(
+        r"`\1`",
+        _double_quote_pat.sub(r"`\1`", text),
+    )
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file,
+            function_name="serialize",
+            qualified_name="serialize",
+            parents=[FunctionParent(name="LspMarkdownMessage", type="ClassDef")],
+        )
+
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+        code_context = ctx_result.unwrap()
+
+        # Ensure detection completes and returns no unused helpers in this scenario
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize,
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        )
+        assert len(unused_helpers) == 0
+    finally:
         import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)

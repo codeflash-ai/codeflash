@@ -5,7 +5,10 @@ from typing import TYPE_CHECKING
 
 from rich.tree import Tree
 
-from codeflash.cli_cmds.console import DEBUG_MODE
+from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
+from codeflash.lsp.lsp_message import LspMarkdownMessage
+from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -485,27 +488,6 @@ class VerificationType(str, Enum):
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
-class TestType(Enum):
-    EXISTING_UNIT_TEST = 1
-    INSPIRED_REGRESSION = 2
-    GENERATED_REGRESSION = 3
-    REPLAY_TEST = 4
-    CONCOLIC_COVERAGE_TEST = 5
-    INIT_STATE_TEST = 6
-
-    def to_name(self) -> str:
-        if self is TestType.INIT_STATE_TEST:
-            return ""
-        names = {
-            TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
-            TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
-            TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
-            TestType.REPLAY_TEST: "⏪ Replay Tests",
-            TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
-        }
-        return names[self]
-
-
 @dataclass(frozen=True)
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
@@ -648,6 +630,13 @@ class TestResults(BaseModel):  # noqa: PLW1641
     @staticmethod
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
         tree = Tree(title)
+
+        if is_LSP_enabled():
+            # Build markdown table
+            markdown = report_to_markdown_table(report, title)
+            lsp_log(LspMarkdownMessage(markdown=markdown))
+            return tree
+
         for test_type in TestType:
             if test_type is TestType.INIT_STATE_TEST:
                 continue

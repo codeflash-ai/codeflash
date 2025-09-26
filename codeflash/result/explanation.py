@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import BenchmarkDetail, TestResults
 from codeflash.result.critic import performance_gain, throughput_gain
 
@@ -61,7 +62,7 @@ class Explanation:
     def speedup_pct(self) -> str:
         return f"{self.speedup * 100:,.0f}%"
 
-    def to_console_string(self) -> str:
+    def __str__(self) -> str:
         # TODO: After doing the best optimization, remove the test cases that errored on the new code, because they might be failing because of syntax errors and such.
         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
         original_runtime_human = humanize_runtime(self.original_runtime_ns)
@@ -131,7 +132,9 @@ class Explanation:
             )
         else:
             performance_description = f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
-        
+
+        test_report = self.winning_behavior_test_results.get_test_pass_fail_report_by_type()
+        test_report_str = TestResults.report_to_string(test_report)
         return (
             f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
@@ -139,8 +142,13 @@ class Explanation:
             + (benchmark_info if benchmark_info else "")
             + self.raw_explanation_message
             + " \n\n"
-            + "The new optimized code was tested for correctness. The results are listed below.\n"
-            + f"{TestResults.report_to_string(self.winning_behavior_test_results.get_test_pass_fail_report_by_type())}\n"
+            + (
+                # in the lsp (extension) we display the test results before the optimization summary
+                ""
+                if is_LSP_enabled()
+                else "The new optimized code was tested for correctness. The results are listed below.\n"
+                + test_report_str
+            )
         )
 
     def explanation_message(self) -> str:

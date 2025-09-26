@@ -4,6 +4,8 @@ import dataclasses
 import datetime
 import decimal
 import re
+from collections import ChainMap, Counter, UserDict, UserList, UserString, defaultdict, deque, namedtuple, OrderedDict
+
 import sys
 import uuid
 from enum import Enum, Flag, IntFlag, auto
@@ -1394,3 +1396,253 @@ def test_exceptions_comparator():
     module2 = ast.parse(code2)
 
     assert not comparator(module7, module2)
+
+def test_collections() -> None:
+    # Deque
+    a = deque([1, 2, 3])
+    b = deque([1, 2, 3])
+    c = deque([1, 2, 4])
+    d = deque([1, 2])
+    e = [1, 2, 3]
+    f = deque([1, 2, 3], maxlen=5)
+    assert comparator(a, b)
+    assert comparator(a, f)  # same elements, different maxlen is ok
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+    assert not comparator(a, e)
+
+    g = deque([{"a": 1}, {"b": 2}])
+    h = deque([{"a": 1}, {"b": 2}])
+    i = deque([{"a": 1}, {"b": 3}])
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    empty_deque1 = deque()
+    empty_deque2 = deque()
+    assert comparator(empty_deque1, empty_deque2)
+    assert not comparator(empty_deque1, a)
+
+    # namedtuple
+    Point = namedtuple('Point', ['x', 'y'])
+    a = Point(x=1, y=2)
+    b = Point(x=1, y=2)
+    c = Point(x=1, y=3)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    Point2 = namedtuple('Point2', ['x', 'y'])
+    d = Point2(x=1, y=2)
+    assert not comparator(a, d)
+
+    e = (1, 2)
+    assert not comparator(a, e)
+
+    # ChainMap
+    map1 = {'a': 1, 'b': 2}
+    map2 = {'c': 3, 'd': 4}
+    a = ChainMap(map1, map2)
+    b = ChainMap(map1, map2)
+    c = ChainMap(map2, map1)
+    d = {'a': 1, 'b': 2, 'c': 3, 'd': 4}
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # Counter
+    a = Counter(['a', 'b', 'a', 'c', 'b', 'a'])
+    b = Counter({'a': 3, 'b': 2, 'c': 1})
+    c = Counter({'a': 3, 'b': 2, 'c': 2})
+    d = {'a': 3, 'b': 2, 'c': 1}
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # OrderedDict
+    a = OrderedDict([('a', 1), ('b', 2)])
+    b = OrderedDict([('a', 1), ('b', 2)])
+    c = OrderedDict([('b', 2), ('a', 1)])
+    d = {'a': 1, 'b': 2}
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # defaultdict
+    a = defaultdict(int, {'a': 1, 'b': 2})
+    b = defaultdict(int, {'a': 1, 'b': 2})
+    c = defaultdict(list, {'a': 1, 'b': 2})
+    d = {'a': 1, 'b': 2}
+    e = defaultdict(int, {'a': 1, 'b': 3})
+    assert comparator(a, b)
+    assert comparator(a, c)
+    assert not comparator(a, d)
+    assert not comparator(a, e)
+
+    # UserDict
+    a = UserDict({'a': 1, 'b': 2})
+    b = UserDict({'a': 1, 'b': 2})
+    c = UserDict({'a': 1, 'b': 3})
+    d = {'a': 1, 'b': 2}
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # UserList
+    a = UserList([1, 2, 3])
+    b = UserList([1, 2, 3])
+    c = UserList([1, 2, 4])
+    d = [1, 2, 3]
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # UserString
+    a = UserString("hello")
+    b = UserString("hello")
+    c = UserString("world")
+    d = "hello"
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+
+def test_attrs():
+    try:
+        import attrs  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    @attrs.define
+    class Person:
+        name: str
+        age: int = 10
+        
+    a = Person("Alice", 25)
+    b = Person("Alice", 25)
+    c = Person("Bob", 25)
+    d = Person("Alice", 30)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    @attrs.frozen
+    class Point:
+        x: int
+        y: int
+        
+    p1 = Point(1, 2)
+    p2 = Point(1, 2)
+    p3 = Point(2, 3)
+    assert comparator(p1, p2)
+    assert not comparator(p1, p3)
+
+    @attrs.define(slots=True)
+    class Vehicle:
+        brand: str
+        model: str
+        year: int = 2020
+        
+    v1 = Vehicle("Toyota", "Camry", 2021)
+    v2 = Vehicle("Toyota", "Camry", 2021)
+    v3 = Vehicle("Honda", "Civic", 2021)
+    assert comparator(v1, v2)
+    assert not comparator(v1, v3)
+
+    @attrs.define
+    class ComplexClass:
+        public_field: str
+        private_field: str = attrs.field(repr=False)
+        non_eq_field: int = attrs.field(eq=False, default=0)
+        computed: str = attrs.field(init=False, eq=True)
+        
+        def __attrs_post_init__(self):
+            self.computed = f"{self.public_field}_{self.private_field}"
+    
+    c1 = ComplexClass("test", "secret")
+    c2 = ComplexClass("test", "secret")
+    c3 = ComplexClass("different", "secret")
+    
+    c1.non_eq_field = 100
+    c2.non_eq_field = 200
+    
+    assert comparator(c1, c2)
+    assert not comparator(c1, c3)
+
+    @attrs.define
+    class Address:
+        street: str
+        city: str
+        
+    @attrs.define 
+    class PersonWithAddress:
+        name: str
+        address: Address
+        
+    addr1 = Address("123 Main St", "Anytown")
+    addr2 = Address("123 Main St", "Anytown")
+    addr3 = Address("456 Oak Ave", "Anytown")
+    
+    person1 = PersonWithAddress("John", addr1)
+    person2 = PersonWithAddress("John", addr2)
+    person3 = PersonWithAddress("John", addr3)
+    
+    assert comparator(person1, person2)
+    assert not comparator(person1, person3)
+
+    @attrs.define
+    class Container:
+        items: list
+        metadata: dict
+        
+    cont1 = Container([1, 2, 3], {"type": "numbers"})
+    cont2 = Container([1, 2, 3], {"type": "numbers"})
+    cont3 = Container([1, 2, 4], {"type": "numbers"})
+    
+    assert comparator(cont1, cont2)
+    assert not comparator(cont1, cont3)
+
+    @attrs.define
+    class BaseClass:
+        name: str
+        value: int
+        
+    @attrs.define
+    class ExtendedClass:
+        name: str
+        value: int
+        extra_field: str = "default"
+        
+    base = BaseClass("test", 42)
+    extended = ExtendedClass("test", 42, "extra")
+    
+    assert not comparator(base, extended)
+
+    @attrs.define
+    class WithNonEqFields:
+        name: str
+        timestamp: float = attrs.field(eq=False)  # Should be ignored
+        debug_info: str = attrs.field(eq=False, default="debug")
+        
+    obj1 = WithNonEqFields("test", 1000.0, "info1")
+    obj2 = WithNonEqFields("test", 9999.0, "info2")  # Different non-eq fields
+    obj3 = WithNonEqFields("different", 1000.0, "info1")
+    
+    assert comparator(obj1, obj2)  # Should be equal despite different timestamp/debug_info
+    assert not comparator(obj1, obj3)  # Should be different due to name
+    @attrs.define
+    class MinimalClass:
+        name: str
+        value: int
+        
+    @attrs.define
+    class ExtendedClass:
+        name: str
+        value: int
+        extra_field: str = "default"
+        metadata: dict = attrs.field(factory=dict)
+        timestamp: float = attrs.field(eq=False, default=0.0)  # This should be ignored
+        
+    minimal = MinimalClass("test", 42)
+    extended = ExtendedClass("test", 42, "extra", {"key": "value"}, 1000.0)
+    
+    assert not comparator(minimal, extended)
+    

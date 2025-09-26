@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
-from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME
+from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.models.models import TestFiles, TestType
 
@@ -37,7 +37,7 @@ def run_behavioral_tests(
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
     verbose: bool = False,
-    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     if test_framework == "pytest":
@@ -66,7 +66,7 @@ def run_behavioral_tests(
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
-            f"--codeflash_seconds={pytest_target_runtime_seconds}",  # TODO : This is unnecessary, update the plugin to not ask for this
+            f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
@@ -151,7 +151,7 @@ def run_line_profile_tests(
     cwd: Path,
     test_framework: str,
     *,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
@@ -237,7 +237,7 @@ def run_benchmarking_tests(
     cwd: Path,
     test_framework: str,
     *,
-    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
