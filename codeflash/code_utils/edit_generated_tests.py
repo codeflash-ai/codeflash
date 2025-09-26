@@ -60,32 +60,58 @@ class CommentMapper(ast.NodeVisitor):
         return node
 
     def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        self.context_stack.append(node.name)
-        i = len(node.body) - 1
-        test_qualified_name = ".".join(self.context_stack)
-        key = test_qualified_name + "#" + str(self.abs_path)
+        context_stack = self.context_stack
+        original_runtimes = self.original_runtimes
+        optimized_runtimes = self.optimized_runtimes
+        results = self.results
+        abs_path = self.abs_path
+
+        append_context = context_stack.append
+        pop_context = context_stack.pop
+
+        append_context(node.name)
+        node_body = node.body
+        node_body_len = len(node_body)
+        test_qualified_name = ".".join(context_stack)
+        key = test_qualified_name + "#" + str(abs_path)
+
+        # Pull method locally for faster access
+        get_comment = self.get_comment
+
+        # Pre-fetch 'isinstance' and types for a tiny speedup in the inner loop
+        _stmt_types = (ast.With, ast.For, ast.While, ast.If)
+        _node_stmt_assign = (ast.stmt, ast.Assign)
+
+        i = node_body_len - 1
         while i >= 0:
-            line_node = node.body[i]
-            if isinstance(line_node, (ast.With, ast.For, ast.While, ast.If)):
-                j = len(line_node.body) - 1
+            line_node = node_body[i]
+            if isinstance(line_node, _stmt_types):
+                sub_body = line_node.body
+                j = len(sub_body) - 1
                 while j >= 0:
-                    compound_line_node: ast.stmt = line_node.body[j]
-                    nodes_to_check = [compound_line_node]
-                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    compound_line_node: ast.stmt = sub_body[j]
+                    # Compose nodes to check, minimizing overhead
+                    body_attr = getattr(compound_line_node, "body", None)
+                    if body_attr:
+                        # Since most ast statement bodies are lists, perform one extend
+                        nodes_to_check = [compound_line_node, *body_attr]
+                    else:
+                        nodes_to_check = [compound_line_node]
                     for internal_node in nodes_to_check:
-                        if isinstance(internal_node, (ast.stmt, ast.Assign)):
-                            inv_id = str(i) + "_" + str(j)
-                            match_key = key + "#" + inv_id
-                            if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                                self.results[internal_node.lineno] = self.get_comment(match_key)
+                        # isinstance(internal_node, ast.Assign) is always True if isinstance(internal_node, ast.stmt)
+                        if isinstance(internal_node, _node_stmt_assign):
+                            inv_id = f"{i}_{j}"
+                            match_key = f"{key}#{inv_id}"
+                            if match_key in original_runtimes and match_key in optimized_runtimes:
+                                results[internal_node.lineno] = get_comment(match_key)
                     j -= 1
             else:
-                inv_id = str(i)
-                match_key = key + "#" + inv_id
-                if match_key in self.original_runtimes and match_key in self.optimized_runtimes:
-                    self.results[line_node.lineno] = self.get_comment(match_key)
+                inv_id = f"{i}"
+                match_key = f"{key}#{inv_id}"
+                if match_key in original_runtimes and match_key in optimized_runtimes:
+                    results[line_node.lineno] = get_comment(match_key)
             i -= 1
-        self.context_stack.pop()
+        pop_context()
 
 
 def get_fn_call_linenos(
