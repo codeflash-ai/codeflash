@@ -12,7 +12,7 @@ from rich.table import Table
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import BenchmarkDetail, TestResults
-from codeflash.result.critic import performance_gain, throughput_gain
+from codeflash.result.critic import throughput_gain
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -143,7 +143,7 @@ class Explanation:
                 ""
                 if is_LSP_enabled()
                 else "The new optimized code was tested for correctness. The results are listed below.\n"
-                + f"{TestResults.report_to_string(self.winning_behavior_test_results.get_test_pass_fail_report_by_type())}\n"
+                f"{TestResults.report_to_string(self.winning_behavior_test_results.get_test_pass_fail_report_by_type())}\n"
             )
         )
 
