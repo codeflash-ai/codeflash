@@ -1410,12 +1410,14 @@ class FunctionOptimizer:
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-            # modify argument of staging vs pr based on the impact
-            opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
-            if opt_impact_response == "low":
-                raise_pr = False
-                staging_review = True
-
+            try:
+                # modify argument of staging vs pr based on the impact
+                opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+                if opt_impact_response == "low":
+                    raise_pr = False
+                    staging_review = True
+            except Exception as e:
+                logger.debug(f"optimization impact response failed, investigate {e}")
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)

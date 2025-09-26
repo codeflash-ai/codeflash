@@ -529,24 +529,20 @@ class AiServiceClient:
         function_trace_id: str,
         coverage_message: str,
         replay_tests: str,
-        concolic_tests: str,
         root_dir: Path,
     ) -> str:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+        """Compute the optimization impact of current Pull Request.
 
         Args:
-        original_code: dict,
-        new_code: dict,
-        explanation: Explanation,
-        existing_tests_source: str,
-        generated_original_test_source: str,
-        function_trace_id: str,
-        coverage_message: str,
-        replay_tests: str,
-        concolic_tests: str,
-        root_dir: Path,
-        original_line_profiler_results: str,
-        optimized_line_profiler_results: str,
+        original_code: dict -> data structure mapping file paths to function definition for original code
+        new_code: dict -> data structure mapping file paths to function definition for optimized code
+        explanation: Explanation -> data structure containing runtime information
+        existing_tests_source: str -> existing tests table
+        generated_original_test_source: str -> annotated generated tests
+        function_trace_id: str -> traceid of function
+        coverage_message: str -> coverage information
+        replay_tests: str -> replay test table
+        root_dir: Path -> path of git directory
 
         Returns:
         -------
@@ -574,7 +570,6 @@ class AiServiceClient:
             "trace_id": function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
-            "concolic_tests": concolic_tests,
             "speedup": f"{100 + 100 * float(explanation.speedup):.2f}%",
             "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
