@@ -100,6 +100,7 @@ class BestOptimization(BaseModel):
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
     line_profiler_test_results: dict
+    async_throughput: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -274,6 +275,7 @@ class OptimizedCandidateResult(BaseModel):
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     optimization_candidate_index: int
     total_candidate_timing: int
+    async_throughput: Optional[int] = None
 
 
 class GeneratedTests(BaseModel):
@@ -380,6 +382,7 @@ class OriginalCodeBaseline(BaseModel):
     line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
+    async_throughput: Optional[int] = None
 
 
 class CoverageStatus(Enum):
@@ -563,6 +566,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+    perf_stdout: Optional[str] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id

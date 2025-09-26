@@ -70,7 +70,11 @@
                 "request": "launch",
                 "program": "${workspaceFolder:codeflash}/codeflash/main.py",
                 "args": [
-                    "--all",
+                    "--file",
+                    "src/async_examples/concurrency.py",
+                    "--function",
+                    "task",
+                    "--verbose"
                 ],
                 "cwd": "${input:chooseCwd}",
                 "console": "integratedTerminal",

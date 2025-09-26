@@ -12,6 +12,7 @@ from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
     replace_functions_in_file,
+    OptimFunctionCollector,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
@@ -3453,3 +3454,174 @@ def hydrate_input_text_actions_with_field_names(
     main_file.unlink(missing_ok=True)
 
     assert new_code == expected
+
+
+# OptimFunctionCollector async function tests
+def test_optim_function_collector_with_async_functions():
+    """Test OptimFunctionCollector correctly collects async functions."""
+    import libcst as cst
+    
+    source_code = """
+def sync_function():
+    return "sync"
+
+async def async_function():
+    return "async"
+
+class TestClass:
+    def sync_method(self):
+        return "sync_method"
+    
+    async def async_method(self):
+        return "async_method"
+"""
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names={(None, "sync_function"), (None, "async_function"), ("TestClass", "sync_method"), ("TestClass", "async_method")},
+        preexisting_objects=None
+    )
+    tree.visit(collector)
+    
+    # Should collect both sync and async functions
+    assert len(collector.modified_functions) == 4
+    assert (None, "sync_function") in collector.modified_functions
+    assert (None, "async_function") in collector.modified_functions
+    assert ("TestClass", "sync_method") in collector.modified_functions
+    assert ("TestClass", "async_method") in collector.modified_functions
+
+
+def test_optim_function_collector_new_async_functions():
+    """Test OptimFunctionCollector identifies new async functions not in preexisting objects."""
+    import libcst as cst
+    
+    source_code = """
+def existing_function():
+    return "existing"
+
+async def new_async_function():
+    return "new_async"
+
+def new_sync_function():
+    return "new_sync"
+
+class ExistingClass:
+    async def new_class_async_method(self):
+        return "new_class_async"
+"""
+    
+    # Only existing_function is in preexisting objects
+    preexisting_objects = {("existing_function", ())}
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names=set(),  # Not looking for specific functions
+        preexisting_objects=preexisting_objects
+    )
+    tree.visit(collector)
+    
+    # Should identify new functions (both sync and async)
+    assert len(collector.new_functions) == 2
+    function_names = [func.name.value for func in collector.new_functions]
+    assert "new_async_function" in function_names
+    assert "new_sync_function" in function_names
+    
+    # Should identify new class methods
+    assert "ExistingClass" in collector.new_class_functions
+    assert len(collector.new_class_functions["ExistingClass"]) == 1
+    assert collector.new_class_functions["ExistingClass"][0].name.value == "new_class_async_method"
+
+
+def test_optim_function_collector_mixed_scenarios():
+    """Test OptimFunctionCollector with complex mix of sync/async functions and classes."""
+    import libcst as cst
+    
+    source_code = """
+# Global functions
+def global_sync():
+    pass
+
+async def global_async():
+    pass
+
+class ParentClass:
+    def __init__(self):
+        pass
+    
+    def sync_method(self):
+        pass
+    
+    async def async_method(self):
+        pass
+
+class ChildClass:
+    async def child_async_method(self):
+        pass
+    
+    def child_sync_method(self):
+        pass
+"""
+    
+    # Looking for specific functions
+    function_names = {
+        (None, "global_sync"),
+        (None, "global_async"), 
+        ("ParentClass", "sync_method"),
+        ("ParentClass", "async_method"),
+        ("ChildClass", "child_async_method")
+    }
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names=function_names,
+        preexisting_objects=None
+    )
+    tree.visit(collector)
+    
+    # Should collect all specified functions (mix of sync and async)
+    assert len(collector.modified_functions) == 5
+    assert (None, "global_sync") in collector.modified_functions
+    assert (None, "global_async") in collector.modified_functions
+    assert ("ParentClass", "sync_method") in collector.modified_functions
+    assert ("ParentClass", "async_method") in collector.modified_functions
+    assert ("ChildClass", "child_async_method") in collector.modified_functions
+    
+    # Should collect __init__ method
+    assert "ParentClass" in collector.modified_init_functions
+
+
+
+def test_is_zero_diff_async_sleep():
+    original_code = '''
+import time
+
+async def task():
+    time.sleep(1)
+    return "done"
+'''
+    optimized_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert not is_zero_diff(original_code, optimized_code)
+
+def test_is_zero_diff_with_equivalent_code():
+    original_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    optimized_code = '''
+import asyncio
+
+async def task():
+    """A task that does something."""
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert is_zero_diff(original_code, optimized_code)
