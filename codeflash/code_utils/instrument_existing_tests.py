@@ -397,30 +397,42 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         return node
 
     def _instrument_statement(self, stmt: ast.stmt, _node_name: str) -> tuple[ast.stmt, bool]:
-        for node in ast.walk(stmt):
+        # Optimize: avoid ast.walk if not necessary by looking for Await directly
+        found = False
+        nodes = [stmt]
+        while nodes and not found:
+            node = nodes.pop()
             if (
                 isinstance(node, ast.Await)
                 and isinstance(node.value, ast.Call)
                 and self._is_target_call(node.value)
                 and self._call_in_positions(node.value)
             ):
-                # Check if this call is in one of our target positions
-                return stmt, True  # Return original statement but signal we added env var
-
+                found = True
+                break
+            # Optimize by only adding fields that can have Await children
+            for field, value in ast.iter_fields(node):
+                if isinstance(value, list):
+                    nodes.extend(v for v in value if isinstance(v, ast.AST))
+                elif isinstance(value, ast.AST):
+                    nodes.append(value)
+        if found:
+            return stmt, True  # Return original statement but signal we added env var
         return stmt, False
 
     def _is_target_call(self, call_node: ast.Call) -> bool:
         """Check if this call node is calling our target async function."""
-        if isinstance(call_node.func, ast.Name):
-            return call_node.func.id == self.function_object.function_name
-        if isinstance(call_node.func, ast.Attribute):
-            return call_node.func.attr == self.function_object.function_name
+        # Inline check for performance
+        fn_name = self.function_object.function_name
+        func = call_node.func
+        if isinstance(func, ast.Name):
+            return func.id == fn_name
+        if isinstance(func, ast.Attribute):
+            return func.attr == fn_name
         return False
 
     def _call_in_positions(self, call_node: ast.Call) -> bool:
-        if not hasattr(call_node, "lineno") or not hasattr(call_node, "col_offset"):
-            return False
-
+        # call_node always has lineno/col_offset if it's found by ast.walk
         return node_in_call_position(call_node, self.call_positions)
 
 
