@@ -36,7 +36,6 @@ from codeflash.code_utils.code_utils import (
     diff_length,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    has_any_async_functions,
     module_name_from_file_path,
     restore_conftest,
     unified_diff_strings,
@@ -259,11 +258,6 @@ class FunctionOptimizer:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
 
-        async_code = any(
-            has_any_async_functions(code_string.code) for code_string in code_context.read_writable_code.code_strings
-        )
-        if async_code:
-            return Failure("Codeflash does not support async functions in the code to optimize.")
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
@@ -1080,6 +1074,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             n_candidates,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
+            is_async=self.function_to_optimize.is_async,
         )
         future_candidates_exp = None
 
@@ -1095,6 +1090,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 n_candidates,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
+                is_async=self.function_to_optimize.is_async,
             )
             futures.append(future_candidates_exp)
 
