@@ -11,10 +11,13 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_replacer import is_zero_diff
+from codeflash.code_utils.code_utils import unified_diff_strings
 from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE, N_CANDIDATES_LP_EFFECTIVE
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
+from codeflash.github.PrComment import FileDiffContent
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
@@ -529,8 +532,6 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,
         root_dir: Path,
-        original_line_profiler_results: str,
-        optimized_line_profiler_results: str,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -553,34 +554,22 @@ class AiServiceClient:
         - 'high','medium' or 'low' optimization impact
 
         """
+        diff_str = '\n'.join([unified_diff_strings(code1=original_code[p], code2=new_code[p], fromfile=Path(p).relative_to(root_dir).as_posix(), tofile=Path(p).relative_to(root_dir).as_posix()) for p in original_code if not is_zero_diff(original_code[p], new_code[p])])
+        code_diff = f"```diff\n{diff_str}\n```"
         logger.info("!lsp|Computing Optimization Impact…")
-        original_code_str = ""
-        new_code_str = ""
-        for p, code in original_code.items():
-            original_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
-            original_code_str += "\n"
-            original_code_str += code
-        for p, code in new_code.items():
-            new_code_str += f"```python:{Path(p).relative_to(root_dir).as_posix()}"
-            new_code_str += "\n"
-            new_code_str += code
-
         payload = {
-            "original_code": original_code_str,
-            "optimized_code": new_code_str,
+            "code_diff": code_diff,
             "existing_tests": existing_tests_source,
             "generated_tests": generated_original_test_source,
             "trace_id": function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
-            "speedup": f"{1 + float(explanation.speedup):.2f}x",
+            "speedup": f"{100 + 100*float(explanation.speedup):.2f}%",
             "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
-            "original_line_profiler_results": original_line_profiler_results,
-            "optimized_line_profiler_results": optimized_line_profiler_results,
         }
         console.rule()
         try:
