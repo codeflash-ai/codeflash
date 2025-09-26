@@ -1,7 +1,7 @@
 import difflib
 import sys
 
-from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.console import DEBUG_MODE, logger
 from codeflash.models.models import TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
 
@@ -70,18 +70,20 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
         ):
-            diff_lines = list(
-                difflib.unified_diff(
-                    original_test_result.stdout.splitlines(keepends=True),
-                    cdd_test_result.stdout.splitlines(keepends=True),
-                    fromfile="original_stdout",
-                    tofile="candidate_stdout",
-                    lineterm="",
+            if DEBUG_MODE:
+                diff_lines = list(
+                    difflib.unified_diff(
+                        original_test_result.stdout.splitlines(keepends=True),
+                        cdd_test_result.stdout.splitlines(keepends=True),
+                        fromfile="original_stdout",
+                        tofile="candidate_stdout",
+                        lineterm="",
+                    )
                 )
-            )
-            diff_output = "".join(diff_lines) if diff_lines else "No diff available"
-
-            logger.debug("Test ID %s has different stdout.\nDiff:\n%s", test_id, diff_output)
+                diff_output = "".join(diff_lines) if diff_lines else "No diff available"
+                logger.debug("Test ID %s has different stdout.\nDiff:\n%s", test_id, diff_output)
+            else:
+                logger.debug("Test ID %s has different stdout.", test_id)
             are_equal = False
             break
 
