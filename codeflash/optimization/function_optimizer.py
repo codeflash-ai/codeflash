@@ -593,6 +593,18 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                        if (
+                            original_code_baseline.async_throughput is not None
+                            and candidate_result.async_throughput is not None
+                        ):
+                            from codeflash.result.critic import throughput_gain
+                            throughput_gain_value = throughput_gain(
+                                original_throughput=original_code_baseline.async_throughput,
+                                optimized_throughput=candidate_result.async_throughput,
+                            )
+                            tree.add(f"Original async throughput: {original_code_baseline.async_throughput} executions")
+                            tree.add(f"Optimized async throughput: {candidate_result.async_throughput} executions")
+                            tree.add(f"Throughput improvement: {throughput_gain_value * 100:.1f}%")
                         line_profile_test_results = self.line_profiler_step(
                             code_context=code_context,
                             original_helper_code=original_helper_code,
@@ -628,6 +640,7 @@ class FunctionOptimizer:
                             replay_performance_gain=replay_perf_gain if self.args.benchmark else None,
                             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
                             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
+                            async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
                         # queue corresponding refined optimization for best optimization
@@ -652,6 +665,16 @@ class FunctionOptimizer:
                         )
                         tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
                         tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
+                        if (
+                            original_code_baseline.async_throughput is not None
+                            and candidate_result.async_throughput is not None
+                        ):
+                            from codeflash.result.critic import throughput_gain
+                            throughput_gain_value = throughput_gain(
+                                original_throughput=original_code_baseline.async_throughput,
+                                optimized_throughput=candidate_result.async_throughput,
+                            )
+                            tree.add(f"Throughput gain: {throughput_gain_value * 100:.1f}%")
 
                     if is_LSP_enabled():
                         lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
@@ -695,6 +718,7 @@ class FunctionOptimizer:
                 replay_performance_gain=valid_opt.replay_performance_gain,
                 winning_benchmarking_test_results=valid_opt.winning_benchmarking_test_results,
                 winning_replay_benchmarking_test_results=valid_opt.winning_replay_benchmarking_test_results,
+                async_throughput=valid_opt.async_throughput,
             )
             valid_candidates_with_shorter_code.append(new_best_opt)
             diff_lens_list.append(
