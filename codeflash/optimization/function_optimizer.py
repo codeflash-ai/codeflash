@@ -1530,7 +1530,7 @@ class FunctionOptimizer:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
         success = True
 
-test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
+        test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
         if self.function_to_optimize.is_async:
             from codeflash.code_utils.instrument_existing_tests import (
