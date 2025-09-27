@@ -29,15 +29,15 @@ def tree_to_markdown(tree: Tree, level: int = 0) -> str:
 
 
 def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str) -> str:
-    lines = ["| Test Type | Passed ✅ | Failed ❌ |", "|-----------|--------|--------|"]
+    lines = ["| Test Type | Passed ✅ |", "|-----------|--------|"]
     for test_type in TestType:
         if test_type is TestType.INIT_STATE_TEST:
             continue
         passed = report[test_type]["passed"]
-        failed = report[test_type]["failed"]
-        if passed == 0 and failed == 0:
+        # failed = report[test_type]["failed"]
+        if passed == 0:
             continue
-        lines.append(f"| {test_type.to_name()} | {passed} | {failed} |")
+        lines.append(f"| {test_type.to_name()} | {passed} |")
     table = "\n".join(lines)
     if title:
         return f"### {title}\n{table}"
