@@ -3,6 +3,10 @@ from pathlib import Path
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
 
+import tempfile
+from codeflash.code_utils.code_extractor import resolve_star_import, DottedImportCollector
+import libcst as cst
+from codeflash.models.models import FunctionParent
 
 def test_add_needed_imports_from_module0() -> None:
     src_module = '''import ast
@@ -349,3 +353,141 @@ class DbtAdapter(BaseAdapter):
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
+
+
+
+
+def test_resolve_star_import_with_all_defined():
+    """Test resolve_star_import when __all__ is explicitly defined."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        test_module = project_root / 'test_module.py'
+        
+        # Create a test module with __all__ definition
+        test_module.write_text('''
+__all__ = ['public_function', 'PublicClass']
+
+def public_function():
+    pass
+
+def _private_function():
+    pass
+
+class PublicClass:
+    pass
+
+class AnotherPublicClass:
+    """Not in __all__ so should be excluded."""
+    pass
+''')
+        
+        symbols = resolve_star_import('test_module', project_root)
+        expected_symbols = {'public_function', 'PublicClass'}
+        assert symbols == expected_symbols
+
+
+def test_resolve_star_import_without_all_defined():
+    """Test resolve_star_import when __all__ is not defined - should include all public symbols."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        test_module = project_root / 'test_module.py'
+        
+        # Create a test module without __all__ definition
+        test_module.write_text('''
+def public_func():
+    pass
+
+def _private_func():
+    pass
+
+class PublicClass:
+    pass
+
+PUBLIC_VAR = 42
+_private_var = 'secret'
+''')
+        
+        symbols = resolve_star_import('test_module', project_root)
+        expected_symbols = {'public_func', 'PublicClass', 'PUBLIC_VAR'}
+        assert symbols == expected_symbols
+
+
+def test_resolve_star_import_nonexistent_module():
+    """Test resolve_star_import with non-existent module - should return empty set."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        
+        symbols = resolve_star_import('nonexistent_module', project_root)
+        assert symbols == set()
+
+
+def test_dotted_import_collector_skips_star_imports():
+    """Test that DottedImportCollector correctly skips star imports."""
+    code_with_star_import = '''
+from typing import *
+from pathlib import Path
+from collections import defaultdict
+import os
+'''
+    
+    module = cst.parse_module(code_with_star_import)
+    collector = DottedImportCollector()
+    module.visit(collector)
+    
+    # Should collect regular imports but skip the star import
+    expected_imports = {'collections.defaultdict', 'os', 'pathlib.Path'}
+    assert collector.imports == expected_imports
+
+
+def test_add_needed_imports_with_star_import_resolution():
+    """Test add_needed_imports_from_module correctly handles star imports by resolving them."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        
+        # Create a source module that exports symbols
+        src_module = project_root / 'source_module.py'
+        src_module.write_text('''
+__all__ = ['UtilFunction', 'HelperClass']
+
+def UtilFunction():
+    pass
+
+class HelperClass:
+    pass
+''')
+        
+        # Create source code that uses star import
+        src_code = '''
+from source_module import *
+
+def my_function():
+    helper = HelperClass()
+    UtilFunction()
+    return helper
+'''
+        
+        # Destination code that needs the imports resolved
+        dst_code = '''
+def my_function():
+    helper = HelperClass()
+    UtilFunction()
+    return helper
+'''
+        
+        src_path = project_root / 'src.py'
+        dst_path = project_root / 'dst.py'
+        src_path.write_text(src_code)
+        
+        result = add_needed_imports_from_module(
+            src_code, dst_code, src_path, dst_path, project_root
+        )
+        
+        # The result should have individual imports instead of star import
+        expected_result = '''from source_module import HelperClass, UtilFunction
+
+def my_function():
+    helper = HelperClass()
+    UtilFunction()
+    return helper
+'''
+        assert result == expected_result
