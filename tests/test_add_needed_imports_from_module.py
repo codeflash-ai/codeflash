@@ -435,14 +435,8 @@ import os
     module.visit(collector)
     
     # Should collect regular imports but skip the star import
-    expected_imports = {
-        'pathlib.Path',
-        'collections.defaultdict',
-        'os'
-    }
+    expected_imports = {'collections.defaultdict', 'os', 'pathlib.Path'}
     assert collector.imports == expected_imports
-    # Ensure the star import from typing is not collected
-    assert not any('typing' in imp for imp in collector.imports)
 
 
 def test_add_needed_imports_with_star_import_resolution():
@@ -489,6 +483,11 @@ def my_function():
         )
         
         # The result should have individual imports instead of star import
-        assert 'from source_module import' in result
-        assert 'HelperClass' in result and 'UtilFunction' in result
-        assert 'from source_module import *' not in result
+        expected_result = '''from source_module import HelperClass, UtilFunction
+
+def my_function():
+    helper = HelperClass()
+    UtilFunction()
+    return helper
+'''
+        assert result == expected_result
