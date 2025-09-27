@@ -179,6 +179,7 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
+    *,
     enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
@@ -233,7 +234,13 @@ def get_functions_to_optimize(
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
-            functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions, enable_async=enable_async
+            functions,
+            test_cfg.tests_root,
+            ignore_paths,
+            project_root,
+            module_root,
+            previous_checkpoint_functions,
+            enable_async=enable_async,
         )
 
         logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
@@ -568,7 +575,8 @@ def filter_functions(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
-    disable_logs: bool = False,  # noqa: FBT001, FBT002
+    *,
+    disable_logs: bool = False,
     enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
