@@ -237,7 +237,7 @@ def remove_functions_from_generated_tests(
 
 
 # Pre-compile all function removal regexes upfront for efficiency.
-def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.Pattern]:
+def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.Pattern[str]]:
     return [
         re.compile(
             rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?(async\s+)?def\s+{re.escape(func)}\(.*?\):.*?(?=\n(async\s+)?def\s|$)",
