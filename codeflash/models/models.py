@@ -253,7 +253,7 @@ class CodeStringsMarkdown(BaseModel):
 
 
 class CodeOptimizationContext(BaseModel):
-    testgen_context_code: str = ""
+    testgen_context: CodeStringsMarkdown
     read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
