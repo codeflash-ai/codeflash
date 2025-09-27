@@ -106,7 +106,7 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | Origin
     if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
         return True
     # If one or more tests passed, check if least one of them was a successful REPLAY_TEST
-    return bool(pass_count >= 1 and report[models.TestType.REPLAY_TEST]["passed"] >= 1) # type: ignore  # noqa: PGH003
+    return bool(pass_count >= 1 and report[models.TestType.REPLAY_TEST]["passed"] >= 1)  # type: ignore  # noqa: PGH003
 
 
 def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:
