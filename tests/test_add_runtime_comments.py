@@ -1903,3 +1903,209 @@ def test_bubble_sort(input, expected_output):
         # Check that comments were added
         modified_source = result.generated_tests[0].generated_original_test_source
         assert modified_source == expected
+
+    def test_async_basic_runtime_comment_addition(self, test_config):
+        """Test basic functionality of adding runtime comments to async test functions."""
+        os.chdir(test_config.project_root_path)
+        test_source = """async def test_async_bubble_sort():
+    codeflash_output = await async_bubble_sort([3, 1, 2])
+    assert codeflash_output == [1, 2, 3]
+"""
+
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py",
+        )
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        original_invocation = self.create_test_invocation("test_async_bubble_sort", 500_000, iteration_id='0')  # 500μs
+        optimized_invocation = self.create_test_invocation("test_async_bubble_sort", 300_000, iteration_id='0')  # 300μs
+
+        original_test_results.add(original_invocation)
+        optimized_test_results.add(optimized_invocation)
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        modified_source = result.generated_tests[0].generated_original_test_source
+        assert "# 500μs -> 300μs" in modified_source
+        assert "codeflash_output = await async_bubble_sort([3, 1, 2]) # 500μs -> 300μs" in modified_source
+
+    def test_async_multiple_test_functions(self, test_config):
+        os.chdir(test_config.project_root_path)
+        test_source = """async def test_async_bubble_sort():
+    codeflash_output = await async_quick_sort([3, 1, 2])
+    assert codeflash_output == [1, 2, 3]
+
+async def test_async_quick_sort():
+    codeflash_output = await async_quick_sort([5, 2, 8])
+    assert codeflash_output == [2, 5, 8]
+
+def helper_function():
+    return "not a test"
+"""
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
+        )
+
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        original_test_results.add(self.create_test_invocation("test_async_bubble_sort", 500_000, iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_async_quick_sort", 800_000, iteration_id='0'))
+
+        optimized_test_results.add(self.create_test_invocation("test_async_bubble_sort", 300_000, iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_async_quick_sort", 600_000, iteration_id='0'))
+
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        modified_source = result.generated_tests[0].generated_original_test_source
+
+        assert "# 500μs -> 300μs" in modified_source
+        assert "# 800μs -> 600μs" in modified_source
+        assert (
+            "helper_function():" in modified_source
+            and "# " not in modified_source.split("helper_function():")[1].split("\n")[0]
+        )
+
+    def test_async_class_method(self, test_config):
+        os.chdir(test_config.project_root_path)
+        test_source = '''class TestAsyncClass:
+    async def test_async_function(self):
+        codeflash_output = await some_async_function()
+        assert codeflash_output == expected
+'''
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
+        )
+
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        invocation_id = InvocationId(
+            test_module_path="tests.test_module__unit_test_0",
+            test_class_name="TestAsyncClass",
+            test_function_name="test_async_function",
+            function_getting_tested="some_async_function",
+            iteration_id="0",
+        )
+
+        original_runtimes = {invocation_id: [2000000000]}  # 2s in nanoseconds
+        optimized_runtimes = {invocation_id: [1000000000]} # 1s in nanoseconds
+
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        expected_source = '''class TestAsyncClass:
+    async def test_async_function(self):
+        codeflash_output = await some_async_function() # 2.00s -> 1.00s (100% faster)
+        assert codeflash_output == expected
+'''
+
+        assert len(result.generated_tests) == 1
+        assert result.generated_tests[0].generated_original_test_source == expected_source
+
+    def test_async_mixed_sync_and_async_functions(self, test_config):
+        os.chdir(test_config.project_root_path)
+        test_source = """def test_sync_function():
+    codeflash_output = sync_function([1, 2, 3])
+    assert codeflash_output == [1, 2, 3]
+
+async def test_async_function():
+    codeflash_output = await async_function([4, 5, 6])
+    assert codeflash_output == [4, 5, 6]
+
+def test_another_sync():
+    result = another_sync_func()
+    assert result is True
+"""
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
+        )
+
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        # Add test invocations for all test functions
+        original_test_results.add(self.create_test_invocation("test_sync_function", 400_000, iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_async_function", 600_000, iteration_id='0'))
+        original_test_results.add(self.create_test_invocation("test_another_sync", 200_000, iteration_id='0'))
+
+        optimized_test_results.add(self.create_test_invocation("test_sync_function", 200_000, iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_async_function", 300_000, iteration_id='0'))
+        optimized_test_results.add(self.create_test_invocation("test_another_sync", 100_000, iteration_id='0'))
+
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        modified_source = result.generated_tests[0].generated_original_test_source
+
+        assert "# 400μs -> 200μs" in modified_source
+        assert "# 600μs -> 300μs" in modified_source
+        assert "# 200μs -> 100μs" in modified_source
+
+        assert "async def test_async_function():" in modified_source
+        assert "await async_function([4, 5, 6])" in modified_source
+
+    def test_async_complex_await_patterns(self, test_config):
+        os.chdir(test_config.project_root_path)
+        test_source = """async def test_complex_async():
+    # Multiple await calls
+    result1 = await async_func1()
+    codeflash_output = await async_func2(result1)
+    result3 = await async_func3(codeflash_output)
+    assert result3 == expected
+    
+    # Await in context manager
+    async with async_context() as ctx:
+        final_result = await ctx.process()
+        assert final_result is not None
+"""
+        generated_test = GeneratedTests(
+            generated_original_test_source=test_source,
+            instrumented_behavior_test_source="",
+            instrumented_perf_test_source="",
+            behavior_file_path=test_config.tests_root / "test_module__unit_test_0.py",
+            perf_file_path=test_config.tests_root / "test_perf.py"
+        )
+
+        generated_tests = GeneratedTestsList(generated_tests=[generated_test])
+
+        original_test_results = TestResults()
+        optimized_test_results = TestResults()
+
+        original_test_results.add(self.create_test_invocation("test_complex_async", 750_000, iteration_id='1'))  # 750μs
+        optimized_test_results.add(self.create_test_invocation("test_complex_async", 450_000, iteration_id='1'))  # 450μs
+
+        original_runtimes = original_test_results.usable_runtime_data_by_test_case()
+        optimized_runtimes = optimized_test_results.usable_runtime_data_by_test_case()
+
+        result = add_runtime_comments_to_generated_tests(generated_tests, original_runtimes, optimized_runtimes)
+
+        modified_source = result.generated_tests[0].generated_original_test_source
+        assert "# 750μs -> 450μs" in modified_source

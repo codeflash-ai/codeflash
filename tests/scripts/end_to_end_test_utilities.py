@@ -27,6 +27,7 @@ class TestConfig:
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
+    enable_async: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -132,6 +133,8 @@ def build_command(
         )
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
+    if config.enable_async:
+        base_command.append("--async")
     return base_command
 
 

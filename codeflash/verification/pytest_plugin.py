@@ -450,3 +450,26 @@ class PytestLoops:
             metafunc.parametrize(
                 "__pytest_loop_step_number", range(count), indirect=True, ids=make_progress_id, scope=scope
             )
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_runtest_setup(self, item: pytest.Item) -> None:
+        """Set test context environment variables before each test."""
+        test_module_name = item.module.__name__ if item.module else "unknown_module"
+
+        test_class_name = None
+        if item.cls:
+            test_class_name = item.cls.__name__
+
+        test_function_name = item.name
+        if "[" in test_function_name:
+            test_function_name = test_function_name.split("[", 1)[0]
+
+        os.environ["CODEFLASH_TEST_MODULE"] = test_module_name
+        os.environ["CODEFLASH_TEST_CLASS"] = test_class_name or ""
+        os.environ["CODEFLASH_TEST_FUNCTION"] = test_function_name
+
+    @pytest.hookimpl(trylast=True)
+    def pytest_runtest_teardown(self, item: pytest.Item) -> None:  # noqa: ARG002
+        """Clean up test context environment variables after each test."""
+        for var in ["CODEFLASH_TEST_MODULE", "CODEFLASH_TEST_CLASS", "CODEFLASH_TEST_FUNCTION"]:
+            os.environ.pop(var, None)
