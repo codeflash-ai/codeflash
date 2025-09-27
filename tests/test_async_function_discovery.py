@@ -236,6 +236,7 @@ class MixedClass:
         ignore_paths=[],
         project_root=file_path.parent,
         module_root=file_path.parent,
+        enable_async=True,
     )
     
     assert functions_count == 4
@@ -247,6 +248,56 @@ class MixedClass:
     assert "sync_method" in function_names
     
     assert "async_func_two" not in function_names
+
+
+def test_no_async_functions_finding(temp_dir):
+    mixed_code = """
+async def async_func_one():
+    return await operation_one()
+
+def sync_func_one():
+    return operation_one()
+
+async def async_func_two():
+    print("no return")
+
+class MixedClass:
+    async def async_method(self):
+        return await self.operation()
+    
+    def sync_method(self):
+        return self.operation()
+"""
+    
+    file_path = temp_dir / "test_file.py"
+    file_path.write_text(mixed_code)
+    
+    test_config = TestConfig(
+        tests_root="tests",
+        project_root_path=".",
+        test_framework="pytest",
+        tests_project_rootdir=Path()
+    )
+    
+    functions, functions_count, _ = get_functions_to_optimize(
+        optimize_all=None,
+        replay_test=None,
+        file=file_path,
+        only_get_this_function=None,
+        test_cfg=test_config,
+        ignore_paths=[],
+        project_root=file_path.parent,
+        module_root=file_path.parent,
+        enable_async=False,
+    )
+    
+    assert functions_count == 2
+    
+    function_names = [fn.function_name for fn in functions[file_path]]
+    assert "sync_func_one" in function_names
+    assert "sync_method" in function_names
+    assert "async_func_one" not in function_names
+    assert "async_method" not in function_names
 
 
 def test_async_function_parents(temp_dir):

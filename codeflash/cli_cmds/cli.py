@@ -96,6 +96,9 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
+    parser.add_argument(
+        "--async", default=False, action="store_true", help="Enable optimization of async functions. By default, async functions are excluded from optimization."
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
