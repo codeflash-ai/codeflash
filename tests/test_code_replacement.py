@@ -1708,7 +1708,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -1784,7 +1783,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 print("Hello world")
 def some_fn():
     a=np.zeros(10)
@@ -1863,7 +1861,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -1941,7 +1938,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=2
 print("Hello world")
 def some_fn():
@@ -2020,7 +2016,6 @@ print("Hello world")
 """
     expected_code = """import numpy as np
 
-print("Hello world")
 a=3
 print("Hello world")
 def some_fn():
@@ -2107,7 +2102,6 @@ print("Hello world")
 
 a = 6
 
-print("Hello world")
 if 2<3:
     a=4
 else:
