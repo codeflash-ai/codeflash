@@ -1529,9 +1529,7 @@ class FunctionOptimizer:
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
         if self.function_to_optimize.is_async:
-            from codeflash.code_utils.instrument_existing_tests import (
-                instrument_source_module_with_async_decorators,
-            )
+            from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
 
             success, instrumented_source = instrument_source_module_with_async_decorators(
                 self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
