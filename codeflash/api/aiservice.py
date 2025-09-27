@@ -530,6 +530,7 @@ class AiServiceClient:
         coverage_message: str,
         replay_tests: str,
         root_dir: Path,
+        concolic_tests: str,
     ) -> str:
         """Compute the optimization impact of current Pull Request.
 
@@ -543,6 +544,7 @@ class AiServiceClient:
         coverage_message: str -> coverage information
         replay_tests: str -> replay test table
         root_dir: Path -> path of git directory
+        concolic_tests: str -> concolic_tests (not used)
 
         Returns:
         -------
@@ -576,6 +578,7 @@ class AiServiceClient:
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
         }
+        logger.debug(f"unused {type(concolic_tests)}")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
