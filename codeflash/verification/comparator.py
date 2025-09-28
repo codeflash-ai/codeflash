@@ -1,4 +1,3 @@
-# ruff: noqa: PGH003
 import array
 import ast
 import datetime
@@ -8,6 +7,7 @@ import math
 import re
 import types
 from collections import ChainMap, OrderedDict, deque
+from importlib.util import find_spec
 from typing import Any
 
 import sentry_sdk
@@ -15,51 +15,13 @@ import sentry_sdk
 from codeflash.cli_cmds.console import logger
 from codeflash.picklepatch.pickle_placeholder import PicklePlaceholderAccessError
 
-try:
-    import numpy as np
-
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
-try:
-    import sqlalchemy  # type: ignore
-
-    HAS_SQLALCHEMY = True
-except ImportError:
-    HAS_SQLALCHEMY = False
-try:
-    import scipy  # type: ignore
-
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
-
-try:
-    import pandas  # type: ignore  # noqa: ICN001
-
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
-
-try:
-    import pyrsistent  # type: ignore
-
-    HAS_PYRSISTENT = True
-except ImportError:
-    HAS_PYRSISTENT = False
-try:
-    import torch  # type: ignore
-
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-try:
-    import jax  # type: ignore
-    import jax.numpy as jnp  # type: ignore
-
-    HAS_JAX = True
-except ImportError:
-    HAS_JAX = False
+HAS_NUMPY = find_spec("numpy") is not None
+HAS_SQLALCHEMY = find_spec("sqlalchemy") is not None
+HAS_SCIPY = find_spec("scipy") is not None
+HAS_PANDAS = find_spec("pandas") is not None
+HAS_PYRSISTENT = find_spec("pyrsistent") is not None
+HAS_TORCH = find_spec("torch") is not None
+HAS_JAX = find_spec("jax") is not None
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
@@ -114,7 +76,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
             return comparator(orig_dict, new_dict, superset_obj)
-
+        if HAS_JAX:
+            import jax  # type: ignore  # noqa: PGH003
+            import jax.numpy as jnp  # type: ignore  # noqa: PGH003
         # Handle JAX arrays first to avoid boolean context errors in other conditions
         if HAS_JAX and isinstance(orig, jax.Array):
             if orig.dtype != new.dtype:
@@ -123,6 +87,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return False
             return bool(jnp.allclose(orig, new, equal_nan=True))
 
+        if HAS_SQLALCHEMY:
+            import sqlalchemy  # type: ignore  # noqa: PGH003
         if HAS_SQLALCHEMY:
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
@@ -138,6 +104,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
+        if HAS_SCIPY:
+            import scipy  # type: ignore  # noqa: PGH003
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
         if isinstance(orig, dict) and not (HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix)):
             if superset_obj:
@@ -151,6 +119,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
             return True
 
+        if HAS_NUMPY:
+            import numpy as np  # type: ignore  # noqa: PGH003
         if HAS_NUMPY and isinstance(orig, np.ndarray):
             if orig.dtype != new.dtype:
                 return False
@@ -180,6 +150,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return False
             return (orig != new).nnz == 0
 
+        if HAS_PANDAS:
+            import pandas  # type: ignore  # noqa: ICN001, PGH003
         if HAS_PANDAS and isinstance(
             orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
         ):
@@ -209,6 +181,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         except Exception:  # noqa: S110
             pass
 
+        if HAS_TORCH:
+            import torch  # type: ignore  # noqa: PGH003
         if HAS_TORCH and isinstance(orig, torch.Tensor):
             if orig.dtype != new.dtype:
                 return False
@@ -219,7 +193,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if orig.device != new.device:
                 return False
             return torch.allclose(orig, new, equal_nan=True)
-
+        if HAS_PYRSISTENT:
+            import pyrsistent  # type: ignore  # noqa: PGH003
         if HAS_PYRSISTENT and isinstance(
             orig,
             (
