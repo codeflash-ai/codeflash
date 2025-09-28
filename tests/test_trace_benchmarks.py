@@ -282,7 +282,9 @@ def test_trace_benchmark_decorator() -> None:
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
         # Close connection
+        cursor.close()
         conn.close()
+        time.sleep(2)
     finally:
         # cleanup
         output_file.unlink(missing_ok=True)
