@@ -394,7 +394,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
@@ -409,7 +409,7 @@ def test_sort():
         assert new_perf_test is not None
         assert new_perf_test.replace('"', "'") == expected_perfonly.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         with test_path.open("w") as f:
@@ -648,11 +648,11 @@ def test_sort_parametrized(input, expected_output):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perfonly.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -921,7 +921,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -930,7 +930,7 @@ def test_sort_parametrized_loop(input, expected_output):
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1276,12 +1276,12 @@ def test_sort():
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1585,11 +1585,11 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -1842,13 +1842,13 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         assert new_test_perf is not None
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         #
@@ -2108,11 +2108,11 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # # Overwrite old test with new instrumented test
@@ -2367,11 +2367,11 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -2668,7 +2668,7 @@ def test_class_name_A_function_name():
     assert success
     assert new_test is not None
     assert new_test.replace('"', "'") == expected.format(
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
     ).replace('"', "'")
 
@@ -2739,7 +2739,7 @@ def test_common_tags_1():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2802,7 +2802,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2879,7 +2879,7 @@ def test_sort():
         assert success
         formatted_expected = expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         )
         assert new_test is not None
         assert new_test.replace('"', "'") == formatted_expected.replace('"', "'")
@@ -2887,7 +2887,7 @@ def test_sort():
         test_path.unlink(missing_ok=True)
 
 
-def test_class_method_instrumentation() -> None:
+def test_class_method_instrumentation(tmp_path: Path) -> None:
     code = """from codeflash.optimization.optimizer import Optimizer
 def test_code_replacement10() -> None:
     get_code_output = '''random code'''
@@ -2957,24 +2957,24 @@ def test_code_replacement10() -> None:
 """
     )
 
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        func = FunctionToOptimize(
-            function_name="get_code_optimization_context",
-            parents=[FunctionParent("Optimizer", "ClassDef")],
-            file_path=Path(f.name),
-        )
-        original_cwd = Path.cwd()
-        run_cwd = Path(__file__).parent.parent.resolve()
-        os.chdir(run_cwd)
-        success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(22, 28), CodePosition(28, 28)], func, Path(f.name).parent, "pytest"
-        )
-        os.chdir(original_cwd)
+    test_file_path = tmp_path / "test_class_method_instrumentation.py"
+    test_file_path.write_text(code, encoding="utf-8")
+    
+    func = FunctionToOptimize(
+        function_name="get_code_optimization_context",
+        parents=[FunctionParent("Optimizer", "ClassDef")],
+        file_path=test_file_path,
+    )
+    original_cwd = Path.cwd()
+    run_cwd = Path(__file__).parent.parent.resolve()
+    os.chdir(run_cwd)
+    success, new_test = inject_profiling_into_existing_test(
+        test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent, "pytest"
+    )
+    os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.replace('"', "'").format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=test_file_path.name, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     )
 
 
@@ -3039,7 +3039,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         # Overwrite old test with new instrumented test
         with test_path.open("w") as f:
@@ -3158,7 +3158,7 @@ class TestPigLatin(unittest.TestCase):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_time_correction_instrumentation_unittest_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         # Overwrite old test with new instrumented test
         with test_path.open("w") as f:

@@ -9,6 +9,7 @@ from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import validate_and_format_benchmark_table
+import time
 
 
 def test_trace_benchmarks() -> None:
@@ -282,7 +283,7 @@ def test_trace_benchmark_decorator() -> None:
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
         # Close connection
         conn.close()
-
     finally:
         # cleanup
         output_file.unlink(missing_ok=True)
+        time.sleep(1)

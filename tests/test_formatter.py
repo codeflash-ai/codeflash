@@ -193,21 +193,19 @@ def foo():
     assert actual == expected
 
 
-def test_formatter_error(temp_dir):
+def test_formatter_error(tmp_path: Path):
     original_code = """
 import os
 import sys
 def foo():
     return os.path.join(sys.path[0], 'bar')"""
-    with tempfile.NamedTemporaryFile("w") as tmp:
-        tmp.write(original_code)
-        tmp.flush()
-        tmp_path = tmp.name
-        try:
-            new_code = format_code(formatter_cmds=["exit 1"], path=Path(tmp_path), exit_on_failure=False)
-            assert new_code == original_code
-        except Exception as e:
-            assert False, f"Shouldn't throw an exception even if the formatter is not found: {e}"
+    temp_file = tmp_path / "test_formatter_error.py"
+    temp_file.write_text(original_code, encoding="utf-8")
+    try:
+        new_code = format_code(formatter_cmds=["exit 1"], path=temp_file, exit_on_failure=False)
+        assert new_code == original_code
+    except Exception as e:
+        assert False, f"Shouldn't throw an exception even if the formatter is not found: {e}"
 
 
 def _run_formatting_test(source_code: str, should_content_change: bool, expected = None, optimized_function: str = ""):

@@ -47,12 +47,12 @@ def generate_candidates(source_code_path: Path) -> set[str]:
 
     last_added = source_code_path.name
     while current_path != current_path.parent:
-        candidate_path = str(Path(current_path.name) / last_added)
+        candidate_path = (Path(current_path.name) / last_added).as_posix()
         candidates.add(candidate_path)
         last_added = candidate_path
         current_path = current_path.parent
 
-    candidates.add(str(source_code_path))
+    candidates.add(source_code_path.as_posix())
     return candidates
 
 

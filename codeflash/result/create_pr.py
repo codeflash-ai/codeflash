@@ -85,7 +85,7 @@ def existing_tests_source_for(
             ):
                 print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-                print_filename = filename.relative_to(tests_root)
+                print_filename = filename.relative_to(tests_root).as_posix()
                 greater = (
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
