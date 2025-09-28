@@ -2974,7 +2974,7 @@ def test_code_replacement10() -> None:
     os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.replace('"', "'").format(
-        module_path=test_file_path.stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+        module_path=test_file_path.name, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     )
 
 
