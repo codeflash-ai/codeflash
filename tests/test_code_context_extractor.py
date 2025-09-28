@@ -266,7 +266,7 @@ def sort_from_another_file(arr):
     assert hashing_context.strip() == expected_hashing_context.strip()
 
 
-def test_flavio_typed_code_helper() -> None:
+def test_flavio_typed_code_helper(tmp_path: Path) -> None:
     code = '''
 
 _P = ParamSpec("_P")
@@ -432,33 +432,32 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
-        opt = Optimizer(
-            Namespace(
-                project_root=file_path.parent.resolve(),
-                disable_telemetry=True,
-                tests_root="tests",
-                test_framework="pytest",
-                pytest_cmd="pytest",
-                experiment_id=None,
-                test_project_root=Path().resolve(),
-            )
+    # Create a temporary Python file using pytest's tmp_path fixture
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
         )
-        function_to_optimize = FunctionToOptimize(
-            function_name="__call__",
-            file_path=file_path,
-            parents=[FunctionParent(name="_PersistentCache", type="ClassDef")],
-            starting_line=None,
-            ending_line=None,
-        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="__call__",
+        file_path=file_path,
+        parents=[FunctionParent(name="_PersistentCache", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
 
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
-        read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
-        hashing_context = code_ctx.hashing_code_context
-        expected_read_write_context = f"""
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+    read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
+    hashing_context = code_ctx.hashing_code_context
+    expected_read_write_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
@@ -556,7 +555,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         )
 ```
 """
-        expected_read_only_context = f'''
+    expected_read_only_context = f'''
 ```python:{file_path.relative_to(opt.args.project_root)}
 _P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
@@ -612,7 +611,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
     __backend__: _CacheBackendT
 ```
 '''
-        expected_hashing_context = f"""
+    expected_hashing_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
@@ -649,9 +648,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         return self.__backend__.get_cache_or_call(func=self.__wrapped__, args=args, kwargs=kwargs, lifespan=self.__duration__)
 ```
 """
-        assert read_write_context.markdown.strip() == expected_read_write_context.strip()
-        assert read_only_context.strip() == expected_read_only_context.strip()
-        assert hashing_context.strip() == expected_hashing_context.strip()
+    assert read_write_context.markdown.strip() == expected_read_write_context.strip()
+    assert read_only_context.strip() == expected_read_only_context.strip()
+    assert hashing_context.strip() == expected_hashing_context.strip()
 
 
 def test_example_class() -> None:
