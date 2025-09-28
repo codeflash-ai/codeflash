@@ -18,6 +18,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, TestFile, TestFiles, TestingMode, TestsInFile, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.equivalence import compare_test_results
+import time
 
 try:
     import sqlalchemy
@@ -156,6 +157,9 @@ def test_picklepatch_with_database_connection():
     with pytest.raises(PicklePlaceholderAccessError):
         reloaded["connection"].execute("SELECT 1")
 
+    cursor.close()
+    conn.close()    
+
 
 def test_picklepatch_with_generator():
     """Test that a data structure containing a generator is replaced by
@@ -290,6 +294,7 @@ def test_run_and_parse_picklepatch() -> None:
         
         # Close the connection to allow file cleanup on Windows
         conn.close()
+        time.sleep(1)
 
         # Handle the case where function runs too fast to be measured
         unused_socket_results = function_to_results["code_to_optimize.bubble_sort_picklepatch_test_unused_socket.bubble_sort_with_unused_socket"]
@@ -326,7 +331,9 @@ def test_run_and_parse_picklepatch() -> None:
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
-        conn.close()
+            conn.close()
+            
+            time.sleep(1)
 
         # Generate replay test
         generate_replay_test(output_file, replay_tests_dir)

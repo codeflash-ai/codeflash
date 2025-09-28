@@ -29,20 +29,25 @@ def get_next_arg_and_return(
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
     limit = num_to_get
+    
+    normalized_file_path = Path(file_path).as_posix()
 
     if class_name is not None:
         cursor = cur.execute(
             "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = ? LIMIT ?",
-            (benchmark_function_name, function_name, file_path, class_name, limit),
+            (benchmark_function_name, function_name, normalized_file_path, class_name, limit),
         )
     else:
         cursor = cur.execute(
             "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = '' LIMIT ?",
-            (benchmark_function_name, function_name, file_path, limit),
+            (benchmark_function_name, function_name, normalized_file_path, limit),
         )
 
-    while (val := cursor.fetchone()) is not None:
-        yield val[9], val[10]  # pickled_args, pickled_kwargs
+    try:
+        while (val := cursor.fetchone()) is not None:
+            yield val[9], val[10]  # pickled_args, pickled_kwargs
+    finally:
+        db.close()
 
 
 def get_function_alias(module: str, function_name: str) -> str:
