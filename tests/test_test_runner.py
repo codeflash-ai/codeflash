@@ -9,7 +9,7 @@ from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
 
 
-def test_unittest_runner(tmp_path: Path):
+def test_unittest_runner():
     code = """import time
 import gc
 import unittest
@@ -34,23 +34,24 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         tests_project_rootdir=cur_dir_path.parent,
     )
 
-    test_file_path = tmp_path / "test_unittest_runner.py"
-    test_file_path.write_text(code, encoding="utf-8")
-    test_files = TestFiles(
-        test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
-    )
-    result_file, process, _, _ = run_behavioral_tests(
-        test_files,
-        test_framework=config.test_framework,
-        cwd=Path(config.project_root_path),
-        test_env=os.environ.copy(),
-    )
-    results = parse_test_xml(result_file, test_files, config, process)
+    with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
+        test_file_path = Path(temp_dir) / "test_xx.py"
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
+        )
+        test_file_path.write_text(code, encoding="utf-8")
+        result_file, process, _, _ = run_behavioral_tests(
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=os.environ.copy(),
+        )
+        results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
     result_file.unlink(missing_ok=True)
 
 
-def test_pytest_runner(tmp_path: Path):
+def test_pytest_runner():
     code = """
 def sorter(arr):
     arr.sort()
@@ -77,22 +78,23 @@ def test_sort():
     else:
         test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
 
-    test_file_path = tmp_path / "test_pytest_runner.py"
-    test_file_path.write_text(code, encoding="utf-8")
-    test_files = TestFiles(
-        test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
-    )
-    result_file, process, _, _ = run_behavioral_tests(
-        test_files,
-        test_framework=config.test_framework,
-        cwd=Path(config.project_root_path),
-        test_env=test_env,
-        pytest_timeout=1,
-        pytest_target_runtime_seconds=1,
-    )
-    results = parse_test_xml(
-        test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
-    )
+    with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
+        test_file_path = Path(temp_dir) / "test_xx.py"
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
+        )
+        test_file_path.write_text(code, encoding="utf-8")
+        result_file, process, _, _ = run_behavioral_tests(
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=test_env,
+            pytest_timeout=1,
+            pytest_target_runtime_seconds=1,
+        )
+        results = parse_test_xml(
+            test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
+        )
     assert results[0].did_pass, "Test did not pass as expected"
     result_file.unlink(missing_ok=True)
 
@@ -123,22 +125,23 @@ def test_sort():
     else:
         test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
 
-    test_file_path2 = tmp_path / "test_pytest_runner_import_error.py"
-    test_file_path2.write_text(code, encoding="utf-8")
-    test_files = TestFiles(
-        test_files=[TestFile(instrumented_behavior_file_path=test_file_path2, test_type=TestType.EXISTING_UNIT_TEST)]
-    )
-    result_file, process, _, _ = run_behavioral_tests(
-        test_files,
-        test_framework=config.test_framework,
-        cwd=Path(config.project_root_path),
-        test_env=test_env,
-        pytest_timeout=1,
-        pytest_target_runtime_seconds=1,
-    )
-    results = parse_test_xml(
-        test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
-    )
+    with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
+        test_file_path = Path(temp_dir) / "test_xx.py"
+        test_files = TestFiles(
+            test_files=[TestFile(instrumented_behavior_file_path=test_file_path, test_type=TestType.EXISTING_UNIT_TEST)]
+        )
+        test_file_path.write_text(code, encoding="utf-8")
+        result_file, process, _, _ = run_behavioral_tests(
+            test_files,
+            test_framework=config.test_framework,
+            cwd=Path(config.project_root_path),
+            test_env=test_env,
+            pytest_timeout=1,
+            pytest_target_runtime_seconds=1,
+        )
+        results = parse_test_xml(
+            test_xml_file_path=result_file, test_files=test_files, test_config=config, run_result=process
+        )
     match = ImportErrorPattern.search(process.stdout).group()
     assert match == "ModuleNotFoundError: No module named 'torch_does_not_exist'"
     result_file.unlink(missing_ok=True)
