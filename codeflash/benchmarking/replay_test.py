@@ -29,7 +29,7 @@ def get_next_arg_and_return(
     db = sqlite3.connect(trace_file)
     cur = db.cursor()
     limit = num_to_get
-    
+
     normalized_file_path = Path(file_path).as_posix()
 
     if class_name is not None:

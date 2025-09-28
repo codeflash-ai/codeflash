@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import sys
 import time
 import uuid
 from pathlib import Path
