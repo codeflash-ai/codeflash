@@ -46,13 +46,13 @@ class CoverageUtils:
 
         reporter = JsonReporter(cov)
         temp_json_file = database_path.with_suffix(".report.json")
-        with temp_json_file.open("w") as f:
+        with temp_json_file.open("w", encoding="utf-8") as f:
             try:
                 reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
             except NoDataError:
                 sentry_sdk.capture_message(f"No coverage data found for {function_name} in {source_code_path}")
                 return CoverageUtils.create_empty(source_code_path, function_name, code_context)
-        with temp_json_file.open() as f:
+        with temp_json_file.open(encoding="utf-8") as f:
             original_coverage_data = json.load(f)
 
         coverage_data, status = CoverageUtils._parse_coverage_file(temp_json_file, source_code_path)
@@ -92,7 +92,7 @@ class CoverageUtils:
     def _parse_coverage_file(
         coverage_file_path: Path, source_code_path: Path
     ) -> tuple[dict[str, dict[str, Any]], CoverageStatus]:
-        with coverage_file_path.open() as f:
+        with coverage_file_path.open(encoding="utf-8") as f:
             coverage_data = json.load(f)
 
         candidates = generate_candidates(source_code_path)
