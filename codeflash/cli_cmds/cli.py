@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
@@ -144,6 +145,14 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
         if env_utils.is_ci():
             args.no_pr = True
+
+    if getattr(args, "async", False) and importlib.util.find_spec("pytest_asyncio") is None:
+        logger.warning(
+            "Warning: The --async flag requires pytest-asyncio to be installed.\n"
+            "Please install it using:\n"
+            '  pip install "codeflash[asyncio]"'
+        )
+        raise SystemExit(1)
 
     return args
 
