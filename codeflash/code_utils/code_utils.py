@@ -173,14 +173,14 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
 
 def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
     try:
-        relative_path = file_path.relative_to(project_root_path)
+        relative_path = file_path.resolve().relative_to(project_root_path.resolve())
         return relative_path.with_suffix("").as_posix().replace("/", ".")
     except ValueError:
         if traverse_up:
             parent = file_path.parent
             while parent not in (project_root_path, parent.parent):
                 try:
-                    relative_path = file_path.relative_to(parent)
+                    relative_path = file_path.resolve().relative_to(parent.resolve())
                     return relative_path.with_suffix("").as_posix().replace("/", ".")
                 except ValueError:
                     parent = parent.parent

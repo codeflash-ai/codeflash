@@ -334,7 +334,7 @@ def extract_code_markdown_context_from_files(
                         helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())
                     ),
                 )
-            code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
+            code_string_context = CodeString(code=code_context, file_path=file_path.resolve().relative_to(project_root_path.resolve()))
             code_context_markdown.code_strings.append(code_string_context)
     # Extract code from file paths containing helpers of helpers
     for file_path, helper_function_sources in helpers_of_helpers_no_overlap.items():
@@ -365,7 +365,7 @@ def extract_code_markdown_context_from_files(
                     project_root=project_root_path,
                     helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
                 )
-            code_string_context = CodeString(code=code_context, file_path=file_path.relative_to(project_root_path))
+            code_string_context = CodeString(code=code_context, file_path=file_path.resolve().relative_to(project_root_path.resolve()))
             code_context_markdown.code_strings.append(code_string_context)
     return code_context_markdown
 

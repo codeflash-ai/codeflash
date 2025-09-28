@@ -85,7 +85,7 @@ def existing_tests_source_for(
             ):
                 print_optimized_runtime = format_time(optimized_tests_to_runtimes[filename][qualified_name])
                 print_original_runtime = format_time(original_tests_to_runtimes[filename][qualified_name])
-                print_filename = filename.relative_to(tests_root).as_posix()
+                print_filename = filename.resolve().relative_to(tests_root.resolve()).as_posix()
                 greater = (
                     optimized_tests_to_runtimes[filename][qualified_name]
                     > original_tests_to_runtimes[filename][qualified_name]
@@ -192,9 +192,9 @@ def check_create_pr(
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
-        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
+        relative_path = explanation.file_path.resolve().relative_to(root_dir.resolve()).as_posix()
         build_file_changes = {
-            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
+            Path(p).resolve().relative_to(root_dir.resolve()).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
@@ -243,10 +243,10 @@ def check_create_pr(
         if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
-        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
+        relative_path = explanation.file_path.resolve().relative_to(root_dir.resolve()).as_posix()
         base_branch = get_current_branch()
         build_file_changes = {
-            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
+            Path(p).resolve().relative_to(root_dir.resolve()).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
