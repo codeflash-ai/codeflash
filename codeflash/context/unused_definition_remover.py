@@ -3,16 +3,15 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -530,10 +529,15 @@ def revert_unused_helper_functions(
                 helper_names = [helper.qualified_name for helper in helpers_in_file]
                 reverted_code = replace_function_definitions_in_module(
                     function_names=helper_names,
-                    optimized_code=original_code,  # Use original code as the "optimized" code to revert
+                    optimized_code=CodeStringsMarkdown(
+                        code_strings=[
+                            CodeString(code=original_code, file_path=Path(file_path).relative_to(project_root))
+                        ]
+                    ),  # Use original code as the "optimized" code to revert
                     module_abspath=file_path,
                     preexisting_objects=set(),  # Empty set since we're reverting
                     project_root_path=project_root,
+                    should_add_global_assignments=False,  # since we revert helpers functions after applying the optimization, we know that the file already has global assignments added, otherwise they would be added twice.
                 )
 
                 if reverted_code:
@@ -608,8 +612,38 @@ def _analyze_imports_in_optimized_code(
     return dict(imported_names_map)
 
 
+def find_target_node(
+    root: ast.AST, function_to_optimize: FunctionToOptimize
+) -> Optional[ast.FunctionDef | ast.AsyncFunctionDef]:
+    parents = function_to_optimize.parents
+    node = root
+    for parent in parents:
+        # Fast loop: directly look for the matching ClassDef in node.body
+        body = getattr(node, "body", None)
+        if not body:
+            return None
+        for child in body:
+            if isinstance(child, ast.ClassDef) and child.name == parent.name:
+                node = child
+                break
+        else:
+            return None
+
+    # Now node is either the root or the target parent class; look for function
+    body = getattr(node, "body", None)
+    if not body:
+        return None
+    target_name = function_to_optimize.function_name
+    for child in body:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == target_name:
+            return child
+    return None
+
+
 def detect_unused_helper_functions(
-    function_to_optimize: FunctionToOptimize, code_context: CodeOptimizationContext, optimized_code: str
+    function_to_optimize: FunctionToOptimize,
+    code_context: CodeOptimizationContext,
+    optimized_code: str | CodeStringsMarkdown,
 ) -> list[FunctionSource]:
     """Detect helper functions that are no longer called by the optimized entrypoint function.
 
@@ -622,16 +656,20 @@ def detect_unused_helper_functions(
         List of FunctionSource objects representing unused helper functions
 
     """
+    if isinstance(optimized_code, CodeStringsMarkdown) and len(optimized_code.code_strings) > 0:
+        return list(
+            chain.from_iterable(
+                detect_unused_helper_functions(function_to_optimize, code_context, code.code)
+                for code in optimized_code.code_strings
+            )
+        )
+
     try:
         # Parse the optimized code to analyze function calls and imports
         optimized_ast = ast.parse(optimized_code)
 
         # Find the optimized entrypoint function
-        entrypoint_function_ast = None
-        for node in ast.walk(optimized_ast):
-            if isinstance(node, ast.FunctionDef) and node.name == function_to_optimize.function_name:
-                entrypoint_function_ast = node
-                break
+        entrypoint_function_ast = find_target_node(optimized_ast, function_to_optimize)
 
         if not entrypoint_function_ast:
             logger.debug(f"Could not find entrypoint function {function_to_optimize.function_name} in optimized code")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from itertools import chain
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
@@ -119,6 +120,32 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         return updated_node
 
+    def _find_insertion_index(self, updated_node: cst.Module) -> int:
+        """Find the position of the last import statement in the top-level of the module."""
+        insert_index = 0
+        for i, stmt in enumerate(updated_node.body):
+            is_top_level_import = isinstance(stmt, cst.SimpleStatementLine) and any(
+                isinstance(child, (cst.Import, cst.ImportFrom)) for child in stmt.body
+            )
+
+            is_conditional_import = isinstance(stmt, cst.If) and all(
+                isinstance(inner, cst.SimpleStatementLine)
+                and all(isinstance(child, (cst.Import, cst.ImportFrom)) for child in inner.body)
+                for inner in stmt.body.body
+            )
+
+            if is_top_level_import or is_conditional_import:
+                insert_index = i + 1
+
+            # Stop scanning once we reach a class or function definition.
+            # Imports are supposed to be at the top of the file, but they can technically appear anywhere, even at the bottom of the file.
+            # Without this check, a stray import later in the file
+            # would incorrectly shift our insertion index below actual code definitions.
+            if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
+                break
+
+        return insert_index
+
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
@@ -131,18 +158,26 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         ]
 
         if assignments_to_append:
-            # Add a blank line before appending new assignments if needed
-            if new_statements and not isinstance(new_statements[-1], cst.EmptyLine):
-                new_statements.append(cst.SimpleStatementLine([cst.Pass()], leading_lines=[cst.EmptyLine()]))
-                new_statements.pop()  # Remove the Pass statement but keep the empty line
+            # after last top-level imports
+            insert_index = self._find_insertion_index(updated_node)
 
-            # Add the new assignments
-            new_statements.extend(
-                [
-                    cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                    for assignment in assignments_to_append
-                ]
-            )
+            assignment_lines = [
+                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
+                for assignment in assignments_to_append
+            ]
+
+            new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
+
+            # Add a blank line after the last assignment if needed
+            after_index = insert_index + len(assignment_lines)
+            if after_index < len(new_statements):
+                next_stmt = new_statements[after_index]
+                # If there's no empty line, add one
+                has_empty = any(isinstance(line, cst.EmptyLine) for line in next_stmt.leading_lines)
+                if not has_empty:
+                    new_statements[after_index] = next_stmt.with_changes(
+                        leading_lines=[cst.EmptyLine(), *next_stmt.leading_lines]
+                    )
 
         return updated_node.with_changes(body=new_statements)
 
@@ -195,6 +230,79 @@ class LastImportFinder(cst.CSTVisitor):
                 self.last_import_line = self.current_line
 
 
+class DottedImportCollector(cst.CSTVisitor):
+    """Collects all top-level imports from a Python module in normalized dotted format, including top-level conditional imports like `if TYPE_CHECKING:`.
+
+    Examples
+    --------
+        import os                                                                  ==> "os"
+        import dbt.adapters.factory                                                ==> "dbt.adapters.factory"
+        from pathlib import Path                                                   ==> "pathlib.Path"
+        from recce.adapter.base import BaseAdapter                                 ==> "recce.adapter.base.BaseAdapter"
+        from typing import Any, List, Optional                                     ==> "typing.Any", "typing.List", "typing.Optional"
+        from recce.util.lineage import ( build_column_key, filter_dependency_maps) ==> "recce.util.lineage.build_column_key", "recce.util.lineage.filter_dependency_maps"
+
+    """
+
+    def __init__(self) -> None:
+        self.imports: set[str] = set()
+        self.depth = 0  # top-level
+
+    def get_full_dotted_name(self, expr: cst.BaseExpression) -> str:
+        if isinstance(expr, cst.Name):
+            return expr.value
+        if isinstance(expr, cst.Attribute):
+            return f"{self.get_full_dotted_name(expr.value)}.{expr.attr.value}"
+        return ""
+
+    def _collect_imports_from_block(self, block: cst.IndentedBlock) -> None:
+        for statement in block.body:
+            if isinstance(statement, cst.SimpleStatementLine):
+                for child in statement.body:
+                    if isinstance(child, cst.Import):
+                        for alias in child.names:
+                            module = self.get_full_dotted_name(alias.name)
+                            asname = alias.asname.name.value if alias.asname else alias.name.value
+                            if isinstance(asname, cst.Attribute):
+                                self.imports.add(module)
+                            else:
+                                self.imports.add(module if module == asname else f"{module}.{asname}")
+
+                    elif isinstance(child, cst.ImportFrom):
+                        if child.module is None:
+                            continue
+                        module = self.get_full_dotted_name(child.module)
+                        for alias in child.names:
+                            if isinstance(alias, cst.ImportAlias):
+                                name = alias.name.value
+                                asname = alias.asname.name.value if alias.asname else name
+                                self.imports.add(f"{module}.{asname}")
+
+    def visit_Module(self, node: cst.Module) -> None:
+        self.depth = 0
+        self._collect_imports_from_block(node)
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+        self.depth += 1
+
+    def leave_FunctionDef(self, node: cst.FunctionDef) -> None:
+        self.depth -= 1
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+        self.depth += 1
+
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:
+        self.depth -= 1
+
+    def visit_If(self, node: cst.If) -> None:
+        if self.depth == 0:
+            self._collect_imports_from_block(node.body)
+
+    def visit_Try(self, node: cst.Try) -> None:
+        if self.depth == 0:
+            self._collect_imports_from_block(node.body)
+
+
 class ImportInserter(cst.CSTTransformer):
     """Transformer that inserts global statements after the last import."""
 
@@ -227,12 +335,12 @@ class ImportInserter(cst.CSTTransformer):
         return updated_node
 
 
-def extract_global_statements(source_code: str) -> list[cst.SimpleStatementLine]:
+def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.SimpleStatementLine]]:
     """Extract global statements from source code."""
     module = cst.parse_module(source_code)
     collector = GlobalStatementCollector()
     module.visit(collector)
-    return collector.global_statements
+    return module, collector.global_statements
 
 
 def find_last_import_line(target_code: str) -> int:
@@ -265,30 +373,41 @@ def delete___future___aliased_imports(module_code: str) -> str:
 
 
 def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
-    non_assignment_global_statements = extract_global_statements(src_module_code)
+    src_module, new_added_global_statements = extract_global_statements(src_module_code)
+    dst_module, existing_global_statements = extract_global_statements(dst_module_code)
 
-    # Find the last import line in target
-    last_import_line = find_last_import_line(dst_module_code)
+    unique_global_statements = []
+    for stmt in new_added_global_statements:
+        if any(
+            stmt is existing_stmt or stmt.deep_equals(existing_stmt) for existing_stmt in existing_global_statements
+        ):
+            continue
+        unique_global_statements.append(stmt)
 
-    # Parse the target code
-    target_module = cst.parse_module(dst_module_code)
+    mod_dst_code = dst_module_code
+    # Insert unique global statements if any
+    if unique_global_statements:
+        last_import_line = find_last_import_line(dst_module_code)
+        # Reuse already-parsed dst_module
+        transformer = ImportInserter(unique_global_statements, last_import_line)
+        # Use visit inplace, don't parse again
+        modified_module = dst_module.visit(transformer)
+        mod_dst_code = modified_module.code
+        # Parse the code after insertion
+        original_module = cst.parse_module(mod_dst_code)
+    else:
+        # No new statements to insert, reuse already-parsed dst_module
+        original_module = dst_module
 
-    # Create transformer to insert non_assignment_global_statements
-    transformer = ImportInserter(non_assignment_global_statements, last_import_line)
-    #
-    # # Apply transformation
-    modified_module = target_module.visit(transformer)
-    dst_module_code = modified_module.code
-
-    # Parse the code
-    original_module = cst.parse_module(dst_module_code)
-    new_module = cst.parse_module(src_module_code)
-
+    # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file
     new_collector = GlobalAssignmentCollector()
-    new_module.visit(new_collector)
+    src_module.visit(new_collector)
+    # Only create transformer if there are assignments to insert/transform
+    if not new_collector.assignments:  # nothing to transform
+        return mod_dst_code
 
-    # Transform the original file
+    # Transform the original destination module
     transformer = GlobalAssignmentTransformer(new_collector.assignments, new_collector.assignment_order)
     transformed_module = original_module.visit(transformer)
 
@@ -329,9 +448,19 @@ def add_needed_imports_from_module(
     except Exception as e:
         logger.error(f"Error parsing source module code: {e}")
         return dst_module_code
+
+    dotted_import_collector = DottedImportCollector()
+    try:
+        parsed_dst_module = cst.parse_module(dst_module_code)
+        parsed_dst_module.visit(dotted_import_collector)
+    except cst.ParserSyntaxError as e:
+        logger.exception(f"Syntax error in destination module code: {e}")
+        return dst_module_code  # Return the original code if there's a syntax error
+
     try:
         for mod in gatherer.module_imports:
-            AddImportsVisitor.add_needed_import(dst_context, mod)
+            if mod not in dotted_import_collector.imports:
+                AddImportsVisitor.add_needed_import(dst_context, mod)
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
         for mod, obj_seq in gatherer.object_mapping.items():
             for obj in obj_seq:
@@ -339,28 +468,29 @@ def add_needed_imports_from_module(
                     f"{mod}.{obj}" in helper_functions_fqn or dst_context.full_module_name == mod  # avoid circular deps
                 ):
                     continue  # Skip adding imports for helper functions already in the context
-                AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                if f"{mod}.{obj}" not in dotted_import_collector.imports:
+                    AddImportsVisitor.add_needed_import(dst_context, mod, obj)
                 RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
+
     for mod, asname in gatherer.module_aliases.items():
-        AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
+        if f"{mod}.{asname}" not in dotted_import_collector.imports:
+            AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
+
     for mod, alias_pairs in gatherer.alias_mapping.items():
         for alias_pair in alias_pairs:
             if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
                 continue
-            AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
+
+            if f"{mod}.{alias_pair[1]}" not in dotted_import_collector.imports:
+                AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
 
     try:
-        parsed_module = cst.parse_module(dst_module_code)
-    except cst.ParserSyntaxError as e:
-        logger.exception(f"Syntax error in destination module code: {e}")
-        return dst_module_code  # Return the original code if there's a syntax error
-    try:
-        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_module)
+        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_dst_module)
         transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
         return transformed_module.code.lstrip("\n")
     except Exception as e:

@@ -9,23 +9,31 @@ import time
 from functools import cache
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import git
 from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_consts import N_CANDIDATES
+from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE
 
 if TYPE_CHECKING:
     from git import Repo
 
 
-def get_git_diff(repo_directory: Path = Path.cwd(), uncommitted_changes: bool = False) -> dict[str, list[int]]:  # noqa: B008, FBT001, FBT002
+def get_git_diff(
+    repo_directory: Path | None = None, *, only_this_commit: Optional[str] = None, uncommitted_changes: bool = False
+) -> dict[str, list[int]]:
+    if repo_directory is None:
+        repo_directory = Path.cwd()
     repository = git.Repo(repo_directory, search_parent_directories=True)
     commit = repository.head.commit
-    if uncommitted_changes:
+    if only_this_commit:
+        uni_diff_text = repository.git.diff(
+            only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
+        )
+    elif uncommitted_changes:
         uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
     else:
         uni_diff_text = repository.git.diff(
@@ -117,30 +125,31 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
     return True
 
 
-def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", wait_for_push: bool = False) -> bool:  # noqa: FBT001, FBT002
-    current_branch = repo.active_branch.name
+def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, wait_for_push: bool = False) -> bool:
+    current_branch = repo.active_branch
+    current_branch_name = current_branch.name
     remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed
-    if f"{git_remote}/{current_branch}" not in repo.refs:
-        logger.warning(f"⚠️ The branch '{current_branch}' is not pushed to the remote repository.")
+    if f"{git_remote}/{current_branch_name}" not in repo.refs:
+        logger.warning(f"⚠️ The branch '{current_branch_name}' is not pushed to the remote repository.")
         if not sys.__stdin__.isatty():
             logger.warning("Non-interactive shell detected. Branch will not be pushed.")
             return False
         if sys.__stdin__.isatty() and Confirm.ask(
             f"⚡️ In order for me to create PRs, your current branch needs to be pushed. Do you want to push "
-            f"the branch '{current_branch}' to the remote repository?",
+            f"the branch '{current_branch_name}' to the remote repository?",
             default=False,
         ):
             remote.push(current_branch)
-            logger.info(f"⬆️ Branch '{current_branch}' has been pushed to {git_remote}.")
+            logger.info(f"⬆️ Branch '{current_branch_name}' has been pushed to {git_remote}.")
             if wait_for_push:
                 time.sleep(3)  # adding this to give time for the push to register with GitHub,
                 # so that our modifications to it are not rejected
             return True
-        logger.info(f"🔘 Branch '{current_branch}' has not been pushed to {git_remote}.")
+        logger.info(f"🔘 Branch '{current_branch_name}' has not been pushed to {git_remote}.")
         return False
-    logger.debug(f"The branch '{current_branch}' is present in the remote repository.")
+    logger.debug(f"The branch '{current_branch_name}' is present in the remote repository.")
     return True
 
 
@@ -155,7 +164,7 @@ def create_git_worktrees(
 ) -> tuple[Path | None, list[Path]]:
     if git_root and worktree_root_dir:
         worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
-        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES + 1)]
+        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES_EFFECTIVE + 1)]
         for worktree in worktrees:
             subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
     else:

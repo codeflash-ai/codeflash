@@ -15,7 +15,9 @@ if os.name == "nt":  # Windows
     SHELL_RC_EXPORT_PATTERN = re.compile(r"^set CODEFLASH_API_KEY=(cf-.*)$", re.MULTILINE)
     SHELL_RC_EXPORT_PREFIX = "set CODEFLASH_API_KEY="
 else:
-    SHELL_RC_EXPORT_PATTERN = re.compile(r'^(?!#)export CODEFLASH_API_KEY=[\'"]?(cf-[^\s"]+)[\'"]$', re.MULTILINE)
+    SHELL_RC_EXPORT_PATTERN = re.compile(
+        r'^(?!#)export CODEFLASH_API_KEY=(?:"|\')?(cf-[^\s"\']+)(?:"|\')?$', re.MULTILINE
+    )
     SHELL_RC_EXPORT_PREFIX = "export CODEFLASH_API_KEY="
 
 
@@ -42,7 +44,7 @@ def get_shell_rc_path() -> Path:
 
 
 def get_api_key_export_line(api_key: str) -> str:
-    return f"{SHELL_RC_EXPORT_PREFIX}{api_key}"
+    return f'{SHELL_RC_EXPORT_PREFIX}"{api_key}"'
 
 
 def save_api_key_to_rc(api_key: str) -> Result[str, str]:

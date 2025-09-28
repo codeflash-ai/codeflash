@@ -7,6 +7,7 @@ import enum
 import math
 import re
 import types
+from collections import ChainMap, OrderedDict, deque
 from typing import Any
 
 import sentry_sdk
@@ -70,7 +71,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
             if type_obj.__name__ != new_type_obj.__name__ or type_obj.__qualname__ != new_type_obj.__qualname__:
                 return False
-        if isinstance(orig, (list, tuple)):
+        if isinstance(orig, (list, tuple, deque, ChainMap)):
             if len(orig) != len(new):
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
@@ -93,6 +94,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 enum.Enum,
                 type,
                 range,
+                OrderedDict,
             ),
         ):
             return orig == new
@@ -232,6 +234,27 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             ),
         ):
             return orig == new
+
+        if hasattr(orig, "__attrs_attrs__") and hasattr(new, "__attrs_attrs__"):
+            orig_dict = {}
+            new_dict = {}
+
+            for attr in orig.__attrs_attrs__:
+                if attr.eq:
+                    attr_name = attr.name
+                    orig_dict[attr_name] = getattr(orig, attr_name, None)
+                    new_dict[attr_name] = getattr(new, attr_name, None)
+
+            if superset_obj:
+                new_attrs_dict = {}
+                for attr in new.__attrs_attrs__:
+                    if attr.eq:
+                        attr_name = attr.name
+                        new_attrs_dict[attr_name] = getattr(new, attr_name, None)
+                return all(
+                    k in new_attrs_dict and comparator(v, new_attrs_dict[k], superset_obj) for k, v in orig_dict.items()
+                )
+            return comparator(orig_dict, new_dict, superset_obj)
 
         # re.Pattern can be made better by DFA Minimization and then comparing
         if isinstance(

@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 CODEFLASH_LOGO: str = (
-    f"{LF}"  # noqa: ISC003
+    f"{LF}"
     r"                   _          ___  _               _     " + f"{LF}"
     r"                  | |        / __)| |             | |    " + f"{LF}"
     r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " + f"{LF}"
@@ -85,12 +85,16 @@ def init_codeflash() -> None:
 
         did_add_new_key = prompt_api_key()
 
-        if should_modify_pyproject_toml():
-            setup_info: SetupInfo = collect_setup_info()
+        should_modify, config = should_modify_pyproject_toml()
 
+        git_remote = config.get("git_remote", "origin") if config else "origin"
+
+        if should_modify:
+            setup_info: SetupInfo = collect_setup_info()
+            git_remote = setup_info.git_remote
             configure_pyproject_toml(setup_info)
 
-        install_github_app()
+        install_github_app(git_remote)
 
         install_github_actions(override_formatter_check=True)
 
@@ -151,7 +155,23 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
-def should_modify_pyproject_toml() -> bool:
+def is_valid_pyproject_toml(pyproject_toml_path: Path) -> dict[str, Any] | None:
+    if not pyproject_toml_path.exists():
+        return None
+    try:
+        config, _ = parse_config_file(pyproject_toml_path)
+    except Exception:
+        return None
+
+    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
+        return None
+    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
+        return None
+
+    return config
+
+
+def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     """Check if the current directory contains a valid pyproject.toml file with codeflash config.
 
     If it does, ask the user if they want to re-configure it.
@@ -159,23 +179,16 @@ def should_modify_pyproject_toml() -> bool:
     from rich.prompt import Confirm
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
-    if not pyproject_toml_path.exists():
-        return True
-    try:
-        config, config_file_path = parse_config_file(pyproject_toml_path)
-    except Exception:
-        return True
 
-    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
-        return True
-    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
-        return True
+    config = is_valid_pyproject_toml(pyproject_toml_path)
+    if config is None:
+        return True, None
 
     return Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
         default=False,
         show_default=True,
-    )
+    ), config
 
 
 # Custom theme for better UX
@@ -958,16 +971,23 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     click.echo()
 
 
-def install_github_app() -> None:
+def install_github_app(git_remote: str) -> None:
     try:
         git_repo = git.Repo(search_parent_directories=True)
     except git.InvalidGitRepositoryError:
         click.echo("Skipping GitHub app installation because you're not in a git repository.")
         return
-    owner, repo = get_repo_owner_and_name(git_repo)
+
+    if git_remote not in get_git_remotes(git_repo):
+        click.echo(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
+        return
+
+    owner, repo = get_repo_owner_and_name(git_repo, git_remote)
 
     if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-        click.echo("🐙 Looks like you've already installed the Codeflash GitHub app on this repository! Continuing…")
+        click.echo(
+            f"🐙 Looks like you've already installed the Codeflash GitHub app on this repository ({owner}/{repo})! Continuing…"
+        )
 
     else:
         click.prompt(

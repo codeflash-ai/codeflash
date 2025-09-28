@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -56,6 +57,7 @@ def test_detect_unused_helper_functions(temp_project):
 
     # Optimized version that only calls one helper
     optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -68,6 +70,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - MODIFIED VERSION should be reverted.\"\"\"
     return x * 4  # This change should be reverted to original x * 3
+```
 """
 
     # Create FunctionToOptimize instance
@@ -89,7 +92,7 @@ def helper_function_2(x):
     code_context = ctx_result.unwrap()
 
     # Test unused helper detection
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
     # Should detect helper_function_2 as unused
     unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -100,6 +103,7 @@ def helper_function_2(x):
     # Also test the complete replace_function_and_helpers_with_optimized_code workflow
     # First modify the optimized code to include a MODIFIED unused helper
     optimized_code_with_modified_helper = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -112,15 +116,15 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - MODIFIED VERSION should be reverted.\"\"\"
     return x * 7  # This should be reverted to x * 3
+```
 """
 
     original_helper_code = {main_file: main_file.read_text()}
 
     # Apply optimization and test reversion
     optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context, optimized_code_with_modified_helper, original_helper_code
+        code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
     )
-
     # Check final file content
     final_content = main_file.read_text()
 
@@ -138,7 +142,7 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Apply optimization and test reversion
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content
     final_content = main_file.read_text()
@@ -160,6 +164,7 @@ def test_revert_unused_helper_functions(temp_project):
 
     # Optimized version that only calls one helper and modifies the unused one
     optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
@@ -172,6 +177,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Modified helper function - should be reverted.\"\"\"
     return x * 4  # This change should be reverted
+```
 """
 
     # Create FunctionToOptimize instance
@@ -200,7 +206,7 @@ def helper_function_2(x):
     # 1. Apply the optimization
     # 2. Detect unused helpers
     # 3. Revert unused helpers to original definitions
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content
     final_content = main_file.read_text()
@@ -222,6 +228,7 @@ def test_no_unused_helpers_no_revert(temp_project):
 
     # Optimized version that still calls both helpers
     optimized_code = """
+```python:main.py
 def entrypoint_function(n):
     \"\"\"Optimized function that still calls both helpers.\"\"\"
     result1 = helper_function_1(n)
@@ -235,6 +242,7 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function - optimized.\"\"\"
     return x * 3
+```
 """
 
     # Create FunctionToOptimize instance
@@ -259,11 +267,11 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Test detection - should find no unused helpers
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
     assert len(unused_helpers) == 0, "No helpers should be detected as unused"
 
     # Apply optimization
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
     # Check final file content - should contain the optimized versions
     final_content = main_file.read_text()
@@ -304,12 +312,14 @@ def helper_function_2(x):
 
         # Optimized version that only calls one helper
         optimized_code = """
+```python:main.py
 from helpers import helper_function_1
 
 def entrypoint_function(n):
     \"\"\"Optimized function that only calls one helper.\"\"\"
     result1 = helper_function_1(n)
     return result1 + n * 3  # Inlined helper_function_2
+```
 """
 
         # Create test config
@@ -340,7 +350,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect helper_function_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -383,8 +393,7 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
-
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
         # Check main file content
         main_content = main_file.read_text()
         assert "result1 + n * 3" in main_content, "Entrypoint function should be optimized"
@@ -432,7 +441,7 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -479,6 +488,7 @@ class Calculator:
 
         # Optimized version that only calls one helper method
         optimized_code = """
+```python:main.py
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -492,6 +502,7 @@ class Calculator:
     def helper_method_2(self, x):
         \"\"\"Second helper method - should be reverted.\"\"\"
         return x * 4
+```
 """
 
         # Create test config
@@ -527,7 +538,7 @@ class Calculator:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect Calculator.helper_method_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -538,6 +549,7 @@ class Calculator:
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
         optimized_code_with_modified_helper = """
+```python:main.py
 class Calculator:
     def entrypoint_method(self, n):
         \"\"\"Optimized method that only calls one helper.\"\"\"
@@ -551,13 +563,14 @@ class Calculator:
     def helper_method_2(self, x):
         \"\"\"Second helper method - MODIFIED VERSION should be reverted.\"\"\"
         return x * 8  # This should be reverted to x * 3
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, optimized_code_with_modified_helper, original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -576,7 +589,7 @@ class Calculator:
         # Test reversion
         original_helper_code = {main_file: main_file.read_text()}
 
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check final file content
         final_content = main_file.read_text()
@@ -620,6 +633,7 @@ class Processor:
 
         # Optimized version that only calls one external helper
         optimized_code = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -633,6 +647,7 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         # Create test config
@@ -668,7 +683,7 @@ class Processor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect external_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -679,6 +694,7 @@ class Processor:
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
         optimized_code_with_modified_helper = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -692,13 +708,14 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, optimized_code_with_modified_helper, original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -717,6 +734,7 @@ class Processor:
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
         optimized_code_with_modified_helper = """
+```python:main.py
 def external_helper_1(x):
     \"\"\"External helper function.\"\"\"
     return x * 2
@@ -730,13 +748,14 @@ class Processor:
         \"\"\"Optimized method that only calls one helper.\"\"\"
         result1 = external_helper_1(n)
         return result1 + n * 3  # Inlined external_helper_2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, optimized_code_with_modified_helper, original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -787,6 +806,7 @@ class OuterClass:
 
         # Optimized version that inlines one helper
         optimized_code = """
+```python:main.py
 def global_helper_1(x):
     return x * 2
 
@@ -802,6 +822,7 @@ class OuterClass:
             
         def local_helper(self, x):
             return x + 1
+```
 """
 
         # Create test config
@@ -868,7 +889,7 @@ class OuterClass:
                     ]
                 },
             )(),
-            optimized_code,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code),
         )
 
         # Should detect global_helper_2 as unused
@@ -955,6 +976,7 @@ def clean_data(x):
 
         # Optimized version that only uses some functions
         optimized_code = """
+```python:main.py
 import utils
 from math_helpers import add
 
@@ -965,6 +987,7 @@ def entrypoint_function(n):
     # Inlined multiply: result3 = n * 2
     # Inlined process_data: result4 = n ** 2
     return result1 + result2 + (n * 2) + (n ** 2)
+```
 """
 
         # Create test config
@@ -995,7 +1018,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect multiply, process_data as unused (at minimum)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1055,7 +1078,7 @@ def subtract(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1116,6 +1139,7 @@ def divide_numbers(x, y):
 
         # Optimized version that only uses add_numbers
         optimized_code = """
+```python:main.py
 import calculator
 
 def entrypoint_function(n):
@@ -1123,6 +1147,7 @@ def entrypoint_function(n):
     result1 = calculator.add_numbers(n, 10)
     # Inlined: result2 = n * 5
     return result1 + (n * 5)
+```
 """
 
         # Create test config
@@ -1153,7 +1178,7 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, optimized_code)
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
 
         # Should detect multiply_numbers and divide_numbers as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1204,7 +1229,7 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1263,7 +1288,7 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, optimized_code, original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1318,6 +1343,7 @@ class MathUtils:
 
         # Optimized static method that inlines one utility
         optimized_static_code = """
+```python:main.py
 def utility_function_1(x):
     return x * 2
 
@@ -1337,6 +1363,7 @@ class MathUtils:
         result1 = utility_function_1(n)
         result2 = utility_function_2(n)
         return result1 - result2
+```
 """
 
         # Create test config
@@ -1373,7 +1400,7 @@ class MathUtils:
 
         # Test unused helper detection for static method
         unused_helpers = detect_unused_helper_functions(
-            optimizer.function_to_optimize, code_context, optimized_static_code
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code)
         )
 
         # Should detect utility_function_2 as unused
@@ -1385,6 +1412,7 @@ class MathUtils:
         # Also test the complete replace_function_and_helpers_with_optimized_code workflow
         # Update optimized code to include a MODIFIED unused helper
         optimized_static_code_with_modified_helper = """
+```python:main.py
 def utility_function_1(x):
     return x * 2
 
@@ -1404,13 +1432,14 @@ class MathUtils:
         result1 = utility_function_1(n)
         result2 = utility_function_2(n)
         return result1 - result2
+```
 """
 
         original_helper_code = {main_file: main_file.read_text()}
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, optimized_static_code_with_modified_helper, original_helper_code
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code_with_modified_helper), original_helper_code
         )
 
         # Check final file content
@@ -1425,6 +1454,155 @@ class MathUtils:
 
         # utility_function_1 should remain (it's still called)
         assert "def utility_function_1(x):" in final_content, "utility_function_1 should still exist"
+
+    finally:
+        # Cleanup
+        import shutil
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_unused_helper_detection_with_duplicated_function_name_in_different_classes():
+    """Test detection when helpers are called via module.function style."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""from __future__ import annotations
+import json
+from helpers import replace_quotes_with_backticks, simplify_worktree_paths
+from dataclasses import asdict, dataclass
+
+@dataclass
+class LspMessage:
+
+    def serialize(self) -> str:
+        data = self._loop_through(asdict(self))
+        # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
+        ordered = {"type": self.type(), **data}
+        return (
+            message_delimiter
+            + json.dumps(ordered)
+            + message_delimiter
+        )
+
+
+@dataclass
+class LspMarkdownMessage(LspMessage):
+
+    def serialize(self) -> str:
+        self.markdown = simplify_worktree_paths(self.markdown)
+        self.markdown = replace_quotes_with_backticks(self.markdown)
+        return super().serialize()
+""")
+
+        # Helpers file
+        helpers_file = temp_dir / "helpers.py"
+        helpers_file.write_text("""def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
+    path_in_msg = worktree_path_regex.search(msg)
+    if path_in_msg:
+        last_part_of_path = path_in_msg.group(0).split("/")[-1]
+        if highlight:
+            last_part_of_path = f"`{last_part_of_path}`"
+        return msg.replace(path_in_msg.group(0), last_part_of_path)
+    return msg
+
+
+def replace_quotes_with_backticks(text: str) -> str:
+    # double-quoted strings
+    text = _double_quote_pat.sub(r"`\1`", text)
+    # single-quoted strings
+    return _single_quote_pat.sub(r"`\1`", text)
+""")
+
+        # Optimized version that only uses add_numbers
+        optimized_code = """
+```python:main.py
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+
+from codeflash.lsp.helpers import (replace_quotes_with_backticks,
+                                   simplify_worktree_paths)
+
+
+@dataclass
+class LspMessage:
+
+    def serialize(self) -> str:
+        # Use local variable to minimize lookup costs and avoid unnecessary dictionary unpacking
+        data = self._loop_through(asdict(self))
+        msg_type = self.type()
+        ordered = {'type': msg_type}
+        ordered.update(data)
+        return (
+            message_delimiter
+            + json.dumps(ordered)
+            + message_delimiter  # \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
+        )
+
+@dataclass
+class LspMarkdownMessage(LspMessage):
+
+    def serialize(self) -> str:
+        # Side effect required, must preserve for behavioral correctness
+        self.markdown = simplify_worktree_paths(self.markdown)
+        self.markdown = replace_quotes_with_backticks(self.markdown)
+        return super().serialize()
+```
+```python:helpers.py
+def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
+    m = worktree_path_regex.search(msg)
+    if m:
+        # More efficient way to get last path part
+        last_part_of_path = m.group(0).rpartition('/')[-1]
+        if highlight:
+            last_part_of_path = f"`{last_part_of_path}`"
+        return msg.replace(m.group(0), last_part_of_path)
+    return msg
+
+def replace_quotes_with_backticks(text: str) -> str:
+    # Efficient string substitution, reduces intermediate string allocations
+    return _single_quote_pat.sub(
+        r"`\1`",
+        _double_quote_pat.sub(r"`\1`", text),
+    )
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, function_name="serialize", qualified_name="serialize", parents=[
+                FunctionParent(name="LspMarkdownMessage", type="ClassDef"),
+            ]
+        )
+
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        assert len(unused_names) == 0 # no unused helpers
 
     finally:
         # Cleanup

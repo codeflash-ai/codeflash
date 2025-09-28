@@ -1,0 +1,172 @@
+---
+title: "Auto Optimize Pull Requests"
+description: "Automatically optimize new code in pull requests with Codeflash GitHub Actions workflow"
+icon: "github"
+---
+
+
+Optimizing new code in Pull Requests is the best way to ensure that all code you and your team ship is performant
+in the future. Automating optimization in the Pull Request stage how most teams use Codeflash, to
+continuously find optimizations for their new code.
+
+To scan new code for performance optimizations, Codeflash uses a GitHub Action workflow which runs
+the Codeflash optimization logic on the new code in every pull request.
+If the action workflow finds an optimization, it communicates with the Codeflash GitHub 
+App and asks it to suggest new changes to the pull request.
+
+This is the most useful way of using Codeflash, where you set it up once and all your new code gets optimized.
+So setting this up is highly recommended.
+
+## Pull Request Optimization 30 seconds demo
+<iframe width="640" height="400" src="https://www.youtube.com/embed/nqa-uewizkU?si=H1wb1RvPp-JqvKPh" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
+## Prerequisites
+
+<Warning>
+**Before you begin, make sure you have:**
+
+✅ A Codeflash API key from the [Codeflash Web App](https://app.codeflash.ai/)
+
+✅ Completed [local installation](/getting-started/local-installation) with `codeflash init`
+
+✅ A Python project with a configured `pyproject.toml` file
+</Warning>
+
+## Setup Options
+
+<Tabs>
+<Tab title="Automated Setup (Recommended)">
+<Steps>
+<Step title="Run the Setup Command">
+```bash
+codeflash init-actions
+```
+This command will automatically create the GitHub Actions workflow file and guide you through the setup process.
+
+Alternatively running `codeflash init` also asks to setup the github actions.
+</Step>
+
+<Step title="Customize and Test Your Setup">
+Open a new pull request to your GitHub project. You'll see:
+- ✅ A new Codeflash workflow running in GitHub Actions
+- 🤖 The codeflash-ai bot commenting with optimization suggestions (if any are found)
+
+Ensure that your Python environment installation works correctly and codeflash is able to run.
+</Step>
+</Steps>
+</Tab>
+
+<Tab title="Manual Setup">
+
+<Steps>
+<Step title="Create Workflow File">
+Create `.github/workflows/codeflash-optimize.yaml` in your repository:
+
+
+```yaml title=".github/workflows/codeflash-optimize.yaml"
+name: Codeflash
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  optimize:
+    name: Optimize new code in this PR
+    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      # TODO: Replace the following with your project's Python installation method
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # TODO: Replace the following with your project's dependency installation method
+      - name: Install Project Dependencies
+        run: |
+          python -m pip install --upgrade pip
+        # TODO: Replace the following with your project setup method
+          pip install -r requirements.txt
+          pip install codeflash
+      - name: Run Codeflash to optimize code
+        id: optimize_code
+        run: |
+          codeflash
+```
+
+<Warning>
+**Replace the TODOs** in the workflow file above with your project's specific setup commands.
+</Warning>
+</Step>
+
+<Step title="Choose Your Package Manager">
+Customize the dependency installation based on your Python package manager:
+
+<CodeGroup>
+```yaml Poetry
+- name: Install Project Dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install poetry
+    poetry install --with dev
+- name: Run Codeflash to optimize code
+  run: |
+    poetry env use python 
+    poetry run codeflash
+```
+
+```yaml uv
+- uses: astral-sh/setup-uv@v6
+  with:
+    enable-cache: true
+- run: uv sync --group=dev
+- name: Run Codeflash to optimize code
+  run: uv run codeflash
+```
+
+```yaml pip
+- name: Install Project Dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+    pip install codeflash
+- name: Run Codeflash to optimize code
+  run: codeflash
+```
+</CodeGroup>
+</Step>
+
+<Step title="Add Repository Secret">
+1. Go to your GitHub repository settings
+2. Navigate to **Secrets and Variables** → **Actions**
+3. Click **New repository secret**
+4. Add:
+   - **Name**: `CODEFLASH_API_KEY`
+   - **Value**: Your API key from [app.codeflash.ai/app/apikeys](https://app.codeflash.ai/app/apikeys)
+
+<Tip>
+**Security Note**: Never commit your API key directly to your code. Always use GitHub repository secrets.
+</Tip>
+</Step>
+</Steps>
+</Tab>
+</Tabs>
+## How the Pull Request Optimization Suggestion looks
+
+Codeflash creates a new dependent Pull Request for you to review with the reported speedups, helpful explanation for the optimization
+and the proof of correctness. The pull request has the code change for you to review and accept.
+
+![Codeflash PR Review](/images/codeflash_pr_suggestion_1.png)
+
+
+Sometimes it also makes an inline suggestion with the optimization.
+
+![Codeflash PR Suggestion](/images/code-suggestion.png)
+
+We hope you enjoy the performance unlock the Pull Request optimization enables.

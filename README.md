@@ -3,9 +3,7 @@
    <a href="https://github.com/codeflash-ai/codeflash">
     <img src="https://img.shields.io/github/commit-activity/m/codeflash-ai/codeflash" alt="GitHub commit activity">
   </a>
-  <a href="https://pypi.org/project/codeflash/">
-    <img src="https://img.shields.io/pypi/dm/codeflash" alt="PyPI Downloads">
-  </a>
+  <a href="https://pypi.org/project/codeflash/"><img src="https://static.pepy.tech/badge/codeflash" alt="PyPI Downloads"></a>
   <a href="https://pypi.org/project/codeflash/">
     <img src="https://img.shields.io/pypi/v/codeflash?label=PyPI%20version" alt="PyPI Downloads">
   </a>
@@ -19,7 +17,7 @@ How to use Codeflash -
 - Automate optimizing all __future__ code you will write by installing Codeflash as a GitHub action.
 - Optimize a Python workflow `python myscript.py` end-to-end by running `codeflash optimize myscript.py`
 
-Codeflash is used by top engineering teams at [Pydantic](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), [Langflow](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1), [Roboflow](https://github.com/roboflow/inference/pulls?q=is%3Apr+is%3Amerged+codeflash+sort%3Acreated-asc), [Albumentations](https://github.com/albumentations-team/albumentations/issues?q=state%3Amerged%20is%3Apr%20author%3Akrrt7%20OR%20state%3Amerged%20is%3Apr%20author%3Aaseembits93%20) and many others to ship performant, expert level code.
+Codeflash is used by top engineering teams at **Pydantic** [(PRs Merged)](https://github.com/pydantic/pydantic/pulls?q=is%3Apr+author%3Amisrasaurabh1+is%3Amerged), **Roboflow** [(PRs Merged 1](https://github.com/roboflow/inference/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1%20is%3Amerged), [PRs Merged 2)](https://github.com/roboflow/inference/issues?q=state%3Amerged%20is%3Apr%20author%3Acodeflash-ai%5Bbot%5D), **Unstructured** [(PRs Merged 1](https://github.com/Unstructured-IO/unstructured/pulls?q=is%3Apr+Explanation+and+details+in%3Abody+is%3Amerged), [PRs Merged 2)](https://github.com/Unstructured-IO/unstructured-ingest/pulls?q=is%3Apr+Explanation+and+details+in%3Abody+is%3Amerged), **Langflow** [(PRs Merged)](https://github.com/langflow-ai/langflow/issues?q=state%3Aclosed%20is%3Apr%20author%3Amisrasaurabh1) and many others to ship performant, expert level code.
 
 Codeflash is great at optimizing AI Agents, Computer Vision algorithms, PyTorch code, numerical code, backend code or anything else you might write with Python.
 
@@ -65,6 +63,13 @@ For detailed installation and usage instructions, visit our documentation at [do
 
 https://github.com/user-attachments/assets/38f44f4e-be1c-4f84-8db9-63d5ee3e61e5
 
+- Optiming a workflow end to end automatically with `codeflash optimize`
+
+
+https://github.com/user-attachments/assets/355ba295-eb5a-453a-8968-7fb35c70d16c
+
+
+
 ## Support
 
 Join our community for support and discussions. If you have any questions, feel free to reach out to us using one of the following methods:
@@ -76,4 +81,4 @@ Join our community for support and discussions. If you have any questions, feel 
 
 ## License
 
-Codeflash is licensed under the BSL-1.1 License. See the LICENSE file for details.
+Codeflash is licensed under the BSL-1.1 License. See the [LICENSE](https://github.com/codeflash-ai/codeflash/blob/main/codeflash/LICENSE) file for details.

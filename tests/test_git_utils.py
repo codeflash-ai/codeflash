@@ -74,7 +74,7 @@ class TestGitUtils(unittest.TestCase):
         mock_origin.push.return_value = None
 
         assert check_and_push_branch(mock_repo_instance)
-        mock_origin.push.assert_called_once_with("test-branch")
+        mock_origin.push.assert_called_once_with(mock_repo_instance.active_branch)
         mock_origin.push.reset_mock()
 
         # Test when branch is already pushed

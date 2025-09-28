@@ -10,6 +10,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
 
@@ -77,6 +78,7 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
+    parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
         action="store_true",
@@ -93,6 +95,7 @@ def parse_args() -> Namespace:
         help="Path to the directory of the project, where all the pytest-benchmark tests are located.",
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
+    parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -209,6 +212,9 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
     args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
+    if is_LSP_enabled():
+        args.all = None
+        return args
     return handle_optimize_all_arg_parsing(args)
 
 

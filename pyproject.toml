@@ -43,6 +43,7 @@ dependencies = [
     "platformdirs>=4.3.7",
     "pygls>=1.3.1",
     "codeflash-benchmark",
+    "filelock",
 ]
 
 [project.urls]
@@ -200,7 +201,7 @@ target-version = "py39"
 line-length = 120
 fix = true
 show-fixes = true
-exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
+extend-exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -239,7 +240,8 @@ ignore = [
     "D104",
     "PERF203",
     "LOG015",
-    "PLC0415"
+    "PLC0415",
+    "UP045"
 ]
 
 [tool.ruff.lint.flake8-type-checking]

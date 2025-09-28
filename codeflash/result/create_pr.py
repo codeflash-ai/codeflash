@@ -10,12 +10,7 @@ from codeflash.api import cfapi
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_replacer import is_zero_diff
-from codeflash.code_utils.git_utils import (
-    check_and_push_branch,
-    get_current_branch,
-    get_repo_owner_and_name,
-    git_root_dir,
-)
+from codeflash.code_utils.git_utils import check_and_push_branch, get_current_branch, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import github_pr_url
 from codeflash.code_utils.tabulate import tabulate
 from codeflash.code_utils.time_utils import format_perf, format_time
@@ -34,12 +29,16 @@ def existing_tests_source_for(
     test_cfg: TestConfig,
     original_runtimes_all: dict[InvocationId, list[int]],
     optimized_runtimes_all: dict[InvocationId, list[int]],
-) -> str:
+) -> tuple[str, str, str]:
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
-        return ""
-    output: str = ""
-    rows = []
+        return "", "", ""
+    output_existing: str = ""
+    output_concolic: str = ""
+    output_replay: str = ""
+    rows_existing = []
+    rows_concolic = []
+    rows_replay = []
     headers = ["Test File::Test Function", "Original ⏱️", "Optimized ⏱️", "Speedup"]
     tests_root = test_cfg.tests_root
     original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
@@ -99,28 +98,79 @@ def existing_tests_source_for(
                     * 100
                 )
                 if greater:
-                    rows.append(
+                    if "__replay_test_" in str(print_filename):
+                        rows_replay.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                    elif "codeflash_concolic" in str(print_filename):
+                        rows_concolic.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                    else:
+                        rows_existing.append(
+                            [
+                                f"`{print_filename}::{qualified_name}`",
+                                f"{print_original_runtime}",
+                                f"{print_optimized_runtime}",
+                                f"{perf_gain}%⚠️",
+                            ]
+                        )
+                elif "__replay_test_" in str(print_filename):
+                    rows_replay.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"⚠️{perf_gain}%",
+                            f"{perf_gain}%✅",
+                        ]
+                    )
+                elif "codeflash_concolic" in str(print_filename):
+                    rows_concolic.append(
+                        [
+                            f"`{print_filename}::{qualified_name}`",
+                            f"{print_original_runtime}",
+                            f"{print_optimized_runtime}",
+                            f"{perf_gain}%✅",
                         ]
                     )
                 else:
-                    rows.append(
+                    rows_existing.append(
                         [
                             f"`{print_filename}::{qualified_name}`",
                             f"{print_original_runtime}",
                             f"{print_optimized_runtime}",
-                            f"✅{perf_gain}%",
+                            f"{perf_gain}%✅",
                         ]
                     )
-    output += tabulate(  # type: ignore[no-untyped-call]
-        headers=headers, tabular_data=rows, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    output_existing += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
-    output += "\n"
-    return output
+    output_existing += "\n"
+    if len(rows_existing) == 0:
+        output_existing = ""
+    output_concolic += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    )
+    output_concolic += "\n"
+    if len(rows_concolic) == 0:
+        output_concolic = ""
+    output_replay += tabulate(  # type: ignore[no-untyped-call]
+        headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
+    )
+    output_replay += "\n"
+    if len(rows_replay) == 0:
+        output_replay = ""
+    return output_existing, output_replay, output_concolic
 
 
 def check_create_pr(
@@ -131,6 +181,9 @@ def check_create_pr(
     generated_original_test_source: str,
     function_trace_id: str,
     coverage_message: str,
+    replay_tests: str,
+    concolic_tests: str,
+    root_dir: Path,
     git_remote: Optional[str] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
@@ -139,9 +192,9 @@ def check_create_pr(
     if pr_number is not None:
         logger.info(f"Suggesting changes to PR #{pr_number} ...")
         owner, repo = get_repo_owner_and_name(git_repo)
-        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
         build_file_changes = {
-            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
@@ -171,6 +224,8 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
             trace_id=function_trace_id,
             coverage_message=coverage_message,
+            replay_tests=replay_tests,
+            concolic_tests=concolic_tests,
         )
         if response.ok:
             logger.info(f"Suggestions were successfully made to PR #{pr_number}")
@@ -188,10 +243,10 @@ def check_create_pr(
         if not check_and_push_branch(git_repo, git_remote, wait_for_push=True):
             logger.warning("⏭️ Branch is not pushed, skipping PR creation...")
             return
-        relative_path = explanation.file_path.relative_to(git_root_dir()).as_posix()
+        relative_path = explanation.file_path.relative_to(root_dir).as_posix()
         base_branch = get_current_branch()
         build_file_changes = {
-            Path(p).relative_to(git_root_dir()).as_posix(): FileDiffContent(
+            Path(p).relative_to(root_dir).as_posix(): FileDiffContent(
                 oldContent=original_code[p], newContent=new_code[p]
             )
             for p in original_code
@@ -218,6 +273,8 @@ def check_create_pr(
             generated_tests=generated_original_test_source,
             trace_id=function_trace_id,
             coverage_message=coverage_message,
+            replay_tests=replay_tests,
+            concolic_tests=concolic_tests,
         )
         if response.ok:
             pr_id = response.text

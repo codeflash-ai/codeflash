@@ -14,16 +14,19 @@ from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
-from codeflash.code_utils.git_utils import get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
+from codeflash.github.PrComment import FileDiffContent, PrComment
+from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from requests import Response
 
-    from codeflash.github.PrComment import FileDiffContent, PrComment
+    from codeflash.result.explanation import Explanation
+
 from packaging import version
 
-if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
+if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
     console.rule()
@@ -37,6 +40,7 @@ def make_cfapi_request(
     payload: dict[str, Any] | None = None,
     extra_headers: dict[str, str] | None = None,
     *,
+    api_key: str | None = None,
     suppress_errors: bool = False,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
@@ -48,7 +52,7 @@ def make_cfapi_request(
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+    cfapi_headers = {"Authorization": f"Bearer {api_key or get_codeflash_api_key()}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
     try:
@@ -80,7 +84,7 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id() -> Optional[str]:
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :return: The userid or None if the request fails.
@@ -88,7 +92,9 @@ def get_user_id() -> Optional[str]:
     if not ensure_codeflash_api_key():
         return None
 
-    response = make_cfapi_request(endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__})
+    response = make_cfapi_request(
+        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key
+    )
     if response.status_code == 200:
         if "min_version" not in response.text:
             return response.text
@@ -99,6 +105,9 @@ def get_user_id() -> Optional[str]:
             if min_version and version.parse(min_version) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
+                if is_LSP_enabled():
+                    logger.debug(msg)
+                    return f"Error: {msg}"
                 sys.exit(1)
             return userid
 
@@ -119,6 +128,8 @@ def suggest_changes(
     generated_tests: str,
     trace_id: str,
     coverage_message: str,
+    replay_tests: str = "",
+    concolic_tests: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -142,6 +153,8 @@ def suggest_changes(
         "generatedTests": generated_tests,
         "traceId": trace_id,
         "coverage_message": coverage_message,
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -156,6 +169,8 @@ def create_pr(
     generated_tests: str,
     trace_id: str,
     coverage_message: str,
+    replay_tests: str = "",
+    concolic_tests: str = "",
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -178,8 +193,66 @@ def create_pr(
         "generatedTests": generated_tests,
         "traceId": trace_id,
         "coverage_message": coverage_message,
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
+
+
+def create_staging(
+    original_code: dict[Path, str],
+    new_code: dict[Path, str],
+    explanation: Explanation,
+    existing_tests_source: str,
+    generated_original_test_source: str,
+    function_trace_id: str,
+    coverage_message: str,
+    replay_tests: str,
+    concolic_tests: str,
+    root_dir: Path,
+) -> Response:
+    """Create a staging pull request, targeting the specified branch. (usually 'staging').
+
+    :param original_code: A mapping of file paths to original source code.
+    :param new_code: A mapping of file paths to optimized source code.
+    :param explanation: An Explanation object with optimization details.
+    :param existing_tests_source: Existing test code.
+    :param generated_original_test_source: Generated tests for the original function.
+    :param function_trace_id: Unique identifier for this optimization trace.
+    :param coverage_message: Coverage report or summary.
+    :return: The response object from the backend.
+    """
+    relative_path = explanation.file_path.relative_to(root_dir).as_posix()
+
+    build_file_changes = {
+        Path(p).relative_to(root_dir).as_posix(): FileDiffContent(oldContent=original_code[p], newContent=new_code[p])
+        for p in original_code
+    }
+
+    payload = {
+        "baseBranch": get_current_branch(),
+        "diffContents": build_file_changes,
+        "prCommentFields": PrComment(
+            optimization_explanation=explanation.explanation_message(),
+            best_runtime=explanation.best_runtime_ns,
+            original_runtime=explanation.original_runtime_ns,
+            function_name=explanation.function_name,
+            relative_file_path=relative_path,
+            speedup_x=explanation.speedup_x,
+            speedup_pct=explanation.speedup_pct,
+            winning_behavior_test_results=explanation.winning_behavior_test_results,
+            winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
+            benchmark_details=explanation.benchmark_details,
+        ).to_json(),
+        "existingTests": existing_tests_source,
+        "generatedTests": generated_original_test_source,
+        "traceId": function_trace_id,
+        "coverage_message": coverage_message,
+        "replayTests": replay_tests,
+        "concolicTests": concolic_tests,
+    }
+
+    return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
 
 
 def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: bool = False) -> bool:

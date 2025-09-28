@@ -1,0 +1,101 @@
+---
+title: "Optimize Performance Benchmarks with every Pull Request"
+description: "Configure and use pytest-benchmark integration for performance-critical code optimization"
+icon: "chart-line"
+sidebarTitle: Setup Benchmarks to Optimize
+keywords: ["benchmarks", "CI", "pytest-benchmark", "performance testing", "github actions", "benchmark mode"]
+---
+<Info>
+**Performance-critical optimization** - Define benchmarks for your most important code sections and let Codeflash optimize and measure the real-world impact of every optimization on your performance metrics.
+</Info>
+
+Benchmark mode is an easy way to define workflows that are performance-critical and need to be optimized and run fast.
+Codeflash will run the benchmark, understand how the current code change in the Pull Request is affecting the benchmark.
+It will then try to optimize the new code for the benchmark and calculate the impact of any optimization on the speed of that benchmark.
+
+## Using Codeflash in Benchmark Mode
+
+1. **Create a benchmarks root:**
+
+    Create a directory for benchmarks if it does not already exist. 
+
+   In your pyproject.toml, add the path to the 'benchmarks-root' section.
+    ```yaml
+    [tool.codeflash]
+   # All paths are relative to this pyproject.toml's directory.
+   module-root = "inference"
+   tests-root = "tests"
+   test-framework = "pytest"
+   benchmarks-root = "tests/benchmarks" # add your benchmarks root dir here
+   ignore-paths = []
+   formatter-cmds = ["disabled"]
+    ```
+    
+2. **Define your benchmarks:**
+    
+   Currently, Codeflash only supports benchmarks written as pytest-benchmarks. Check out the [pytest-benchmark](https://pytest-benchmark.readthedocs.io/en/stable/index.html) documentation for more information on syntax.
+
+   For example:
+      
+   ```python
+   from core.bubble_sort import sorter
+
+   def test_sort(benchmark):
+       result = benchmark(sorter, list(reversed(range(500))))
+       assert result == list(range(500))
+   ```
+
+   Note that these benchmarks should be defined in such a way that they don't take a long time to run.
+
+   The pytest-benchmark format is simply used as an interface. The plugin is actually not used - Codeflash will run these benchmarks with its own pytest plugin
+
+
+3. **Run and Test Codeflash:**
+
+   Run Codeflash with the `--benchmark` flag. Note that benchmark mode cannot be used with `--all`. 
+
+   ```bash
+   codeflash --file test_file.py --benchmark
+   ```
+   
+   If you did not define your benchmarks-root in your pyproject.toml, you can do:
+
+   ```bash
+   codeflash --file test_file.py --benchmark --benchmarks-root path/to/benchmarks
+   ```
+   
+
+4. **Run Codeflash :**
+
+   Benchmark mode is best used together with Codeflash as a GitHub Action. This way,
+   Codeflash will trace through your benchmark and optimize the functions modified in your Pull Request to speed up the benchmark.
+   It will also report the impact of Codeflash's optimizations on your benchmarks.
+   
+   Use `codeflash init` for an easy way to set up Codeflash as a GitHub Action.
+
+   After that, you can add the `--benchmark` argument to codeflash to enable benchmarks optimization.
+
+   ```bash
+   codeflash --benchmark
+   ```
+
+
+
+## How it works
+
+1. Codeflash identifies benchmarks in the benchmarks-root directory.
+
+
+2. The benchmarks are run so that runtime statistics and inputs can be recorded.
+
+
+3. Replay tests are generated so the performance of optimization candidates on the exact inputs used in the benchmarks can be measured.
+
+
+4. If an optimization candidate is verified to be correct, the speedup of the optimization is calculated for each benchmark. 
+
+
+5. Codeflash then reports the impact of the optimization on each benchmark. 
+
+
+Using Codeflash with benchmarks is a great way to find optimizations that really matter.

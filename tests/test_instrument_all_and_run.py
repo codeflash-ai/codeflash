@@ -15,8 +15,8 @@ from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 
 # Used by cli instrumentation
-codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -24,14 +24,14 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}"
     print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -39,7 +39,7 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     gc.enable()
     print(f"!######{{test_stdout_tag}}######!")
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception

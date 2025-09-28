@@ -1,0 +1,52 @@
+---
+title: "Optimize Your Entire Codebase"
+description: "Automatically optimize all codepaths in your project with Codeflash's comprehensive analysis"
+icon: "database"
+sidebarTitle: "Optimize Entire Codebase"
+keywords: ["codebase optimization", "all functions", "batch optimization", "github app", "checkpoint", "recovery"]
+---
+
+# Optimize your entire codebase
+
+Codeflash can optimize your entire codebase by analyzing all the functions in your project and generating optimized versions of them.
+It iterates through all the functions in your codebase and optimizes them one by one.
+
+To optimize your entire codebase, run the following command in your project directory:
+
+```bash
+codeflash --all
+```
+
+This requires the Codeflash GitHub App to be installed in your repository.
+
+This is a powerful feature that can help you optimize your entire codebase in one go. It also discovers and runs any unit tests covering the function under optimization.
+
+Since it runs on all the functions in your codebase, it can take some time to complete, please be patient.
+As this runs you will see Codeflash opening pull requests for each function it successfully optimizes.
+
+If you only want to optimize a subdirectory you can run:
+```bash
+codeflash --all path/to/dir
+```
+
+<Tip>
+  If your project has a good number of unit tests, we can trace those to achieve higher quality results.
+  The following approach is recommended instead:
+  ```bash
+  codeflash optimize --trace-only -m pytest tests/ ; codeflash --all
+  ```
+  This will run your test suite, trace all the code covered by your tests, ensuring higher correctness guarantees
+  and better performance benchmarking, and help create optimizations for code where the LLMs struggle to generate and run tests.
+
+  Even though `codeflash --all` discovers any existing unit tests. It currently can only discover any test that directly calls the
+  function under optimization. Tracing all the tests helps ensure correctness for code that may be indirectly called by your tests.
+
+</Tip>
+## Important considerations
+- **Dedicated Optimization Machine:** Optimizing the entire codebase may require considerable time—up to one day. It's recommended to allocate a dedicated machine specifically for this long-running optimization task.
+
+- **Minimize Background Processes:** To achieve optimal results, avoid running other processes on the optimization machine. Additional processes can introduce noise into Codeflash's runtime measurements, reducing the quality of the optimizations. Although Codeflash tolerates some runtime fluctuations, minimizing noise ensures the highest optimization quality.
+
+- **Checkpoint and Recovery:** Codeflash automatically creates checkpoints as it identifies optimizations. If the optimization process is interrupted or encounters issues, you can resume the process by re-running `codeflash --all`. The command will prompt you to continue from the most recent checkpoint.
+
+

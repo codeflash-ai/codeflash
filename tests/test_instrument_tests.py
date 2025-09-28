@@ -27,8 +27,8 @@ from codeflash.models.models import (
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
-codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -36,14 +36,14 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}"
     print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -51,15 +51,15 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     gc.enable()
     print(f"!######{{test_stdout_tag}}######!")
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception
     return return_value
 """
 
-codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+codeflash_wrap_perfonly_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -67,14 +67,14 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}"
     print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -122,8 +122,8 @@ import timeout_decorator
 from code_to_optimize.bubble_sort import sorter
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -131,16 +131,16 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
     """
-    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    expected += """test_stdout_tag = f'{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}'
     """
     expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -148,7 +148,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     gc.enable()
     print(f'!######{{test_stdout_tag}}######!')
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception
@@ -223,8 +223,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -232,16 +232,16 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
     """
-    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    expected += """test_stdout_tag = f'{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}'
     """
     expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -249,7 +249,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     gc.enable()
     print(f'!######{{test_stdout_tag}}######!')
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception
