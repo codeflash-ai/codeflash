@@ -87,6 +87,33 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(codeflash_wrapped, codefl
         raise exception
     return return_value
 """
+
+
+def build_expected_unittest_imports(extra_imports: str = "") -> str:
+    imports = """import gc
+import os
+import sqlite3
+import time
+import unittest
+
+import dill as pickle"""
+    if platform.system() != "Windows":
+        imports += "\nimport timeout_decorator"
+    if extra_imports:
+        imports += "\n" + extra_imports
+    return imports
+
+
+def build_expected_pytest_imports(extra_imports: str = "") -> str:
+    """Helper to build platform-aware imports for pytest tests."""
+    imports = """import gc
+import os
+import time
+
+import pytest"""
+    if extra_imports:
+        imports += "\n" + extra_imports
+    return imports
 # create a temporary directory for the test results
 @pytest.fixture
 def tmp_dir():
@@ -112,54 +139,27 @@ class TestPigLatin(unittest.TestCase):
         input = list(reversed(range(5000)))
         self.assertEqual(sorter(input), list(range(5000)))
 """
-    expected = """import gc
+    imports = """import gc
 import os
 import sqlite3
 import time
 import unittest
 
-import dill as pickle
-import timeout_decorator
-
-from code_to_optimize.bubble_sort import sorter
-
-
-def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
-    """
-    expected += """test_stdout_tag = f'{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}'
-    """
-    expected += """print(f'!$######{{test_stdout_tag}}######$!')
-    exception = None
-    gc.disable()
-    try:
-        counter = time.perf_counter_ns()
-        return_value = codeflash_wrapped(*args, **kwargs)
-        codeflash_duration = time.perf_counter_ns() - counter
-    except Exception as e:
-        codeflash_duration = time.perf_counter_ns() - counter
-        exception = e
-    gc.enable()
-    print(f'!######{{test_stdout_tag}}######!')
-    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
-    codeflash_con.commit()
-    if exception:
-        raise exception
-    return return_value
-
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+import dill as pickle"""
+    if platform.system() != "Windows":
+        imports += "\nimport timeout_decorator"
+    
+    imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    wrapper_func = codeflash_wrap_string
+    
+    test_class_header = "class TestPigLatin(unittest.TestCase):"
+    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    
+    expected = imports + "\n\n\n" + wrapper_func + "\n" + test_class_header + "\n\n"
+    if test_decorator:
+        expected += test_decorator + "\n"
+    expected += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -1818,28 +1818,18 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
 """
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
-"""
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # Build expected behavior output with platform-aware imports
+    imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -1849,32 +1839,32 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+    
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    if platform.system() != "Windows":
+        imports_perf += "\nimport timeout_decorator"
+    imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, input)
         self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -2077,26 +2067,17 @@ class TestPigLatin(unittest.TestCase):
             output = sorter(input)
             self.assertEqual(output, expected_output)"""
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-
-from code_to_optimize.bubble_sort import sorter
-
+    # Build expected behavior output with platform-aware imports  
+    imports_behavior = build_expected_unittest_imports()
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
 """
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -2111,26 +2092,28 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
+    
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
 
-    expected_perf = (
-        """import gc
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-
-from code_to_optimize.bubble_sort import sorter
-
+"""
+    if platform.system() != "Windows":
+        imports_perf += "\nimport timeout_decorator"
+        imports_perf += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    else:
+        imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
         expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
@@ -2140,7 +2123,8 @@ class TestPigLatin(unittest.TestCase):
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -2343,28 +2327,18 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
-"""
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # Build expected behavior output with platform-aware imports
+    imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -2375,33 +2349,33 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+    
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    if platform.system() != "Windows":
+        imports_perf += "\nimport timeout_decorator"
+    imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         for i in range(2):
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -3175,30 +3149,29 @@ class TestPigLatin(unittest.TestCase):
         output = accurate_sleepfunc(n)
 """
 
-    expected = (
-        """import gc
+    # Build expected output with platform-aware imports
+    imports = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.sleeptime import accurate_sleepfunc
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    if platform.system() != "Windows":
+        imports += "\nimport timeout_decorator"
+    imports += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.sleeptime import accurate_sleepfunc"
+    
+    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_class = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
-    @timeout_decorator.timeout(15)
-    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
+"""
+    if test_decorator:
+        test_class += test_decorator + "\n"
+    test_class += """    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         output = codeflash_wrap(accurate_sleepfunc, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'accurate_sleepfunc', '0', codeflash_loop_index, n)
 """
-    )
+    
+    expected = imports + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/sleeptime.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
