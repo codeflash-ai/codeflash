@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -135,7 +136,10 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "unittest":
+            if self.test_framework == "unittest" and platform.system() != "Windows":
+                # Only add timeout decorator on non-Windows platforms
+                # Windows doesn't support SIGALRM signal required by timeout_decorator
+
                 node.decorator_list.append(
                     ast.Call(
                         func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
@@ -354,7 +358,7 @@ def inject_profiling_into_existing_test(
         new_imports.extend(
             [ast.Import(names=[ast.alias(name="sqlite3")]), ast.Import(names=[ast.alias(name="dill", asname="pickle")])]
         )
-    if test_framework == "unittest":
+    if test_framework == "unittest" and platform.system() != "Windows":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     tree.body = [*new_imports, create_wrapper_function(mode), *tree.body]
     return True, isort.code(ast.unparse(tree), float_to_top=True)

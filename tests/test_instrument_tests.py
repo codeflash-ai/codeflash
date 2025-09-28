@@ -24,6 +24,8 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
+import platform
+
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -1451,6 +1453,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
 
 
 def test_perfinjector_bubble_sort_unittest_results() -> None:
+    
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -1471,8 +1474,74 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
 """
 
-    expected = (
-        """import gc
+    is_windows = platform.system() == "Windows"
+    
+    if is_windows:
+        expected = (
+            """import gc
+import os
+import sqlite3
+import time
+import unittest
+
+import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
+
+"""
+            + codeflash_wrap_string
+            + """
+class TestPigLatin(unittest.TestCase):
+
+    def test_sort(self):
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+        codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+        codeflash_cur = codeflash_con.cursor()
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+        input = [5, 4, 3, 2, 1, 0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        input = list(reversed(range(50)))
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        self.assertEqual(output, list(range(50)))
+        codeflash_con.close()
+"""
+        )
+        expected_perf = (
+            """import gc
+import os
+import time
+import unittest
+
+from code_to_optimize.bubble_sort import sorter
+
+
+"""
+            + codeflash_wrap_perfonly_string
+            + """
+class TestPigLatin(unittest.TestCase):
+
+    def test_sort(self):
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        input = [5, 4, 3, 2, 1, 0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, input)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, input)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        input = list(reversed(range(50)))
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, input)
+        self.assertEqual(output, list(range(50)))
+"""
+        )
+    else:
+        expected = (
+            """import gc
 import os
 import sqlite3
 import time
@@ -1485,8 +1554,8 @@ from code_to_optimize.bubble_sort import sorter
 
 
 """
-        + codeflash_wrap_string
-        + """
+            + codeflash_wrap_string
+            + """
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -1507,9 +1576,9 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+        )
+        expected_perf = (
+            """import gc
 import os
 import time
 import unittest
@@ -1520,8 +1589,8 @@ from code_to_optimize.bubble_sort import sorter
 
 
 """
-        + codeflash_wrap_perfonly_string
-        + """
+            + codeflash_wrap_perfonly_string
+            + """
 class TestPigLatin(unittest.TestCase):
 
     @timeout_decorator.timeout(15)
@@ -1537,7 +1606,7 @@ class TestPigLatin(unittest.TestCase):
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, input)
         self.assertEqual(output, list(range(50)))
 """
-    )
+        )
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
