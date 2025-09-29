@@ -120,7 +120,7 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with Path(event_path).open(encoding="utf-8") as f:
+    with open(event_path, encoding="utf-8") as f:
         return json.load(f)  # type: ignore  # noqa
 
 
