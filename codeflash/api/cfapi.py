@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 from packaging import version
 
-if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
+if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
     console.rule()

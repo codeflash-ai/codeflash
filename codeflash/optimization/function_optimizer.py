@@ -1865,7 +1865,6 @@ class FunctionOptimizer:
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
         try:
-            logger.info("Running line profiling to identify performance bottlenecks…")
             console.rule()
 
             test_env = self.get_test_env(
