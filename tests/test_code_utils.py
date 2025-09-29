@@ -17,10 +17,10 @@ from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
-    has_any_async_functions,
+    validate_python_code,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
-from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
+from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
 
 
 @pytest.fixture
@@ -368,6 +368,86 @@ def my_function():
     assert is_class_defined_in_file("MyClass", test_file) is False
 
 
+@pytest.fixture
+def mock_code_context():
+    """Mock CodeOptimizationContext for testing extract_dependent_function."""
+    from unittest.mock import MagicMock
+    from codeflash.models.models import CodeOptimizationContext
+    
+    context = MagicMock(spec=CodeOptimizationContext)
+    context.preexisting_objects = []
+    return context
+
+
+def test_extract_dependent_function_sync_and_async(mock_code_context):
+    """Test extract_dependent_function with both sync and async functions."""
+    # Test sync function extraction
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+def helper_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) == "helper_function"
+    
+    # Test async function extraction
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+async def async_helper_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) == "async_helper_function"
+
+
+def test_extract_dependent_function_edge_cases(mock_code_context):
+    """Test extract_dependent_function edge cases."""
+    # No dependent functions
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) is False
+    
+    # Multiple dependent functions
+    mock_code_context.testgen_context_code = """
+def main_function():
+    pass
+
+def helper1():
+    pass
+
+async def helper2():
+    pass
+"""
+    assert extract_dependent_function("main_function", mock_code_context) is False
+
+
+def test_extract_dependent_function_mixed_scenarios(mock_code_context):
+    """Test extract_dependent_function with mixed sync/async scenarios."""
+    # Async main with sync helper
+    mock_code_context.testgen_context_code = """
+async def async_main():
+    pass
+
+def sync_helper():
+    pass
+"""
+    assert extract_dependent_function("async_main", mock_code_context) == "sync_helper"
+    
+    # Only async functions
+    mock_code_context.testgen_context_code = """
+async def async_main():
+    pass
+
+async def async_helper():
+    pass
+"""
+    assert extract_dependent_function("async_main", mock_code_context) == "async_helper"
+
+
 def test_is_class_defined_in_file_with_non_existing_file() -> None:
     non_existing_file = Path("/non/existing/file.py")
 
@@ -505,25 +585,41 @@ def test_Grammar_copy():
     assert cleaned_code == expected_cleaned_code.strip()
 
 
-def test_has_any_async_functions_with_async_code() -> None:
+def test_validate_python_code_valid() -> None:
+    code = "def hello():\n    return 'world'"
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_invalid() -> None:
+    code = "def hello(:\n    return 'world'"
+    with pytest.raises(ValueError, match="Invalid Python code"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_empty() -> None:
+    code = ""
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_complex_invalid() -> None:
+    code = "if True\n    print('missing colon')"
+    with pytest.raises(ValueError, match="Invalid Python code.*line 1.*column 8"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_valid_complex() -> None:
     code = """
-def normal_function():
-    pass
-
-async def async_function():
-    pass
+def calculate(a, b):
+    if a > b:
+        return a + b
+    else:
+        return a * b
+        
+class MyClass:
+    def __init__(self):
+        self.value = 42
 """
-    result = has_any_async_functions(code)
-    assert result is True
-
-
-def test_has_any_async_functions_without_async_code() -> None:
-    code = """
-def normal_function():
-    pass
-
-def another_function():
-    pass
-"""
-    result = has_any_async_functions(code)
-    assert result is False
+    result = validate_python_code(code)
+    assert result == code

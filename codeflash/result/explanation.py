@@ -12,6 +12,7 @@ from rich.table import Table
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import BenchmarkDetail, TestResults
+from codeflash.result.critic import throughput_gain
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -24,9 +25,28 @@ class Explanation:
     function_name: str
     file_path: Path
     benchmark_details: Optional[list[BenchmarkDetail]] = None
+    original_async_throughput: Optional[int] = None
+    best_async_throughput: Optional[int] = None
 
     @property
     def perf_improvement_line(self) -> str:
+        runtime_improvement = self.speedup
+
+        if (
+            self.original_async_throughput is not None
+            and self.best_async_throughput is not None
+            and self.original_async_throughput > 0
+        ):
+            throughput_improvement = throughput_gain(
+                original_throughput=self.original_async_throughput, optimized_throughput=self.best_async_throughput
+            )
+
+            # Use throughput metrics if throughput improvement is better or runtime got worse
+            if throughput_improvement > runtime_improvement or runtime_improvement <= 0:
+                throughput_pct = f"{throughput_improvement * 100:,.0f}%"
+                throughput_x = f"{throughput_improvement + 1:,.2f}x"
+                return f"{throughput_pct} improvement ({throughput_x} faster)."
+
         return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
 
     @property
@@ -46,6 +66,23 @@ class Explanation:
         # TODO: Sometimes the explanation says something similar to "This is the code that was optimized", remove such parts
         original_runtime_human = humanize_runtime(self.original_runtime_ns)
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
+
+        # Determine if we're showing throughput or runtime improvements
+        runtime_improvement = self.speedup
+        is_using_throughput_metric = False
+
+        if (
+            self.original_async_throughput is not None
+            and self.best_async_throughput is not None
+            and self.original_async_throughput > 0
+        ):
+            throughput_improvement = throughput_gain(
+                original_throughput=self.original_async_throughput, optimized_throughput=self.best_async_throughput
+            )
+
+            if throughput_improvement > runtime_improvement or runtime_improvement <= 0:
+                is_using_throughput_metric = True
+
         benchmark_info = ""
 
         if self.benchmark_details:
@@ -86,13 +123,18 @@ class Explanation:
             console.print(table)
             benchmark_info = cast("StringIO", console.file).getvalue() + "\n"  # Cast for mypy
 
-        test_report = self.winning_behavior_test_results.get_test_pass_fail_report_by_type()
-        test_report_str = TestResults.report_to_string(test_report)
+        if is_using_throughput_metric:
+            performance_description = (
+                f"Throughput improved from {self.original_async_throughput} to {self.best_async_throughput} operations/second "
+                f"(runtime: {original_runtime_human} → {best_runtime_human})\n\n"
+            )
+        else:
+            performance_description = f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
 
         return (
             f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
-            f"Runtime went down from {original_runtime_human} to {best_runtime_human} \n\n"
+            + performance_description
             + (benchmark_info if benchmark_info else "")
             + self.raw_explanation_message
             + " \n\n"
@@ -101,7 +143,7 @@ class Explanation:
                 ""
                 if is_LSP_enabled()
                 else "The new optimized code was tested for correctness. The results are listed below.\n"
-                + test_report_str
+                f"{TestResults.report_to_string(self.winning_behavior_test_results.get_test_pass_fail_report_by_type())}\n"
             )
         )
 

@@ -272,6 +272,8 @@ class DottedImportCollector(cst.CSTVisitor):
                         if child.module is None:
                             continue
                         module = self.get_full_dotted_name(child.module)
+                        if isinstance(child.names, cst.ImportStar):
+                            continue
                         for alias in child.names:
                             if isinstance(alias, cst.ImportAlias):
                                 name = alias.name.value
@@ -414,6 +416,73 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     return transformed_module.code
 
 
+def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
+    try:
+        module_path = module_name.replace(".", "/")
+        possible_paths = [project_root / f"{module_path}.py", project_root / f"{module_path}/__init__.py"]
+
+        module_file = None
+        for path in possible_paths:
+            if path.exists():
+                module_file = path
+                break
+
+        if module_file is None:
+            logger.warning(f"Could not find module file for {module_name}, skipping star import resolution")
+            return set()
+
+        with module_file.open(encoding="utf8") as f:
+            module_code = f.read()
+
+        tree = ast.parse(module_code)
+
+        all_names = None
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "__all__"
+            ):
+                if isinstance(node.value, (ast.List, ast.Tuple)):
+                    all_names = []
+                    for elt in node.value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            all_names.append(elt.value)
+                        elif isinstance(elt, ast.Str):  # Python < 3.8 compatibility
+                            all_names.append(elt.s)
+                break
+
+        if all_names is not None:
+            return set(all_names)
+
+        public_names = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if not node.name.startswith("_"):
+                    public_names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
+                        public_names.add(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
+                    public_names.add(node.target.id)
+            elif isinstance(node, ast.Import) or (
+                isinstance(node, ast.ImportFrom) and not any(alias.name == "*" for alias in node.names)
+            ):
+                for alias in node.names:
+                    name = alias.asname or alias.name
+                    if not name.startswith("_"):
+                        public_names.add(name)
+
+        return public_names  # noqa: TRY300
+
+    except Exception as e:
+        logger.warning(f"Error resolving star import for {module_name}: {e}")
+        return set()
+
+
 def add_needed_imports_from_module(
     src_module_code: str,
     dst_module_code: str,
@@ -468,9 +537,23 @@ def add_needed_imports_from_module(
                     f"{mod}.{obj}" in helper_functions_fqn or dst_context.full_module_name == mod  # avoid circular deps
                 ):
                     continue  # Skip adding imports for helper functions already in the context
-                if f"{mod}.{obj}" not in dotted_import_collector.imports:
-                    AddImportsVisitor.add_needed_import(dst_context, mod, obj)
-                RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
+
+                # Handle star imports by resolving them to actual symbol names
+                if obj == "*":
+                    resolved_symbols = resolve_star_import(mod, project_root)
+                    logger.debug(f"Resolved star import from {mod}: {resolved_symbols}")
+
+                    for symbol in resolved_symbols:
+                        if (
+                            f"{mod}.{symbol}" not in helper_functions_fqn
+                            and f"{mod}.{symbol}" not in dotted_import_collector.imports
+                        ):
+                            AddImportsVisitor.add_needed_import(dst_context, mod, symbol)
+                        RemoveImportsVisitor.remove_unused_import(dst_context, mod, symbol)
+                else:
+                    if f"{mod}.{obj}" not in dotted_import_collector.imports:
+                        AddImportsVisitor.add_needed_import(dst_context, mod, obj)
+                    RemoveImportsVisitor.remove_unused_import(dst_context, mod, obj)
     except Exception as e:
         logger.exception(f"Error adding imports to destination module code: {e}")
         return dst_module_code
