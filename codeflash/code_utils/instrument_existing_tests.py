@@ -322,17 +322,18 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
                 keywords=[],
             )
             for item in node.body:
-                if (
-                    isinstance(item, ast.FunctionDef)
-                    and item.name.startswith("test_")
-                    and not any(
-                        isinstance(d, ast.Call)
-                        and isinstance(d.func, ast.Name)
-                        and d.func.id == "timeout_decorator.timeout"
-                        for d in item.decorator_list
-                    )
-                ):
-                    item.decorator_list.append(timeout_decorator)
+                if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
+                    has_timeout_decorator = False
+                    for d in item.decorator_list:
+                        if (
+                            isinstance(d, ast.Call)
+                            and isinstance(d.func, ast.Name)
+                            and d.func.id == "timeout_decorator.timeout"
+                        ):
+                            has_timeout_decorator = True
+                            break
+                    if not has_timeout_decorator:
+                        item.decorator_list.append(timeout_decorator)
         return self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
