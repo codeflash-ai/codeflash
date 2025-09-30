@@ -27,6 +27,7 @@ class TestConfig:
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
+    enable_async: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -88,8 +89,10 @@ def run_codeflash_command(
     test_root = cwd / "tests" / (config.test_framework or "")
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
     )
 
     output = []
@@ -122,7 +125,7 @@ def build_command(
 ) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
-    base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
+    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
@@ -132,6 +135,8 @@ def build_command(
         )
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
+    if config.enable_async:
+        base_command.append("--async")
     return base_command
 
 
@@ -187,9 +192,11 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
     test_root = cwd / "tests" / (config.test_framework or "")
     clear_directory(test_root)
-    command = ["python", "-m", "codeflash.main", "optimize", "workload.py"]
+    command = ["uv", "run", "--no-project", "-m", "codeflash.main", "optimize", "workload.py"]
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
     )
 
     output = []
