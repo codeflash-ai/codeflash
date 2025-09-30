@@ -2,6 +2,7 @@ import tempfile
 from pathlib import Path
 import uuid
 import os
+import sys
 
 import pytest
 
@@ -52,6 +53,7 @@ def temp_dir():
 #             pass  # Ignore cleanup errors
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_application_behavior_mode():
     async_function_code = '''
 import asyncio
@@ -86,6 +88,7 @@ async def async_function(x: int, y: int) -> int:
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_application_performance_mode():
     async_function_code = '''
 import asyncio
@@ -120,6 +123,7 @@ async def async_function(x: int, y: int) -> int:
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_class_method_decorator_application():
     async_class_code = '''
 import asyncio
@@ -171,6 +175,7 @@ class Calculator:
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_no_duplicate_application():
     already_decorated_code = '''
 from codeflash.code_utils.codeflash_wrap_decorator import codeflash_behavior_async
@@ -207,6 +212,7 @@ async def async_function(x: int, y: int) -> int:
     assert modified_code.strip() == expected_reformatted_code.strip()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_inject_profiling_async_function_behavior_mode(temp_dir):
     source_module_code = '''
 import asyncio
@@ -265,6 +271,7 @@ async def test_async_function():
     assert instrumented_test_code is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_inject_profiling_async_function_performance_mode(temp_dir):
     source_module_code = '''
 import asyncio
@@ -324,6 +331,7 @@ async def test_async_function():
     assert instrumented_test_code is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_mixed_sync_async_instrumentation(temp_dir):
     source_module_code = '''
 import asyncio
@@ -394,6 +402,7 @@ async def test_mixed_functions():
     assert instrumented_test_code is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_function_qualified_name_handling():
     nested_async_code = '''
 import asyncio
@@ -435,6 +444,7 @@ class OuterClass:
     assert modified_code.strip() == expected_output.strip()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_with_existing_decorators():
     """Test async decorator application when function already has other decorators."""
     decorated_async_code = '''
@@ -470,6 +480,7 @@ async def async_function(x: int, y: int) -> int:
     assert codeflash_pos < my_decorator_pos
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_sync_function_not_affected_by_async_logic():
     sync_function_code = '''
 def sync_function(x: int, y: int) -> int:
@@ -491,6 +502,7 @@ def sync_function(x: int, y: int) -> int:
     assert not decorator_added
     assert modified_code == sync_function_code
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_inject_profiling_async_multiple_calls_same_test(temp_dir):
     """Test that multiple async function calls within the same test function get correctly numbered 0, 1, 2, etc."""
     source_module_code = '''
@@ -579,6 +591,7 @@ async def test_multiple_calls():
 
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_behavior_decorator_return_values_and_test_ids():
     """Test that async behavior decorator correctly captures return values, test IDs, and stores data in database."""
     import asyncio
@@ -677,6 +690,7 @@ def test_async_behavior_decorator_return_values_and_test_ids():
                 del os.environ[k]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_comprehensive_return_values_and_test_ids():
     import asyncio
     import os

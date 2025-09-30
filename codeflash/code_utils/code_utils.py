@@ -180,7 +180,7 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path, *, trav
             parent = file_path.parent
             while parent not in (project_root_path, parent.parent):
                 try:
-                    relative_path = file_path.relative_to(parent)
+                    relative_path = file_path.resolve().relative_to(parent.resolve())
                     return relative_path.with_suffix("").as_posix().replace("/", ".")
                 except ValueError:
                     parent = parent.parent
@@ -245,8 +245,9 @@ def get_run_tmp_file(file_path: Path) -> Path:
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
-    site_packages = [Path(p) for p in site.getsitepackages()]
-    return any(file_path.resolve().is_relative_to(site_package_path) for site_package_path in site_packages)
+    file_path_resolved = file_path.resolve()
+    site_packages = [Path(p).resolve() for p in site.getsitepackages()]
+    return any(file_path_resolved.is_relative_to(site_package_path) for site_package_path in site_packages)
 
 
 def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:

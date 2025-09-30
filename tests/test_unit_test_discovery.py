@@ -133,7 +133,7 @@ def test_discover_tests_pytest_with_temp_dir_root():
         assert len(discovered_tests) == 1
         assert len(discovered_tests["dummy_code.dummy_function"]) == 2
         dummy_tests = discovered_tests["dummy_code.dummy_function"]
-        assert all(test.tests_in_file.test_file == test_file_path for test in dummy_tests)
+        assert all(test.tests_in_file.test_file.resolve() == test_file_path.resolve() for test in dummy_tests)
         assert {test.tests_in_file.test_function for test in dummy_tests} == {
             "test_dummy_parametrized_function[True]",
             "test_dummy_function",
@@ -204,16 +204,13 @@ def test_discover_tests_pytest_with_multi_level_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 3
-        assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
-        assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
-            == level1_test_file_path
-        )
+        discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
+        assert discovered_root_test.resolve() == root_test_file_path.resolve()
+        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
 
-        assert (
-            next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
-            == level2_test_file_path
-        )
+        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
 
 def test_discover_tests_pytest_dirs():
@@ -295,20 +292,15 @@ def test_discover_tests_pytest_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 4
-        assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
-        assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
-            == level1_test_file_path
-        )
-        assert (
-            next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
-            == level2_test_file_path
-        )
+        discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
+        assert discovered_root_test.resolve() == root_test_file_path.resolve()
+        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
+        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
-        assert (
-            next(iter(discovered_tests["level1.level3.level3_code.level3_function"])).tests_in_file.test_file
-            == level3_test_file_path
-        )
+        discovered_level3_test = next(iter(discovered_tests["level1.level3.level3_code.level3_function"])).tests_in_file.test_file
+        assert discovered_level3_test.resolve() == level3_test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_class():
@@ -342,10 +334,8 @@ def test_discover_tests_pytest_with_class():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_class_test = next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
+        assert discovered_class_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_double_nested_directories():
@@ -383,12 +373,10 @@ def test_discover_tests_pytest_with_double_nested_directories():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(
-                iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])
-            ).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_nested_test = next(
+            iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])
+        ).tests_in_file.test_file
+        assert discovered_nested_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_with_code_in_dir_and_test_in_subdir():
@@ -433,7 +421,8 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Check if the test file is discovered and associated with the code file
         assert len(discovered_tests) == 1
-        assert next(iter(discovered_tests["code.some_code.some_function"])).tests_in_file.test_file == test_file_path
+        discovered_test_file = next(iter(discovered_tests["code.some_code.some_function"])).tests_in_file.test_file
+        assert discovered_test_file.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_nested_class():
@@ -469,10 +458,8 @@ def test_discover_tests_pytest_with_nested_class():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_inner_test = next(iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])).tests_in_file.test_file
+        assert discovered_inner_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_separate_moduledir():
@@ -509,7 +496,8 @@ def test_discover_tests_pytest_separate_moduledir():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        assert next(iter(discovered_tests["mypackage.code.find_common_tags"])).tests_in_file.test_file == test_file_path
+        discovered_test_file = next(iter(discovered_tests["mypackage.code.find_common_tags"])).tests_in_file.test_file
+        assert discovered_test_file.resolve() == test_file_path.resolve()
 
 
 def test_unittest_discovery_with_pytest():
@@ -554,7 +542,7 @@ class TestCalculator(unittest.TestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add"
 
 
@@ -622,7 +610,7 @@ class TestCalculator(ExtendedTestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add"
 
 
@@ -720,7 +708,7 @@ class TestCalculator(unittest.TestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add_with_parameters"
 
 

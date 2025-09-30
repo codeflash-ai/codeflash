@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sqlite3
+import sys
 import tempfile
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from codeflash.code_utils.codeflash_wrap_decorator import (
 from codeflash.verification.codeflash_capture import VerificationType
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 class TestAsyncWrapperSQLiteValidation:
 
     @pytest.fixture

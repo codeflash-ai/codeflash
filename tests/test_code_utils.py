@@ -254,7 +254,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 
 
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
+    site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
@@ -275,6 +275,66 @@ def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.Mo
 
     file_path = Path("some_package")
     assert path_belongs_to_site_packages(file_path) is False
+
+
+def test_path_belongs_to_site_packages_with_symlinked_site_packages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_site_packages = tmp_path / "real_site_packages"
+    real_site_packages.mkdir()
+    
+    symlinked_site_packages = tmp_path / "symlinked_site_packages"
+    symlinked_site_packages.symlink_to(real_site_packages)
+    
+    package_file = real_site_packages / "some_package" / "__init__.py"
+    package_file.parent.mkdir()
+    package_file.write_text("# package file")
+    
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(symlinked_site_packages)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    symlinked_package_file = symlinked_site_packages / "some_package" / "__init__.py"
+    assert path_belongs_to_site_packages(symlinked_package_file) is True
+
+
+def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_site_packages = tmp_path / "real" / "lib" / "python3.9" / "site-packages"
+    real_site_packages.mkdir(parents=True)
+    
+    link1 = tmp_path / "link1"
+    link1.symlink_to(real_site_packages.parent.parent.parent)
+    
+    link2 = tmp_path / "link2" 
+    link2.symlink_to(link1)
+    
+    package_file = real_site_packages / "test_package" / "module.py"
+    package_file.parent.mkdir()
+    package_file.write_text("# test module")
+    
+    site_packages_via_links = link2 / "lib" / "python3.9" / "site-packages"
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(site_packages_via_links)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    file_via_links = site_packages_via_links / "test_package" / "module.py"
+    assert path_belongs_to_site_packages(file_via_links) is True
+
+
+def test_path_belongs_to_site_packages_resolved_paths_normalization(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    site_packages_dir = tmp_path / "lib" / "python3.9" / "site-packages"
+    site_packages_dir.mkdir(parents=True)
+    
+    package_dir = site_packages_dir / "mypackage"
+    package_dir.mkdir()
+    package_file = package_dir / "module.py"
+    package_file.write_text("# module")
+    
+    complex_site_packages_path = tmp_path / "lib" / "python3.9" / "other" / ".." / "site-packages" / "."
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(complex_site_packages_path)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    complex_file_path = tmp_path / "lib" / "python3.9" / "site-packages" / "other" / ".." / "mypackage" / "module.py"
+    assert path_belongs_to_site_packages(complex_file_path) is True
 
 
 # tests for is_class_defined_in_file

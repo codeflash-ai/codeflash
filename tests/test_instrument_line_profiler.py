@@ -37,7 +37,7 @@ def test_add_decorator_imports_helper_in_class():
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
 from code_to_optimize.bubble_sort_in_class import BubbleSortClass
 
@@ -106,7 +106,7 @@ def test_add_decorator_imports_helper_in_nested_class():
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
 from code_to_optimize.bubble_sort_in_nested_class import WrapperClass
 
@@ -151,7 +151,7 @@ def test_add_decorator_imports_nodeps():
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
 
 @codeflash_line_profile
@@ -200,7 +200,7 @@ def test_add_decorator_imports_helper_outside():
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
 from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
@@ -275,7 +275,7 @@ class helper:
         line_profiler_output_file = add_decorator_imports(
             func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
-codeflash_line_profile.enable(output_prefix='{line_profiler_output_file}')
+codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
 
 @codeflash_line_profile

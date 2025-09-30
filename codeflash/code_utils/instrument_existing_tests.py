@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import platform
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -143,7 +144,10 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "unittest":
+            if self.test_framework == "unittest" and platform.system() != "Windows":
+                # Only add timeout decorator on non-Windows platforms
+                # Windows doesn't support SIGALRM signal required by timeout_decorator
+
                 node.decorator_list.append(
                     ast.Call(
                         func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
@@ -220,7 +224,9 @@ class InjectPerfOnly(ast.NodeTransformer):
                                     args=[
                                         ast.JoinedStr(
                                             values=[
-                                                ast.Constant(value=f"{get_run_tmp_file(Path('test_return_values_'))}"),
+                                                ast.Constant(
+                                                    value=f"{get_run_tmp_file(Path('test_return_values_')).as_posix()}"
+                                                ),
                                                 ast.FormattedValue(
                                                     value=ast.Name(id="codeflash_iteration", ctx=ast.Load()),
                                                     conversion=-1,
@@ -588,7 +594,7 @@ def inject_profiling_into_existing_test(
         new_imports.extend(
             [ast.Import(names=[ast.alias(name="sqlite3")]), ast.Import(names=[ast.alias(name="dill", asname="pickle")])]
         )
-    if test_framework == "unittest":
+    if test_framework == "unittest" and platform.system() != "Windows":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     additional_functions = [create_wrapper_function(mode)]
 

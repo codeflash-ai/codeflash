@@ -46,7 +46,7 @@ class CoverageUtils:
 
         reporter = JsonReporter(cov)
         temp_json_file = database_path.with_suffix(".report.json")
-        with temp_json_file.open("w") as f:
+        with temp_json_file.open("w", encoding="utf-8") as f:
             try:
                 reporter.report(morfs=[source_code_path.as_posix()], outfile=f)
             except NoDataError:
@@ -92,7 +92,7 @@ class CoverageUtils:
     def _parse_coverage_file(
         coverage_file_path: Path, source_code_path: Path
     ) -> tuple[dict[str, dict[str, Any]], CoverageStatus]:
-        with coverage_file_path.open() as f:
+        with coverage_file_path.open(encoding="utf-8") as f:
             coverage_data = json.load(f)
 
         candidates = generate_candidates(source_code_path)

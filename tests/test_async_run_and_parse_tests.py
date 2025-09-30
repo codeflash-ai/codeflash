@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import sys
 from argparse import Namespace
 from pathlib import Path
+
+import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
@@ -10,6 +13,7 @@ from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators, inject_profiling_into_existing_test
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_bubble_sort_behavior_results() -> None:
     test_code = """import asyncio
 import pytest
@@ -137,6 +141,7 @@ async def test_async_sort():
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_class_method_behavior_results() -> None:
     """Test async class method behavior with run_and_parse_tests."""
     test_code = """import asyncio
@@ -260,6 +265,7 @@ async def test_async_class_sort():
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_function_performance_mode() -> None:
     test_code = """import asyncio
 import pytest
@@ -354,6 +360,7 @@ async def test_async_perf():
 
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_function_error_handling() -> None:
     test_code = """import asyncio
 import pytest
@@ -516,6 +523,7 @@ async def async_error_function(lst):
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_multiple_iterations() -> None:
     test_code = """import asyncio
 import pytest
@@ -624,6 +632,7 @@ async def test_async_multi():
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_empty_input_edge_cases() -> None:
     test_code = """import asyncio
 import pytest
@@ -741,6 +750,7 @@ async def test_async_edge_cases():
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_sync_function_behavior_in_async_test_environment() -> None:
     sync_sorter_code = """def sync_sorter(lst):
     \"\"\"Synchronous bubble sort for comparison.\"\"\"
@@ -880,6 +890,7 @@ def test_sync_sort():
             test_path_perf.unlink()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_mixed_async_sync_function_calls() -> None:
     mixed_module_code = """import asyncio
 from typing import List, Union

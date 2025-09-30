@@ -209,7 +209,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         return "\n".join(
             [
-                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
