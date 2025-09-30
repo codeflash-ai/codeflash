@@ -543,7 +543,7 @@ class AiServiceClient:
         coverage_message: str,
         replay_tests: str,
         root_dir: Path,
-        concolic_tests: str,
+        concolic_tests: str,  # noqa: ARG002
     ) -> str:
         """Compute the optimization impact of current Pull Request.
 
@@ -580,6 +580,7 @@ class AiServiceClient:
         logger.info("!lsp|Computing Optimization Impact…")
         payload = {
             "code_diff": code_diff,
+            "explanation": explanation.raw_explanation_message,
             "existing_tests": existing_tests_source,
             "generated_tests": generated_original_test_source,
             "trace_id": function_trace_id,
@@ -591,7 +592,6 @@ class AiServiceClient:
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
         }
-        logger.debug(f"unused {type(concolic_tests)}")
         console.rule()
         try:
             response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
