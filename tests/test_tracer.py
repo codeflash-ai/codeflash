@@ -3,7 +3,6 @@ import dataclasses
 import pickle
 import sqlite3
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Generator
@@ -59,29 +58,26 @@ class TraceConfig:
 
 class TestTracer:
     @pytest.fixture
-    def trace_config(self) -> Generator[Path, None, None]:
+    def trace_config(self, tmp_path: Path) -> Generator[TraceConfig, None, None]:
         """Create a temporary pyproject.toml config file."""
         # Create a temporary directory structure
-        temp_dir = Path(tempfile.mkdtemp())
-        tests_dir = temp_dir / "tests"
+        tests_dir = tmp_path / "tests"
         tests_dir.mkdir(exist_ok=True)
 
         # Use the current working directory as module root so test files are included
         current_dir = Path.cwd()
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False, dir=temp_dir) as f:
-            f.write(f"""
+        config_path = tmp_path / "pyproject.toml"
+        config_path.write_text(f"""
 [tool.codeflash]
-module-root = "{current_dir}"
-tests-root = "{tests_dir}"
+module-root = "{current_dir.as_posix()}"
+tests-root = "{tests_dir.as_posix()}"
 test-framework = "pytest"
 ignore-paths = []
-""")
-            config_path = Path(f.name)
-        with tempfile.NamedTemporaryFile(suffix=".trace", delete=False) as f:
-            trace_path = Path(f.name)
-        trace_path.unlink(missing_ok=True)  # Remove the file, we just want the path
-        replay_test_pkl_path = temp_dir / "replay_test.pkl"
+""", encoding="utf-8")
+        
+        trace_path = tmp_path / "trace_file.trace"
+        replay_test_pkl_path = tmp_path / "replay_test.pkl"
         config, found_config_path = parse_config_file(config_path)
         trace_config = TraceConfig(
             trace_file=trace_path,
@@ -92,11 +88,6 @@ ignore-paths = []
         )
 
         yield trace_config
-        import shutil
-
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        trace_path.unlink(missing_ok=True)
-        replay_test_pkl_path.unlink(missing_ok=True)
 
     @pytest.fixture(autouse=True)
     def reset_tracer_state(self) -> Generator[None, None, None]:
