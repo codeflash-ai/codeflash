@@ -10,6 +10,9 @@ from codeflash.lsp.helpers import replace_quotes_with_backticks, simplify_worktr
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
 
+# \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
+message_delimiter = "\u241f"
+
 
 @dataclass
 class LspMessage:
@@ -32,12 +35,8 @@ class LspMessage:
 
     def serialize(self) -> str:
         data = self._loop_through(asdict(self))
-        # Important: keep type as the first key, for making it easy and fast for the client to know if this is a lsp message before parsing it
         ordered = {"type": self.type(), **data}
-        return (
-            json.dumps(ordered)
-            + "\u241f"  # \u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
-        )
+        return message_delimiter + json.dumps(ordered) + message_delimiter
 
 
 @dataclass

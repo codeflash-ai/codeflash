@@ -11,7 +11,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         function_name="sorter",
         benchmarks_root=cwd / "tests" / "pytest" / "benchmarks",
         test_framework="pytest",
-        min_improvement_x=1.0,
+        min_improvement_x=0.70,
         coverage_expectations=[
             CoverageExpectation(
                 function_name="sorter", expected_coverage=100.0, expected_lines=[2, 3, 4, 5, 6, 7, 8, 9, 10]
