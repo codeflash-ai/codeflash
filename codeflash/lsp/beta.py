@@ -431,6 +431,13 @@ def perform_function_optimization(
             server.optimizer.current_worktree, relative_file_paths, function_to_optimize_qualified_name
         )
 
+        if not patch_path:
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": "Failed to create a patch for optimization",
+            }
+
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
         return {
@@ -438,7 +445,7 @@ def perform_function_optimization(
             "status": "success",
             "message": "Optimization completed successfully",
             "extra": f"Speedup: {speedup:.2f}x faster",
-            "patch_file": patch_path,
+            "patch_file": str(patch_path),
             "task_id": params.task_id,
             "explanation": best_optimization.explanation_v2,
         }
