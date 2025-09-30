@@ -219,6 +219,6 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
             file.write(modified_code)
     # Adding profile.enable line for changing the savepath of the data, do this only for the main file and not the helper files
     file_contents = function_to_optimize.file_path.read_text("utf-8")
-    modified_code = add_profile_enable(file_contents, str(line_profile_output_file))
+    modified_code = add_profile_enable(file_contents, line_profile_output_file.as_posix())
     function_to_optimize.file_path.write_text(modified_code, "utf-8")
     return line_profile_output_file
