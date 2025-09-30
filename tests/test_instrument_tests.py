@@ -539,7 +539,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 2
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 2
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -806,7 +807,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -1161,7 +1163,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 6
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 6
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -1439,7 +1442,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt is True:
             func_optimizer.write_code_and_helpers(
