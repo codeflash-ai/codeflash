@@ -459,7 +459,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
         hashing_context = code_ctx.hashing_code_context
         expected_read_write_context = f"""
-```python:{file_path.relative_to(opt.args.project_root)}
+```python:{file_path.resolve().relative_to(opt.args.project_root)}
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
     def __init__(self) -> None: ...
@@ -557,7 +557,7 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
 ```
 """
         expected_read_only_context = f'''
-```python:{file_path.relative_to(opt.args.project_root)}
+```python:{file_path.resolve().relative_to(opt.args.project_root)}
 _P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
@@ -1799,10 +1799,11 @@ def get_system_details():
             main_file.flush()
 
         # Set up the optimizer
+        project_root = package_dir.resolve()
         file_path = main_file_path.resolve()
         opt = Optimizer(
             Namespace(
-                project_root=package_dir.resolve(),
+                project_root=project_root,
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
@@ -1827,7 +1828,7 @@ def get_system_details():
         hashing_context = code_ctx.hashing_code_context
         # The expected contexts
         expected_read_write_context = f"""
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{file_path.relative_to(project_root)}
 import utility_module
 
 class Calculator:
@@ -2044,10 +2045,11 @@ def get_system_details():
             main_file.flush()
 
         # Set up the optimizer
+        project_root = package_dir.resolve()
         file_path = main_file_path.resolve()
         opt = Optimizer(
             Namespace(
-                project_root=package_dir.resolve(),
+                project_root=project_root,
                 disable_telemetry=True,
                 tests_root="tests",
                 test_framework="pytest",
@@ -2096,7 +2098,7 @@ def select_precision(precision, fallback_precision):
     else:
         return DEFAULT_PRECISION
 ```
-```python:{main_file_path.relative_to(opt.args.project_root)}
+```python:{file_path.relative_to(project_root)}
 import utility_module
 
 class Calculator:
