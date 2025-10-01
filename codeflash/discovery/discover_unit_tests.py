@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @final
-class PytestExitCode(enum.IntEnum): # don't need to import entire pytest just for this
+class PytestExitCode(enum.IntEnum):  # don't need to import entire pytest just for this
     #: Tests passed.
     OK = 0
     #: Tests failed.
