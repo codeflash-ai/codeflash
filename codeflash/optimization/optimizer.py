@@ -350,13 +350,12 @@ class Optimizer:
                                 relative_file_paths = [
                                     code_string.file_path for code_string in read_writable_code.code_strings
                                 ]
-                                metadata = create_diff_patch_from_worktree(
+                                patch_path = create_diff_patch_from_worktree(
                                     self.current_worktree,
                                     relative_file_paths,
                                     fto_name=function_to_optimize.qualified_name,
-                                    metadata_input={},
                                 )
-                                self.patch_files.append(metadata["patch_path"])
+                                self.patch_files.append(patch_path)
                                 if i < len(functions_to_optimize) - 1:
                                     create_worktree_snapshot_commit(
                                         self.current_worktree,
