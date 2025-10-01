@@ -586,7 +586,7 @@ class AiServiceClient:
             "trace_id": function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
-            "speedup": f"{100 + 100 * float(explanation.speedup):.2f}%",
+            "speedup": f"{(100 * float(explanation.speedup)):.2f}%",
             "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
