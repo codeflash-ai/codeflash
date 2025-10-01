@@ -21,11 +21,15 @@ def test_function_eligible_for_optimization() -> None:
     return a**2
     """
     functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert functions_found[Path(f.name)][0].function_name == "test_function_eligible_for_optimization"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(function)
+        
+        functions_found = find_all_functions_in_file(file_path)
+    assert functions_found[file_path][0].function_name == "test_function_eligible_for_optimization"
 
     # Has no return statement
     function = """def test_function_not_eligible_for_optimization():
@@ -33,28 +37,40 @@ def test_function_eligible_for_optimization() -> None:
     print(a)
     """
     functions_found = {}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
-    assert len(functions_found[Path(f.name)]) == 0
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(function)
+        
+        functions_found = find_all_functions_in_file(file_path)
+    assert len(functions_found[file_path]) == 0
 
 
     # we want to trigger an error in the function discovery
     function = """def test_invalid_code():"""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(function)
-        f.flush()
-        functions_found = find_all_functions_in_file(Path(f.name))
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(function)
+        
+        functions_found = find_all_functions_in_file(file_path)
     assert functions_found == {}
 
 
 
 
 def test_find_top_level_function_or_method():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
-            """def functionA():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
+                """def functionA():
     def functionB():
         return 5
     class E:
@@ -76,42 +92,48 @@ class AirbyteEntrypoint(object):
 def non_classmethod_function(cls, name):
     return cls.name
     """
-        )
-        f.flush()
-        path_obj_name = Path(f.name)
-        assert inspect_top_level_functions_or_methods(path_obj_name, "functionA").is_top_level
-        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionB").is_top_level
-        assert inspect_top_level_functions_or_methods(path_obj_name, "functionC", class_name="A").is_top_level
-        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionD", class_name="A").is_top_level
-        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionF", class_name="E").is_top_level
-        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionA").has_args
+            )
+        
+        assert inspect_top_level_functions_or_methods(file_path, "functionA").is_top_level
+        assert not inspect_top_level_functions_or_methods(file_path, "functionB").is_top_level
+        assert inspect_top_level_functions_or_methods(file_path, "functionC", class_name="A").is_top_level
+        assert not inspect_top_level_functions_or_methods(file_path, "functionD", class_name="A").is_top_level
+        assert not inspect_top_level_functions_or_methods(file_path, "functionF", class_name="E").is_top_level
+        assert not inspect_top_level_functions_or_methods(file_path, "functionA").has_args
         staticmethod_func = inspect_top_level_functions_or_methods(
-            path_obj_name, "handle_record_counts", class_name=None, line_no=15
+            file_path, "handle_record_counts", class_name=None, line_no=15
         )
         assert staticmethod_func.is_staticmethod
         assert staticmethod_func.staticmethod_class_name == "AirbyteEntrypoint"
         assert inspect_top_level_functions_or_methods(
-            path_obj_name, "functionE", class_name="AirbyteEntrypoint"
+            file_path, "functionE", class_name="AirbyteEntrypoint"
         ).is_classmethod
         assert not inspect_top_level_functions_or_methods(
-            path_obj_name, "non_classmethod_function", class_name="AirbyteEntrypoint"
+            file_path, "non_classmethod_function", class_name="AirbyteEntrypoint"
         ).is_top_level
         # needed because this will be traced with a class_name being passed
 
     # we want to write invalid code to ensure that the function discovery does not crash
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
-            """def functionA():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
+                """def functionA():
 """
-        )
-        f.flush()
-        path_obj_name = Path(f.name)
-        assert not inspect_top_level_functions_or_methods(path_obj_name, "functionA")
+            )
+        
+        assert not inspect_top_level_functions_or_methods(file_path, "functionA")
 
 def test_class_method_discovery():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
-            """class A:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
+                """class A:
     def functionA():
         return True
     def functionB():
@@ -123,21 +145,20 @@ class X:
         return False
 def functionA():
     return True"""
-        )
-        f.flush()
+            )
+        
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             only_get_this_function="A.functionA",
             test_cfg=test_config,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
         assert len(functions) == 1
         for file in functions:
@@ -148,12 +169,12 @@ def functionA():
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             only_get_this_function="X.functionA",
             test_cfg=test_config,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
         assert len(functions) == 1
         for file in functions:
@@ -164,12 +185,12 @@ def functionA():
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             only_get_this_function="functionA",
             test_cfg=test_config,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
         assert len(functions) == 1
         for file in functions:
@@ -178,8 +199,12 @@ def functionA():
 
 
 def test_nested_function():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
 """
 import copy 
 
@@ -223,28 +248,31 @@ def propagate_attributes(
     traverse(source_node_id)
     return modified_nodes
 """
-        )
-        f.flush()
+            )
+        
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             test_cfg=test_config,
             only_get_this_function=None,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
 
         assert len(functions) == 1
         assert functions_count == 1
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
 """
 def outer_function():
     def inner_function():
@@ -252,28 +280,31 @@ def outer_function():
 
     return inner_function
 """
-        )
-        f.flush()
+            )
+        
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             test_cfg=test_config,
             only_get_this_function=None,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
 
         assert len(functions) == 1
         assert functions_count == 1
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as f:
-        f.write(
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        file_path = temp_dir_path / "test_function.py"
+        
+        with file_path.open("w") as f:
+            f.write(
 """
 def outer_function():
     def inner_function():
@@ -283,21 +314,20 @@ def outer_function():
         pass
     return inner_function, another_inner_function
 """
-        )
-        f.flush()
+            )
+        
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
-        path_obj_name = Path(f.name)
         functions, functions_count, _ = get_functions_to_optimize(
             optimize_all=None,
             replay_test=None,
-            file=path_obj_name,
+            file=file_path,
             test_cfg=test_config,
             only_get_this_function=None,
             ignore_paths=[Path("/bruh/")],
-            project_root=path_obj_name.parent,
-            module_root=path_obj_name.parent,
+            project_root=file_path.parent,
+            module_root=file_path.parent,
         )
 
         assert len(functions) == 1

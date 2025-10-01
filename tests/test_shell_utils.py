@@ -38,6 +38,12 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         self.test_rc_path = "test_shell_rc"
         self.api_key = "cf-1234567890abcdef"
         os.environ["SHELL"] = "/bin/bash"  # Set a default shell for testing
+        
+        # Set up platform-specific export syntax
+        if os.name == "nt":  # Windows
+            self.api_key_export = f'set CODEFLASH_API_KEY={self.api_key}'
+        else:  # Unix-like systems
+            self.api_key_export = f'export CODEFLASH_API_KEY="{self.api_key}"'
 
     def tearDown(self):
         """Cleanup the temporary shell configuration file after testing."""
@@ -50,25 +56,37 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         with patch("codeflash.code_utils.shell_utils.get_shell_rc_path") as mock_get_shell_rc_path:
             mock_get_shell_rc_path.return_value = self.test_rc_path
             with patch(
-                "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY="{self.api_key}"\n')
+                "builtins.open", mock_open(read_data=f'{self.api_key_export}\n')
             ) as mock_file:
                 self.assertEqual(read_api_key_from_shell_config(), self.api_key)
                 mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
-            with patch(
                 "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
-            ) as mock_file:
-                self.assertEqual(read_api_key_from_shell_config(), self.api_key)
-                mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
-            with patch(
-                "builtins.open", mock_open(read_data=f'#export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
-            ) as mock_file:
-                self.assertEqual(read_api_key_from_shell_config(), None)
-                mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
-            with patch(
-                "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY={self.api_key}\n')
-            ) as mock_file:
-                self.assertEqual(read_api_key_from_shell_config(), self.api_key)
-                mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+            
+            if os.name != "nt":
+                with patch(
+                    "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
+                ) as mock_file:
+                    self.assertEqual(read_api_key_from_shell_config(), self.api_key)
+                    mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+                
+                with patch(
+                    "builtins.open", mock_open(read_data=f'#export CODEFLASH_API_KEY=\'{self.api_key}\'\n')
+                ) as mock_file:
+                    self.assertEqual(read_api_key_from_shell_config(), None)
+                    mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+                
+                with patch(
+                    "builtins.open", mock_open(read_data=f'export CODEFLASH_API_KEY={self.api_key}\n')
+                ) as mock_file:
+                    self.assertEqual(read_api_key_from_shell_config(), self.api_key)
+                    mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
+            
+            elif os.name == "nt":
+                with patch(
+                    "builtins.open", mock_open(read_data=f'REM set CODEFLASH_API_KEY={self.api_key}\n')
+                ) as mock_file:
+                    self.assertEqual(read_api_key_from_shell_config(), None)
+                    mock_file.assert_called_once_with(self.test_rc_path, encoding="utf8")
 
 
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
@@ -83,23 +101,41 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
     def test_malformed_api_key_export(self, mock_get_shell_rc_path):
         """Test with a malformed API key export."""
         mock_get_shell_rc_path.return_value = self.test_rc_path
-        with patch("builtins.open", mock_open(read_data=f"export API_KEY={self.api_key}\n")):
-            result = read_api_key_from_shell_config()
-            self.assertIsNone(result)
-        with patch("builtins.open", mock_open(read_data=f"CODEFLASH_API_KEY={self.api_key}\n")):
-            result = read_api_key_from_shell_config()
-            self.assertIsNone(result)
-        with patch("builtins.open", mock_open(read_data=f"export CODEFLASH_API_KEY=sk-{self.api_key}\n")):
-            result = read_api_key_from_shell_config()
-            self.assertIsNone(result)
+        
+        if os.name == "nt":
+            with patch("builtins.open", mock_open(read_data=f"set API_KEY={self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
+            with patch("builtins.open", mock_open(read_data=f"CODEFLASH_API_KEY={self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
+            with patch("builtins.open", mock_open(read_data=f"set CODEFLASH_API_KEY=sk-{self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
+        else:
+            with patch("builtins.open", mock_open(read_data=f"export API_KEY={self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
+            with patch("builtins.open", mock_open(read_data=f"CODEFLASH_API_KEY={self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
+            with patch("builtins.open", mock_open(read_data=f"export CODEFLASH_API_KEY=sk-{self.api_key}\n")):
+                result = read_api_key_from_shell_config()
+                self.assertIsNone(result)
 
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
     def test_multiple_api_key_exports(self, mock_get_shell_rc_path):
         """Test with multiple API key exports."""
         mock_get_shell_rc_path.return_value = self.test_rc_path
+        if os.name == "nt":  # Windows
+            first_export = 'set CODEFLASH_API_KEY=cf-firstkey'
+            second_export = f'set CODEFLASH_API_KEY={self.api_key}'
+        else:
+            first_export = 'export CODEFLASH_API_KEY="cf-firstkey"'
+            second_export = f'export CODEFLASH_API_KEY="{self.api_key}"'
         with patch(
             "builtins.open",
-            mock_open(read_data=f'export CODEFLASH_API_KEY="cf-firstkey"\nexport CODEFLASH_API_KEY="{self.api_key}"\n'),
+            mock_open(read_data=f'{first_export}\n{second_export}\n'),
         ):
             self.assertEqual(read_api_key_from_shell_config(), self.api_key)
 
@@ -109,7 +145,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
         mock_get_shell_rc_path.return_value = self.test_rc_path
         with patch(
             "builtins.open",
-            mock_open(read_data=f'# Setting API Key\nexport CODEFLASH_API_KEY="{self.api_key}"\n# Done\n'),
+            mock_open(read_data=f'# Setting API Key\n{self.api_key_export}\n# Done\n'),
         ):
             self.assertEqual(read_api_key_from_shell_config(), self.api_key)
 
@@ -117,7 +153,7 @@ class TestReadApiKeyFromShellConfig(unittest.TestCase):
     def test_api_key_in_comment(self, mock_get_shell_rc_path):
         """Test with API key export in a comment."""
         mock_get_shell_rc_path.return_value = self.test_rc_path
-        with patch("builtins.open", mock_open(read_data=f'# export CODEFLASH_API_KEY="{self.api_key}"\n')):
+        with patch("builtins.open", mock_open(read_data=f'# {self.api_key_export}\n')):
             self.assertIsNone(read_api_key_from_shell_config())
 
     @patch("codeflash.code_utils.shell_utils.get_shell_rc_path")
