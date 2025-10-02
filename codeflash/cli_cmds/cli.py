@@ -239,7 +239,8 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path, 
         return git_root_dir()
     if pyproject_file_path.parent == module_root:
         return module_root
-    return module_root.parent.resolve()
+    parent = module_root.parent
+    return parent if parent.is_absolute() else parent.absolute()
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
