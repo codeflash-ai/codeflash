@@ -442,11 +442,11 @@ class Optimizer:
                 logger.warning("Failed to create worktree. Skipping optimization.")
                 return
             self.current_worktree = worktree_dir
-            self.mutate_args_for_worktree_mode(worktree_dir)
+            self.mirror_paths_for_worktree_mode(worktree_dir)
             # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
             Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
-    def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
+    def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
         original_args = copy.deepcopy(self.args)
         original_test_cfg = copy.deepcopy(self.test_cfg)
         self.original_args_and_test_cfg = (original_args, original_test_cfg)
