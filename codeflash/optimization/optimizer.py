@@ -15,7 +15,7 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import check_running_in_git_repo
+from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
@@ -447,34 +447,51 @@ class Optimizer:
             Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
     def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
-        saved_args = copy.deepcopy(self.args)
-        saved_test_cfg = copy.deepcopy(self.test_cfg)
-        self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
+        original_args = copy.deepcopy(self.args)
+        original_test_cfg = copy.deepcopy(self.test_cfg)
+        self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
-        project_root = self.args.project_root
-        module_root = self.args.module_root
-        relative_module_root = module_root.relative_to(project_root)
-        relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
-        relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
-        relative_benchmarks_root = (
-            self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
-        )
+        original_module_root = original_args.module_root
+        original_git_root = git_root_dir().as_posix()
 
+        # mutate project_root
+        relative_project_root = original_args.project_root.relative_to(original_git_root).as_posix()
+        # this will be the same as the original project root but in the worktree
+        new_project_root = worktree_dir / relative_project_root
+        self.args.project_root = new_project_root
+        self.test_cfg.project_root_path = new_project_root
+
+        # mutate module_root
+        relative_module_root = original_module_root.relative_to(original_git_root).as_posix()
         self.args.module_root = worktree_dir / relative_module_root
-        self.args.project_root = worktree_dir
-        self.args.test_project_root = worktree_dir
-        self.args.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
 
-        self.test_cfg.project_root_path = worktree_dir
-        self.test_cfg.tests_project_rootdir = worktree_dir
-        self.test_cfg.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
-
+        # mute target file
+        relative_optimized_file = (
+            original_args.file.relative_to(original_git_root).as_posix() if original_args.file else None
+        )
         if relative_optimized_file is not None:
             self.args.file = worktree_dir / relative_optimized_file
+
+        # mutate tests root
+        relative_tests_root = original_test_cfg.tests_root.relative_to(original_git_root).as_posix()
+        new_tests_root = worktree_dir / relative_tests_root
+        self.args.tests_root = new_tests_root
+        self.test_cfg.tests_root = new_tests_root
+
+        # mutate tests project root
+        relative_tests_project_root = original_args.test_project_root.relative_to(original_git_root).as_posix()
+        self.args.test_project_root = worktree_dir / relative_tests_project_root
+        self.test_cfg.tests_project_rootdir = worktree_dir / relative_tests_project_root
+
+        # mutate benchmarks root
+        relative_benchmarks_root = (
+            original_args.benchmarks_root.relative_to(original_git_root).as_posix()
+            if original_args.benchmarks_root
+            else None
+        )
+        if relative_benchmarks_root:
+            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
 
 
 def run_with_args(args: Namespace) -> None:
