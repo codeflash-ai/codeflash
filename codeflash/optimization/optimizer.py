@@ -452,42 +452,38 @@ class Optimizer:
         self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
         original_module_root = original_args.module_root
-        original_git_root = git_root_dir().as_posix()
+        original_git_root = git_root_dir()
 
         # mutate project_root
-        relative_project_root = original_args.project_root.relative_to(original_git_root).as_posix()
+        relative_project_root = original_args.project_root.relative_to(original_git_root)
         # this will be the same as the original project root but in the worktree
         new_project_root = worktree_dir / relative_project_root
         self.args.project_root = new_project_root
         self.test_cfg.project_root_path = new_project_root
 
         # mutate module_root
-        relative_module_root = original_module_root.relative_to(original_git_root).as_posix()
+        relative_module_root = original_module_root.relative_to(original_git_root)
         self.args.module_root = worktree_dir / relative_module_root
 
         # mute target file
-        relative_optimized_file = (
-            original_args.file.relative_to(original_git_root).as_posix() if original_args.file else None
-        )
+        relative_optimized_file = original_args.file.relative_to(original_git_root) if original_args.file else None
         if relative_optimized_file is not None:
             self.args.file = worktree_dir / relative_optimized_file
 
         # mutate tests root
-        relative_tests_root = original_test_cfg.tests_root.relative_to(original_git_root).as_posix()
+        relative_tests_root = original_test_cfg.tests_root.relative_to(original_git_root)
         new_tests_root = worktree_dir / relative_tests_root
         self.args.tests_root = new_tests_root
         self.test_cfg.tests_root = new_tests_root
 
         # mutate tests project root
-        relative_tests_project_root = original_args.test_project_root.relative_to(original_git_root).as_posix()
+        relative_tests_project_root = original_args.test_project_root.relative_to(original_git_root)
         self.args.test_project_root = worktree_dir / relative_tests_project_root
         self.test_cfg.tests_project_rootdir = worktree_dir / relative_tests_project_root
 
         # mutate benchmarks root
         relative_benchmarks_root = (
-            original_args.benchmarks_root.relative_to(original_git_root).as_posix()
-            if original_args.benchmarks_root
-            else None
+            original_args.benchmarks_root.relative_to(original_git_root) if original_args.benchmarks_root else None
         )
         if relative_benchmarks_root:
             self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
