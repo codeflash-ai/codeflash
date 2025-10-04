@@ -22,13 +22,7 @@ HAS_PANDAS = find_spec("pandas") is not None
 HAS_PYRSISTENT = find_spec("pyrsistent") is not None
 HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
-
-try:
-    import xarray  # type: ignore
-
-    HAS_XARRAY = True
-except ImportError:
-    HAS_XARRAY = False
+HAS_XARRAY = find_spec("xarray") is not None
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
@@ -83,24 +77,29 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
             new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
             return comparator(orig_dict, new_dict, superset_obj)
+
         if HAS_JAX:
             import jax  # type: ignore  # noqa: PGH003
             import jax.numpy as jnp  # type: ignore  # noqa: PGH003
-        # Handle JAX arrays first to avoid boolean context errors in other conditions
-        if HAS_JAX and isinstance(orig, jax.Array):
-            if orig.dtype != new.dtype:
-                return False
-            if orig.shape != new.shape:
-                return False
-            return bool(jnp.allclose(orig, new, equal_nan=True))
+
+            # Handle JAX arrays first to avoid boolean context errors in other conditions
+            if isinstance(orig, jax.Array):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape != new.shape:
+                    return False
+                return bool(jnp.allclose(orig, new, equal_nan=True))
 
         # Handle xarray objects before numpy to avoid boolean context errors
-        if HAS_XARRAY and isinstance(orig, (xarray.Dataset, xarray.DataArray)):
-            return orig.identical(new)
+        if HAS_XARRAY:
+            import xarray  # type: ignore  # noqa: PGH003
+
+            if isinstance(orig, (xarray.Dataset, xarray.DataArray)):
+                return orig.identical(new)
 
         if HAS_SQLALCHEMY:
             import sqlalchemy  # type: ignore  # noqa: PGH003
-        if HAS_SQLALCHEMY:
+
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
                 insp = sqlalchemy.inspection.inspect(new)  # noqa: F841
@@ -115,6 +114,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
+
         if HAS_SCIPY:
             import scipy  # type: ignore  # noqa: PGH003
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
@@ -132,27 +132,28 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
         if HAS_NUMPY:
             import numpy as np  # type: ignore  # noqa: PGH003
-        if HAS_NUMPY and isinstance(orig, np.ndarray):
-            if orig.dtype != new.dtype:
-                return False
-            if orig.shape != new.shape:
-                return False
-            try:
-                return np.allclose(orig, new, equal_nan=True)
-            except Exception:
-                # fails at "ufunc 'isfinite' not supported for the input types"
-                return np.all([comparator(x, y, superset_obj) for x, y in zip(orig, new)])
 
-        if HAS_NUMPY and isinstance(orig, (np.floating, np.complex64, np.complex128)):
-            return np.isclose(orig, new)
+            if isinstance(orig, np.ndarray):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape != new.shape:
+                    return False
+                try:
+                    return np.allclose(orig, new, equal_nan=True)
+                except Exception:
+                    # fails at "ufunc 'isfinite' not supported for the input types"
+                    return np.all([comparator(x, y, superset_obj) for x, y in zip(orig, new)])
 
-        if HAS_NUMPY and isinstance(orig, (np.integer, np.bool_, np.byte)):
-            return orig == new
+            if isinstance(orig, (np.floating, np.complex64, np.complex128)):
+                return np.isclose(orig, new)
 
-        if HAS_NUMPY and isinstance(orig, np.void):
-            if orig.dtype != new.dtype:
-                return False
-            return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
+            if isinstance(orig, (np.integer, np.bool_, np.byte)):
+                return orig == new
+
+            if isinstance(orig, np.void):
+                if orig.dtype != new.dtype:
+                    return False
+                return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
 
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
@@ -163,15 +164,16 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
         if HAS_PANDAS:
             import pandas  # type: ignore  # noqa: ICN001, PGH003
-        if HAS_PANDAS and isinstance(
-            orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
-        ):
-            return orig.equals(new)
 
-        if HAS_PANDAS and isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
-            return orig == new
-        if HAS_PANDAS and pandas.isna(orig) and pandas.isna(new):
-            return True
+            if isinstance(
+                orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
+            ):
+                return orig.equals(new)
+
+            if isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
+                return orig == new
+            if pandas.isna(orig) and pandas.isna(new):
+                return True
 
         if isinstance(orig, array.array):
             if orig.typecode != new.typecode:
@@ -194,32 +196,35 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
         if HAS_TORCH:
             import torch  # type: ignore  # noqa: PGH003
-        if HAS_TORCH and isinstance(orig, torch.Tensor):
-            if orig.dtype != new.dtype:
-                return False
-            if orig.shape != new.shape:
-                return False
-            if orig.requires_grad != new.requires_grad:
-                return False
-            if orig.device != new.device:
-                return False
-            return torch.allclose(orig, new, equal_nan=True)
+
+            if isinstance(orig, torch.Tensor):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape != new.shape:
+                    return False
+                if orig.requires_grad != new.requires_grad:
+                    return False
+                if orig.device != new.device:
+                    return False
+                return torch.allclose(orig, new, equal_nan=True)
+
         if HAS_PYRSISTENT:
             import pyrsistent  # type: ignore  # noqa: PGH003
-        if HAS_PYRSISTENT and isinstance(
-            orig,
-            (
-                pyrsistent.PMap,
-                pyrsistent.PVector,
-                pyrsistent.PSet,
-                pyrsistent.PRecord,
-                pyrsistent.PClass,
-                pyrsistent.PBag,
-                pyrsistent.PList,
-                pyrsistent.PDeque,
-            ),
-        ):
-            return orig == new
+
+            if isinstance(
+                orig,
+                (
+                    pyrsistent.PMap,
+                    pyrsistent.PVector,
+                    pyrsistent.PSet,
+                    pyrsistent.PRecord,
+                    pyrsistent.PClass,
+                    pyrsistent.PBag,
+                    pyrsistent.PList,
+                    pyrsistent.PDeque,
+                ),
+            ):
+                return orig == new
 
         if hasattr(orig, "__attrs_attrs__") and hasattr(new, "__attrs_attrs__"):
             orig_dict = {}
