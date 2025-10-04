@@ -28,14 +28,14 @@ def test_mirror_paths_for_worktree_mode(monkeypatch: pytest.MonkeyPatch):
     optimizer.mirror_paths_for_worktree_mode(worktree_dir)
 
     assert optimizer.args.project_root == worktree_dir / "src"
-    assert optimizer.args.test_project_root == worktree_dir
+    assert optimizer.args.test_project_root == worktree_dir / "src"
     assert optimizer.args.module_root == worktree_dir / "src" / "app"
-    assert optimizer.args.tests_root == worktree_dir / "tests"
+    assert optimizer.args.tests_root == worktree_dir / "src" / "tests"
     assert optimizer.args.file == worktree_dir / "src" / "app" / "main.py"
 
-    assert optimizer.test_cfg.tests_root == worktree_dir / "tests"
+    assert optimizer.test_cfg.tests_root == worktree_dir / "src" / "tests"
     assert optimizer.test_cfg.project_root_path == worktree_dir / "src" # same as project_root
-    assert optimizer.test_cfg.tests_project_rootdir == worktree_dir # same as test_project_root
+    assert optimizer.test_cfg.tests_project_rootdir == worktree_dir / "src" # same as test_project_root
 
     # test on our repo
     monkeypatch.setattr("codeflash.optimization.optimizer.git_root_dir", lambda: repo_root)
