@@ -23,6 +23,13 @@ HAS_PYRSISTENT = find_spec("pyrsistent") is not None
 HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
 
+try:
+    import xarray  # type: ignore
+
+    HAS_XARRAY = True
+except ImportError:
+    HAS_XARRAY = False
+
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
@@ -86,6 +93,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if orig.shape != new.shape:
                 return False
             return bool(jnp.allclose(orig, new, equal_nan=True))
+
+        # Handle xarray objects before numpy to avoid boolean context errors
+        if HAS_XARRAY and isinstance(orig, (xarray.Dataset, xarray.DataArray)):
+            return orig.identical(new)
 
         if HAS_SQLALCHEMY:
             import sqlalchemy  # type: ignore  # noqa: PGH003
