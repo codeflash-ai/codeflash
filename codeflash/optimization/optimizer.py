@@ -484,8 +484,12 @@ class Optimizer:
 
 
 def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
-    relative_path = path.relative_to(src_root)
-    return dest_root / relative_path
+    path_parts = path.parts
+    src_parts = src_root.parts
+    if path_parts[: len(src_parts)] != src_parts:
+        raise ValueError(f"{path!r} does not start with {src_root!r}")
+    relative_parts = path_parts[len(src_parts) :]
+    return dest_root.joinpath(*relative_parts)
 
 
 def run_with_args(args: Namespace) -> None:
