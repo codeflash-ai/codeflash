@@ -451,43 +451,41 @@ class Optimizer:
         original_test_cfg = copy.deepcopy(self.test_cfg)
         self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
-        original_module_root = original_args.module_root
         original_git_root = git_root_dir()
 
-        # mutate project_root
-        relative_project_root = original_args.project_root.relative_to(original_git_root)
-        # this will be the same as the original project root but in the worktree
-        new_project_root = worktree_dir / relative_project_root
-        self.args.project_root = new_project_root
-        self.test_cfg.project_root_path = new_project_root
+        # mirror project_root
+        self.args.project_root = mirror_path(self.args.project_root, original_git_root, worktree_dir)
+        self.test_cfg.project_root_path = mirror_path(self.test_cfg.project_root_path, original_git_root, worktree_dir)
 
-        # mutate module_root
-        relative_module_root = original_module_root.relative_to(original_git_root)
-        self.args.module_root = worktree_dir / relative_module_root
+        # mirror module_root
+        self.args.module_root = mirror_path(self.args.module_root, original_git_root, worktree_dir)
 
-        # mute target file
-        relative_optimized_file = original_args.file.relative_to(original_git_root) if original_args.file else None
-        if relative_optimized_file is not None:
-            self.args.file = worktree_dir / relative_optimized_file
+        # mirror target file
+        if self.args.file:
+            self.args.file = mirror_path(self.args.file, original_git_root, worktree_dir)
 
-        # mutate tests root
-        relative_tests_root = original_test_cfg.tests_root.relative_to(original_git_root)
-        new_tests_root = worktree_dir / relative_tests_root
-        self.args.tests_root = new_tests_root
-        self.test_cfg.tests_root = new_tests_root
+        # mirror tests root
+        self.args.tests_root = mirror_path(self.args.tests_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_root = mirror_path(self.test_cfg.tests_root, original_git_root, worktree_dir)
 
-        # mutate tests project root
-        relative_tests_project_root = original_args.test_project_root.relative_to(original_git_root)
-        self.args.test_project_root = worktree_dir / relative_tests_project_root
-        self.test_cfg.tests_project_rootdir = worktree_dir / relative_tests_project_root
-
-        # mutate benchmarks root
-        relative_benchmarks_root = (
-            original_args.benchmarks_root.relative_to(original_git_root) if original_args.benchmarks_root else None
+        # mirror tests project root
+        self.args.test_project_root = mirror_path(self.args.test_project_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_project_rootdir = mirror_path(
+            self.test_cfg.tests_project_rootdir, original_git_root, worktree_dir
         )
-        if relative_benchmarks_root:
-            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
-            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
+
+        # mirror benchmarks root paths
+        if self.args.benchmarks_root:
+            self.args.benchmarks_root = mirror_path(self.args.benchmarks_root, original_git_root, worktree_dir)
+        if self.test_cfg.benchmark_tests_root:
+            self.test_cfg.benchmark_tests_root = mirror_path(
+                self.test_cfg.benchmark_tests_root, original_git_root, worktree_dir
+            )
+
+
+def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
+    relative_path = path.relative_to(src_root)
+    return dest_root / relative_path
 
 
 def run_with_args(args: Namespace) -> None:
