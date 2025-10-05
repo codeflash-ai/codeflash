@@ -11,7 +11,6 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
@@ -223,20 +222,18 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     args.module_root = Path(args.module_root).resolve()
     # If module-root is "." then all imports are relatives to it.
     # in this case, the ".." becomes outside project scope, causing issues with un-importable paths
-    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path, args.worktree)
+    args.project_root = project_root_from_module_root(args.module_root, pyproject_file_path)
     args.tests_root = Path(args.tests_root).resolve()
     if args.benchmarks_root:
         args.benchmarks_root = Path(args.benchmarks_root).resolve()
-    args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path, args.worktree)
+    args.test_project_root = project_root_from_module_root(args.tests_root, pyproject_file_path)
     if is_LSP_enabled():
         args.all = None
         return args
     return handle_optimize_all_arg_parsing(args)
 
 
-def project_root_from_module_root(module_root: Path, pyproject_file_path: Path, in_worktree: bool = False) -> Path:  # noqa: FBT001, FBT002
-    if in_worktree:
-        return git_root_dir()
+def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
     if pyproject_file_path.parent == module_root:
         return module_root
     return module_root.parent.resolve()

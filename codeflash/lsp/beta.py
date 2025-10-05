@@ -115,7 +115,6 @@ def get_optimizable_functions(
     server: CodeflashLanguageServer, params: OptimizableFunctionsParams
 ) -> dict[str, list[str]]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}
 
@@ -123,16 +122,12 @@ def get_optimizable_functions(
     server.optimizer.args.function = None  # Always get ALL functions, not just one
     server.optimizer.args.previous_checkpoint_functions = False
 
-    server.show_message_log(f"Calling get_optimizable_functions for {server.optimizer.args.file}...", "Info")
     optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
 
     path_to_qualified_names = {}
     for functions in optimizable_funcs.values():
         path_to_qualified_names[file_path] = [func.qualified_name for func in functions]
 
-    server.show_message_log(
-        f"Found {len(path_to_qualified_names)} files with functions: {path_to_qualified_names}", "Info"
-    )
     return path_to_qualified_names
 
 
@@ -177,7 +172,7 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
             else:
                 return {"status": "error", "message": "No pyproject.toml found in workspace."}
 
-    # since we are using worktrees, optimization diffs are generated with respect to the root of the repo, also the args.project_root is set to the root of the repo when creating a worktree
+    # since we are using worktrees, optimization diffs are generated with respect to the root of the repo.
     root = str(git_root_dir())
 
     if getattr(params, "skip_validation", False):
