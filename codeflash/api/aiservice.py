@@ -561,7 +561,7 @@ class AiServiceClient:
 
         Returns:
         -------
-        - 'high','medium' or 'low' optimization impact
+        - 'high' or 'low' optimization impact
 
         """
         diff_str = "\n".join(
