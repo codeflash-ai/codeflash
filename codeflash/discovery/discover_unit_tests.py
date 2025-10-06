@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import enum
 import hashlib
 import os
 import pickle
@@ -11,12 +12,11 @@ import subprocess
 import unittest
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-import pytest
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text
@@ -33,6 +33,22 @@ from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInF
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
+
+
+@final
+class PytestExitCode(enum.IntEnum):  # don't need to import entire pytest just for this
+    #: Tests passed.
+    OK = 0
+    #: Tests failed.
+    TESTS_FAILED = 1
+    #: pytest was interrupted.
+    INTERRUPTED = 2
+    #: An internal error got in the way.
+    INTERNAL_ERROR = 3
+    #: pytest was misused.
+    USAGE_ERROR = 4
+    #: pytest couldn't find tests.
+    NO_TESTS_COLLECTED = 5
 
 
 @dataclass(frozen=True)
@@ -412,7 +428,7 @@ def discover_tests_pytest(
             error_section = match.group(1) if match else result.stdout
 
             logger.warning(
-                f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}\n {error_section}"
+                f"Failed to collect tests. Pytest Exit code: {exitcode}={PytestExitCode(exitcode).name}\n {error_section}"
             )
             if "ModuleNotFoundError" in result.stdout:
                 match = ImportErrorPattern.search(result.stdout).group()
@@ -420,7 +436,7 @@ def discover_tests_pytest(
                 console.print(panel)
 
         elif 0 <= exitcode <= 5:
-            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}")
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={PytestExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
         console.rule()
