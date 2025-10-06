@@ -15,7 +15,7 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import check_running_in_git_repo
+from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
@@ -442,39 +442,50 @@ class Optimizer:
                 logger.warning("Failed to create worktree. Skipping optimization.")
                 return
             self.current_worktree = worktree_dir
-            self.mutate_args_for_worktree_mode(worktree_dir)
+            self.mirror_paths_for_worktree_mode(worktree_dir)
             # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
             Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
-    def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
-        saved_args = copy.deepcopy(self.args)
-        saved_test_cfg = copy.deepcopy(self.test_cfg)
-        self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
+    def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
+        original_args = copy.deepcopy(self.args)
+        original_test_cfg = copy.deepcopy(self.test_cfg)
+        self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
-        project_root = self.args.project_root
-        module_root = self.args.module_root
-        relative_module_root = module_root.relative_to(project_root)
-        relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
-        relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
-        relative_benchmarks_root = (
-            self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
+        original_git_root = git_root_dir()
+
+        # mirror project_root
+        self.args.project_root = mirror_path(self.args.project_root, original_git_root, worktree_dir)
+        self.test_cfg.project_root_path = mirror_path(self.test_cfg.project_root_path, original_git_root, worktree_dir)
+
+        # mirror module_root
+        self.args.module_root = mirror_path(self.args.module_root, original_git_root, worktree_dir)
+
+        # mirror target file
+        if self.args.file:
+            self.args.file = mirror_path(self.args.file, original_git_root, worktree_dir)
+
+        # mirror tests root
+        self.args.tests_root = mirror_path(self.args.tests_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_root = mirror_path(self.test_cfg.tests_root, original_git_root, worktree_dir)
+
+        # mirror tests project root
+        self.args.test_project_root = mirror_path(self.args.test_project_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_project_rootdir = mirror_path(
+            self.test_cfg.tests_project_rootdir, original_git_root, worktree_dir
         )
 
-        self.args.module_root = worktree_dir / relative_module_root
-        self.args.project_root = worktree_dir
-        self.args.test_project_root = worktree_dir
-        self.args.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+        # mirror benchmarks root paths
+        if self.args.benchmarks_root:
+            self.args.benchmarks_root = mirror_path(self.args.benchmarks_root, original_git_root, worktree_dir)
+        if self.test_cfg.benchmark_tests_root:
+            self.test_cfg.benchmark_tests_root = mirror_path(
+                self.test_cfg.benchmark_tests_root, original_git_root, worktree_dir
+            )
 
-        self.test_cfg.project_root_path = worktree_dir
-        self.test_cfg.tests_project_rootdir = worktree_dir
-        self.test_cfg.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
 
-        if relative_optimized_file is not None:
-            self.args.file = worktree_dir / relative_optimized_file
+def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
+    relative_path = path.relative_to(src_root)
+    return dest_root / relative_path
 
 
 def run_with_args(args: Namespace) -> None:
