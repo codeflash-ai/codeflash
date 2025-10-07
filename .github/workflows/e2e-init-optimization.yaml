@@ -1,14 +1,13 @@
 name: E2E - Init Optimization
 
 on:
-  workflow_run:
-    workflows: ["Unit Tests"]
-    types:
-      - completed
+  pull_request:
+    paths:
+      - '**'  # Trigger for all paths
   workflow_dispatch:
+
 jobs:
   init-optimization:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
 
