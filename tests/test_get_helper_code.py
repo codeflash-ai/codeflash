@@ -6,7 +6,7 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import FunctionParent, get_code_block_splitter
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.verification_utils import TestConfig
@@ -413,17 +413,17 @@ def test_bubble_sort_deps() -> None:
     code_context = ctx_result.unwrap()
     assert (
             code_context.testgen_context.flat
-            == f"""# file: code_to_optimize/bubble_sort_dep1_helper.py
+            == f"""{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep1_helper.py"))}
 def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
 
-# file: code_to_optimize/bubble_sort_dep2_swap.py
+{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep2_swap.py"))}
 def dep2_swap(arr, j):
     temp = arr[j]
     arr[j] = arr[j + 1]
     arr[j + 1] = temp
 
-# file: code_to_optimize/bubble_sort_deps.py
+{get_code_block_splitter(Path("code_to_optimize/bubble_sort_deps.py"))}
 from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
 from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
 
