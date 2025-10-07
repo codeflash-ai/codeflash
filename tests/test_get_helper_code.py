@@ -213,11 +213,12 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
             lifespan=self.__duration__,
         )
 '''
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        file_path = Path(f.name).resolve()
-        project_root_path = file_path.parent.resolve()
+    with tempfile.TemporaryDirectory() as tempdir:
+        tempdir_path = Path(tempdir)
+        file_path = (tempdir_path / "typed_code_helper.py").resolve()
+        file_path.write_text(code, encoding="utf-8")
+        project_root_path = tempdir_path.resolve()
+        project_root_path = tempdir_path.resolve()
         function_to_optimize = FunctionToOptimize(
             function_name="__call__",
             file_path=file_path,

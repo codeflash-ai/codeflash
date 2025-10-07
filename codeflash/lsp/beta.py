@@ -12,11 +12,8 @@ from pygls import uris
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.cli_cmds.console import code_print
-from codeflash.code_utils.git_worktree_utils import (
-    create_diff_patch_from_worktree,
-    get_patches_metadata,
-    overwrite_patch_metadata,
-)
+from codeflash.code_utils.git_utils import git_root_dir
+from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import (
     filter_functions,
@@ -40,9 +37,16 @@ class OptimizableFunctionsParams:
 
 
 @dataclass
+class FunctionOptimizationInitParams:
+    textDocument: types.TextDocumentIdentifier  # noqa: N815
+    functionName: str  # noqa: N815
+
+
+@dataclass
 class FunctionOptimizationParams:
     textDocument: types.TextDocumentIdentifier  # noqa: N815
     functionName: str  # noqa: N815
+    task_id: str
 
 
 @dataclass
@@ -59,7 +63,7 @@ class ValidateProjectParams:
 
 @dataclass
 class OnPatchAppliedParams:
-    patch_id: str
+    task_id: str
 
 
 @dataclass
@@ -111,7 +115,6 @@ def get_optimizable_functions(
     server: CodeflashLanguageServer, params: OptimizableFunctionsParams
 ) -> dict[str, list[str]]:
     file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    server.show_message_log(f"Getting optimizable functions for: {file_path}", "Info")
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}
 
@@ -119,53 +122,13 @@ def get_optimizable_functions(
     server.optimizer.args.function = None  # Always get ALL functions, not just one
     server.optimizer.args.previous_checkpoint_functions = False
 
-    server.show_message_log(f"Calling get_optimizable_functions for {server.optimizer.args.file}...", "Info")
     optimizable_funcs, _, _ = server.optimizer.get_optimizable_functions()
 
     path_to_qualified_names = {}
     for functions in optimizable_funcs.values():
         path_to_qualified_names[file_path] = [func.qualified_name for func in functions]
 
-    server.show_message_log(
-        f"Found {len(path_to_qualified_names)} files with functions: {path_to_qualified_names}", "Info"
-    )
     return path_to_qualified_names
-
-
-@server.feature("initializeFunctionOptimization")
-def initialize_function_optimization(
-    server: CodeflashLanguageServer, params: FunctionOptimizationParams
-) -> dict[str, str]:
-    file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
-
-    if server.optimizer is None:
-        _initialize_optimizer_if_api_key_is_valid(server)
-
-    server.optimizer.worktree_mode()
-
-    original_args, _ = server.optimizer.original_args_and_test_cfg
-
-    server.optimizer.args.function = params.functionName
-    original_relative_file_path = file_path.relative_to(original_args.project_root)
-    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
-    server.optimizer.args.previous_checkpoint_functions = False
-
-    server.show_message_log(
-        f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
-    )
-
-    optimizable_funcs, count, _ = server.optimizer.get_optimizable_functions()
-
-    if count == 0:
-        server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
-        server.cleanup_the_optimizer()
-        return {"functionName": params.functionName, "status": "error", "message": "not found", "args": None}
-
-    fto = optimizable_funcs.popitem()[1][0]
-    server.optimizer.current_function_being_optimized = fto
-    server.show_message_log(f"Successfully initialized optimization for {params.functionName}", "Info")
-    return {"functionName": params.functionName, "status": "success"}
 
 
 def _find_pyproject_toml(workspace_path: str) -> Path | None:
@@ -207,13 +170,18 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
             if pyproject_toml_path:
                 server.prepare_optimizer_arguments(pyproject_toml_path)
             else:
-                return {
-                    "status": "error",
-                    "message": "No pyproject.toml found in workspace.",
-                }  # TODO: enhancec this message to say there is not tool.codeflash in pyproject.toml or smth
+                return {"status": "error", "message": "No pyproject.toml found in workspace."}
+
+    # since we are using worktrees, optimization diffs are generated with respect to the root of the repo.
+    root = str(git_root_dir())
 
     if getattr(params, "skip_validation", False):
-        return {"status": "success", "moduleRoot": server.args.module_root, "pyprojectPath": pyproject_toml_path}
+        return {
+            "status": "success",
+            "moduleRoot": server.args.module_root,
+            "pyprojectPath": pyproject_toml_path,
+            "root": root,
+        }
 
     server.show_message_log("Validating project...", "Info")
     config = is_valid_pyproject_toml(pyproject_toml_path)
@@ -234,7 +202,7 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
     except Exception:
         return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
-    return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path}
+    return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
 
 def _initialize_optimizer_if_api_key_is_valid(
@@ -296,78 +264,85 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
-@server.feature("retrieveSuccessfulOptimizations")
-def retrieve_successful_optimizations(_server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
-    metadata = get_patches_metadata()
-    return {"status": "success", "patches": metadata["patches"]}
+@server.feature("initializeFunctionOptimization")
+def initialize_function_optimization(
+    server: CodeflashLanguageServer, params: FunctionOptimizationInitParams
+) -> dict[str, str]:
+    file_path = Path(uris.to_fs_path(params.textDocument.uri))
+    server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
 
+    if server.optimizer is None:
+        _initialize_optimizer_if_api_key_is_valid(server)
 
-@server.feature("onPatchApplied")
-def on_patch_applied(_server: CodeflashLanguageServer, params: OnPatchAppliedParams) -> dict[str, str]:
-    # first remove the patch from the metadata
-    metadata = get_patches_metadata()
+    server.optimizer.worktree_mode()
 
-    deleted_patch_file = None
-    new_patches = []
-    for patch in metadata["patches"]:
-        if patch["id"] == params.patch_id:
-            deleted_patch_file = patch["patch_path"]
-            continue
-        new_patches.append(patch)
+    original_args, _ = server.optimizer.original_args_and_test_cfg
 
-    # then remove the patch file
-    if deleted_patch_file:
-        overwrite_patch_metadata(new_patches)
-        patch_path = Path(deleted_patch_file)
-        patch_path.unlink(missing_ok=True)
-        return {"status": "success"}
-    return {"status": "error", "message": "Patch not found"}
+    server.optimizer.args.function = params.functionName
+    original_relative_file_path = file_path.relative_to(original_args.project_root)
+    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
+    server.optimizer.args.previous_checkpoint_functions = False
+
+    server.show_message_log(
+        f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
+    )
+
+    optimizable_funcs, count, _ = server.optimizer.get_optimizable_functions()
+
+    if count == 0:
+        server.show_message_log(f"No optimizable functions found for {params.functionName}", "Warning")
+        server.cleanup_the_optimizer()
+        return {"functionName": params.functionName, "status": "error", "message": "not found", "args": None}
+
+    fto = optimizable_funcs.popitem()[1][0]
+
+    module_prep_result = server.optimizer.prepare_module_for_optimization(fto.file_path)
+    if not module_prep_result:
+        return {
+            "functionName": params.functionName,
+            "status": "error",
+            "message": "Failed to prepare module for optimization",
+        }
+
+    validated_original_code, original_module_ast = module_prep_result
+
+    function_optimizer = server.optimizer.create_function_optimizer(
+        fto,
+        function_to_optimize_source_code=validated_original_code[fto.file_path].source_code,
+        original_module_ast=original_module_ast,
+        original_module_path=fto.file_path,
+        function_to_tests={},
+    )
+
+    server.optimizer.current_function_optimizer = function_optimizer
+    if not function_optimizer:
+        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
+
+    initialization_result = function_optimizer.can_be_optimized()
+    if not is_successful(initialization_result):
+        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
+
+    server.current_optimization_init_result = initialization_result.unwrap()
+    server.show_message_log(f"Successfully initialized optimization for {params.functionName}", "Info")
+
+    files = [function_optimizer.function_to_optimize.file_path]
+
+    _, _, original_helpers = server.current_optimization_init_result
+    files.extend([str(helper_path) for helper_path in original_helpers])
+
+    return {"functionName": params.functionName, "status": "success", "files_inside_context": files}
 
 
 @server.feature("performFunctionOptimization")
 @server.thread()
-def perform_function_optimization(  # noqa: PLR0911
+def perform_function_optimization(
     server: CodeflashLanguageServer, params: FunctionOptimizationParams
 ) -> dict[str, str]:
     try:
         server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
-        current_function = server.optimizer.current_function_being_optimized
-
-        if not current_function:
-            server.show_message_log(f"No current function being optimized for {params.functionName}", "Error")
-            return {
-                "functionName": params.functionName,
-                "status": "error",
-                "message": "No function currently being optimized",
-            }
-
-        module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
-        if not module_prep_result:
-            return {
-                "functionName": params.functionName,
-                "status": "error",
-                "message": "Failed to prepare module for optimization",
-            }
-
-        validated_original_code, original_module_ast = module_prep_result
-
-        function_optimizer = server.optimizer.create_function_optimizer(
-            current_function,
-            function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
-            original_module_ast=original_module_ast,
-            original_module_path=current_function.file_path,
-            function_to_tests={},
-        )
-
-        server.optimizer.current_function_optimizer = function_optimizer
-        if not function_optimizer:
-            return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
-
-        initialization_result = function_optimizer.can_be_optimized()
-        if not is_successful(initialization_result):
-            return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
-
-        should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+        should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
+        function_optimizer = server.optimizer.current_function_optimizer
+        current_function = function_optimizer.function_to_optimize
 
         code_print(
             code_context.read_writable_code.flat,
@@ -447,21 +422,16 @@ def perform_function_optimization(  # noqa: PLR0911
 
         speedup = original_code_baseline.runtime / best_optimization.runtime
 
-        # get the original file path in the actual project (not in the worktree)
-        original_args, _ = server.optimizer.original_args_and_test_cfg
-        relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
-        original_file_path = Path(original_args.project_root / relative_file_path).resolve()
-
-        metadata = create_diff_patch_from_worktree(
-            server.optimizer.current_worktree,
-            relative_file_paths,
-            metadata_input={
-                "fto_name": function_to_optimize_qualified_name,
-                "explanation": best_optimization.explanation_v2,
-                "file_path": str(original_file_path),
-                "speedup": speedup,
-            },
+        patch_path = create_diff_patch_from_worktree(
+            server.optimizer.current_worktree, relative_file_paths, function_to_optimize_qualified_name
         )
+
+        if not patch_path:
+            return {
+                "functionName": params.functionName,
+                "status": "error",
+                "message": "Failed to create a patch for optimization",
+            }
 
         server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
 
@@ -470,8 +440,8 @@ def perform_function_optimization(  # noqa: PLR0911
             "status": "success",
             "message": "Optimization completed successfully",
             "extra": f"Speedup: {speedup:.2f}x faster",
-            "patch_file": metadata["patch_path"],
-            "patch_id": metadata["id"],
+            "patch_file": str(patch_path),
+            "task_id": params.task_id,
             "explanation": best_optimization.explanation_v2,
         }
     finally:

@@ -9,6 +9,7 @@ from pygls.server import LanguageServer
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash.optimization.optimizer import Optimizer
 
 
@@ -22,6 +23,7 @@ class CodeflashLanguageServer(LanguageServer):
         self.optimizer: Optimizer | None = None
         self.args_processed_before: bool = False
         self.args = None
+        self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args
@@ -57,6 +59,7 @@ class CodeflashLanguageServer(LanguageServer):
         self.lsp.notify("window/logMessage", log_params)
 
     def cleanup_the_optimizer(self) -> None:
+        self.current_optimization_init_result = None
         if not self.optimizer:
             return
         try:
