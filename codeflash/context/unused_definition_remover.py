@@ -279,7 +279,7 @@ class QualifiedFunctionUsageMarker:
         # Find class methods and add their containing classes and dunder methods
         for qualified_name in list(self.qualified_function_names):
             if "." in qualified_name:
-                class_name, method_name = qualified_name.split(".", 1)
+                class_name, _method_name = qualified_name.split(".", 1)
 
                 # Add the class itself
                 expanded.add(class_name)
@@ -511,7 +511,7 @@ def revert_unused_helper_functions(
     if not unused_helpers:
         return
 
-    logger.info(f"Reverting {len(unused_helpers)} unused helper function(s) to original definitions")
+    logger.debug(f"Reverting {len(unused_helpers)} unused helper function(s) to original definitions")
 
     # Group unused helpers by file path
     unused_helpers_by_file = defaultdict(list)

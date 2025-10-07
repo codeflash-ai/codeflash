@@ -304,7 +304,7 @@ class FunctionOptimizer:
         ]
 
         with progress_bar(
-            f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
+            f"Generating new tests and optimizations for function '{self.function_to_optimize.function_name}'",
             transient=True,
             revert_to_print=bool(get_pr_number()),
         ):
@@ -1657,8 +1657,8 @@ class FunctionOptimizer:
 
         loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
         logger.info(
-            f"h2|⌚ Original code summed runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
-            f"{humanize_runtime(total_timing)} per full loop"
+            f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
+            f"'{humanize_runtime(total_timing)}' per full loop"
         )
         console.rule()
         logger.debug(f"Total original code runtime (ns): {total_timing}")
