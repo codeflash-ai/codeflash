@@ -56,6 +56,6 @@ if __name__ == "__main__":
         print(f"Failed to collect tests: {e!s}")
         try:
             with Path(pickle_path).open("wb") as f:
-                pickle.dump((1, [], None), f, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump((-1, [], None), f, protocol=pickle.HIGHEST_PROTOCOL)
         except Exception as pickle_error:
             print(f"Failed to write failure pickle: {pickle_error!s}", file=sys.stderr)
