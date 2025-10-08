@@ -1,5 +1,6 @@
 # ruff: noqa
 import sys
+from pathlib import Path
 from typing import Any
 
 # This script should not have any relation to the codeflash package, be careful with imports
@@ -11,11 +12,32 @@ pytest_rootdir = None
 sys.path.insert(1, str(cwd))
 
 
+def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
+    test_results = []
+    for test in pytest_tests:
+        test_class = None
+        if test.cls:
+            test_class = test.parent.name
+        test_results.append({
+            "test_file": str(test.path), 
+            "test_class": test_class, 
+            "test_function": test.name
+        })
+    return test_results
+
+
 class PytestCollectionPlugin:
     def pytest_collection_finish(self, session) -> None:
-        global pytest_rootdir
+        global pytest_rootdir, collected_tests
+        
         collected_tests.extend(session.items)
         pytest_rootdir = session.config.rootdir
+        
+        # Write results immediately since pytest.main() will exit after this callback, not always with a success code
+        tests = parse_pytest_collection_results(collected_tests)
+        with Path(pickle_path).open("wb") as f:
+            import pickle
+            pickle.dump((0, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def pytest_collection_modifyitems(self, items) -> None:
         skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
@@ -24,31 +46,13 @@ class PytestCollectionPlugin:
                 item.add_marker(skip_benchmark)
 
 
-def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
-    test_results = []
-    for test in pytest_tests:
-        test_class = None
-        if test.cls:
-            test_class = test.parent.name
-        test_results.append({"test_file": str(test.path), "test_class": test_class, "test_function": test.name})
-    return test_results
-
-
 if __name__ == "__main__":
-    from pathlib import Path
-
     import pytest
 
     try:
-        exitcode = pytest.main(
-            [tests_root, "-p no:logging", "--collect-only", "-m", "not skip", "-p", "no:codeflash-benchmark"],
+        pytest.main(
+            [tests_root, "-p", "no:logging", "--collect-only", "-m", "not skip", "-p", "no:codeflash-benchmark"],
             plugins=[PytestCollectionPlugin()],
         )
     except Exception as e:
         print(f"Failed to collect tests: {e!s}")
-        exitcode = -1
-    tests = parse_pytest_collection_results(collected_tests)
-    import pickle
-
-    with Path(pickle_path).open("wb") as f:
-        pickle.dump((exitcode, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
