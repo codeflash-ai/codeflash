@@ -4,15 +4,19 @@ import json
 import os
 import platform
 import time
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_replacer import is_zero_diff
+from codeflash.code_utils.code_utils import unified_diff_strings
 from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE, N_CANDIDATES_LP_EFFECTIVE
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
@@ -20,11 +24,10 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import AIServiceRefinerRequest
+    from codeflash.result.explanation import Explanation
 
 
 class AiServiceClient:
@@ -528,6 +531,85 @@ class AiServiceClient:
             logger.error(f"Error generating tests: {response.status_code} - {response.text}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
+
+    def get_optimization_impact(
+        self,
+        original_code: dict[Path, str],
+        new_code: dict[Path, str],
+        explanation: Explanation,
+        existing_tests_source: str,
+        generated_original_test_source: str,
+        function_trace_id: str,
+        coverage_message: str,
+        replay_tests: str,
+        root_dir: Path,
+        concolic_tests: str,  # noqa: ARG002
+    ) -> str:
+        """Compute the optimization impact of current Pull Request.
+
+        Args:
+        original_code: dict -> data structure mapping file paths to function definition for original code
+        new_code: dict -> data structure mapping file paths to function definition for optimized code
+        explanation: Explanation -> data structure containing runtime information
+        existing_tests_source: str -> existing tests table
+        generated_original_test_source: str -> annotated generated tests
+        function_trace_id: str -> traceid of function
+        coverage_message: str -> coverage information
+        replay_tests: str -> replay test table
+        root_dir: Path -> path of git directory
+        concolic_tests: str -> concolic_tests (not used)
+
+        Returns:
+        -------
+        - 'high' or 'low' optimization impact
+
+        """
+        diff_str = "\n".join(
+            [
+                unified_diff_strings(
+                    code1=original_code[p],
+                    code2=new_code[p],
+                    fromfile=Path(p).relative_to(root_dir).as_posix(),
+                    tofile=Path(p).relative_to(root_dir).as_posix(),
+                )
+                for p in original_code
+                if not is_zero_diff(original_code[p], new_code[p])
+            ]
+        )
+        code_diff = f"```diff\n{diff_str}\n```"
+        logger.info("!lsp|Computing Optimization Impact…")
+        payload = {
+            "code_diff": code_diff,
+            "explanation": explanation.raw_explanation_message,
+            "existing_tests": existing_tests_source,
+            "generated_tests": generated_original_test_source,
+            "trace_id": function_trace_id,
+            "coverage_message": coverage_message,
+            "replay_tests": replay_tests,
+            "speedup": f"{(100 * float(explanation.speedup)):.2f}%",
+            "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
+            "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
+            "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
+            "original_runtime": humanize_runtime(explanation.original_runtime_ns),
+        }
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization refinements: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return ""
+
+        if response.status_code == 200:
+            return cast("str", response.json()["impact"])
+        try:
+            error = cast("str", response.json()["error"])
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return ""
 
 
 class LocalAiServiceClient(AiServiceClient):
