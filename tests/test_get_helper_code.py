@@ -6,7 +6,7 @@ import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.either import is_successful
-from codeflash.models.models import FunctionParent
+from codeflash.models.models import FunctionParent, get_code_block_splitter
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.verification_utils import TestConfig
@@ -242,8 +242,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         code_context = ctx_result.unwrap()
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
         assert (
-                code_context.testgen_context_code
-                == f'''_P = ParamSpec("_P")
+                code_context.testgen_context.flat
+                == f'''# file: {file_path.relative_to(project_root_path)}
+_P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
@@ -395,10 +396,11 @@ def test_bubble_sort_deps() -> None:
     function_to_optimize = FunctionToOptimize(
         function_name="sorter_deps", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
+    project_root = file_path.parent.parent.resolve()
     test_config = TestConfig(
         tests_root=str(file_path.parent / "tests"),
         tests_project_rootdir=file_path.parent.resolve(),
-        project_root_path=file_path.parent.parent.resolve(),
+        project_root_path=project_root,
         test_framework="pytest",
         pytest_cmd="pytest",
     )
@@ -410,19 +412,20 @@ def test_bubble_sort_deps() -> None:
         pytest.fail()
     code_context = ctx_result.unwrap()
     assert (
-            code_context.testgen_context_code
-            == """from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
-from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
-
+            code_context.testgen_context.flat
+            == f"""{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep1_helper.py"))}
 def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
 
+{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep2_swap.py"))}
 def dep2_swap(arr, j):
     temp = arr[j]
     arr[j] = arr[j + 1]
     arr[j + 1] = temp
 
-
+{get_code_block_splitter(Path("code_to_optimize/bubble_sort_deps.py"))}
+from code_to_optimize.bubble_sort_dep1_helper import dep1_comparer
+from code_to_optimize.bubble_sort_dep2_swap import dep2_swap
 
 def sorter_deps(arr):
     for i in range(len(arr)):
