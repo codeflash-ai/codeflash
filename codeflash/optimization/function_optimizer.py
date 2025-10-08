@@ -1379,11 +1379,13 @@ class FunctionOptimizer:
             generated_tests, original_runtime_by_test, optimized_runtime_by_test
         )
 
-        generated_tests_str = "\n#------------------------------------------------\n".join(
-            [test.generated_original_test_source for test in generated_tests.generated_tests]
-        )
+        generated_tests_str = ""
+        for test in generated_tests.generated_tests:
+            generated_tests_str += f"```python\n{test.generated_original_test_source}\n```"
+            generated_tests_str += "\n\n"
+
         if concolic_test_str:
-            generated_tests_str += "\n#------------------------------------------------\n" + concolic_test_str
+            generated_tests_str += f"```python\n{concolic_test_str}\n```\n\n"
 
         existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
