@@ -163,7 +163,7 @@ class CodeString(BaseModel):
 
 
 def get_code_block_splitter(file_path: Path) -> str:
-    return f"# file: {file_path}"
+    return f"# file: {file_path.as_posix()}"
 
 
 markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
@@ -254,7 +254,7 @@ class CodeStringsMarkdown(BaseModel):
 
 
 class CodeOptimizationContext(BaseModel):
-    testgen_context_code: str = ""
+    testgen_context: CodeStringsMarkdown
     read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
