@@ -1457,14 +1457,22 @@ class FunctionOptimizer:
         }
 
         raise_pr = not self.args.no_pr
+        staging_review = self.args.staging_review
 
-        if raise_pr or self.args.staging_review:
+        if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-
-        if raise_pr and not self.args.staging_review:
+            try:
+                # modify argument of staging vs pr based on the impact
+                opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+                if opt_impact_response == "low":
+                    raise_pr = False
+                    staging_review = True
+            except Exception as e:
+                logger.debug(f"optimization impact response failed, investigate {e}")
+        if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
-        elif self.args.staging_review:
+        elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
                 staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
@@ -1503,7 +1511,7 @@ class FunctionOptimizer:
             self.revert_code_and_helpers(original_helper_code)
             return
 
-        if self.args.staging_review:
+        if staging_review:
             # always revert code and helpers when staging review
             self.revert_code_and_helpers(original_helper_code)
             return
