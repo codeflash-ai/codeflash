@@ -2,6 +2,8 @@
 import sys
 from pathlib import Path
 from typing import Any
+import pickle
+
 
 # This script should not have any relation to the codeflash package, be careful with imports
 cwd = sys.argv[1]
@@ -31,10 +33,9 @@ class PytestCollectionPlugin:
 
         # Write results immediately since pytest.main() will exit after this callback, not always with a success code
         tests = parse_pytest_collection_results(collected_tests)
+        exit_code = getattr(session.config, "exitstatus", 0)
         with Path(pickle_path).open("wb") as f:
-            import pickle
-
-            pickle.dump((0, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump((exit_code, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
 
     def pytest_collection_modifyitems(self, items) -> None:
         skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
@@ -53,3 +54,8 @@ if __name__ == "__main__":
         )
     except Exception as e:
         print(f"Failed to collect tests: {e!s}")
+        try:
+            with Path(pickle_path).open("wb") as f:
+                pickle.dump((1, [], None), f, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as pickle_error:
+            print(f"Failed to write failure pickle: {pickle_error!s}", file=sys.stderr)
