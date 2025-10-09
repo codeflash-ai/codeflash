@@ -21,7 +21,6 @@ from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
-from codeflash.version import __version__
 from codeflash.version import __version__ as codeflash_version
 
 if TYPE_CHECKING:
