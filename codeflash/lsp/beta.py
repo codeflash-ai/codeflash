@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
@@ -155,11 +154,13 @@ def _find_pyproject_toml(workspace_path: str) -> tuple[Path | None, bool]:
 
 # should be called the first thing to initialize and validate the project
 @server.feature("initProject")
-def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams) -> dict[str, str]:  # noqa: PLR0911
+def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams) -> dict[str, str]:
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
 
-    pyproject_toml_path: Path | None = getattr(params, "config_file", None) or getattr(server.args, "config_file", None)
+    # Always process args in the init project, the extension can call
+    server.args_processed_before = False
 
+    pyproject_toml_path: Path | None = getattr(params, "config_file", None) or getattr(server.args, "config_file", None)
     if pyproject_toml_path is not None:
         # if there is a config file provided use it
         server.prepare_optimizer_arguments(pyproject_toml_path)
@@ -196,14 +197,6 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
         return {"status": "error", "message": f"reason: {reason}", "pyprojectPath": pyproject_toml_path}
 
     args = process_args(server)
-    repo = git.Repo(args.module_root, search_parent_directories=True)
-    if repo.bare:
-        return {"status": "error", "message": "Repository is in bare state"}
-
-    try:
-        _ = repo.head.commit
-    except Exception:
-        return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
     return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
