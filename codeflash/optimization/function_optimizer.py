@@ -101,7 +101,6 @@ from codeflash.verification.parse_test_output import calculate_function_throughp
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
-from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from argparse import Namespace
