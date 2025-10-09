@@ -1,6 +1,5 @@
 import contextlib
 import os
-from pathlib import Path
 
 from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
@@ -8,46 +7,11 @@ from codeflash.either import is_successful
 from codeflash.lsp.server import CodeflashLanguageServer
 
 
-# ruff: noqa: PLR0911, ANN001
-def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:
+def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:  # noqa: ANN001
     server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
-    current_function = server.optimizer.current_function_being_optimized
-
-    if not current_function:
-        server.show_message_log(f"No current function being optimized for {params.functionName}", "Error")
-        return {
-            "functionName": params.functionName,
-            "status": "error",
-            "message": "No function currently being optimized",
-        }
-
-    module_prep_result = server.optimizer.prepare_module_for_optimization(current_function.file_path)
-    if not module_prep_result:
-        return {
-            "functionName": params.functionName,
-            "status": "error",
-            "message": "Failed to prepare module for optimization",
-        }
-
-    validated_original_code, original_module_ast = module_prep_result
-
-    function_optimizer = server.optimizer.create_function_optimizer(
-        current_function,
-        function_to_optimize_source_code=validated_original_code[current_function.file_path].source_code,
-        original_module_ast=original_module_ast,
-        original_module_path=current_function.file_path,
-        function_to_tests={},
-    )
-
-    server.optimizer.current_function_optimizer = function_optimizer
-    if not function_optimizer:
-        return {"functionName": params.functionName, "status": "error", "message": "No function optimizer found"}
-
-    initialization_result = function_optimizer.can_be_optimized()
-    if not is_successful(initialization_result):
-        return {"functionName": params.functionName, "status": "error", "message": initialization_result.failure()}
-
-    should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
+    should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
+    function_optimizer = server.optimizer.current_function_optimizer
+    current_function = function_optimizer.function_to_optimize
 
     code_print(
         code_context.read_writable_code.flat,
@@ -124,29 +88,26 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
     # generate a patch for the optimization
     relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
     speedup = original_code_baseline.runtime / best_optimization.runtime
-    # get the original file path in the actual project (not in the worktree)
-    original_args, _ = server.optimizer.original_args_and_test_cfg
-    relative_file_path = current_function.file_path.relative_to(server.optimizer.current_worktree)
-    original_file_path = Path(original_args.project_root / relative_file_path).resolve()
 
-    metadata = create_diff_patch_from_worktree(
-        server.optimizer.current_worktree,
-        relative_file_paths,
-        metadata_input={
-            "fto_name": function_to_optimize_qualified_name,
-            "explanation": best_optimization.explanation_v2,
-            "file_path": str(original_file_path),
-            "speedup": speedup,
-        },
+    patch_path = create_diff_patch_from_worktree(
+        server.optimizer.current_worktree, relative_file_paths, function_to_optimize_qualified_name
     )
 
+    if not patch_path:
+        return {
+            "functionName": params.functionName,
+            "status": "error",
+            "message": "Failed to create a patch for optimization",
+        }
+
     server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
+
     return {
         "functionName": params.functionName,
         "status": "success",
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {speedup:.2f}x faster",
-        "patch_file": metadata["patch_path"],
-        "patch_id": metadata["id"],
+        "patch_file": str(patch_path),
+        "task_id": params.task_id,
         "explanation": best_optimization.explanation_v2,
     }
