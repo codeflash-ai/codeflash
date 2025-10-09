@@ -28,6 +28,7 @@ class TestConfig:
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
     enable_async: bool = False
+    use_worktree: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -137,6 +138,8 @@ def build_command(
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.enable_async:
         base_command.append("--async")
+    if config.use_worktree:
+        base_command.append("--worktree")
     return base_command
 
 
