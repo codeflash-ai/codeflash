@@ -1,0 +1,6 @@
+[tool.codeflash]
+disable-telemetry = true
+formatter-cmds = ["ruff check --exit-zero --fix $file", "ruff format $file"]
+module-root = "."
+test-framework = "pytest"
+tests-root = "tests"

@@ -24,7 +24,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          version: "0.5.30"
 
       - name: install dependencies
         run: uv sync

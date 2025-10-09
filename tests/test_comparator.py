@@ -787,6 +787,126 @@ def test_jax():
     assert not comparator(aa, cc)
 
 
+def test_xarray():
+    try:
+        import xarray as xr
+        import numpy as np
+    except ImportError:
+        pytest.skip()
+
+    # Test basic DataArray
+    a = xr.DataArray([1, 2, 3], dims=['x'])
+    b = xr.DataArray([1, 2, 3], dims=['x'])
+    c = xr.DataArray([1, 2, 4], dims=['x'])
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test DataArray with coordinates
+    d = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 2]}, dims=['x'])
+    e = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 2]}, dims=['x'])
+    f = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 3]}, dims=['x'])
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test DataArray with attributes
+    g = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'meters'})
+    h = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'meters'})
+    i = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'feet'})
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test 2D DataArray
+    j = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=['x', 'y'])
+    k = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=['x', 'y'])
+    l = xr.DataArray([[1, 2, 3], [4, 5, 7]], dims=['x', 'y'])
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test DataArray with different dimensions
+    m = xr.DataArray([1, 2, 3], dims=['x'])
+    n = xr.DataArray([1, 2, 3], dims=['y'])
+    assert not comparator(m, n)
+
+    # Test DataArray with NaN values
+    o = xr.DataArray([1.0, np.nan, 3.0], dims=['x'])
+    p = xr.DataArray([1.0, np.nan, 3.0], dims=['x'])
+    q = xr.DataArray([1.0, 2.0, 3.0], dims=['x'])
+    assert comparator(o, p)
+    assert not comparator(o, q)
+
+    # Test Dataset
+    r = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
+        'pressure': (['x', 'y'], [[5, 6], [7, 8]])
+    })
+    s = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
+        'pressure': (['x', 'y'], [[5, 6], [7, 8]])
+    })
+    t = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
+        'pressure': (['x', 'y'], [[5, 6], [7, 9]])
+    })
+    assert comparator(r, s)
+    assert not comparator(r, t)
+
+    # Test Dataset with coordinates
+    u = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]])
+    }, coords={'x': [0, 1], 'y': [0, 1]})
+    v = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]])
+    }, coords={'x': [0, 1], 'y': [0, 1]})
+    w = xr.Dataset({
+        'temp': (['x', 'y'], [[1, 2], [3, 4]])
+    }, coords={'x': [0, 2], 'y': [0, 1]})
+    assert comparator(u, v)
+    assert not comparator(u, w)
+
+    # Test Dataset with attributes
+    x = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'sensor'})
+    y = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'sensor'})
+    z = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'model'})
+    assert comparator(x, y)
+    assert not comparator(x, z)
+
+    # Test Dataset with different variables
+    aa = xr.Dataset({'temp': (['x'], [1, 2, 3])})
+    bb = xr.Dataset({'temp': (['x'], [1, 2, 3])})
+    cc = xr.Dataset({'pressure': (['x'], [1, 2, 3])})
+    assert comparator(aa, bb)
+    assert not comparator(aa, cc)
+
+    # Test empty Dataset
+    dd = xr.Dataset()
+    ee = xr.Dataset()
+    assert comparator(dd, ee)
+
+    # Test DataArray with different shapes
+    ff = xr.DataArray([1, 2, 3], dims=['x'])
+    gg = xr.DataArray([[1, 2, 3]], dims=['x', 'y'])
+    assert not comparator(ff, gg)
+
+    # Test DataArray with different data types
+    # Note: xarray.identical() considers int and float arrays with same values as identical
+    hh = xr.DataArray(np.array([1, 2, 3], dtype='int32'), dims=['x'])
+    ii = xr.DataArray(np.array([1, 2, 3], dtype='int64'), dims=['x'])
+    # xarray is permissive with dtype comparisons, treats these as identical
+    assert comparator(hh, ii)
+
+    # Test DataArray with infinity
+    jj = xr.DataArray([1.0, np.inf, 3.0], dims=['x'])
+    kk = xr.DataArray([1.0, np.inf, 3.0], dims=['x'])
+    ll = xr.DataArray([1.0, -np.inf, 3.0], dims=['x'])
+    assert comparator(jj, kk)
+    assert not comparator(jj, ll)
+
+    # Test Dataset vs DataArray (different types)
+    mm = xr.DataArray([1, 2, 3], dims=['x'])
+    nn = xr.Dataset({'data': (['x'], [1, 2, 3])})
+    assert not comparator(mm, nn)
+
+
 def test_returns():
     a = Success(5)
     b = Success(5)
@@ -1503,3 +1623,146 @@ def test_collections() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
+
+
+def test_attrs():
+    try:
+        import attrs  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    @attrs.define
+    class Person:
+        name: str
+        age: int = 10
+        
+    a = Person("Alice", 25)
+    b = Person("Alice", 25)
+    c = Person("Bob", 25)
+    d = Person("Alice", 30)
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    @attrs.frozen
+    class Point:
+        x: int
+        y: int
+        
+    p1 = Point(1, 2)
+    p2 = Point(1, 2)
+    p3 = Point(2, 3)
+    assert comparator(p1, p2)
+    assert not comparator(p1, p3)
+
+    @attrs.define(slots=True)
+    class Vehicle:
+        brand: str
+        model: str
+        year: int = 2020
+        
+    v1 = Vehicle("Toyota", "Camry", 2021)
+    v2 = Vehicle("Toyota", "Camry", 2021)
+    v3 = Vehicle("Honda", "Civic", 2021)
+    assert comparator(v1, v2)
+    assert not comparator(v1, v3)
+
+    @attrs.define
+    class ComplexClass:
+        public_field: str
+        private_field: str = attrs.field(repr=False)
+        non_eq_field: int = attrs.field(eq=False, default=0)
+        computed: str = attrs.field(init=False, eq=True)
+        
+        def __attrs_post_init__(self):
+            self.computed = f"{self.public_field}_{self.private_field}"
+    
+    c1 = ComplexClass("test", "secret")
+    c2 = ComplexClass("test", "secret")
+    c3 = ComplexClass("different", "secret")
+    
+    c1.non_eq_field = 100
+    c2.non_eq_field = 200
+    
+    assert comparator(c1, c2)
+    assert not comparator(c1, c3)
+
+    @attrs.define
+    class Address:
+        street: str
+        city: str
+        
+    @attrs.define 
+    class PersonWithAddress:
+        name: str
+        address: Address
+        
+    addr1 = Address("123 Main St", "Anytown")
+    addr2 = Address("123 Main St", "Anytown")
+    addr3 = Address("456 Oak Ave", "Anytown")
+    
+    person1 = PersonWithAddress("John", addr1)
+    person2 = PersonWithAddress("John", addr2)
+    person3 = PersonWithAddress("John", addr3)
+    
+    assert comparator(person1, person2)
+    assert not comparator(person1, person3)
+
+    @attrs.define
+    class Container:
+        items: list
+        metadata: dict
+        
+    cont1 = Container([1, 2, 3], {"type": "numbers"})
+    cont2 = Container([1, 2, 3], {"type": "numbers"})
+    cont3 = Container([1, 2, 4], {"type": "numbers"})
+    
+    assert comparator(cont1, cont2)
+    assert not comparator(cont1, cont3)
+
+    @attrs.define
+    class BaseClass:
+        name: str
+        value: int
+        
+    @attrs.define
+    class ExtendedClass:
+        name: str
+        value: int
+        extra_field: str = "default"
+        
+    base = BaseClass("test", 42)
+    extended = ExtendedClass("test", 42, "extra")
+    
+    assert not comparator(base, extended)
+
+    @attrs.define
+    class WithNonEqFields:
+        name: str
+        timestamp: float = attrs.field(eq=False)  # Should be ignored
+        debug_info: str = attrs.field(eq=False, default="debug")
+        
+    obj1 = WithNonEqFields("test", 1000.0, "info1")
+    obj2 = WithNonEqFields("test", 9999.0, "info2")  # Different non-eq fields
+    obj3 = WithNonEqFields("different", 1000.0, "info1")
+    
+    assert comparator(obj1, obj2)  # Should be equal despite different timestamp/debug_info
+    assert not comparator(obj1, obj3)  # Should be different due to name
+    @attrs.define
+    class MinimalClass:
+        name: str
+        value: int
+        
+    @attrs.define
+    class ExtendedClass:
+        name: str
+        value: int
+        extra_field: str = "default"
+        metadata: dict = attrs.field(factory=dict)
+        timestamp: float = attrs.field(eq=False, default=0.0)  # This should be ignored
+        
+    minimal = MinimalClass("test", 42)
+    extended = ExtendedClass("test", 42, "extra", {"key": "value"}, 1000.0)
+    
+    assert not comparator(minimal, extended)
+    

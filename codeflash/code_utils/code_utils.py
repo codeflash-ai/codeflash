@@ -173,14 +173,14 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
 
 def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
     try:
-        relative_path = file_path.relative_to(project_root_path)
+        relative_path = file_path.resolve().relative_to(project_root_path.resolve())
         return relative_path.with_suffix("").as_posix().replace("/", ".")
     except ValueError:
         if traverse_up:
             parent = file_path.parent
             while parent not in (project_root_path, parent.parent):
                 try:
-                    relative_path = file_path.relative_to(parent)
+                    relative_path = file_path.resolve().relative_to(parent.resolve())
                     return relative_path.with_suffix("").as_posix().replace("/", ".")
                 except ValueError:
                     parent = parent.parent
@@ -247,8 +247,9 @@ def get_run_tmp_file(file_path: Path | str) -> Path:
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
-    site_packages = [Path(p) for p in site.getsitepackages()]
-    return any(file_path.resolve().is_relative_to(site_package_path) for site_package_path in site_packages)
+    file_path_resolved = file_path.resolve()
+    site_packages = [Path(p).resolve() for p in site.getsitepackages()]
+    return any(file_path_resolved.is_relative_to(site_package_path) for site_package_path in site_packages)
 
 
 def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
@@ -268,14 +269,6 @@ def validate_python_code(code: str) -> str:
         msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
         raise ValueError(msg) from e
     return code
-
-
-def has_any_async_functions(code: str) -> bool:
-    try:
-        module = ast.parse(code)
-    except SyntaxError:
-        return False
-    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
 
 
 def cleanup_paths(paths: list[Path]) -> None:

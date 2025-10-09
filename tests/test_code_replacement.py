@@ -12,6 +12,7 @@ from codeflash.code_utils.code_replacer import (
     is_zero_diff,
     replace_functions_and_add_imports,
     replace_functions_in_file,
+    OptimFunctionCollector,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
@@ -797,7 +798,8 @@ class MainClass:
 
 
 def test_code_replacement10() -> None:
-    get_code_output = """from __future__ import annotations
+    get_code_output = """# file: test_code_replacement.py
+from __future__ import annotations
 
 class HelperClass:
     def __init__(self, name):
@@ -827,7 +829,7 @@ class MainClass:
     )
     func_optimizer = FunctionOptimizer(function_to_optimize=func_top_optimize, test_cfg=test_config)
     code_context = func_optimizer.get_code_optimization_context().unwrap()
-    assert code_context.testgen_context_code.rstrip() == get_code_output.rstrip()
+    assert code_context.testgen_context.flat.rstrip() == get_code_output.rstrip()
 
 
 def test_code_replacement11() -> None:
@@ -3448,156 +3450,173 @@ def hydrate_input_text_actions_with_field_names(
 
     assert new_code == expected
 
-def test_duplicate_global_assignments_when_reverting_helpers():
-    root_dir = Path(__file__).parent.parent.resolve()
-    main_file = Path(root_dir / "code_to_optimize/temp_main.py").resolve()
 
-    original_code = '''"""Chunking objects not specific to a particular chunking strategy."""
-from __future__ import annotations
-import collections
-import copy
-from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
-import regex
-from typing_extensions import Self, TypeAlias
-from unstructured.utils import lazyproperty
-from unstructured.documents.elements import Element
-# ================================================================================================
-# MODEL
-# ================================================================================================
-CHUNK_MAX_CHARS_DEFAULT: int = 500
-# ================================================================================================
-# PRE-CHUNKER
-# ================================================================================================
-class PreChunker:
-    """Gathers sequential elements into pre-chunks as length constraints allow.
-    The pre-chunker's responsibilities are:
-    - **Segregate semantic units.** Identify semantic unit boundaries and segregate elements on
-      either side of those boundaries into different sections. In this case, the primary indicator
-      of a semantic boundary is a `Title` element. A page-break (change in page-number) is also a
-      semantic boundary when `multipage_sections` is `False`.
-    - **Minimize chunk count for each semantic unit.** Group the elements within a semantic unit
-      into sections as big as possible without exceeding the chunk window size.
-    - **Minimize chunks that must be split mid-text.** Precompute the text length of each section
-      and only produce a section that exceeds the chunk window size when there is a single element
-      with text longer than that window.
-    A Table element is placed into a section by itself. CheckBox elements are dropped.
-    The "by-title" strategy specifies breaking on section boundaries; a `Title` element indicates
-    a new "section", hence the "by-title" designation.
-    """
-    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
-        self._elements = elements
-        self._opts = opts
-    @lazyproperty
-    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
-        """The semantic-boundary detectors to be applied to break pre-chunks."""
-        return self._opts.boundary_predicates
-    def _is_in_new_semantic_unit(self, element: Element) -> bool:
-        """True when `element` begins a new semantic unit such as a section or page."""
-        # -- all detectors need to be called to update state and avoid double counting
-        # -- boundaries that happen to coincide, like Table and new section on same element.
-        # -- Using `any()` would short-circuit on first True.
-        semantic_boundaries = [pred(element) for pred in self._boundary_predicates]
-        return any(semantic_boundaries)
-'''
-    main_file.write_text(original_code, encoding="utf-8")
-    optim_code = f'''```python:{main_file.relative_to(root_dir)}
-# ================================================================================================
-# PRE-CHUNKER
-# ================================================================================================
-from __future__ import annotations
-from typing import Iterable
-from unstructured.documents.elements import Element
-from unstructured.utils import lazyproperty
-class PreChunker:
-    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
-        self._elements = elements
-        self._opts = opts
-    @lazyproperty
-    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
-        """The semantic-boundary detectors to be applied to break pre-chunks."""
-        return self._opts.boundary_predicates
-    def _is_in_new_semantic_unit(self, element: Element) -> bool:
-        """True when `element` begins a new semantic unit such as a section or page."""
-        # Use generator expression for lower memory usage and avoid building intermediate list
-        for pred in self._boundary_predicates:
-            if pred(element):
-                return True
-        return False
-```
-'''
+# OptimFunctionCollector async function tests
+def test_optim_function_collector_with_async_functions():
+    """Test OptimFunctionCollector correctly collects async functions."""
+    import libcst as cst
+    
+    source_code = """
+def sync_function():
+    return "sync"
 
-    func = FunctionToOptimize(function_name="_is_in_new_semantic_unit", parents=[FunctionParent("PreChunker", "ClassDef")], file_path=main_file)
-    test_config = TestConfig(
-        tests_root=root_dir / "tests/pytest",
-        tests_project_rootdir=root_dir,
-        project_root_path=root_dir,
-        test_framework="pytest",
-        pytest_cmd="pytest",
+async def async_function():
+    return "async"
+
+class TestClass:
+    def sync_method(self):
+        return "sync_method"
+    
+    async def async_method(self):
+        return "async_method"
+"""
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names={(None, "sync_function"), (None, "async_function"), ("TestClass", "sync_method"), ("TestClass", "async_method")},
+        preexisting_objects=None
     )
-    func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
-    code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
+    tree.visit(collector)
+    
+    # Should collect both sync and async functions
+    assert len(collector.modified_functions) == 4
+    assert (None, "sync_function") in collector.modified_functions
+    assert (None, "async_function") in collector.modified_functions
+    assert ("TestClass", "sync_method") in collector.modified_functions
+    assert ("TestClass", "async_method") in collector.modified_functions
 
-    original_helper_code: dict[Path, str] = {}
-    helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
-    for helper_function_path in helper_function_paths:
-        with helper_function_path.open(encoding="utf8") as f:
-            helper_code = f.read()
-            original_helper_code[helper_function_path] = helper_code
 
-    func_optimizer.args = Args()
-    func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optim_code), original_helper_code=original_helper_code
+def test_optim_function_collector_new_async_functions():
+    """Test OptimFunctionCollector identifies new async functions not in preexisting objects."""
+    import libcst as cst
+    
+    source_code = """
+def existing_function():
+    return "existing"
+
+async def new_async_function():
+    return "new_async"
+
+def new_sync_function():
+    return "new_sync"
+
+class ExistingClass:
+    async def new_class_async_method(self):
+        return "new_class_async"
+"""
+    
+    # Only existing_function is in preexisting objects
+    preexisting_objects = {("existing_function", ())}
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names=set(),  # Not looking for specific functions
+        preexisting_objects=preexisting_objects
     )
+    tree.visit(collector)
+    
+    # Should identify new functions (both sync and async)
+    assert len(collector.new_functions) == 2
+    function_names = [func.name.value for func in collector.new_functions]
+    assert "new_async_function" in function_names
+    assert "new_sync_function" in function_names
+    
+    # Should identify new class methods
+    assert "ExistingClass" in collector.new_class_functions
+    assert len(collector.new_class_functions["ExistingClass"]) == 1
+    assert collector.new_class_functions["ExistingClass"][0].name.value == "new_class_async_method"
 
 
-    new_code = main_file.read_text(encoding="utf-8")
-    main_file.unlink(missing_ok=True)
+def test_optim_function_collector_mixed_scenarios():
+    """Test OptimFunctionCollector with complex mix of sync/async functions and classes."""
+    import libcst as cst
+    
+    source_code = """
+# Global functions
+def global_sync():
+    pass
 
-    expected = '''"""Chunking objects not specific to a particular chunking strategy."""
-from __future__ import annotations
-import collections
-import copy
-from typing import Any, Callable, DefaultDict, Iterable, Iterator, cast
-import regex
-from typing_extensions import Self, TypeAlias
-from unstructured.utils import lazyproperty
-from unstructured.documents.elements import Element
-# ================================================================================================
-# MODEL
-# ================================================================================================
-CHUNK_MAX_CHARS_DEFAULT: int = 500
-# ================================================================================================
-# PRE-CHUNKER
-# ================================================================================================
-class PreChunker:
-    """Gathers sequential elements into pre-chunks as length constraints allow.
-    The pre-chunker's responsibilities are:
-    - **Segregate semantic units.** Identify semantic unit boundaries and segregate elements on
-      either side of those boundaries into different sections. In this case, the primary indicator
-      of a semantic boundary is a `Title` element. A page-break (change in page-number) is also a
-      semantic boundary when `multipage_sections` is `False`.
-    - **Minimize chunk count for each semantic unit.** Group the elements within a semantic unit
-      into sections as big as possible without exceeding the chunk window size.
-    - **Minimize chunks that must be split mid-text.** Precompute the text length of each section
-      and only produce a section that exceeds the chunk window size when there is a single element
-      with text longer than that window.
-    A Table element is placed into a section by itself. CheckBox elements are dropped.
-    The "by-title" strategy specifies breaking on section boundaries; a `Title` element indicates
-    a new "section", hence the "by-title" designation.
-    """
-    def __init__(self, elements: Iterable[Element], opts: ChunkingOptions):
-        self._elements = elements
-        self._opts = opts
-    @lazyproperty
-    def _boundary_predicates(self) -> tuple[BoundaryPredicate, ...]:
-        """The semantic-boundary detectors to be applied to break pre-chunks."""
-        return self._opts.boundary_predicates
-    def _is_in_new_semantic_unit(self, element: Element) -> bool:
-        """True when `element` begins a new semantic unit such as a section or page."""
-        # Use generator expression for lower memory usage and avoid building intermediate list
-        for pred in self._boundary_predicates:
-            if pred(element):
-                return True
-        return False
+async def global_async():
+    pass
+
+class ParentClass:
+    def __init__(self):
+        pass
+    
+    def sync_method(self):
+        pass
+    
+    async def async_method(self):
+        pass
+
+class ChildClass:
+    async def child_async_method(self):
+        pass
+    
+    def child_sync_method(self):
+        pass
+"""
+    
+    # Looking for specific functions
+    function_names = {
+        (None, "global_sync"),
+        (None, "global_async"), 
+        ("ParentClass", "sync_method"),
+        ("ParentClass", "async_method"),
+        ("ChildClass", "child_async_method")
+    }
+    
+    tree = cst.parse_module(source_code)
+    collector = OptimFunctionCollector(
+        function_names=function_names,
+        preexisting_objects=None
+    )
+    tree.visit(collector)
+    
+    # Should collect all specified functions (mix of sync and async)
+    assert len(collector.modified_functions) == 5
+    assert (None, "global_sync") in collector.modified_functions
+    assert (None, "global_async") in collector.modified_functions
+    assert ("ParentClass", "sync_method") in collector.modified_functions
+    assert ("ParentClass", "async_method") in collector.modified_functions
+    assert ("ChildClass", "child_async_method") in collector.modified_functions
+    
+    # Should collect __init__ method
+    assert "ParentClass" in collector.modified_init_functions
+
+
+
+def test_is_zero_diff_async_sleep():
+    original_code = '''
+import time
+
+async def task():
+    time.sleep(1)
+    return "done"
 '''
-    assert new_code == expected
+    optimized_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert not is_zero_diff(original_code, optimized_code)
+
+def test_is_zero_diff_with_equivalent_code():
+    original_code = '''
+import asyncio
+
+async def task():
+    await asyncio.sleep(1)
+    return "done"
+'''
+    optimized_code = '''
+import asyncio
+
+async def task():
+    """A task that does something."""
+    await asyncio.sleep(1)
+    return "done"
+'''
+    assert is_zero_diff(original_code, optimized_code)
