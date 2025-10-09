@@ -308,6 +308,7 @@ class AiServiceClient:
         original_throughput: str | None = None,
         optimized_throughput: str | None = None,
         throughput_improvement: str | None = None,
+        codeflash_version: str = codeflash_version,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -327,6 +328,7 @@ class AiServiceClient:
         - original_throughput: str | None - throughput for the baseline code (operations per second)
         - optimized_throughput: str | None - throughput for the optimized code (operations per second)
         - throughput_improvement: str | None - throughput improvement percentage
+        - current codeflash version
 
         Returns
         -------
@@ -349,6 +351,7 @@ class AiServiceClient:
             "original_throughput": original_throughput,
             "optimized_throughput": optimized_throughput,
             "throughput_improvement": throughput_improvement,
+            "codeflash_version": codeflash_version,
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -591,6 +594,7 @@ class AiServiceClient:
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
+            "codeflash_version": codeflash_version,
         }
         console.rule()
         try:
