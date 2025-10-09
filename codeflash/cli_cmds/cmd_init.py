@@ -199,9 +199,7 @@ class CodeflashTheme(inquirer.themes.Default):
         self.Question.brackets_color = inquirer.themes.term.bright_blue
         self.Question.default_color = inquirer.themes.term.bright_cyan
         self.List.selection_color = inquirer.themes.term.bright_blue
-        self.List.selection_cursor = "⚡"
         self.Checkbox.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selection_cursor = "⚡"
         self.Checkbox.selected_icon = "✅"
         self.Checkbox.unselected_icon = "⬜"
 
