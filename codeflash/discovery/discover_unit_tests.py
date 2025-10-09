@@ -134,8 +134,8 @@ class TestsCache:
             return self.memory_cache[cache_key]
 
         self.cur.execute(
-            "SELECT * FROM discovered_tests WHERE project_root_path = ? AND file_path = ? AND file_hash = ?", 
-            (self.project_root_path, file_path, file_hash)
+            "SELECT * FROM discovered_tests WHERE project_root_path = ? AND file_path = ? AND file_hash = ?",
+            (self.project_root_path, file_path, file_hash),
         )
         rows = self.cur.fetchall()
         if not rows:
