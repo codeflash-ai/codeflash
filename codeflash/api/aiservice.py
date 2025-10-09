@@ -309,7 +309,7 @@ class AiServiceClient:
         original_throughput: str | None = None,
         optimized_throughput: str | None = None,
         throughput_improvement: str | None = None,
-        codeflash_version: str | None = "0.17.2",
+        codeflash_version: str = codeflash_version,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
