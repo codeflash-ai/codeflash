@@ -1428,7 +1428,6 @@ class FunctionOptimizer:
             original_throughput=original_throughput_str,
             optimized_throughput=optimized_throughput_str,
             throughput_improvement=throughput_improvement_str,
-            codeflash_version=__version__,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
