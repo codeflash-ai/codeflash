@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
 
+@cache
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
     # Find the pyproject.toml file on the root of the project
 
@@ -31,6 +33,7 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
+@cache
 def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     list_of_conftest_files = set()
     for test_path in test_paths:
