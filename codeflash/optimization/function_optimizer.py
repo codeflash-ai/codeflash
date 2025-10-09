@@ -101,6 +101,7 @@ from codeflash.verification.parse_test_output import calculate_function_throughp
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
+from codeflash.version import __version__
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -1427,6 +1428,7 @@ class FunctionOptimizer:
             original_throughput=original_throughput_str,
             optimized_throughput=optimized_throughput_str,
             throughput_improvement=throughput_improvement_str,
+            codeflash_version=__version__,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
