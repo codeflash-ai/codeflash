@@ -34,6 +34,12 @@ def get_git_project_id() -> str:
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
+    with repository.config_writer() as cw:
+        if not cw.has_option("user", "name"):
+            cw.set_value("user", "name", "Codeflash Bot")
+        if not cw.has_option("user", "email"):
+            cw.set_value("user", "email", "bot@codeflash.ai")
+
     repository.git.add(".")
     repository.git.commit("-m", commit_message, "--no-verify")
 
