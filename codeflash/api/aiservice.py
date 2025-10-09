@@ -595,7 +595,7 @@ class AiServiceClient:
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
-            "codeflash_version": __version__,
+            "codeflash_version": codeflash_version,
         }
         console.rule()
         try:
