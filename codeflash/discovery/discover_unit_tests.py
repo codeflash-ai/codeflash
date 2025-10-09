@@ -67,12 +67,14 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 
 class TestsCache:
-    def __init__(self) -> None:
+    def __init__(self, project_root_path: str | Path) -> None:
+        self.project_root_path = Path(project_root_path).resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS discovered_tests(
+                project_root_path TEXT,
                 file_path TEXT,
                 file_hash TEXT,
                 qualified_name_with_modules_from_root TEXT,
@@ -87,8 +89,8 @@ class TestsCache:
         )
         self.cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_discovered_tests_file_path_hash
-            ON discovered_tests (file_path, file_hash)
+            CREATE INDEX IF NOT EXISTS idx_discovered_tests_project_file_path_hash
+            ON discovered_tests (project_root_path, file_path, file_hash)
             """
         )
 
@@ -108,8 +110,9 @@ class TestsCache:
     ) -> None:
         test_type_value = test_type.value if hasattr(test_type, "value") else test_type
         self.cur.execute(
-            "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
+                self.project_root_path,
                 file_path,
                 file_hash,
                 qualified_name_with_modules_from_root,
@@ -126,11 +129,14 @@ class TestsCache:
     def get_function_to_test_map_for_file(
         self, file_path: str, file_hash: str
     ) -> dict[str, set[FunctionCalledInTest]] | None:
-        cache_key = (file_path, file_hash)
+        cache_key = (self.project_root_path, file_path, file_hash)
         if cache_key in self.memory_cache:
             return self.memory_cache[cache_key]
 
-        self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
+        self.cur.execute(
+            "SELECT * FROM discovered_tests WHERE project_root_path = ? AND file_path = ? AND file_hash = ?", 
+            (self.project_root_path, file_path, file_hash)
+        )
         rows = self.cur.fetchall()
         if not rows:
             return None
@@ -138,12 +144,12 @@ class TestsCache:
         function_to_test_map = defaultdict(set)
 
         for row in rows:
-            qualified_name_with_modules_from_root = row[2]
+            qualified_name_with_modules_from_root = row[3]
             function_called_in_test = FunctionCalledInTest(
                 tests_in_file=TestsInFile(
-                    test_file=Path(row[0]), test_class=row[4], test_function=row[5], test_type=TestType(int(row[6]))
+                    test_file=Path(row[1]), test_class=row[5], test_function=row[6], test_type=TestType(int(row[7]))
                 ),
-                position=CodePosition(line_no=row[7], col_no=row[8]),
+                position=CodePosition(line_no=row[8], col_no=row[9]),
             )
             function_to_test_map[qualified_name_with_modules_from_root].add(function_called_in_test)
 
@@ -566,7 +572,7 @@ def process_test_files(
     num_discovered_replay_tests = 0
     jedi_project = jedi.Project(path=project_root_path)
 
-    tests_cache = TestsCache()
+    tests_cache = TestsCache(project_root_path)
 
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
@@ -577,7 +583,7 @@ def process_test_files(
 
             cached_function_to_test_map = tests_cache.get_function_to_test_map_for_file(str(test_file), file_hash)
 
-            if cached_function_to_test_map:
+            if cfg.use_cache and cached_function_to_test_map:
                 for qualified_name, test_set in cached_function_to_test_map.items():
                     function_to_test_map[qualified_name].update(test_set)
 
