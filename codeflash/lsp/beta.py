@@ -191,10 +191,10 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
         }
 
     server.show_message_log("Validating project...", "Info")
-    config = is_valid_pyproject_toml(pyproject_toml_path)
+    config, reason = is_valid_pyproject_toml(pyproject_toml_path)
     if config is None:
         server.show_message_log("pyproject.toml is not valid", "Error")
-        return {"status": "error", "message": "not valid", "pyprojectPath": pyproject_toml_path}
+        return {"status": "error", "message": f"reason: {reason}", "pyprojectPath": pyproject_toml_path}
 
     args = process_args(server)
 
