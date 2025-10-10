@@ -518,10 +518,7 @@ def discover_tests_unittest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
-            test_file=_test_module_path,
-            test_function=_test_function,
-            test_type=test_type,
-            test_class=_test_suite_name,
+            test_file=_test_module_path, test_function=_test_function, test_type=test_type, test_class=_test_suite_name
         )
 
     for _test_suite in tests._tests:
