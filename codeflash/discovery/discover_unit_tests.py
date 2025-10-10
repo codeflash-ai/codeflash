@@ -67,10 +67,35 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 
 class TestsCache:
+    SCHEMA_VERSION = 1  # Increment this when schema changes
+
     def __init__(self, project_root_path: str | Path) -> None:
         self.project_root_path = Path(project_root_path).resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
+
+        self.cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version(
+                version INTEGER PRIMARY KEY
+            )
+            """
+        )
+
+        self.cur.execute("SELECT version FROM schema_version")
+        result = self.cur.fetchone()
+        current_version = result[0] if result else None
+
+        if current_version != self.SCHEMA_VERSION:
+            logger.debug(
+                f"Schema version mismatch (current: {current_version}, expected: {self.SCHEMA_VERSION}). Recreating tables."
+            )
+            self.cur.execute("DROP TABLE IF EXISTS discovered_tests")
+            self.cur.execute("DROP INDEX IF EXISTS idx_discovered_tests_project_file_path_hash")
+            self.cur.execute("DELETE FROM schema_version")
+            self.cur.execute("INSERT INTO schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
+            self.connection.commit()
+
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS discovered_tests(
