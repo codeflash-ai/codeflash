@@ -490,13 +490,13 @@ def discover_tests_pytest(
 
 def discover_tests_unittest(
     cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
     tests: unittest.TestSuite = loader.discover(str(tests_root))
-    file_to_test_map: defaultdict[str, list[TestsInFile]] = defaultdict(list)
+    file_to_test_map: defaultdict[Path, list[TestsInFile]] = defaultdict(list)
 
     def get_test_details(_test: unittest.TestCase) -> TestsInFile | None:
         _test_function, _test_module, _test_suite_name = (
@@ -508,7 +508,7 @@ def discover_tests_unittest(
         _test_module_path = Path(_test_module.replace(".", os.sep)).with_suffix(".py")
         _test_module_path = tests_root / _test_module_path
         if not _test_module_path.exists() or (
-            discover_only_these_tests and str(_test_module_path) not in discover_only_these_tests
+            discover_only_these_tests and _test_module_path not in discover_only_these_tests
         ):
             return None
         if "__replay_test" in str(_test_module_path):
@@ -518,7 +518,7 @@ def discover_tests_unittest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
-            test_file=str(_test_module_path),
+            test_file=_test_module_path,
             test_function=_test_function,
             test_type=test_type,
             test_class=_test_suite_name,
@@ -539,11 +539,11 @@ def discover_tests_unittest(
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            file_to_test_map[str(details.test_file)].append(details)
+                            file_to_test_map[details.test_file].append(details)
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        file_to_test_map[str(details.test_file)].append(details)
+                        file_to_test_map[details.test_file].append(details)
     return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
