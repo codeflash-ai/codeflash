@@ -528,6 +528,10 @@ def add_needed_imports_from_module(
 
     try:
         for mod in gatherer.module_imports:
+            # Skip __future__ imports as they cannot be imported directly
+            # __future__ imports should only be imported with specific objects
+            if mod == "__future__":
+                continue
             if mod not in dotted_import_collector.imports:
                 AddImportsVisitor.add_needed_import(dst_context, mod)
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
