@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from functools import cache
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
+PYPROJECT_TOML_CACHE = {}
 
-@cache
+
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
     # Find the pyproject.toml file on the root of the project
 
@@ -21,10 +21,15 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
             raise ValueError(msg)
         return config_file
     dir_path = Path.cwd()
-
+    cur_path = dir_path
+    # see if it was encountered before in search
+    if cur_path in PYPROJECT_TOML_CACHE:
+        return PYPROJECT_TOML_CACHE[cur_path]
+    # map current path to closest file
     while dir_path != dir_path.parent:
         config_file = dir_path / "pyproject.toml"
         if config_file.exists():
+            PYPROJECT_TOML_CACHE[cur_path] = config_file
             return config_file
         # Search for pyproject.toml in the parent directories
         dir_path = dir_path.parent
@@ -33,7 +38,6 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
     raise ValueError(msg)
 
 
-@cache
 def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     list_of_conftest_files = set()
     for test_path in test_paths:
