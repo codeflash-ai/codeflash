@@ -158,14 +158,16 @@ class TestsCache:
         return result
 
     @staticmethod
-    def compute_file_hash(path: str | Path) -> str:
+    def compute_file_hash(path: Path) -> str:
         h = hashlib.sha256(usedforsecurity=False)
-        with Path(path).open("rb") as f:
+        with path.open("rb", buffering=0) as f:
+            buf = bytearray(8192)
+            mv = memoryview(buf)
             while True:
-                chunk = f.read(8192)
-                if not chunk:
+                n = f.readinto(mv)
+                if n == 0:
                     break
-                h.update(chunk)
+                h.update(mv[:n])
         return h.hexdigest()
 
     def close(self) -> None:
