@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import configparser
 import difflib
 import os
 import re
@@ -15,7 +16,7 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger, paneled_text
-from codeflash.code_utils.config_parser import find_pyproject_toml
+from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
@@ -83,50 +84,54 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 
+def modify_addopts(config_file: Path) -> tuple[str, bool]:
+    content = ""
+    try:
+        if config_file.suffix.lower() == "toml":
+            # use tomlkit
+            pass
+        else:
+            # use configparser
+            pass
+    except Exception:
+        logger.debug("Trouble parsing")
+        return content, False  # not modified
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    # read file
+    # parse
+    # modify
+    # save
+    # return original content
+    print(config_file)
+    return "", True
+
+
 @contextmanager
 def custom_addopts() -> None:
-    pyproject_file = find_pyproject_toml()
-    # closest_config_files = get_all_closest_config_files()
-    original_content = None
-    non_blacklist_plugin_args = ""
+    closest_config_files = get_all_closest_config_files()
+
+    # 1. find closest config files
+    # 2. iterate through each of them and mask the addopts
+    # 3. yield
+    # 4. restore the original addopts when the context manager exits
+
+    original_content = {}
 
     try:
-        # Read original file
-        if pyproject_file.exists():
-            with Path.open(pyproject_file, encoding="utf-8") as f:
-                original_content = f.read()
-                data = tomlkit.parse(original_content)
-            # Backup original addopts
-            original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
-            # nothing to do if no addopts present
-            if original_addopts != "" and isinstance(original_addopts, list):
-                non_blacklist_plugin_args = []
-                for opt in original_addopts:
-                    opt_stripped = opt.strip().lstrip("-")
-                    # Filter out -n/--numprocesses and blacklisted options
-                    if opt_stripped.startswith(("n=", "numprocesses=")) or any(
-                        opt_stripped.startswith(b) for b in BLACKLIST_ADDOPTS
-                    ):
-                        continue
-                    non_blacklist_plugin_args.append(opt)
-
-                if non_blacklist_plugin_args != original_addopts:
-                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
-                    # Write modified file
-                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                        f.write(tomlkit.dumps(data))
-
+        for config_file in closest_config_files:
+            # Read original file
+            print(config_file)
+            # if pyproject_file.exists():
+            original_content[config_file] = modify_addopts(config_file)
         yield
 
     finally:
         # Restore original file
-        if (
-            original_content
-            and pyproject_file.exists()
-            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
-        ):
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(original_content)
+        for file, (content, was_modified) in original_content.items():
+            if was_modified:
+                with Path.open(file, "w", encoding="utf-8") as f:
+                    f.write(content)
 
 
 @contextmanager
