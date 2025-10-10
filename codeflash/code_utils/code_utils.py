@@ -19,6 +19,8 @@ from codeflash.code_utils.config_parser import find_pyproject_toml
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
+BLACKLIST_ADDOPTS = ("benchmark", "sugar", "codespeed", "cov", "profile", "junitxml")
+
 
 def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
     """Return the unified diff between two code strings as a single string.
@@ -84,6 +86,7 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
 @contextmanager
 def custom_addopts() -> None:
     pyproject_file = find_pyproject_toml()
+    # closest_config_files = get_all_closest_config_files()
     original_content = None
     non_blacklist_plugin_args = ""
 
@@ -97,9 +100,16 @@ def custom_addopts() -> None:
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
             if original_addopts != "" and isinstance(original_addopts, list):
-                original_addopts = [x.strip() for x in original_addopts]
-                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
-                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
+                non_blacklist_plugin_args = []
+                for opt in original_addopts:
+                    opt_stripped = opt.strip().lstrip("-")
+                    # Filter out -n/--numprocesses and blacklisted options
+                    if opt_stripped.startswith(("n=", "numprocesses=")) or any(
+                        opt_stripped.startswith(b) for b in BLACKLIST_ADDOPTS
+                    ):
+                        continue
+                    non_blacklist_plugin_args.append(opt)
+
                 if non_blacklist_plugin_args != original_addopts:
                     data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
                     # Write modified file
