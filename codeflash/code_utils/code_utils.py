@@ -123,6 +123,7 @@ def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
                 return content, False
             if isinstance(original_addopts, list):
                 original_addopts = " ".join(original_addopts)
+            original_addopts = original_addopts.replace("=", " ")
             addopts_args = (
                 original_addopts.split()
             )  # any number of space characters as delimiter, doesn't look at = which is fine
@@ -135,6 +136,7 @@ def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
                 original_addopts = data.get("pytest", {}).get("addopts", "")  # should only be a string
             else:
                 original_addopts = data.get("tool:pytest", {}).get("addopts", "")  # should only be a string
+            original_addopts = original_addopts.replace("=", " ")
             addopts_args = original_addopts.split()
         new_addopts_args = filter_args(addopts_args)
         if new_addopts_args == addopts_args:
