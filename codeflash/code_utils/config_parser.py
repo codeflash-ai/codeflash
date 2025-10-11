@@ -42,7 +42,7 @@ def get_all_closest_config_files() -> list[Path]:
     return all_closest_config_files
 
 
-def find_closest_config_file(file_type: str) -> Path:
+def find_closest_config_file(file_type: str) -> Path | None:
     # Find the closest pyproject.toml, pytest.ini, tox.ini, or setup.cfg file on the root of the project
     dir_path = Path.cwd()
     cur_path = dir_path
@@ -57,9 +57,7 @@ def find_closest_config_file(file_type: str) -> Path:
             return config_file
         # Search for pyproject.toml in the parent directories
         dir_path = dir_path.parent
-    msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to pyproject.toml with the --config-file argument."
-
-    raise ValueError(msg)
+    return None
 
 
 def find_conftest_files(test_paths: list[Path]) -> list[Path]:

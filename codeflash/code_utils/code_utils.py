@@ -20,7 +20,7 @@ from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_clos
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
-BLACKLIST_ADDOPTS = ("benchmark", "sugar", "codespeed", "cov", "profile", "junitxml")
+BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
 
 
 def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
@@ -84,45 +84,93 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 
-def modify_addopts(config_file: Path) -> tuple[str, bool]:
-    content = ""
+def filter_args(addopts_args: list[str]) -> list[str]:
+    filtered_args = []
+    i = 0
+    while i < len(addopts_args):
+        current_arg = addopts_args[i]
+        # Check if current argument starts with --cov
+        if current_arg.startswith(BLACKLIST_ADDOPTS):
+            # Skip this argument
+            i += 1
+            # Check if the next argument is a value (doesn't start with -)
+            if i < len(addopts_args) and not addopts_args[i].startswith("-"):
+                # Skip the value as well
+                i += 1
+        else:
+            # Keep this argument
+            filtered_args.append(current_arg)
+            i += 1
+    return filtered_args
+
+
+def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
+    file_type = config_file.suffix.lower()
+    filename = config_file.name
+    if file_type not in {".toml", ".ini", "cfg"} or not config_file.exists():
+        return "", False
+    # Read original file
+    with Path.open(config_file, encoding="utf-8") as f:
+        content = f.read()
     try:
-        if config_file.suffix.lower() == "toml":
+        if filename == "pyproject.toml":
             # use tomlkit
-            pass
+            data = tomlkit.parse(content)
+            original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
+            # nothing to do if no addopts present
+            if original_addopts == "":
+                return content, False
+            if isinstance(original_addopts, list):
+                original_addopts = " ".join(original_addopts)
+            addopts_args = (
+                original_addopts.split()
+            )  # any number of space characters as delimiter, doesn't look at = which is fine
         else:
             # use configparser
-            pass
+            config = configparser.ConfigParser()
+            config.read_string(content)
+            data = {section: dict(config[section]) for section in config.sections()}
+            if config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+                original_addopts = data.get("pytest", {}).get("addopts", "")  # should only be a string
+            else:
+                original_addopts = data.get("tool:pytest", {}).get("addopts", "")  # should only be a string
+            addopts_args = original_addopts.split()
+        new_addopts_args = filter_args(addopts_args)
+        if new_addopts_args == addopts_args:
+            return content, False
+        # change addopts now
+        if file_type == "toml":
+            data["tool"]["pytest"]["ini_options"]["addopts"] = " ".join(new_addopts_args)
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+                return content, True
+        elif config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+            config["pytest"]["addopts"] = " ".join(new_addopts_args)
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
+        else:
+            config["tool:pytest"]["addopts"] = " ".join(new_addopts_args)
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
+
     except Exception:
         logger.debug("Trouble parsing")
         return content, False  # not modified
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    # read file
-    # parse
-    # modify
-    # save
-    # return original content
-    print(config_file)
-    return "", True
 
 
 @contextmanager
 def custom_addopts() -> None:
     closest_config_files = get_all_closest_config_files()
 
-    # 1. find closest config files
-    # 2. iterate through each of them and mask the addopts
-    # 3. yield
-    # 4. restore the original addopts when the context manager exits
-
     original_content = {}
 
     try:
         for config_file in closest_config_files:
-            # Read original file
-            print(config_file)
-            # if pyproject_file.exists():
             original_content[config_file] = modify_addopts(config_file)
         yield
 
