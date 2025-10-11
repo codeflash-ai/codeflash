@@ -528,15 +528,28 @@ def add_needed_imports_from_module(
 
     try:
         for mod in gatherer.module_imports:
+            # Skip __future__ imports as they cannot be imported directly
+            # __future__ imports should only be imported with specific objects i.e from __future__ import annotations
+            if mod == "__future__":
+                continue
             if mod not in dotted_import_collector.imports:
                 AddImportsVisitor.add_needed_import(dst_context, mod)
             RemoveImportsVisitor.remove_unused_import(dst_context, mod)
+        aliased_objects = set()
+        for mod, alias_pairs in gatherer.alias_mapping.items():
+            for alias_pair in alias_pairs:
+                if alias_pair[0] and alias_pair[1]:  # Both name and alias exist
+                    aliased_objects.add(f"{mod}.{alias_pair[0]}")
+
         for mod, obj_seq in gatherer.object_mapping.items():
             for obj in obj_seq:
                 if (
                     f"{mod}.{obj}" in helper_functions_fqn or dst_context.full_module_name == mod  # avoid circular deps
                 ):
                     continue  # Skip adding imports for helper functions already in the context
+
+                if f"{mod}.{obj}" in aliased_objects:
+                    continue
 
                 # Handle star imports by resolving them to actual symbol names
                 if obj == "*":
@@ -559,6 +572,8 @@ def add_needed_imports_from_module(
         return dst_module_code
 
     for mod, asname in gatherer.module_aliases.items():
+        if not asname:
+            continue
         if f"{mod}.{asname}" not in dotted_import_collector.imports:
             AddImportsVisitor.add_needed_import(dst_context, mod, asname=asname)
         RemoveImportsVisitor.remove_unused_import(dst_context, mod, asname=asname)
@@ -568,12 +583,16 @@ def add_needed_imports_from_module(
             if f"{mod}.{alias_pair[0]}" in helper_functions_fqn:
                 continue
 
+            if not alias_pair[0] or not alias_pair[1]:
+                continue
+
             if f"{mod}.{alias_pair[1]}" not in dotted_import_collector.imports:
                 AddImportsVisitor.add_needed_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
             RemoveImportsVisitor.remove_unused_import(dst_context, mod, alias_pair[0], asname=alias_pair[1])
 
     try:
-        transformed_module = AddImportsVisitor(dst_context).transform_module(parsed_dst_module)
+        add_imports_visitor = AddImportsVisitor(dst_context)
+        transformed_module = add_imports_visitor.transform_module(parsed_dst_module)
         transformed_module = RemoveImportsVisitor(dst_context).transform_module(transformed_module)
         return transformed_module.code.lstrip("\n")
     except Exception as e:

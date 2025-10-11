@@ -67,7 +67,7 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
     test_results = TestResults()
     if not file_location.exists():
-        logger.warning(f"No test results for {file_location} found.")
+        logger.debug(f"No test results for {file_location} found.")
         console.rule()
         return test_results
 
@@ -237,6 +237,11 @@ def parse_test_xml(
 
             test_class_path = testcase.classname
             try:
+                if testcase.name is None:
+                    logger.debug(
+                        f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping"
+                    )
+                    continue
                 test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             except (AttributeError, TypeError) as e:
                 msg = (
@@ -273,16 +278,16 @@ def parse_test_xml(
 
             timed_out = False
             if test_config.test_framework == "pytest":
-                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if "[" in testcase.name else 1
+                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
                 if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
                         timed_out = True
             else:
                 if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "timed out" in message:
