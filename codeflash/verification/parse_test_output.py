@@ -238,7 +238,9 @@ def parse_test_xml(
             test_class_path = testcase.classname
             try:
                 if testcase.name is None:
-                    logger.debug(f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping")
+                    logger.debug(
+                        f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping"
+                    )
                     continue
                 test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             except (AttributeError, TypeError) as e:
