@@ -142,7 +142,7 @@ def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
         if new_addopts_args == addopts_args:
             return content, False
         # change addopts now
-        if file_type == "toml":
+        if file_type == ".toml":
             data["tool"]["pytest"]["ini_options"]["addopts"] = " ".join(new_addopts_args)
             # Write modified file
             with Path.open(config_file, "w", encoding="utf-8") as f:
