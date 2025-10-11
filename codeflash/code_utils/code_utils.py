@@ -107,7 +107,8 @@ def filter_args(addopts_args: list[str]) -> list[str]:
 def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
     file_type = config_file.suffix.lower()
     filename = config_file.name
-    if file_type not in {".toml", ".ini", "cfg"} or not config_file.exists():
+    config = None
+    if file_type not in {".toml", ".ini", ".cfg"} or not config_file.exists():
         return "", False
     # Read original file
     with Path.open(config_file, encoding="utf-8") as f:
@@ -146,13 +147,13 @@ def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
                 f.write(tomlkit.dumps(data))
                 return content, True
         elif config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
-            config["pytest"]["addopts"] = " ".join(new_addopts_args)
+            config.set("pytest", "addopts", " ".join(new_addopts_args))
             # Write modified file
             with Path.open(config_file, "w", encoding="utf-8") as f:
                 config.write(f)
                 return content, True
         else:
-            config["tool:pytest"]["addopts"] = " ".join(new_addopts_args)
+            config.set("tool:pytest", "addopts", " ".join(new_addopts_args))
             # Write modified file
             with Path.open(config_file, "w", encoding="utf-8") as f:
                 config.write(f)
