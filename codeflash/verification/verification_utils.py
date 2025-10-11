@@ -76,3 +76,4 @@ class TestConfig:
     concolic_test_root_dir: Optional[Path] = None
     pytest_cmd: str = "pytest"
     benchmark_tests_root: Optional[Path] = None
+    use_cache: bool = True
