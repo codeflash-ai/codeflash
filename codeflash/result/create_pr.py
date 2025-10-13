@@ -277,7 +277,6 @@ def check_create_pr(
             coverage_message=coverage_message,
             replay_tests=replay_tests,
             concolic_tests=concolic_tests,
-            optimization_impact=optimization_impact,
         )
         if response.ok:
             pr_id = response.text
