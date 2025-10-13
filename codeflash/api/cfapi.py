@@ -130,6 +130,7 @@ def suggest_changes(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    optimization_impact: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -155,6 +156,7 @@ def suggest_changes(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimization_impact": optimization_impact,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -171,6 +173,7 @@ def create_pr(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    optimization_impact: str = "",
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -195,6 +198,7 @@ def create_pr(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimization_impact": optimization_impact,
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -210,6 +214,7 @@ def create_staging(
     replay_tests: str,
     concolic_tests: str,
     root_dir: Path,
+    optimization_impact: str = "",
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -250,6 +255,7 @@ def create_staging(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimization_impact": optimization_impact,
     }
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
