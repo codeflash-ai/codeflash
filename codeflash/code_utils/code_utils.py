@@ -85,20 +85,20 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
 
 
 def filter_args(addopts_args: list[str]) -> list[str]:
+    # Convert BLACKLIST_ADDOPTS to a set for faster lookup of simple matches
+    # But keep tuple for startswith
+    blacklist = BLACKLIST_ADDOPTS
+    # Precompute the length for re-use
+    n = len(addopts_args)
     filtered_args = []
     i = 0
-    while i < len(addopts_args):
+    while i < n:
         current_arg = addopts_args[i]
-        # Check if current argument starts with --cov
-        if current_arg.startswith(BLACKLIST_ADDOPTS):
-            # Skip this argument
+        if current_arg.startswith(blacklist):
             i += 1
-            # Check if the next argument is a value (doesn't start with -)
-            if i < len(addopts_args) and not addopts_args[i].startswith("-"):
-                # Skip the value as well
+            if i < n and not addopts_args[i].startswith("-"):
                 i += 1
         else:
-            # Keep this argument
             filtered_args.append(current_arg)
             i += 1
     return filtered_args
