@@ -6,8 +6,9 @@ import re
 import subprocess
 import sys
 from enum import Enum, auto
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union, cast
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 import click
 import git
@@ -214,17 +215,15 @@ class CodeflashTheme(inquirer.themes.Default):
         self.Checkbox.unselected_icon = "⬜"
 
 
-def collect_setup_info() -> SetupInfo:
-    curdir = Path.cwd()
-    # Check if the cwd is writable
-    if not os.access(curdir, os.W_OK):
-        click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
-        click.echo("It's likely you don't have write permissions for this folder.")
-        sys.exit(1)
+# common sections between normal mode and lsp mode
+class CommonSections(Enum):
+    module_root = "module_root"
+    tests_root = "tests_root"
+    test_framework = "test_framework"
 
-    # Check for the existence of pyproject.toml or setup.py
-    project_name = check_for_toml_or_setup_file()
 
+@lru_cache(maxsize=1)
+def get_valid_subdirs() -> list[str]:
     ignore_subdirs = [
         "venv",
         "node_modules",
@@ -237,11 +236,36 @@ def collect_setup_info() -> SetupInfo:
         "tmp",
         "__pycache__",
     ]
-    valid_subdirs = [
+    return [
         d for d in next(os.walk("."))[1] if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
     ]
 
-    valid_module_subdirs = [d for d in valid_subdirs if d != "tests"]
+
+def get_suggestions(section: str) -> tuple(list[str], Optional[str]):
+    valid_subdirs = get_valid_subdirs()
+    if section == CommonSections.module_root:
+        return [d for d in valid_subdirs if d != "tests"], None
+    if section == CommonSections.tests_root:
+        default = "tests" if "tests" in valid_subdirs else None
+        return valid_subdirs, default
+    if section == CommonSections.test_framework:
+        auto_detected = detect_test_framework_from_config_files(Path.cwd())
+        return ["pytest", "unittest"], auto_detected
+    msg = f"Unknown section: {section}"
+    raise ValueError(msg)
+
+
+def collect_setup_info() -> SetupInfo:
+    curdir = Path.cwd()
+    # Check if the cwd is writable
+    if not os.access(curdir, os.W_OK):
+        click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
+        click.echo("It's likely you don't have write permissions for this folder.")
+        sys.exit(1)
+
+    # Check for the existence of pyproject.toml or setup.py
+    project_name = check_for_toml_or_setup_file()
+    valid_module_subdirs, _ = get_suggestions(CommonSections.module_root)
 
     curdir_option = f"current directory ({curdir})"
     custom_dir_option = "enter a custom directory…"
@@ -305,10 +329,10 @@ def collect_setup_info() -> SetupInfo:
     ph("cli-project-root-provided")
 
     # Discover test directory
-    default_tests_subdir = "tests"
     create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
-    test_subdir_options = [sub_dir for sub_dir in valid_subdirs if sub_dir != module_root]
-    if "tests" not in valid_subdirs:
+    tests_suggestions, default_tests_subdir = get_suggestions(CommonSections.tests_root)
+    test_subdir_options = [sub_dir for sub_dir in tests_suggestions if sub_dir != module_root]
+    if "tests" not in tests_suggestions:
         test_subdir_options.append(create_for_me_option)
     custom_dir_option = "📁 Enter a custom directory…"
     test_subdir_options.append(custom_dir_option)
@@ -331,7 +355,7 @@ def collect_setup_info() -> SetupInfo:
             "tests_root",
             message="Where are your tests located?",
             choices=test_subdir_options,
-            default=(default_tests_subdir if default_tests_subdir in test_subdir_options else test_subdir_options[0]),
+            default=(default_tests_subdir or test_subdir_options[0]),
             carousel=True,
         )
     ]
@@ -382,7 +406,8 @@ def collect_setup_info() -> SetupInfo:
 
     ph("cli-tests-root-provided")
 
-    autodetected_test_framework = detect_test_framework(curdir, tests_root)
+    test_framework_choices, detected_framework = get_suggestions(CommonSections.test_framework)
+    autodetected_test_framework = detected_framework or detect_test_framework_from_test_files(tests_root)
 
     framework_message = "⚗️ Let's configure your test framework.\n\n"
     if autodetected_test_framework:
@@ -393,11 +418,19 @@ def collect_setup_info() -> SetupInfo:
     console.print(framework_panel)
     console.print()
 
+    framework_choices = []
+    # add icons based on the detected framework
+    for choice in test_framework_choices:
+        if choice == "pytest":
+            framework_choices.append(("🧪 pytest", "pytest"))
+        elif choice == "unittest":
+            framework_choices.append(("🐍 unittest", "unittest"))
+
     framework_questions = [
         inquirer.List(
             "test_framework",
             message="Which test framework do you use?",
-            choices=[("🧪 pytest", "pytest"), ("🐍 unittest", "unittest")],
+            choices=framework_choices,
             default=autodetected_test_framework or "pytest",
             carousel=True,
         )
@@ -511,7 +544,7 @@ def collect_setup_info() -> SetupInfo:
     )
 
 
-def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
+def detect_test_framework_from_config_files(curdir: Path) -> Optional[str]:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
     pytest_config_patterns = {
@@ -529,27 +562,31 @@ def detect_test_framework(curdir: Path, tests_root: Path) -> str | None:
                     test_framework = "pytest"
                     break
         test_framework = "pytest"
-    else:
-        # Check if any python files contain a class that inherits from unittest.TestCase
-        for filename in tests_root.iterdir():
-            if filename.suffix == ".py":
-                with filename.open(encoding="utf8") as file:
-                    contents = file.read()
-                    try:
-                        node = ast.parse(contents)
-                    except SyntaxError:
-                        continue
-                    if any(
-                        isinstance(item, ast.ClassDef)
-                        and any(
-                            (isinstance(base, ast.Attribute) and base.attr == "TestCase")
-                            or (isinstance(base, ast.Name) and base.id == "TestCase")
-                            for base in item.bases
-                        )
-                        for item in node.body
-                    ):
-                        test_framework = "unittest"
-                        break
+    return test_framework
+
+
+def detect_test_framework_from_test_files(tests_root: Path) -> Optional[str]:
+    test_framework = None
+    # Check if any python files contain a class that inherits from unittest.TestCase
+    for filename in tests_root.iterdir():
+        if filename.suffix == ".py":
+            with filename.open(encoding="utf8") as file:
+                contents = file.read()
+                try:
+                    node = ast.parse(contents)
+                except SyntaxError:
+                    continue
+                if any(
+                    isinstance(item, ast.ClassDef)
+                    and any(
+                        (isinstance(base, ast.Attribute) and base.attr == "TestCase")
+                        or (isinstance(base, ast.Name) and base.id == "TestCase")
+                        for base in item.bases
+                    )
+                    for item in node.body
+                ):
+                    test_framework = "unittest"
+                    break
     return test_framework
 
 
