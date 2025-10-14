@@ -5,6 +5,7 @@ from typing import Any
 
 import tomlkit
 
+PYPROJECT_TOML_CACHE = {}
 ALL_CONFIG_FILES = {}  # map path to closest config file
 
 
@@ -21,10 +22,15 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
             raise ValueError(msg)
         return config_file
     dir_path = Path.cwd()
-
+    cur_path = dir_path
+    # see if it was encountered before in search
+    if cur_path in PYPROJECT_TOML_CACHE:
+        return PYPROJECT_TOML_CACHE[cur_path]
+    # map current path to closest file
     while dir_path != dir_path.parent:
         config_file = dir_path / "pyproject.toml"
         if config_file.exists():
+            PYPROJECT_TOML_CACHE[cur_path] = config_file
             return config_file
         # Search for pyproject.toml in the parent directories
         dir_path = dir_path.parent
