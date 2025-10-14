@@ -304,12 +304,12 @@ class FunctionOptimizer:
         ]
 
         with progress_bar(
-            f"Generating new tests and optimizations for function {self.function_to_optimize.function_name}",
+            f"Generating new tests and optimizations for function '{self.function_to_optimize.function_name}'",
             transient=True,
             revert_to_print=bool(get_pr_number()),
         ):
             generated_results = self.generate_tests_and_optimizations(
-                testgen_context_code=code_context.testgen_context_code,
+                testgen_context=code_context.testgen_context,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 helper_functions=code_context.helper_functions,
@@ -345,7 +345,6 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
         if concolic_test_str:
-            # no concolic tests in lsp mode
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
 
@@ -972,7 +971,7 @@ class FunctionOptimizer:
 
         return Success(
             CodeOptimizationContext(
-                testgen_context_code=new_code_ctx.testgen_context_code,
+                testgen_context=new_code_ctx.testgen_context,
                 read_writable_code=new_code_ctx.read_writable_code,
                 read_only_context_code=new_code_ctx.read_only_context_code,
                 hashing_code_context=new_code_ctx.hashing_code_context,
@@ -1079,7 +1078,7 @@ class FunctionOptimizer:
 
     def generate_tests_and_optimizations(
         self,
-        testgen_context_code: str,
+        testgen_context: CodeStringsMarkdown,
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         helper_functions: list[FunctionSource],
@@ -1093,7 +1092,7 @@ class FunctionOptimizer:
         # Submit the test generation task as future
         future_tests = self.submit_test_generation_tasks(
             self.executor,
-            testgen_context_code,
+            testgen_context.markdown,
             [definition.fully_qualified_name for definition in helper_functions],
             generated_test_paths,
             generated_perf_test_paths,
@@ -1458,14 +1457,22 @@ class FunctionOptimizer:
         }
 
         raise_pr = not self.args.no_pr
+        staging_review = self.args.staging_review
 
-        if raise_pr or self.args.staging_review:
+        if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-
-        if raise_pr and not self.args.staging_review:
+            # try:
+            #     # modify argument of staging vs pr based on the impact
+            #     opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+            #     if opt_impact_response == "low":
+            #         raise_pr = False
+            #         staging_review = True
+            # except Exception as e:
+            #     logger.debug(f"optimization impact response failed, investigate {e}")
+        if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
-        elif self.args.staging_review:
+        elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
                 staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
@@ -1504,7 +1511,7 @@ class FunctionOptimizer:
             self.revert_code_and_helpers(original_helper_code)
             return
 
-        if self.args.staging_review:
+        if staging_review:
             # always revert code and helpers when staging review
             self.revert_code_and_helpers(original_helper_code)
             return
@@ -1657,8 +1664,8 @@ class FunctionOptimizer:
 
         loop_count = max([int(result.loop_index) for result in benchmarking_results.test_results])
         logger.info(
-            f"h2|⌚ Original code summed runtime measured over {loop_count} loop{'s' if loop_count > 1 else ''}: "
-            f"{humanize_runtime(total_timing)} per full loop"
+            f"h3|⌚ Original code summed runtime measured over '{loop_count}' loop{'s' if loop_count > 1 else ''}: "
+            f"'{humanize_runtime(total_timing)}' per full loop"
         )
         console.rule()
         logger.debug(f"Total original code runtime (ns): {total_timing}")

@@ -417,6 +417,7 @@ def discover_tests_pytest(
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)
     except Exception as e:
+        tests, pytest_rootdir = [], None
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     finally:

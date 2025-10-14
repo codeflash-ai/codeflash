@@ -155,20 +155,30 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
-def is_valid_pyproject_toml(pyproject_toml_path: Path) -> dict[str, Any] | None:
+def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[dict[str, Any] | None, str]:  # noqa: PLR0911
     if not pyproject_toml_path.exists():
-        return None
+        return None, f"Configuration file not found: {pyproject_toml_path}"
+
     try:
         config, _ = parse_config_file(pyproject_toml_path)
-    except Exception:
-        return None
+    except Exception as e:
+        return None, f"Failed to parse configuration: {e}"
 
-    if "module_root" not in config or config["module_root"] is None or not Path(config["module_root"]).is_dir():
-        return None
-    if "tests_root" not in config or config["tests_root"] is None or not Path(config["tests_root"]).is_dir():
-        return None
+    module_root = config.get("module_root")
+    if not module_root:
+        return None, "Missing required field: 'module_root'"
 
-    return config
+    if not Path(module_root).is_dir():
+        return None, f"Invalid 'module_root': directory does not exist at {module_root}"
+
+    tests_root = config.get("tests_root")
+    if not tests_root:
+        return None, "Missing required field: 'tests_root'"
+
+    if not Path(tests_root).is_dir():
+        return None, f"Invalid 'tests_root': directory does not exist at {tests_root}"
+
+    return config, ""
 
 
 def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
@@ -180,7 +190,7 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
 
-    config = is_valid_pyproject_toml(pyproject_toml_path)
+    config, _message = is_valid_pyproject_toml(pyproject_toml_path)
     if config is None:
         return True, None
 
@@ -199,9 +209,7 @@ class CodeflashTheme(inquirer.themes.Default):
         self.Question.brackets_color = inquirer.themes.term.bright_blue
         self.Question.default_color = inquirer.themes.term.bright_cyan
         self.List.selection_color = inquirer.themes.term.bright_blue
-        self.List.selection_cursor = "⚡"
         self.Checkbox.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selection_cursor = "⚡"
         self.Checkbox.selected_icon = "✅"
         self.Checkbox.unselected_icon = "⬜"
 
@@ -633,7 +641,7 @@ def check_for_toml_or_setup_file() -> str | None:
 
 def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
     try:
-        config, config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
+        config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
         ph("cli-github-actions-install-started")
         try:

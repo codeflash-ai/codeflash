@@ -1,4 +1,4 @@
-name: E2E - Topological Sort
+name: E2E - Topological Sort (Worktree)
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  topological-sort-optimization:
+  topological-sort-worktree-optimization:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
     environment: ${{ (github.event_name == 'workflow_dispatch' || (contains(toJSON(github.event.pull_request.files.*.filename), '.github/workflows/') && github.event.pull_request.user.login != 'misrasaurabh1' && github.event.pull_request.user.login != 'KRRT7')) && 'external-trusted-contributors' || '' }}
     runs-on: ubuntu-latest
@@ -90,4 +90,4 @@ jobs:
       - name: Run Codeflash to optimize code
         id: optimize_code
         run: |
-          uv run python tests/scripts/end_to_end_test_topological_sort.py
+          uv run python tests/scripts/end_to_end_test_topological_sort_worktree.py

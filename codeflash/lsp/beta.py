@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-import contextlib
+import asyncio
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-import git
 from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
-from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_utils import git_root_dir
-from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import (
     filter_functions,
@@ -21,6 +18,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
+from codeflash.lsp.features.perform_optimization import sync_perform_optimization
 from codeflash.lsp.server import CodeflashLanguageServer
 
 if TYPE_CHECKING:
@@ -71,7 +69,6 @@ class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
 
-# server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0")
 
 
@@ -131,10 +128,11 @@ def get_optimizable_functions(
     return path_to_qualified_names
 
 
-def _find_pyproject_toml(workspace_path: str) -> Path | None:
+def _find_pyproject_toml(workspace_path: str) -> tuple[Path | None, bool]:
     workspace_path_obj = Path(workspace_path)
     max_depth = 2
     base_depth = len(workspace_path_obj.parts)
+    top_level_pyproject = None
 
     for root, dirs, files in os.walk(workspace_path_obj):
         depth = len(Path(root).parts) - base_depth
@@ -145,11 +143,13 @@ def _find_pyproject_toml(workspace_path: str) -> Path | None:
 
         if "pyproject.toml" in files:
             file_path = Path(root) / "pyproject.toml"
+            if depth == 0:
+                top_level_pyproject = file_path
             with file_path.open("r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
                     if line.strip() == "[tool.codeflash]":
-                        return file_path.resolve()
-    return None
+                        return file_path.resolve(), True
+    return top_level_pyproject, False
 
 
 # should be called the first thing to initialize and validate the project
@@ -157,20 +157,27 @@ def _find_pyproject_toml(workspace_path: str) -> Path | None:
 def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams) -> dict[str, str]:
     from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
 
-    pyproject_toml_path: Path | None = getattr(params, "config_file", None)
+    # Always process args in the init project, the extension can call
+    server.args_processed_before = False
 
-    if server.args is None:
-        if pyproject_toml_path is not None:
-            # if there is a config file provided use it
-            server.prepare_optimizer_arguments(pyproject_toml_path)
-        else:
-            # otherwise look for it
-            pyproject_toml_path = _find_pyproject_toml(params.root_path_abs)
+    pyproject_toml_path: Path | None = getattr(params, "config_file", None) or getattr(server.args, "config_file", None)
+    if pyproject_toml_path is not None:
+        # if there is a config file provided use it
+        server.prepare_optimizer_arguments(pyproject_toml_path)
+    else:
+        # otherwise look for it
+        pyproject_toml_path, has_codeflash_config = _find_pyproject_toml(params.root_path_abs)
+        if pyproject_toml_path and has_codeflash_config:
             server.show_message_log(f"Found pyproject.toml at: {pyproject_toml_path}", "Info")
-            if pyproject_toml_path:
-                server.prepare_optimizer_arguments(pyproject_toml_path)
-            else:
-                return {"status": "error", "message": "No pyproject.toml found in workspace."}
+            server.prepare_optimizer_arguments(pyproject_toml_path)
+        elif pyproject_toml_path and not has_codeflash_config:
+            return {
+                "status": "error",
+                "message": "pyproject.toml found in workspace, but no codeflash config.",
+                "pyprojectPath": pyproject_toml_path,
+            }
+        else:
+            return {"status": "error", "message": "No pyproject.toml found in workspace."}
 
     # since we are using worktrees, optimization diffs are generated with respect to the root of the repo.
     root = str(git_root_dir())
@@ -184,23 +191,12 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
         }
 
     server.show_message_log("Validating project...", "Info")
-    config = is_valid_pyproject_toml(pyproject_toml_path)
+    config, reason = is_valid_pyproject_toml(pyproject_toml_path)
     if config is None:
         server.show_message_log("pyproject.toml is not valid", "Error")
-        return {
-            "status": "error",
-            "message": "pyproject.toml is not valid",  # keep the error message the same, the extension is matching "pyproject.toml" in the error message to show the codeflash init instructions,
-        }
+        return {"status": "error", "message": f"reason: {reason}", "pyprojectPath": pyproject_toml_path}
 
     args = process_args(server)
-    repo = git.Repo(args.module_root, search_parent_directories=True)
-    if repo.bare:
-        return {"status": "error", "message": "Repository is in bare state"}
-
-    try:
-        _ = repo.head.commit
-    except Exception:
-        return {"status": "error", "message": "Repository has no commits (unborn HEAD)"}
 
     return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
@@ -334,115 +330,15 @@ def initialize_function_optimization(
 
 
 @server.feature("performFunctionOptimization")
-@server.thread()
-def perform_function_optimization(
+async def perform_function_optimization(
     server: CodeflashLanguageServer, params: FunctionOptimizationParams
 ) -> dict[str, str]:
+    loop = asyncio.get_running_loop()
     try:
-        server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
-        should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
-        function_optimizer = server.optimizer.current_function_optimizer
-        current_function = function_optimizer.function_to_optimize
-
-        code_print(
-            code_context.read_writable_code.flat,
-            file_name=current_function.file_path,
-            function_name=current_function.function_name,
-        )
-
-        optimizable_funcs = {current_function.file_path: [current_function]}
-
-        devnull_writer = open(os.devnull, "w")  # noqa
-        with contextlib.redirect_stdout(devnull_writer):
-            function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
-            function_optimizer.function_to_tests = function_to_tests
-
-        test_setup_result = function_optimizer.generate_and_instrument_tests(
-            code_context, should_run_experiment=should_run_experiment
-        )
-        if not is_successful(test_setup_result):
-            return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
-        (
-            generated_tests,
-            function_to_concolic_tests,
-            concolic_test_str,
-            optimizations_set,
-            generated_test_paths,
-            generated_perf_test_paths,
-            instrumented_unittests_created_for_function,
-            original_conftest_content,
-        ) = test_setup_result.unwrap()
-
-        baseline_setup_result = function_optimizer.setup_and_establish_baseline(
-            code_context=code_context,
-            original_helper_code=original_helper_code,
-            function_to_concolic_tests=function_to_concolic_tests,
-            generated_test_paths=generated_test_paths,
-            generated_perf_test_paths=generated_perf_test_paths,
-            instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
-            original_conftest_content=original_conftest_content,
-        )
-
-        if not is_successful(baseline_setup_result):
-            return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
-
-        (
-            function_to_optimize_qualified_name,
-            function_to_all_tests,
-            original_code_baseline,
-            test_functions_to_remove,
-            file_path_to_helper_classes,
-        ) = baseline_setup_result.unwrap()
-
-        best_optimization = function_optimizer.find_and_process_best_optimization(
-            optimizations_set=optimizations_set,
-            code_context=code_context,
-            original_code_baseline=original_code_baseline,
-            original_helper_code=original_helper_code,
-            file_path_to_helper_classes=file_path_to_helper_classes,
-            function_to_optimize_qualified_name=function_to_optimize_qualified_name,
-            function_to_all_tests=function_to_all_tests,
-            generated_tests=generated_tests,
-            test_functions_to_remove=test_functions_to_remove,
-            concolic_test_str=concolic_test_str,
-        )
-
-        if not best_optimization:
-            server.show_message_log(
-                f"No best optimizations found for function {function_to_optimize_qualified_name}", "Warning"
-            )
-            return {
-                "functionName": params.functionName,
-                "status": "error",
-                "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
-            }
-
-        # generate a patch for the optimization
-        relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
-
-        speedup = original_code_baseline.runtime / best_optimization.runtime
-
-        patch_path = create_diff_patch_from_worktree(
-            server.optimizer.current_worktree, relative_file_paths, function_to_optimize_qualified_name
-        )
-
-        if not patch_path:
-            return {
-                "functionName": params.functionName,
-                "status": "error",
-                "message": "Failed to create a patch for optimization",
-            }
-
-        server.show_message_log(f"Optimization completed for {params.functionName} with {speedup:.2f}x speedup", "Info")
-
-        return {
-            "functionName": params.functionName,
-            "status": "success",
-            "message": "Optimization completed successfully",
-            "extra": f"Speedup: {speedup:.2f}x faster",
-            "patch_file": str(patch_path),
-            "task_id": params.task_id,
-            "explanation": best_optimization.explanation_v2,
-        }
+        result = await loop.run_in_executor(None, sync_perform_optimization, server, params)
+    except asyncio.CancelledError:
+        return {"status": "canceled", "message": "Task was canceled"}
+    else:
+        return result
     finally:
         server.cleanup_the_optimizer()

@@ -464,6 +464,10 @@ class Optimizer:
         if self.args.file:
             self.args.file = mirror_path(self.args.file, original_git_root, worktree_dir)
 
+        if self.args.all:
+            # the args.all path is the same as module_root.
+            self.args.all = mirror_path(self.args.all, original_git_root, worktree_dir)
+
         # mirror tests root
         self.args.tests_root = mirror_path(self.args.tests_root, original_git_root, worktree_dir)
         self.test_cfg.tests_root = mirror_path(self.test_cfg.tests_root, original_git_root, worktree_dir)
