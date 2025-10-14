@@ -85,6 +85,16 @@ dev = [
 asyncio = [
     "pytest-asyncio>=1.2.0",
 ]
+tests = [
+    "black>=25.9.0",
+    "jax>=0.4.30",
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "pyrsistent>=0.20.0",
+    "scipy>=1.13.1",
+    "torch>=2.8.0",
+    "xarray>=2024.7.0",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["codeflash"]
