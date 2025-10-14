@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import configparser
 import difflib
 import os
 import re
@@ -15,9 +16,11 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger, paneled_text
-from codeflash.code_utils.config_parser import find_pyproject_toml
+from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
+
+BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
 
 
 def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
@@ -81,42 +84,105 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 
-@contextmanager
-def custom_addopts() -> None:
-    pyproject_file = find_pyproject_toml()
-    original_content = None
-    non_blacklist_plugin_args = ""
+def filter_args(addopts_args: list[str]) -> list[str]:
+    # Convert BLACKLIST_ADDOPTS to a set for faster lookup of simple matches
+    # But keep tuple for startswith
+    blacklist = BLACKLIST_ADDOPTS
+    # Precompute the length for re-use
+    n = len(addopts_args)
+    filtered_args = []
+    i = 0
+    while i < n:
+        current_arg = addopts_args[i]
+        if current_arg.startswith(blacklist):
+            i += 1
+            if i < n and not addopts_args[i].startswith("-"):
+                i += 1
+        else:
+            filtered_args.append(current_arg)
+            i += 1
+    return filtered_args
 
+
+def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
+    file_type = config_file.suffix.lower()
+    filename = config_file.name
+    config = None
+    if file_type not in {".toml", ".ini", ".cfg"} or not config_file.exists():
+        return "", False
+    # Read original file
+    with Path.open(config_file, encoding="utf-8") as f:
+        content = f.read()
     try:
-        # Read original file
-        if pyproject_file.exists():
-            with Path.open(pyproject_file, encoding="utf-8") as f:
-                original_content = f.read()
-                data = tomlkit.parse(original_content)
-            # Backup original addopts
+        if filename == "pyproject.toml":
+            # use tomlkit
+            data = tomlkit.parse(content)
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
-            if original_addopts != "" and isinstance(original_addopts, list):
-                original_addopts = [x.strip() for x in original_addopts]
-                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
-                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
-                if non_blacklist_plugin_args != original_addopts:
-                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
-                    # Write modified file
-                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                        f.write(tomlkit.dumps(data))
+            if original_addopts == "":
+                return content, False
+            if isinstance(original_addopts, list):
+                original_addopts = " ".join(original_addopts)
+            original_addopts = original_addopts.replace("=", " ")
+            addopts_args = (
+                original_addopts.split()
+            )  # any number of space characters as delimiter, doesn't look at = which is fine
+        else:
+            # use configparser
+            config = configparser.ConfigParser()
+            config.read_string(content)
+            data = {section: dict(config[section]) for section in config.sections()}
+            if config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+                original_addopts = data.get("pytest", {}).get("addopts", "")  # should only be a string
+            else:
+                original_addopts = data.get("tool:pytest", {}).get("addopts", "")  # should only be a string
+            original_addopts = original_addopts.replace("=", " ")
+            addopts_args = original_addopts.split()
+        new_addopts_args = filter_args(addopts_args)
+        if new_addopts_args == addopts_args:
+            return content, False
+        # change addopts now
+        if file_type == ".toml":
+            data["tool"]["pytest"]["ini_options"]["addopts"] = " ".join(new_addopts_args)
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+                return content, True
+        elif config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+            config.set("pytest", "addopts", " ".join(new_addopts_args))
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
+        else:
+            config.set("tool:pytest", "addopts", " ".join(new_addopts_args))
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
 
+    except Exception:
+        logger.debug("Trouble parsing")
+        return content, False  # not modified
+
+
+@contextmanager
+def custom_addopts() -> None:
+    closest_config_files = get_all_closest_config_files()
+
+    original_content = {}
+
+    try:
+        for config_file in closest_config_files:
+            original_content[config_file] = modify_addopts(config_file)
         yield
 
     finally:
         # Restore original file
-        if (
-            original_content
-            and pyproject_file.exists()
-            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
-        ):
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(original_content)
+        for file, (content, was_modified) in original_content.items():
+            if was_modified:
+                with Path.open(file, "w", encoding="utf-8") as f:
+                    f.write(content)
 
 
 @contextmanager
