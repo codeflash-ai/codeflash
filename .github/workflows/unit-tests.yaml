@@ -28,5 +28,9 @@ jobs:
       - name: install dependencies
         run: uv sync
 
+      - name: Install test-only dependencies (Python 3.13)
+        if: matrix.python-version == '3.13'
+        run: uv sync --group tests
+
       - name: Unit tests
         run: uv run pytest tests/
