@@ -6,18 +6,22 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
-        file_path="remove_control_chars.py",
-        function_name="CharacterRemover.remove_control_characters",
+        file_path="topological_sort.py",
+        function_name="Graph.topologicalSort",
         test_framework="pytest",
-        min_improvement_x=0.1,
+        min_improvement_x=0.05,
+        use_worktree=True,
         coverage_expectations=[
             CoverageExpectation(
-                function_name="CharacterRemover.remove_control_characters", expected_coverage=100.0, expected_lines=[14]
+                function_name="Graph.topologicalSort",
+                expected_coverage=100.0,
+                expected_lines=[25, 26, 27, 28, 29, 30, 31],
             )
         ],
     )
     cwd = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize").resolve()
-    return run_codeflash_command(cwd, config, expected_improvement_pct)
+    return_var = run_codeflash_command(cwd, config, expected_improvement_pct)
+    return return_var
 
 
 if __name__ == "__main__":

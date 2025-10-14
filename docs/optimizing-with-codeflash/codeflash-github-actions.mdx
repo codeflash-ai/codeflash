@@ -5,8 +5,8 @@ icon: "github"
 ---
 
 
-Optimizing new code in Pull Requests is the best way to ensure that all code you and your team ship is performant
-in the future. Automating optimization in the Pull Request stage how most teams use Codeflash, to
+Optimizing new code in Pull Requests is the best way to ensure that all code you and your team ship is always performant.
+Automating optimization in the Pull Request stage is how most teams use Codeflash, to
 continuously find optimizations for their new code.
 
 To scan new code for performance optimizations, Codeflash uses a GitHub Action workflow which runs
@@ -14,8 +14,7 @@ the Codeflash optimization logic on the new code in every pull request.
 If the action workflow finds an optimization, it communicates with the Codeflash GitHub 
 App and asks it to suggest new changes to the pull request.
 
-This is the most useful way of using Codeflash, where you set it up once and all your new code gets optimized.
-So setting this up is highly recommended.
+We highly recommend setting this up, since once you set it up all your new code gets optimized.
 
 ## Pull Request Optimization 30 seconds demo
 <iframe width="640" height="400" src="https://www.youtube.com/embed/nqa-uewizkU?si=H1wb1RvPp-JqvKPh" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
@@ -68,7 +67,14 @@ name: Codeflash
 
 on:
   pull_request:
+    paths:
+      - '**'  # Modify this to the path of your project in a mono-repo. Codeflash will only run when code in this directory is modified.
   workflow_dispatch:
+
+concurrency:
+  # Any new push to the PR will cancel the previous run, so that only the latest code is optimized
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   optimize:
@@ -103,10 +109,16 @@ jobs:
 <Warning>
 **Replace the TODOs** in the workflow file above with your project's specific setup commands.
 </Warning>
+  Set the `working-directory` parameter in the yaml file, if the commands are meant to be run from some other directory.
 </Step>
 
 <Step title="Choose Your Package Manager">
 Customize the dependency installation based on your Python package manager:
+
+The workflow will need to be set up in such a way the Codeflash can create and
+run tests for functionality and speed, so the stock YAML may need to be altered to
+suit the specific codebase. Typically the setup steps for a unit test workflow can
+be copied.
 
 <CodeGroup>
 ```yaml Poetry
