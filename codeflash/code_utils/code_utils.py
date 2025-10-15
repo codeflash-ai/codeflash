@@ -304,7 +304,9 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     return True, function_names
 
 
-def get_run_tmp_file(file_path: Path) -> Path:
+def get_run_tmp_file(file_path: Path | str) -> Path:
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
     return Path(get_run_tmp_file.tmpdir.name) / file_path
