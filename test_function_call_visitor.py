@@ -1,9 +1,6 @@
-"""
-Test and demonstrate the FunctionCallVisitor capabilities.
-"""
+"""Test and demonstrate the FunctionCallVisitor capabilities."""
 
-import ast
-from function_call_visitor import FunctionCallVisitor, analyze_code, analyze_file
+from function_call_visitor import analyze_code, analyze_file
 
 
 def test_basic_calls():
@@ -15,10 +12,10 @@ def example():
     max([4, 5, 6])
     print("World")
 """
-    results = analyze_code(code, ['print', 'len'])
+    results = analyze_code(code, ["print", "len"])
     print("Test: Basic Calls")
     print(f"  Found {results['total_calls']} calls")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"    {call}")
     print()
 
@@ -40,13 +37,13 @@ def process():
 
     print("End")  # Outside loop
 """
-    results = analyze_code(code, ['print', 'len'])
+    results = analyze_code(code, ["print", "len"])
     print("Test: Loop Detection")
     print(f"  Total calls: {results['total_calls']}")
     print(f"  In loops: {results['calls_in_loops']}")
     print(f"  Outside loops: {results['calls_outside_loops']}")
     print("  Loop calls:")
-    for call in results['loop_calls']:
+    for call in results["loop_calls"]:
         print(f"    {call}")
     print()
 
@@ -63,9 +60,9 @@ def nested():
                 print(f"Innermost")
                 j += 1
 """
-    results = analyze_code(code, ['print'])
+    results = analyze_code(code, ["print"])
     print("Test: Nested Loops")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"  {call}")
     print()
 
@@ -104,10 +101,10 @@ obj.data.append(99)
 MyClass.create()
 MyClass.helper()
 """
-    results = analyze_code(code, ['append', 'validate', 'len'])
+    results = analyze_code(code, ["append", "validate", "len"])
     print("Test: Method Calls")
     print(f"  Found {results['total_calls']} calls")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"    {call}")
     print()
 
@@ -132,11 +129,11 @@ def example():
     # Nested module calls
     result = os.path.dirname(os.path.join("x", "y"))
 """
-    results = analyze_code(code, ['os.path.join', 'np.array', 'sqrt', 'os.path.exists', 'np.zeros', 'os.path.dirname'])
+    results = analyze_code(code, ["os.path.join", "np.array", "sqrt", "os.path.exists", "np.zeros", "os.path.dirname"])
     print("Test: Module Calls")
     print(f"  Total calls: {results['total_calls']}")
     print("  All calls:")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"    {call}")
     print()
 
@@ -164,10 +161,10 @@ def complex_example():
     # Calls in dict comprehensions
     d = {x: len(x) for x in ["key1", "key2"]}
 """
-    results = analyze_code(code, ['len', 'print', 'max'])
+    results = analyze_code(code, ["len", "print", "max"])
     print("Test: Complex Expressions")
     print(f"  Found {results['total_calls']} calls")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"    {call}")
     print()
 
@@ -191,9 +188,9 @@ async def async_generator():
 async def process_item(item):
     print(f"Item: {item}")
 """
-    results = analyze_code(code, ['print', 'process_item'])
+    results = analyze_code(code, ["print", "process_item"])
     print("Test: Async Code")
-    for call in results['all_calls']:
+    for call in results["all_calls"]:
         print(f"  {call}")
     print()
 
@@ -218,10 +215,10 @@ def file_operations():
     list2.append(2)
     # some_obj.data.append(3)  # Would need some_obj to be defined
 """
-    results = analyze_code(code, ['join', 'append'])
+    results = analyze_code(code, ["join", "append"])
     print("Test: Partial Matching")
-    print(f"  Tracking 'join' and 'append'")
-    for call in results['all_calls']:
+    print("  Tracking 'join' and 'append'")
+    for call in results["all_calls"]:
         print(f"    {call}")
     print()
 
@@ -254,13 +251,13 @@ if __name__ == "__main__":
     print("\nExample: Analyzing the visitor file itself")
     print("-" * 60)
     try:
-        results = analyze_file("function_call_visitor.py", ['isinstance', 'append', 'len'])
+        results = analyze_file("function_call_visitor.py", ["isinstance", "append", "len"])
         print(f"Found {results['total_calls']} calls in function_call_visitor.py")
         print(f"  In loops: {results['calls_in_loops']}")
         print(f"  Outside loops: {results['calls_outside_loops']}")
-        if results['loop_calls']:
+        if results["loop_calls"]:
             print("\nCalls in loops:")
-            for call in results['loop_calls'][:5]:  # Show first 5
+            for call in results["loop_calls"][:5]:  # Show first 5
                 print(f"  {call}")
     except FileNotFoundError:
         print("  (File not found - run from the same directory)")

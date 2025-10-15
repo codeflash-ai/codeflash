@@ -3,6 +3,7 @@
 This module provides a visitor that can track calls to specific functions,
 including regular functions, methods, classmethods, and staticmethods.
 """
+
 from __future__ import annotations
 
 import ast
@@ -103,16 +104,16 @@ class FunctionCallVisitor(ast.NodeVisitor):
                 if node.lineno == node.end_lineno:
                     line = self._source_lines[node.lineno - 1]
                     if hasattr(node, "col_offset") and hasattr(node, "end_col_offset"):
-                        return line[node.col_offset:node.end_col_offset]
+                        return line[node.col_offset : node.end_col_offset]
                 else:
                     # Multi-line call
                     lines = []
                     for i in range(node.lineno - 1, node.end_lineno):
                         if i < len(self._source_lines):
                             if i == node.lineno - 1:
-                                lines.append(self._source_lines[i][node.col_offset:])
+                                lines.append(self._source_lines[i][node.col_offset :])
                             elif i == node.end_lineno - 1:
-                                lines.append(self._source_lines[i][:node.end_col_offset])
+                                lines.append(self._source_lines[i][: node.end_col_offset])
                             else:
                                 lines.append(self._source_lines[i])
                     return " ".join(line.strip() for line in lines)
@@ -166,7 +167,7 @@ class FunctionCallVisitor(ast.NodeVisitor):
                     call_text=self._get_call_text(node),
                     in_loop=self._in_loop(),
                     loop_type=self._get_loop_type(),
-                    file_path=self.file_path
+                    file_path=self.file_path,
                 )
                 self.calls.append(call_info)
 
@@ -202,7 +203,7 @@ class FunctionCallVisitor(ast.NodeVisitor):
             "calls_outside_loops": len(calls_outside_loops),
             "all_calls": self.calls,
             "loop_calls": calls_in_loops,
-            "non_loop_calls": calls_outside_loops
+            "non_loop_calls": calls_outside_loops,
         }
 
 
