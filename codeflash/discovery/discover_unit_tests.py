@@ -67,10 +67,35 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 
 class TestsCache:
+    SCHEMA_VERSION = 1  # Increment this when schema changes
+
     def __init__(self, project_root_path: str | Path) -> None:
         self.project_root_path = Path(project_root_path).resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
+
+        self.cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version(
+                version INTEGER PRIMARY KEY
+            )
+            """
+        )
+
+        self.cur.execute("SELECT version FROM schema_version")
+        result = self.cur.fetchone()
+        current_version = result[0] if result else None
+
+        if current_version != self.SCHEMA_VERSION:
+            logger.debug(
+                f"Schema version mismatch (current: {current_version}, expected: {self.SCHEMA_VERSION}). Recreating tables."
+            )
+            self.cur.execute("DROP TABLE IF EXISTS discovered_tests")
+            self.cur.execute("DROP INDEX IF EXISTS idx_discovered_tests_project_file_path_hash")
+            self.cur.execute("DELETE FROM schema_version")
+            self.cur.execute("INSERT INTO schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
+            self.connection.commit()
+
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS discovered_tests(
@@ -158,14 +183,16 @@ class TestsCache:
         return result
 
     @staticmethod
-    def compute_file_hash(path: str | Path) -> str:
+    def compute_file_hash(path: Path) -> str:
         h = hashlib.sha256(usedforsecurity=False)
-        with Path(path).open("rb") as f:
+        with path.open("rb", buffering=0) as f:
+            buf = bytearray(8192)
+            mv = memoryview(buf)
             while True:
-                chunk = f.read(8192)
-                if not chunk:
+                n = f.readinto(mv)
+                if n == 0:
                     break
-                h.update(chunk)
+                h.update(mv[:n])
         return h.hexdigest()
 
     def close(self) -> None:
@@ -488,13 +515,13 @@ def discover_tests_pytest(
 
 def discover_tests_unittest(
     cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
     tests: unittest.TestSuite = loader.discover(str(tests_root))
-    file_to_test_map: defaultdict[str, list[TestsInFile]] = defaultdict(list)
+    file_to_test_map: defaultdict[Path, list[TestsInFile]] = defaultdict(list)
 
     def get_test_details(_test: unittest.TestCase) -> TestsInFile | None:
         _test_function, _test_module, _test_suite_name = (
@@ -506,7 +533,7 @@ def discover_tests_unittest(
         _test_module_path = Path(_test_module.replace(".", os.sep)).with_suffix(".py")
         _test_module_path = tests_root / _test_module_path
         if not _test_module_path.exists() or (
-            discover_only_these_tests and str(_test_module_path) not in discover_only_these_tests
+            discover_only_these_tests and _test_module_path not in discover_only_these_tests
         ):
             return None
         if "__replay_test" in str(_test_module_path):
@@ -516,10 +543,7 @@ def discover_tests_unittest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
-            test_file=str(_test_module_path),
-            test_function=_test_function,
-            test_type=test_type,
-            test_class=_test_suite_name,
+            test_file=_test_module_path, test_function=_test_function, test_type=test_type, test_class=_test_suite_name
         )
 
     for _test_suite in tests._tests:
@@ -537,11 +561,11 @@ def discover_tests_unittest(
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            file_to_test_map[str(details.test_file)].append(details)
+                            file_to_test_map[details.test_file].append(details)
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        file_to_test_map[str(details.test_file)].append(details)
+                        file_to_test_map[details.test_file].append(details)
     return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
