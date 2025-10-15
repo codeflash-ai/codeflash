@@ -31,6 +31,14 @@ from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
 
+@dataclass
+class ImpactMetrics:
+    complexity_score: int
+    occurances: int
+    loop_occurances: int
+    presence_of_decorators: bool
+
+
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
     optimization_id: str

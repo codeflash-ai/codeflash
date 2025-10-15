@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import ast
+import json
+import subprocess
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
@@ -14,12 +17,10 @@ from codeflash.cli_cmds.console import logger
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from libcst.helpers import ModuleNameAndPackage
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionSource
+    from codeflash.models.models import FunctionSource, ImpactMetrics
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
@@ -748,3 +749,85 @@ def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionP
                 if isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     preexisting_objects.add((cnode.name, (FunctionParent(node.name, "ClassDef"),)))
     return preexisting_objects
+
+
+def search_with_ripgrep(pattern: str, path: str = ".") -> dict[str, list[tuple[int, str]]]:
+    """Use ripgrep to search for a pattern in the repository.
+
+    Args:
+        pattern: The pattern to search for
+        path: The directory to search in (default: current directory)
+
+    Returns:
+        Dictionary with filepaths as keys and list of (line_no, content) tuples as values
+
+    """
+    # Run ripgrep with JSON output for easier parsing
+    # -n: Show line numbers
+    # --json: Output in JSON format
+    # --no-heading: Don't group matches by file
+    path = str(Path.cwd())
+    cmd = [
+        "rg",
+        "-n",
+        "--json",
+        pattern,
+        path,
+        "-g",
+        "!/Users/aseemsaxena/Downloads/codeflash_dev/codeflash/code_to_optimize/tests/**",
+    ]
+    print(" ".join(cmd))
+    # Parse the JSON output
+    matches_dict = {}
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,  # Don't raise exception on non-zero return
+        )
+
+        if result.returncode not in [0, 1]:  # 0 = matches found, 1 = no matches
+            print(f"Error running ripgrep: {result.stderr}")
+            return {}
+
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+
+            try:
+                json_obj = json.loads(line)
+
+                # We're only interested in match objects
+                if json_obj.get("type") == "match":
+                    data = json_obj.get("data", {})
+                    file_path = data.get("path", {}).get("text", "")
+                    line_number = data.get("line_number")
+                    line_content = data.get("lines", {}).get("text", "").rstrip("\n")
+
+                    if file_path and line_number:
+                        if file_path not in matches_dict:
+                            matches_dict[file_path] = []
+                        matches_dict[file_path].append((line_number, line_content))
+
+            except json.JSONDecodeError:
+                continue
+
+    except FileNotFoundError:
+        print("Error: ripgrep (rg) is not installed or not in PATH")
+        return {}
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return {}
+    return matches_dict
+
+
+def get_opt_impact_metrics(file_path: Path, qualified_name: str, project_root: Path, tests_root: Path) -> ImpactMetrics:
+    # grep for function / use rg (respects gitignore)
+    # SAFE_GREP_EXECUTABLE command
+    # ast visitor for occurances and loop occurances
+    # radon lib for complexity metrics
+    print(file_path, qualified_name, project_root, tests_root)
+
+    # grep windows alternative
+    return 0

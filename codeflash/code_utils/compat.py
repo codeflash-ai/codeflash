@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -17,6 +18,7 @@ class Compat:
     LF: str = os.linesep
 
     SAFE_SYS_EXECUTABLE: str = Path(sys.executable).as_posix()
+    SAFE_GREP_EXECUTABLE: str = shutil.which("grep")  # works even grep is aliased in the env
 
     IS_POSIX: bool = os.name != "nt"
 
@@ -45,3 +47,4 @@ codeflash_cache_db = _compat.codeflash_cache_db
 LF = _compat.LF
 SAFE_SYS_EXECUTABLE = _compat.SAFE_SYS_EXECUTABLE
 IS_POSIX = _compat.IS_POSIX
+SAFE_GREP_EXECUTABLE = _compat.SAFE_GREP_EXECUTABLE

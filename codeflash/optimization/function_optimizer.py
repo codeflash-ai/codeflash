@@ -24,6 +24,7 @@ from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_opti
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_extractor import get_opt_impact_metrics
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
@@ -1467,6 +1468,9 @@ class FunctionOptimizer:
             except Exception as e:
                 logger.debug(f"optimization impact response failed, investigate {e}")
             data["optimization_impact"] = opt_impact_response
+            data["impact_metrics"] = get_opt_impact_metrics(
+                self.project_root, self.test_cfg.tests_root
+            )  # need module root, tests root only
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
