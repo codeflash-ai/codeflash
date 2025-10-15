@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import difflib
+import functools
 import os
 import re
 import shlex
@@ -169,9 +170,14 @@ def format_code(
 def sort_imports(code: str, *, float_to_top: bool = False) -> str:
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
-        sorted_code = isort.code(code=code, float_to_top=float_to_top)
+        sorted_code = _cached_isort_code(code, float_to_top)
     except Exception:  # this will also catch the FileSkipComment exception, use this fn everywhere
         logger.exception("Failed to sort imports with isort.")
         return code  # Fall back to original code if isort fails
 
     return sorted_code
+
+
+@functools.lru_cache(maxsize=128)
+def _cached_isort_code(code: str, float_to_top: bool) -> str:
+    return isort.code(code=code, float_to_top=float_to_top)
