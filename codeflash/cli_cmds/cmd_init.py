@@ -58,8 +58,9 @@ class SetupInfo:
     benchmarks_root: Union[str, None]
     test_framework: str
     ignore_paths: list[str]
-    formatter: str
+    formatter: Union[str, list[str]]
     git_remote: str
+    enable_telemetry: bool
 
 
 class DependencyManager(Enum):
@@ -93,7 +94,9 @@ def init_codeflash() -> None:
         if should_modify:
             setup_info: SetupInfo = collect_setup_info()
             git_remote = setup_info.git_remote
-            configure_pyproject_toml(setup_info)
+            configured = configure_pyproject_toml(setup_info)
+            if not configured:
+                apologize_and_exit()
 
         install_github_app(git_remote)
 
@@ -156,30 +159,30 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
 
 
-def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[dict[str, Any] | None, str]:  # noqa: PLR0911
+def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[bool, dict[str, Any] | None, str]:  # noqa: PLR0911
     if not pyproject_toml_path.exists():
-        return None, f"Configuration file not found: {pyproject_toml_path}"
+        return False, None, f"Configuration file not found: {pyproject_toml_path}"
 
     try:
         config, _ = parse_config_file(pyproject_toml_path)
     except Exception as e:
-        return None, f"Failed to parse configuration: {e}"
+        return False, None, f"Failed to parse configuration: {e}"
 
     module_root = config.get("module_root")
     if not module_root:
-        return None, "Missing required field: 'module_root'"
+        return False, config, "Missing required field: 'module_root'"
 
     if not Path(module_root).is_dir():
-        return None, f"Invalid 'module_root': directory does not exist at {module_root}"
+        return False, config, f"Invalid 'module_root': directory does not exist at {module_root}"
 
     tests_root = config.get("tests_root")
     if not tests_root:
-        return None, "Missing required field: 'tests_root'"
+        return False, config, "Missing required field: 'tests_root'"
 
     if not Path(tests_root).is_dir():
-        return None, f"Invalid 'tests_root': directory does not exist at {tests_root}"
+        return False, config, f"Invalid 'tests_root': directory does not exist at {tests_root}"
 
-    return config, ""
+    return True, config, ""
 
 
 def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
@@ -191,8 +194,9 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
 
-    config, _message = is_valid_pyproject_toml(pyproject_toml_path)
-    if config is None:
+    valid, config, _message = is_valid_pyproject_toml(pyproject_toml_path)
+    if not valid:
+        # needs to be re-configured
         return True, None
 
     return Confirm.ask(
@@ -532,6 +536,8 @@ def collect_setup_info() -> SetupInfo:
     except InvalidGitRepositoryError:
         git_remote = ""
 
+    enable_telemetry = ask_for_telemetry()
+
     ignore_paths: list[str] = []
     return SetupInfo(
         module_root=str(module_root),
@@ -541,6 +547,7 @@ def collect_setup_info() -> SetupInfo:
         ignore_paths=ignore_paths,
         formatter=cast("str", formatter),
         git_remote=str(git_remote),
+        enable_telemetry=enable_telemetry,
     )
 
 
@@ -966,8 +973,8 @@ def customize_codeflash_yaml_content(
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
-def configure_pyproject_toml(setup_info: SetupInfo) -> None:
-    toml_path = Path.cwd() / "pyproject.toml"
+def configure_pyproject_toml(setup_info: SetupInfo, config_file: Optional[Path] = None) -> bool:
+    toml_path = config_file or Path.cwd() / "pyproject.toml"
     try:
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
@@ -976,9 +983,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
-        apologize_and_exit()
-
-    enable_telemetry = ask_for_telemetry()
+        return False
 
     codeflash_section = tomlkit.table()
     codeflash_section.add(tomlkit.comment("All paths are relative to this pyproject.toml's directory."))
@@ -986,13 +991,16 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
     codeflash_section["tests-root"] = setup_info.tests_root
     codeflash_section["test-framework"] = setup_info.test_framework
     codeflash_section["ignore-paths"] = setup_info.ignore_paths
-    if not enable_telemetry:
-        codeflash_section["disable-telemetry"] = not enable_telemetry
+    if not setup_info.enable_telemetry:
+        codeflash_section["disable-telemetry"] = not setup_info.enable_telemetry
     if setup_info.git_remote not in ["", "origin"]:
         codeflash_section["git-remote"] = setup_info.git_remote
     formatter = setup_info.formatter
     formatter_cmds = []
-    if formatter == "black":
+
+    if isinstance(formatter, list):
+        formatter_cmds = formatter
+    elif formatter == "black":
         formatter_cmds.append("black $file")
     elif formatter == "ruff":
         formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
@@ -1003,6 +1011,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         )
     elif formatter == "don't use a formatter":
         formatter_cmds.append("disabled")
+
     check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
@@ -1014,6 +1023,7 @@ def configure_pyproject_toml(setup_info: SetupInfo) -> None:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
     click.echo(f"✅ Added Codeflash configuration to {toml_path}")
     click.echo()
+    return True
 
 
 def install_github_app(git_remote: str) -> None:

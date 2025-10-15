@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,15 @@ from pygls import uris
 
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
+from codeflash.cli_cmds.cmd_init import (
+    CommonSections,
+    SetupInfo,
+    configure_pyproject_toml,
+    get_suggestions,
+    get_valid_subdirs,
+    is_valid_pyproject_toml,
+)
+from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import (
@@ -67,6 +77,12 @@ class OnPatchAppliedParams:
 @dataclass
 class OptimizableFunctionsInCommitParams:
     commit_hash: str
+
+
+@dataclass
+class WriteConfigParams:
+    config_file: str
+    config: any
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0")
@@ -152,11 +168,51 @@ def _find_pyproject_toml(workspace_path: str) -> tuple[Path | None, bool]:
     return top_level_pyproject, False
 
 
+@server.feature("writeConfig")
+def write_config(_server: CodeflashLanguageServer, params: WriteConfigParams) -> dict[str, any]:
+    cfg = params.config
+    cfg_file = Path(params.config_file)
+
+    try:
+        parsed_config, _ = parse_config_file(cfg_file)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to parse configuration: {e}"}
+    _server.show_message_log(f"{parsed_config}", "Info")
+    setup_info = SetupInfo(
+        module_root=getattr(cfg, "module_root", ""),
+        tests_root=getattr(cfg, "tests_root", ""),
+        test_framework=getattr(cfg, "test_framework", "pytest"),
+        # keep other stuff as it is
+        benchmarks_root=None,  # we don't support benchmarks in the LSP
+        ignore_paths=parsed_config.get("ignore_paths", []),
+        formatter=parsed_config.get("formatter_cmds", ["disabled"]),
+        git_remote=parsed_config.get("git_remote", ""),
+        enable_telemetry=parsed_config.get("disable_telemetry", True),
+    )
+    devnull_writer = open(os.devnull, "w")  # noqa
+    with contextlib.redirect_stdout(devnull_writer):
+        configured = configure_pyproject_toml(setup_info, cfg_file)
+        if configured:
+            return {"status": "success"}
+        return {"status": "error", "message": "Failed to configure pyproject.toml"}
+
+
+@server.feature("getConfigSuggestions")
+def get_config_suggestions(_server: CodeflashLanguageServer, _params: any) -> dict[str, any]:
+    module_root_suggestions, default_module_root = get_suggestions(CommonSections.module_root)
+    tests_root_suggestions, default_tests_root = get_suggestions(CommonSections.tests_root)
+    test_framework_suggestions, default_test_framework = get_suggestions(CommonSections.test_framework)
+    get_valid_subdirs.cache_clear()
+    return {
+        "module_root": {"choices": module_root_suggestions, "default": default_module_root},
+        "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
+        "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
+    }
+
+
 # should be called the first thing to initialize and validate the project
 @server.feature("initProject")
 def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams) -> dict[str, str]:
-    from codeflash.cli_cmds.cmd_init import is_valid_pyproject_toml
-
     # Always process args in the init project, the extension can call
     server.args_processed_before = False
 
@@ -190,11 +246,14 @@ def init_project(server: CodeflashLanguageServer, params: ValidateProjectParams)
             "root": root,
         }
 
-    server.show_message_log("Validating project...", "Info")
-    config, reason = is_valid_pyproject_toml(pyproject_toml_path)
-    if config is None:
-        server.show_message_log("pyproject.toml is not valid", "Error")
-        return {"status": "error", "message": f"reason: {reason}", "pyprojectPath": pyproject_toml_path}
+    valid, config, reason = is_valid_pyproject_toml(pyproject_toml_path)
+    if not valid:
+        return {
+            "status": "error",
+            "message": f"reason: {reason}",
+            "pyprojectPath": pyproject_toml_path,
+            "existingConfig": config,
+        }
 
     args = process_args(server)
 
