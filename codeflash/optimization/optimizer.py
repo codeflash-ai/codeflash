@@ -240,6 +240,7 @@ class Optimizer:
 
         console.rule()
         start_time = time.time()
+        logger.info("lsp,loading|Discovering existing function tests...")
         function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(
             self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
         )
