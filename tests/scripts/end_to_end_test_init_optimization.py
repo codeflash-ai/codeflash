@@ -21,4 +21,4 @@ def run_test(expected_improvement_pct: int) -> bool:
 
 
 if __name__ == "__main__":
-    exit(run_with_retries(run_test, int(os.getenv("EXPECTED_IMPROVEMENT_PCT", 5))))
+    exit(run_with_retries(run_test, int(os.getenv("EXPECTED_IMPROVEMENT_PCT", 10))))
