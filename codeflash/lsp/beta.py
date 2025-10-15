@@ -15,6 +15,7 @@ from codeflash.cli_cmds.cmd_init import (
     CommonSections,
     SetupInfo,
     configure_pyproject_toml,
+    create_empty_pyproject_toml,
     get_suggestions,
     get_valid_subdirs,
     is_valid_pyproject_toml,
@@ -171,13 +172,19 @@ def _find_pyproject_toml(workspace_path: str) -> tuple[Path | None, bool]:
 @server.feature("writeConfig")
 def write_config(_server: CodeflashLanguageServer, params: WriteConfigParams) -> dict[str, any]:
     cfg = params.config
-    cfg_file = Path(params.config_file)
+    cfg_file = Path(params.config_file) if params.config_file else None
 
-    try:
-        parsed_config, _ = parse_config_file(cfg_file)
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to parse configuration: {e}"}
-    _server.show_message_log(f"{parsed_config}", "Info")
+    parsed_config = {}
+
+    if cfg_file and not cfg_file.exists():
+        # the client provided a config path but it doesn't exist
+        create_empty_pyproject_toml(cfg_file)
+    elif cfg_file and cfg_file.exists():
+        try:
+            parsed_config, _ = parse_config_file(cfg_file)
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to parse configuration: {e}"}
+
     setup_info = SetupInfo(
         module_root=getattr(cfg, "module_root", ""),
         tests_root=getattr(cfg, "tests_root", ""),
