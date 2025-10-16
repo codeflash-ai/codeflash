@@ -64,6 +64,14 @@ class SetupInfo:
     enable_telemetry: bool
 
 
+@dataclass(frozen=True)
+class VsCodeSetupInfo:
+    module_root: str
+    tests_root: str
+    test_framework: str
+    formatter: Union[str, list[str]]
+
+
 class DependencyManager(Enum):
     PIP = auto()
     POETRY = auto()
@@ -225,6 +233,10 @@ class CommonSections(Enum):
     module_root = "module_root"
     tests_root = "tests_root"
     test_framework = "test_framework"
+    formatter_cmds = "formatter_cmds"
+
+    def get_toml_key(self) -> str:
+        return self.value.replace("_", "-")
 
 
 @lru_cache(maxsize=1)
@@ -256,6 +268,8 @@ def get_suggestions(section: str) -> tuple(list[str], Optional[str]):
     if section == CommonSections.test_framework:
         auto_detected = detect_test_framework_from_config_files(Path.cwd())
         return ["pytest", "unittest"], auto_detected
+    if section == CommonSections.formatter_cmds:
+        return ["disabled", "ruff", "black"], "disabled"
     msg = f"Unknown section: {section}"
     raise ValueError(msg)
 
@@ -973,8 +987,24 @@ def customize_codeflash_yaml_content(
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
 
+def get_formatter_cmds(formatter: str) -> list[str]:
+    if formatter == "black":
+        return ["black $file"]
+    if formatter == "ruff":
+        return ["ruff check --exit-zero --fix $file", "ruff format $file"]
+    if formatter == "other":
+        click.echo(
+            "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code."
+        )
+        return ["your-formatter $file"]
+    if formatter in {"don't use a formatter", "disabled"}:
+        return ["disabled"]
+    return [formatter]
+
+
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
-def configure_pyproject_toml(setup_info: SetupInfo, config_file: Optional[Path] = None) -> bool:
+def configure_pyproject_toml(setup_info: Union[VsCodeSetupInfo, SetupInfo], config_file: Optional[Path] = None) -> bool:
+    for_vscode = isinstance(setup_info, VsCodeSetupInfo)
     toml_path = config_file or Path.cwd() / "pyproject.toml"
     try:
         with toml_path.open(encoding="utf8") as pyproject_file:
@@ -988,36 +1018,40 @@ def configure_pyproject_toml(setup_info: SetupInfo, config_file: Optional[Path] 
 
     codeflash_section = tomlkit.table()
     codeflash_section.add(tomlkit.comment("All paths are relative to this pyproject.toml's directory."))
-    codeflash_section["module-root"] = setup_info.module_root
-    codeflash_section["tests-root"] = setup_info.tests_root
-    codeflash_section["test-framework"] = setup_info.test_framework
-    codeflash_section["ignore-paths"] = setup_info.ignore_paths
-    if not setup_info.enable_telemetry:
-        codeflash_section["disable-telemetry"] = not setup_info.enable_telemetry
-    if setup_info.git_remote not in ["", "origin"]:
-        codeflash_section["git-remote"] = setup_info.git_remote
-    formatter = setup_info.formatter
-    formatter_cmds = []
 
-    if isinstance(formatter, list):
-        formatter_cmds = formatter
-    elif formatter == "black":
-        formatter_cmds.append("black $file")
-    elif formatter == "ruff":
-        formatter_cmds.extend(["ruff check --exit-zero --fix $file", "ruff format $file"])
-    elif formatter == "other":
-        formatter_cmds.append("your-formatter $file")
-        click.echo(
-            "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code."
-        )
-    elif formatter == "don't use a formatter":
-        formatter_cmds.append("disabled")
+    if for_vscode:
+        for section in CommonSections:
+            if hasattr(setup_info, section.value):
+                codeflash_section[section.get_toml_key()] = getattr(setup_info, section.value)
+    else:
+        codeflash_section["module-root"] = setup_info.module_root
+        codeflash_section["tests-root"] = setup_info.tests_root
+        codeflash_section["test-framework"] = setup_info.test_framework
+        codeflash_section["ignore-paths"] = setup_info.ignore_paths
+        if not setup_info.enable_telemetry:
+            codeflash_section["disable-telemetry"] = not setup_info.enable_telemetry
+        if setup_info.git_remote not in ["", "origin"]:
+            codeflash_section["git-remote"] = setup_info.git_remote
+
+    formatter = setup_info.formatter
+
+    formatter_cmds = formatter if isinstance(formatter, list) else get_formatter_cmds(formatter)
 
     check_formatter_installed(formatter_cmds, exit_on_failure=False)
     codeflash_section["formatter-cmds"] = formatter_cmds
     # Add the 'codeflash' section, ensuring 'tool' section exists
     tool_section = pyproject_data.get("tool", tomlkit.table())
-    tool_section["codeflash"] = codeflash_section
+
+    if for_vscode:
+        # merge the existing codeflash section, instead of overwriting it
+        existing_codeflash = tool_section.get("codeflash", tomlkit.table())
+
+        for key, value in codeflash_section.items():
+            existing_codeflash[key] = value
+        tool_section["codeflash"] = existing_codeflash
+    else:
+        tool_section["codeflash"] = codeflash_section
+
     pyproject_data["tool"] = tool_section
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:

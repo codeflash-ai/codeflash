@@ -13,14 +13,14 @@ from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.cli_cmds.cmd_init import (
     CommonSections,
-    SetupInfo,
+    VsCodeSetupInfo,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
+    get_formatter_cmds,
     get_suggestions,
     get_valid_subdirs,
     is_valid_pyproject_toml,
 )
-from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.discovery.functions_to_optimize import (
@@ -174,28 +174,17 @@ def write_config(_server: CodeflashLanguageServer, params: WriteConfigParams) ->
     cfg = params.config
     cfg_file = Path(params.config_file) if params.config_file else None
 
-    parsed_config = {}
-
     if cfg_file and not cfg_file.exists():
         # the client provided a config path but it doesn't exist
         create_empty_pyproject_toml(cfg_file)
-    elif cfg_file and cfg_file.exists():
-        try:
-            parsed_config, _ = parse_config_file(cfg_file)
-        except Exception as e:
-            return {"status": "error", "message": f"Failed to parse configuration: {e}"}
 
-    setup_info = SetupInfo(
+    setup_info = VsCodeSetupInfo(
         module_root=getattr(cfg, "module_root", ""),
         tests_root=getattr(cfg, "tests_root", ""),
         test_framework=getattr(cfg, "test_framework", "pytest"),
-        # keep other stuff as it is
-        benchmarks_root=None,  # we don't support benchmarks in the LSP
-        ignore_paths=parsed_config.get("ignore_paths", []),
-        formatter=parsed_config.get("formatter_cmds", ["disabled"]),
-        git_remote=parsed_config.get("git_remote", ""),
-        enable_telemetry=parsed_config.get("disable_telemetry", True),
+        formatter=get_formatter_cmds(getattr(cfg, "formatter_cmds", "disabled")),
     )
+
     devnull_writer = open(os.devnull, "w")  # noqa
     with contextlib.redirect_stdout(devnull_writer):
         configured = configure_pyproject_toml(setup_info, cfg_file)
@@ -209,11 +198,13 @@ def get_config_suggestions(_server: CodeflashLanguageServer, _params: any) -> di
     module_root_suggestions, default_module_root = get_suggestions(CommonSections.module_root)
     tests_root_suggestions, default_tests_root = get_suggestions(CommonSections.tests_root)
     test_framework_suggestions, default_test_framework = get_suggestions(CommonSections.test_framework)
+    formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
     return {
         "module_root": {"choices": module_root_suggestions, "default": default_module_root},
         "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
         "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
+        "formatter_cmds": {"choices": formatter_suggestions, "default": default_formatter},
     }
 
 
