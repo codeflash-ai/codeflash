@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""
-Script to find all references to the sorter function from code_to_optimize/bubble_sort.py
+"""Script to find all references to the sorter function from code_to_optimize/bubble_sort.py
 using Jedi's static analysis capabilities.
 """
 
-import jedi
-import os
 from pathlib import Path
+
+import jedi
 
 
 def find_function_references(file_path, line, column, project_root):
-    """
-    Find all references to a function using Jedi.
+    """Find all references to a function using Jedi.
 
     Args:
         file_path: Path to the file containing the function
         line: Line number where the function is defined (1-indexed)
         column: Column number where the function name starts (0-indexed)
         project_root: Root directory of the project to search
+
     """
     # Read the source code
-    with open(file_path, 'r') as f:
+    with open(file_path) as f:
         source = f.read()
 
     # Create a Jedi Script object with project configuration
@@ -45,7 +44,7 @@ def find_function_references(file_path, line, column, project_root):
     references = []
     try:
         # Use usages() method to get all references
-        references = script.get_references(line, column, scope='project', include_builtins=False)
+        references = script.get_references(line, column, scope="project", include_builtins=False)
     except AttributeError:
         # Alternative approach using search
         print("Using alternative search method...")
@@ -91,7 +90,7 @@ def main():
             for ref in sorted(file_refs, key=lambda r: (r.line, r.column)):
                 # Get the line content for context
                 try:
-                    with open(file_path, 'r') as f:
+                    with open(file_path) as f:
                         lines = f.readlines()
                         if ref.line <= len(lines):
                             line_content = lines[ref.line - 1].strip()

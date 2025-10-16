@@ -3,7 +3,7 @@
 from function_call_finder import find_function_calls
 
 # Test code
-test_code = '''
+test_code = """
 def func1():
     target_func()
 
@@ -21,7 +21,7 @@ class TestClass:
     def method2(self):
         # No call here
         pass
-'''
+"""
 
 # Run the visitor
 results = find_function_calls(test_code, "target_func", "/dummy/path.py")
@@ -39,6 +39,7 @@ for name, code in results.items():
 
 # Verify it's exactly the format requested: {"calling_function_qualified_name1":"function_definition1",....}
 import json
+
 print("\nJSON serializable:", end=" ")
 try:
     json_str = json.dumps(results)
@@ -47,6 +48,6 @@ try:
 except:
     print("✗ No")
 
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("VERIFIED: Output is in the format")
 print('{"calling_function_qualified_name1":"function_definition1",...}')

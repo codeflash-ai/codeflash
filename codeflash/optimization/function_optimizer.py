@@ -377,7 +377,6 @@ class FunctionOptimizer:
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
-        get_opt_impact_metrics(self.function_to_optimize.file_path,self.function_to_optimize.qualified_name, self.project_root, self.test_cfg.tests_root)
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
@@ -1470,7 +1469,11 @@ class FunctionOptimizer:
                 logger.debug(f"optimization impact response failed, investigate {e}")
             data["optimization_impact"] = opt_impact_response
             data["impact_metrics"] = get_opt_impact_metrics(
-                self.project_root, self.test_cfg.tests_root
+                self.function_to_optimize_source_code,
+                self.function_to_optimize.file_path,
+                self.function_to_optimize.qualified_name,
+                self.project_root,
+                self.test_cfg.tests_root,
             )  # need module root, tests root only
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote

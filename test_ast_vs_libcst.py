@@ -4,7 +4,7 @@ from function_call_finder import find_function_calls as find_calls_libcst
 from function_call_finder_ast import find_function_calls as find_calls_ast
 
 # Test code with various scenarios
-test_code = '''
+test_code = """
 import module1
 from module2 import func as f2
 import module3 as m3
@@ -37,10 +37,10 @@ async def async_function():
 
 def no_call():
     x = 5
-'''
+"""
 
 print("Testing AST vs LibCST implementations\n")
-print("="*50)
+print("=" * 50)
 
 # Test 1: Direct function calls
 print("\nTest 1: Finding 'target_func' calls")
@@ -64,7 +64,7 @@ else:
     print(f"  Only in LibCST: {libcst_keys - ast_keys}")
 
 # Test 2: Check if source code is similar (may have minor formatting differences)
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("Test 2: Source code comparison")
 
 for func_name in ast_keys & libcst_keys:
@@ -72,8 +72,8 @@ for func_name in ast_keys & libcst_keys:
     libcst_code = results_libcst[func_name].strip()
 
     # Normalize whitespace for comparison
-    ast_normalized = ' '.join(ast_code.split())
-    libcst_normalized = ' '.join(libcst_code.split())
+    ast_normalized = " ".join(ast_code.split())
+    libcst_normalized = " ".join(libcst_code.split())
 
     if ast_normalized == libcst_normalized:
         print(f"✅ {func_name}: Source code matches (normalized)")
@@ -83,10 +83,10 @@ for func_name in ast_keys & libcst_keys:
         print(f"   LibCST length: {len(libcst_code)} chars")
 
 # Test 3: Test with imports
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("Test 3: Testing with import resolution")
 
-import_test = '''
+import_test = """
 from mymodule import target_func as tf
 
 def uses_alias():
@@ -94,7 +94,7 @@ def uses_alias():
 
 def uses_direct():
     target_func()  # This shouldn't match since it's imported as tf
-'''
+"""
 
 results_ast_import = find_calls_ast(import_test, "mymodule.target_func", "/dummy/path.py")
 results_libcst_import = find_calls_libcst(import_test, "mymodule.target_func", "/dummy/path.py")
@@ -103,16 +103,16 @@ print(f"AST found: {list(results_ast_import.keys())}")
 print(f"LibCST found: {list(results_libcst_import.keys())}")
 
 # Summary
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("COMPARISON SUMMARY")
-print("="*50)
+print("=" * 50)
 
 differences = []
 if ast_keys != libcst_keys:
     differences.append("Different function names detected")
 
-print(f"\n✅ AST implementation is working correctly")
-print(f"✅ Output format matches: {{'func_name': 'source_code'}}")
+print("\n✅ AST implementation is working correctly")
+print("✅ Output format matches: {'func_name': 'source_code'}")
 
 if not differences:
     print("✅ Both implementations produce equivalent results")

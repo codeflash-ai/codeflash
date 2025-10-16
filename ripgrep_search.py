@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""
-Script to find all occurrences of 'function_name' in the repository using ripgrep.
+"""Script to find all occurrences of 'function_name' in the repository using ripgrep.
 Returns a dictionary where keys are filepaths and values are lists of (line_no, content) tuples.
 """
-import os
-import subprocess
+
 import json
-from typing import Dict, List, Tuple
+import subprocess
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 
 def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[int, str]]]:
-    """
-    Use ripgrep to search for a pattern in the repository.
+    """Use ripgrep to search for a pattern in the repository.
 
     Args:
         pattern: The pattern to search for
@@ -20,13 +18,22 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[i
 
     Returns:
         Dictionary with filepaths as keys and list of (line_no, content) tuples as values
+
     """
     # Run ripgrep with JSON output for easier parsing
     # -n: Show line numbers
     # --json: Output in JSON format
     # --no-heading: Don't group matches by file
     path = str(Path.cwd())
-    cmd = ["rg", "-n", "--json", pattern, path, "-g", "!/Users/aseemsaxena/Downloads/codeflash_dev/codeflash/code_to_optimize/tests/**"]
+    cmd = [
+        "rg",
+        "-n",
+        "--json",
+        pattern,
+        path,
+        "-g",
+        "!/Users/aseemsaxena/Downloads/codeflash_dev/codeflash/code_to_optimize/tests/**",
+    ]
     print(" ".join(cmd))
 
     try:
@@ -34,7 +41,7 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[i
             cmd,
             capture_output=True,
             text=True,
-            check=False  # Don't raise exception on non-zero return
+            check=False,  # Don't raise exception on non-zero return
         )
 
         if result.returncode not in [0, 1]:  # 0 = matches found, 1 = no matches
@@ -44,7 +51,7 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[i
         # Parse the JSON output
         matches_dict = {}
 
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if not line:
                 continue
 
@@ -56,7 +63,7 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[i
                     data = json_obj.get("data", {})
                     file_path = data.get("path", {}).get("text", "")
                     line_number = data.get("line_number")
-                    line_content = data.get("lines", {}).get("text", "").rstrip('\n')
+                    line_content = data.get("lines", {}).get("text", "").rstrip("\n")
 
                     if file_path and line_number:
                         if file_path not in matches_dict:
@@ -77,8 +84,7 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> Dict[str, List[Tuple[i
 
 
 def search_with_ripgrep_simple(pattern: str, path: str = ".") -> Dict[str, List[Tuple[int, str]]]:
-    """
-    Alternative implementation using simpler ripgrep output (non-JSON).
+    """Alternative implementation using simpler ripgrep output (non-JSON).
 
     Args:
         pattern: The pattern to search for
@@ -86,6 +92,7 @@ def search_with_ripgrep_simple(pattern: str, path: str = ".") -> Dict[str, List[
 
     Returns:
         Dictionary with filepaths as keys and list of (line_no, content) tuples as values
+
     """
     # Run ripgrep with simpler output
     # -n: Show line numbers
@@ -93,12 +100,7 @@ def search_with_ripgrep_simple(pattern: str, path: str = ".") -> Dict[str, List[
     cmd = ["rg", "-n", "--no-heading", pattern, path]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         if result.returncode not in [0, 1]:
             print(f"Error running ripgrep: {result.stderr}")
@@ -107,12 +109,12 @@ def search_with_ripgrep_simple(pattern: str, path: str = ".") -> Dict[str, List[
         matches_dict = {}
 
         # Parse the output (format: filepath:line_number:content)
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if not line:
                 continue
 
             # Split only on the first two colons to handle colons in content
-            parts = line.split(':', 2)
+            parts = line.split(":", 2)
             if len(parts) >= 3:
                 file_path = parts[0]
                 try:

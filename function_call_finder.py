@@ -143,8 +143,8 @@ class FunctionCallFinder(cst.CSTVisitor):
 
                 # For methods, add proper indentation (4 spaces)
                 if self.current_class_stack:
-                    lines = func_source.split('\n')
-                    func_source = '\n'.join('    ' + line if line else line for line in lines)
+                    lines = func_source.split("\n")
+                    func_source = "\n".join("    " + line if line else line for line in lines)
 
                 self.function_definitions[full_name] = FunctionDefinitionInfo(
                     name=full_name,
@@ -153,7 +153,7 @@ class FunctionCallFinder(cst.CSTVisitor):
                     start_line=position.start.line if position else -1,
                     end_line=position.end.line if position else -1,
                     is_method=bool(self.current_class_stack),
-                    class_name=self.current_class_stack[-1] if self.current_class_stack else None
+                    class_name=self.current_class_stack[-1] if self.current_class_stack else None,
                 )
 
             # Handle nested functions - mark parent as containing nested calls
@@ -167,11 +167,15 @@ class FunctionCallFinder(cst.CSTVisitor):
                     parent_source = cst.Module(body=[parent_func_node]).code
 
                     # Get parent class context (go up one level in stack since we're inside the nested function)
-                    parent_class_stack = self.current_class_stack[:-1] if len(self.current_function_stack) == 1 and self.current_class_stack else []
+                    parent_class_stack = (
+                        self.current_class_stack[:-1]
+                        if len(self.current_function_stack) == 1 and self.current_class_stack
+                        else []
+                    )
 
                     if parent_class_stack:
-                        lines = parent_source.split('\n')
-                        parent_source = '\n'.join('    ' + line if line else line for line in lines)
+                        lines = parent_source.split("\n")
+                        parent_source = "\n".join("    " + line if line else line for line in lines)
 
                     self.function_definitions[parent_name] = FunctionDefinitionInfo(
                         name=parent_name,
@@ -180,7 +184,7 @@ class FunctionCallFinder(cst.CSTVisitor):
                         start_line=parent_position.start.line if parent_position else -1,
                         end_line=parent_position.end.line if parent_position else -1,
                         is_method=bool(parent_class_stack),
-                        class_name=parent_class_stack[-1] if parent_class_stack else None
+                        class_name=parent_class_stack[-1] if parent_class_stack else None,
                     )
 
             # Reset the flag for parent function if we're in nested functions
@@ -290,10 +294,7 @@ class FunctionCallFinder(cst.CSTVisitor):
             Only includes functions that call the target function (directly or through nested functions).
 
         """
-        return {
-            info.name: info.source_code
-            for info in self.function_definitions.values()
-        }
+        return {info.name: info.source_code for info in self.function_definitions.values()}
 
 
 def find_function_calls(source_code: str, target_function_name: str, target_filepath: str) -> Dict[str, str]:
@@ -367,6 +368,7 @@ def nested_calls():
 
     # Simple usage - results is just a dict of {function_name: source_code}
     import json
+
     print("JSON representation of results:")
     print(json.dumps(list(results.keys()), indent=2))
 

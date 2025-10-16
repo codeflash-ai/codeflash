@@ -1,13 +1,14 @@
 """AST-based visitor to find function definitions that call a specific qualified function."""
 
 import ast
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
-from dataclasses import dataclass, field
 
 
 @dataclass
 class FunctionCallLocation:
     """Represents a location where the target function is called."""
+
     calling_function: str
     line: int
     column: int
@@ -16,6 +17,7 @@ class FunctionCallLocation:
 @dataclass
 class FunctionDefinitionInfo:
     """Contains information about a function definition."""
+
     name: str
     node: ast.FunctionDef
     source_code: str
@@ -31,6 +33,7 @@ class FunctionCallFinder(ast.NodeVisitor):
     Args:
         target_function_name: The qualified name of the function to find (e.g., "module.function" or "function")
         target_filepath: The filepath where the target function is defined
+
     """
 
     def __init__(self, target_function_name: str, target_filepath: str, source_lines: List[str]):
@@ -39,7 +42,7 @@ class FunctionCallFinder(ast.NodeVisitor):
         self.source_lines = source_lines  # Store original source lines for extraction
 
         # Parse the target function name into parts
-        self.target_parts = target_function_name.split('.')
+        self.target_parts = target_function_name.split(".")
         self.target_base_name = self.target_parts[-1]
 
         # Track current context
@@ -66,16 +69,16 @@ class FunctionCallFinder(ast.NodeVisitor):
                 self.imports[alias.asname] = alias.name
             else:
                 # import module
-                self.imports[alias.name.split('.')[-1]] = alias.name
+                self.imports[alias.name.split(".")[-1]] = alias.name
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Track from imports."""
         if node.module:
             for alias in node.names:
-                if alias.name == '*':
+                if alias.name == "*":
                     # from module import *
-                    self.imports['*'] = node.module
+                    self.imports["*"] = node.module
                 elif alias.asname:
                     # from module import name as alias
                     self.imports[alias.asname] = f"{node.module}.{alias.name}"
@@ -121,9 +124,9 @@ class FunctionCallFinder(ast.NodeVisitor):
                 node=node,
                 source_code=source_code,
                 start_line=node.lineno,
-                end_line=node.end_lineno if hasattr(node, 'end_lineno') else node.lineno,
+                end_line=node.end_lineno if hasattr(node, "end_lineno") else node.lineno,
                 is_method=bool(self.current_class_stack),
-                class_name=self.current_class_stack[-1] if self.current_class_stack else None
+                class_name=self.current_class_stack[-1] if self.current_class_stack else None,
             )
 
         # Handle nested functions - mark parent as containing nested calls
@@ -144,9 +147,9 @@ class FunctionCallFinder(ast.NodeVisitor):
                     node=parent_node,
                     source_code=parent_source,
                     start_line=parent_node.lineno,
-                    end_line=parent_node.end_lineno if hasattr(parent_node, 'end_lineno') else parent_node.lineno,
+                    end_line=parent_node.end_lineno if hasattr(parent_node, "end_lineno") else parent_node.lineno,
                     is_method=bool(parent_class_context),
-                    class_name=parent_class_context[-1] if parent_class_context else None
+                    class_name=parent_class_context[-1] if parent_class_context else None,
                 )
 
         self.current_function_stack.pop()
@@ -167,9 +170,7 @@ class FunctionCallFinder(ast.NodeVisitor):
             current_func_name = self.current_function_stack[-1][0]
 
             call_location = FunctionCallLocation(
-                calling_function=current_func_name,
-                line=node.lineno,
-                column=node.col_offset
+                calling_function=current_func_name, line=node.lineno, column=node.col_offset
             )
 
             self.function_calls.append(call_location)
@@ -193,13 +194,15 @@ class FunctionCallFinder(ast.NodeVisitor):
             # Could be imported with a different name, check imports
             if call_name in self.imports:
                 imported_path = self.imports[call_name]
-                if imported_path == self.target_function_name or imported_path.endswith(f".{self.target_function_name}"):
+                if imported_path == self.target_function_name or imported_path.endswith(
+                    f".{self.target_function_name}"
+                ):
                     return True
             # Could also be a direct call if we're in the same file
             return True
 
         # Check for qualified calls with imports
-        call_parts = call_name.split('.')
+        call_parts = call_name.split(".")
         if call_parts[0] in self.imports:
             # Resolve the full path using imports
             base_import = self.imports[call_parts[0]]
@@ -214,7 +217,7 @@ class FunctionCallFinder(ast.NodeVisitor):
         """Extract the name being called from a function node."""
         if isinstance(func_node, ast.Name):
             return func_node.id
-        elif isinstance(func_node, ast.Attribute):
+        if isinstance(func_node, ast.Attribute):
             parts = []
             current = func_node
             while isinstance(current, ast.Attribute):
@@ -222,12 +225,12 @@ class FunctionCallFinder(ast.NodeVisitor):
                 current = current.value
             if isinstance(current, ast.Name):
                 parts.append(current.id)
-                return '.'.join(reversed(parts))
+                return ".".join(reversed(parts))
         return None
 
     def _extract_source_code(self, node: ast.FunctionDef) -> str:
         """Extract source code for a function node using original source lines."""
-        if not self.source_lines or not hasattr(node, 'lineno'):
+        if not self.source_lines or not hasattr(node, "lineno"):
             # Fallback to ast.unparse if available (Python 3.9+)
             try:
                 return ast.unparse(node)
@@ -236,13 +239,13 @@ class FunctionCallFinder(ast.NodeVisitor):
 
         # Get the lines for this function
         start_line = node.lineno - 1  # Convert to 0-based index
-        end_line = node.end_lineno if hasattr(node, 'end_lineno') else len(self.source_lines)
+        end_line = node.end_lineno if hasattr(node, "end_lineno") else len(self.source_lines)
 
         # Extract the function lines
         func_lines = self.source_lines[start_line:end_line]
 
         # Find the minimum indentation (excluding empty lines)
-        min_indent = float('inf')
+        min_indent = float("inf")
         for line in func_lines:
             if line.strip():  # Skip empty lines
                 indent = len(line) - len(line.lstrip())
@@ -267,18 +270,16 @@ class FunctionCallFinder(ast.NodeVisitor):
                 else:
                     result_lines.append(line)
 
-        return ''.join(result_lines).rstrip()
+        return "".join(result_lines).rstrip()
 
     def get_results(self) -> Dict[str, str]:
         """Get the results of the analysis.
 
         Returns:
             A dictionary mapping qualified function names to their source code definitions.
+
         """
-        return {
-            info.name: info.source_code
-            for info in self.function_definitions.values()
-        }
+        return {info.name: info.source_code for info in self.function_definitions.values()}
 
 
 def find_function_calls(source_code: str, target_function_name: str, target_filepath: str) -> Dict[str, str]:
@@ -292,6 +293,7 @@ def find_function_calls(source_code: str, target_function_name: str, target_file
     Returns:
         A dictionary mapping qualified function names to their source code definitions.
         Example: {"function_a": "def function_a():\n    ...", "MyClass.method_one": "def method_one(self):\n    ..."}
+
     """
     # Parse the source code
     tree = ast.parse(source_code)
@@ -346,15 +348,14 @@ def nested_calls():
 
     # Find calls to a specific function
     results = find_function_calls(
-        example_code,
-        target_function_name="my_module.target_function",
-        target_filepath="/path/to/my_module.py"
+        example_code, target_function_name="my_module.target_function", target_filepath="/path/to/my_module.py"
     )
 
     print("Functions that call 'my_module.target_function':\n")
 
     # Simple usage - results is just a dict of {function_name: source_code}
     import json
+
     print("JSON representation of results:")
     print(json.dumps(list(results.keys()), indent=2))
 

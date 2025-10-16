@@ -1,20 +1,21 @@
 """Verify that both AST and LibCST implementations produce the exact requested output format."""
 
 import json
-from function_call_finder_ast import find_function_calls as find_calls_ast
+
 from function_call_finder import find_function_calls as find_calls_libcst
+from function_call_finder_ast import find_function_calls as find_calls_ast
 
 # Simple test case
-test_code = '''
+test_code = """
 def func1():
     my_target()
 
 def func2():
     my_target(1, 2, 3)
-'''
+"""
 
 print("Verifying output format: {'calling_function_qualified_name1':'function_definition1',...}")
-print("="*70)
+print("=" * 70)
 
 # Test AST implementation
 print("\n1. AST Implementation:")
@@ -36,14 +37,14 @@ print(f"   Example output: {json.dumps(libcst_result, indent=2)}")
 
 # Test with class methods
 print("\n3. Testing with class methods:")
-class_test = '''
+class_test = """
 class MyClass:
     def method1(self):
         target()
 
     def method2(self):
         pass
-'''
+"""
 
 ast_class = find_calls_ast(class_test, "target", "/dummy/path.py")
 libcst_class = find_calls_libcst(class_test, "target", "/dummy/path.py")
@@ -52,7 +53,7 @@ print(f"   AST result: {list(ast_class.keys())}")
 print(f"   LibCST result: {list(libcst_class.keys())}")
 
 # Final verification
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("✅ VERIFIED: Both implementations return the exact format requested:")
 print('   {"calling_function_qualified_name1":"function_definition1",...}')
 print("\nKey characteristics:")
