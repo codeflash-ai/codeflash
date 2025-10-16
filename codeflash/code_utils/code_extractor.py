@@ -4,9 +4,10 @@ from __future__ import annotations
 import ast
 import json
 import subprocess
+from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 import libcst as cst
 from libcst.codemod import CodemodContext
@@ -240,7 +241,7 @@ class DottedImportCollector(cst.CSTVisitor):
         import dbt.adapters.factory                                                ==> "dbt.adapters.factory"
         from pathlib import Path                                                   ==> "pathlib.Path"
         from recce.adapter.base import BaseAdapter                                 ==> "recce.adapter.base.BaseAdapter"
-        from typing import Any, List, Optional                                     ==> "typing.Any", "typing.List", "typing.Optional"
+        from typing import Any, list, Optional                                     ==> "typing.Any", "typing.list", "typing.Optional"
         from recce.util.lineage import ( build_column_key, filter_dependency_maps) ==> "recce.util.lineage.build_column_key", "recce.util.lineage.filter_dependency_maps"
 
     """
@@ -445,7 +446,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
                 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id == "__all__"
             ):
-                if isinstance(node.value, (ast.List, ast.Tuple)):
+                if isinstance(node.value, (ast.list, ast.tuple)):
                     all_names = []
                     for elt in node.value.elts:
                         if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
@@ -751,31 +752,23 @@ def find_preexisting_objects(source_code: str) -> set[tuple[str, tuple[FunctionP
     return preexisting_objects
 
 
-def search_with_ripgrep(pattern: str, path: str = ".") -> dict[str, list[tuple[int, str]]]:
+def search_with_ripgrep(pattern: str, path: str, exclude_path: str) -> dict[str, list[tuple[int, str]]]:
     """Use ripgrep to search for a pattern in the repository.
 
     Args:
         pattern: The pattern to search for
         path: The directory to search in (default: current directory)
+        exclude_path: directory to avoid looking into
 
     Returns:
-        Dictionary with filepaths as keys and list of (line_no, content) tuples as values
+        dictionary with filepaths as keys and list of (line_no, content) tuples as values
 
     """
     # Run ripgrep with JSON output for easier parsing
     # -n: Show line numbers
     # --json: Output in JSON format
     # --no-heading: Don't group matches by file
-    path = str(Path.cwd())
-    cmd = [
-        "rg",
-        "-n",
-        "--json",
-        pattern,
-        path,
-        "-g",
-        "!/Users/aseemsaxena/Downloads/codeflash_dev/codeflash/code_to_optimize/tests/**",
-    ]
+    cmd = ["rg", "-n", "--type","py", "--json", pattern, path, "-g", f"!{exclude_path}"]
     print(" ".join(cmd))
     # Parse the JSON output
     matches_dict = {}
@@ -822,12 +815,645 @@ def search_with_ripgrep(pattern: str, path: str = ".") -> dict[str, list[tuple[i
     return matches_dict
 
 
+# @dataclass
+# class FunctionCallLocation:
+#     """Represents a location where the target function is called."""
+# 
+#     calling_function: str  # Name of the function making the call
+#     line: int
+#     column: int
+#     call_node: cst.Call  # The actual call node for additional analysis if needed
+# 
+# 
+# @dataclass
+# class FunctionDefinitionInfo:
+#     """Contains information about a function definition."""
+# 
+#     name: str  # Qualified name of the function
+#     node: cst.FunctionDef  # The CST node of the function definition
+#     source_code: str  # The source code of the function
+#     start_line: int
+#     end_line: int
+#     is_method: bool  # Whether this is a class method
+#     class_name: Optional[str] = None  # Name of containing class if it's a method
+# 
+# 
+# class FunctionCallFinder(cst.CSTVisitor):
+#     """Visitor that finds all function definitions that call a specific qualified function.
+# 
+#     Args:
+#         target_function_name: The qualified name of the function to find (e.g., "module.function" or "function")
+#         target_filepath: The filepath where the target function is defined
+# 
+#     """
+# 
+#     METADATA_DEPENDENCIES = (cst.metadata.PositionProvider,)
+# 
+#     def __init__(self, target_function_name: str, target_filepath: str) -> None:
+#         super().__init__()
+#         self.target_function_name = target_function_name
+#         self.target_filepath = target_filepath
+# 
+#         # Parse the target function name into parts
+#         self.target_parts = target_function_name.split(".")
+#         self.target_base_name = self.target_parts[-1]
+# 
+#         # Track current context
+#         self.current_function_stack: list[tuple[str, cst.FunctionDef]] = []  # (name, node) pairs
+#         self.current_class_stack: list[str] = []
+# 
+#         # Track imports to resolve qualified names
+#         self.imports: dict = {}  # Maps imported names to their full paths
+# 
+#         # Results
+#         self.function_calls: list[FunctionCallLocation] = []
+#         self.calling_functions: set[str] = set()  # Unique function names that call the target
+#         self.function_definitions: dict[str, FunctionDefinitionInfo] = {}  # Function name -> definition info
+# 
+#         # Track if we found calls in the current function
+#         self.found_call_in_current_function = False
+#         # Track functions with nested calls (parent functions that contain nested functions with calls)
+#         self.functions_with_nested_calls: set[str] = set()
+# 
+#     def visit_Import(self, node: cst.Import) -> None:
+#         """Track regular imports."""
+#         for name in node.names:
+#             if isinstance(name, cst.ImportAlias):
+#                 if name.asname:
+#                     # import module as alias
+#                     module_name = name.name.value if isinstance(name.name, cst.Attribute) else str(name.name)
+#                     alias = name.asname.name.value
+#                     self.imports[alias] = module_name
+#                 else:
+#                     # import module
+#                     module_name = self._get_dotted_name(name.name)
+#                     if module_name:
+#                         self.imports[module_name.split(".")[-1]] = module_name
+# 
+#     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
+#         """Track from imports."""
+#         if not node.module:
+#             return
+# 
+#         module_path = self._get_dotted_name(node.module)
+#         if not module_path:
+#             return
+# 
+#         if isinstance(node.names, cst.ImportStar):
+#             # from module import *
+#             self.imports["*"] = module_path
+#         else:
+#             # from module import name1, name2
+#             for name in node.names:
+#                 if isinstance(name, cst.ImportAlias):
+#                     import_name = name.name.value
+#                     if name.asname:
+#                         # from module import name as alias
+#                         alias = name.asname.name.value
+#                         self.imports[alias] = f"{module_path}.{import_name}"
+#                     else:
+#                         # from module import name
+#                         self.imports[import_name] = f"{module_path}.{import_name}"
+# 
+#     def visit_ClassDef(self, node: cst.ClassDef) -> None:
+#         """Track when entering a class definition."""
+#         self.current_class_stack.append(node.name.value)
+# 
+#     def leave_ClassDef(self, node: cst.ClassDef) -> None:
+#         """Track when leaving a class definition."""
+#         if self.current_class_stack:
+#             self.current_class_stack.pop()
+# 
+#     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+#         """Track when entering a function definition."""
+#         func_name = node.name.value
+# 
+#         # Build the full qualified name including class if applicable
+#         full_name = f"{'.'.join(self.current_class_stack)}.{func_name}" if self.current_class_stack else func_name
+# 
+#         self.current_function_stack.append((full_name, node))
+#         self.found_call_in_current_function = False
+# 
+#     def leave_FunctionDef(self, node: cst.FunctionDef) -> None:
+#         """Track when leaving a function definition and store it if it contains target calls."""
+#         if self.current_function_stack:
+#             full_name, func_node = self.current_function_stack.pop()
+# 
+#             # If we found a call in this function, store its definition
+#             if self.found_call_in_current_function and full_name not in self.function_definitions:
+#                 # Get position information
+#                 position = self.get_metadata(cst.metadata.PositionProvider, func_node)
+# 
+#                 # Extract function source code by converting node to module
+#                 # For methods, we need to maintain proper indentation
+#                 func_source = cst.Module(body=[func_node]).code
+# 
+#                 # For methods, add proper indentation (4 spaces)
+#                 if self.current_class_stack:
+#                     lines = func_source.split('\n')
+#                     func_source = '\n'.join('    ' + line if line else line for line in lines)
+# 
+#                 self.function_definitions[full_name] = FunctionDefinitionInfo(
+#                     name=full_name,
+#                     node=func_node,
+#                     source_code=func_source.rstrip(),  # Remove trailing whitespace
+#                     start_line=position.start.line if position else -1,
+#                     end_line=position.end.line if position else -1,
+#                     is_method=bool(self.current_class_stack),
+#                     class_name=self.current_class_stack[-1] if self.current_class_stack else None
+#                 )
+# 
+#             # Handle nested functions - mark parent as containing nested calls
+#             if self.found_call_in_current_function and self.current_function_stack:
+#                 parent_name = self.current_function_stack[-1][0]
+#                 self.functions_with_nested_calls.add(parent_name)
+#                 # Also store the parent function if not already stored
+#                 if parent_name not in self.function_definitions:
+#                     parent_func_node = self.current_function_stack[-1][1]
+#                     parent_position = self.get_metadata(cst.metadata.PositionProvider, parent_func_node)
+#                     parent_source = cst.Module(body=[parent_func_node]).code
+# 
+#                     # Get parent class context (go up one level in stack since we're inside the nested function)
+#                     parent_class_stack = self.current_class_stack[:-1] if len(self.current_function_stack) == 1 and self.current_class_stack else []
+# 
+#                     if parent_class_stack:
+#                         lines = parent_source.split('\n')
+#                         parent_source = '\n'.join('    ' + line if line else line for line in lines)
+# 
+#                     self.function_definitions[parent_name] = FunctionDefinitionInfo(
+#                         name=parent_name,
+#                         node=parent_func_node,
+#                         source_code=parent_source.rstrip(),
+#                         start_line=parent_position.start.line if parent_position else -1,
+#                         end_line=parent_position.end.line if parent_position else -1,
+#                         is_method=bool(parent_class_stack),
+#                         class_name=parent_class_stack[-1] if parent_class_stack else None
+#                     )
+# 
+#             # Reset the flag for parent function if we're in nested functions
+#             if self.current_function_stack:
+#                 # Check if the parent function should also be marked as containing calls
+#                 parent_name = self.current_function_stack[-1][0]
+#                 self.found_call_in_current_function = parent_name in self.calling_functions
+# 
+#     def visit_Call(self, node: cst.Call) -> None:
+#         """Check if this call matches our target function."""
+#         if not self.current_function_stack:
+#             # Not inside a function, skip
+#             return
+# 
+#         if self._is_target_function_call(node):
+#             # Get position information
+#             position = self.get_metadata(cst.metadata.PositionProvider, node)
+# 
+#             current_func_name = self.current_function_stack[-1][0]
+# 
+#             call_location = FunctionCallLocation(
+#                 calling_function=current_func_name,
+#                 line=position.start.line if position else -1,
+#                 column=position.start.column if position else -1,
+#                 call_node=node,
+#             )
+# 
+#             self.function_calls.append(call_location)
+#             self.calling_functions.add(current_func_name)
+#             self.found_call_in_current_function = True
+# 
+#     def _is_target_function_call(self, node: cst.Call) -> bool:
+#         """Determine if this call node is calling our target function.
+# 
+#         Handles various call patterns:
+#         - Direct calls: function()
+#         - Qualified calls: module.function()
+#         - Method calls: obj.method()
+#         """
+#         func = node.func
+# 
+#         # Get the call name
+#         call_name = self._get_call_name(func)
+#         if not call_name:
+#             return False
+# 
+#         # Check if it matches directly
+#         if call_name == self.target_function_name:
+#             return True
+# 
+#         # Check if it's just the base name matching
+#         if call_name == self.target_base_name:
+#             # Could be imported with a different name, check imports
+#             if call_name in self.imports:
+#                 imported_path = self.imports[call_name]
+#                 # Check if the imported path matches our target
+#                 if imported_path == self.target_function_name or imported_path.endswith(
+#                     f".{self.target_function_name}"
+#                 ):
+#                     return True
+#             # Could also be a direct call if we're in the same file
+#             return True
+# 
+#         # Check for qualified calls with imports
+#         call_parts = call_name.split(".")
+#         if call_parts[0] in self.imports:
+#             # Resolve the full path using imports
+#             base_import = self.imports[call_parts[0]]
+#             full_path = f"{base_import}.{'.'.join(call_parts[1:])}" if len(call_parts) > 1 else base_import
+# 
+#             if full_path == self.target_function_name or full_path.endswith(f".{self.target_function_name}"):
+#                 return True
+# 
+#         return False
+# 
+#     def _get_call_name(self, func: Union[cst.Name, cst.Attribute, cst.Call]) -> Optional[str]:
+#         """Extract the name being called from a function node."""
+#         if isinstance(func, cst.Name):
+#             return func.value
+#         if isinstance(func, cst.Attribute):
+#             return self._get_dotted_name(func)
+#         if isinstance(func, cst.Call):
+#             # Chained calls like foo()()
+#             return None
+#         return None
+# 
+#     def _get_dotted_name(self, node: Union[cst.Name, cst.Attribute]) -> Optional[str]:
+#         """Get the full dotted name from an Attribute or Name node."""
+#         if isinstance(node, cst.Name):
+#             return node.value
+#         if isinstance(node, cst.Attribute):
+#             parts = []
+#             current = node
+#             while isinstance(current, cst.Attribute):
+#                 parts.append(current.attr.value)
+#                 current = current.value
+#             if isinstance(current, cst.Name):
+#                 parts.append(current.value)
+#                 return ".".join(reversed(parts))
+#         return None
+# 
+#     def get_results(self) -> dict[str, str]:
+#         """Get the results of the analysis.
+# 
+#         Returns:
+#             A dictionary mapping qualified function names to their source code definitions.
+#             Only includes functions that call the target function (directly or through nested functions).
+# 
+#         """
+#         return {
+#             info.name: info.source_code
+#             for info in self.function_definitions.values()
+#         }
+# 
+# 
+# def find_function_calls(source_code: str, target_function_name: str, target_filepath: str) -> dict:
+#     """Find all function definitions that call a specific target function.
+# 
+#     Args:
+#         source_code: The Python source code to analyze
+#         target_function_name: The qualified name of the function to find (e.g., "module.function")
+#         target_filepath: The filepath where the target function is defined
+# 
+#     Returns:
+#         A dictionary with:
+#         - calling_functions: list of function names that call the target
+#         - calls: list of detailed call information including line/column
+# 
+#     """
+#     # Parse the source code
+#     module = cst.parse_module(source_code)
+# 
+#     # Create and run the visitor
+#     visitor = FunctionCallFinder(target_function_name, target_filepath)
+#     wrapper = cst.metadata.MetadataWrapper(module)
+#     wrapper.visit(visitor)
+# 
+#     return visitor.get_results()
+
+
+@dataclass
+class FunctionCallLocation:
+    """Represents a location where the target function is called."""
+    calling_function: str
+    line: int
+    column: int
+
+
+@dataclass
+class FunctionDefinitionInfo:
+    """Contains information about a function definition."""
+    name: str
+    node: ast.FunctionDef
+    source_code: str
+    start_line: int
+    end_line: int
+    is_method: bool
+    class_name: Optional[str] = None
+
+
+class FunctionCallFinder(ast.NodeVisitor):
+    """AST visitor that finds all function definitions that call a specific qualified function.
+
+    Args:
+        target_function_name: The qualified name of the function to find (e.g., "module.function" or "function")
+        target_filepath: The filepath where the target function is defined
+    """
+
+    def __init__(self, target_function_name: str, target_filepath: str, source_lines: list[str]):
+        self.target_function_name = target_function_name
+        self.target_filepath = target_filepath
+        self.source_lines = source_lines  # Store original source lines for extraction
+
+        # Parse the target function name into parts
+        self.target_parts = target_function_name.split('.')
+        self.target_base_name = self.target_parts[-1]
+
+        # Track current context
+        self.current_function_stack: list[tuple[str, ast.FunctionDef]] = []
+        self.current_class_stack: list[str] = []
+
+        # Track imports to resolve qualified names
+        self.imports: dict[str, str] = {}  # Maps imported names to their full paths
+
+        # Results
+        self.function_calls: list[FunctionCallLocation] = []
+        self.calling_functions: set[str] = set()
+        self.function_definitions: dict[str, FunctionDefinitionInfo] = {}
+
+        # Track if we found calls in the current function
+        self.found_call_in_current_function = False
+        self.functions_with_nested_calls: set[str] = set()
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Track regular imports."""
+        for alias in node.names:
+            if alias.asname:
+                # import module as alias
+                self.imports[alias.asname] = alias.name
+            else:
+                # import module
+                self.imports[alias.name.split('.')[-1]] = alias.name
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Track from imports."""
+        if node.module:
+            for alias in node.names:
+                if alias.name == '*':
+                    # from module import *
+                    self.imports['*'] = node.module
+                elif alias.asname:
+                    # from module import name as alias
+                    self.imports[alias.asname] = f"{node.module}.{alias.name}"
+                else:
+                    # from module import name
+                    self.imports[alias.name] = f"{node.module}.{alias.name}"
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """Track when entering a class definition."""
+        self.current_class_stack.append(node.name)
+        self.generic_visit(node)
+        self.current_class_stack.pop()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Track when entering a function definition."""
+        self._visit_function_def(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """Track when entering an async function definition."""
+        self._visit_function_def(node)
+
+    def _visit_function_def(self, node: ast.FunctionDef) -> None:
+        """Common logic for both regular and async function definitions."""
+        func_name = node.name
+
+        # Build the full qualified name including class if applicable
+        full_name = f"{'.'.join(self.current_class_stack)}.{func_name}" if self.current_class_stack else func_name
+
+        self.current_function_stack.append((full_name, node))
+        self.found_call_in_current_function = False
+
+        # Visit the function body
+        self.generic_visit(node)
+
+        # Process the function after visiting its body
+        if self.found_call_in_current_function and full_name not in self.function_definitions:
+            # Extract function source code
+            source_code = self._extract_source_code(node)
+
+            self.function_definitions[full_name] = FunctionDefinitionInfo(
+                name=full_name,
+                node=node,
+                source_code=source_code,
+                start_line=node.lineno,
+                end_line=node.end_lineno if hasattr(node, 'end_lineno') else node.lineno,
+                is_method=bool(self.current_class_stack),
+                class_name=self.current_class_stack[-1] if self.current_class_stack else None
+            )
+
+        # Handle nested functions - mark parent as containing nested calls
+        if self.found_call_in_current_function and len(self.current_function_stack) > 1:
+            parent_name = self.current_function_stack[-2][0]
+            self.functions_with_nested_calls.add(parent_name)
+
+            # Also store the parent function if not already stored
+            if parent_name not in self.function_definitions:
+                parent_node = self.current_function_stack[-2][1]
+                parent_source = self._extract_source_code(parent_node)
+
+                # Check if parent is a method (excluding current level)
+                parent_class_context = self.current_class_stack if len(self.current_function_stack) == 2 else []
+
+                self.function_definitions[parent_name] = FunctionDefinitionInfo(
+                    name=parent_name,
+                    node=parent_node,
+                    source_code=parent_source,
+                    start_line=parent_node.lineno,
+                    end_line=parent_node.end_lineno if hasattr(parent_node, 'end_lineno') else parent_node.lineno,
+                    is_method=bool(parent_class_context),
+                    class_name=parent_class_context[-1] if parent_class_context else None
+                )
+
+        self.current_function_stack.pop()
+
+        # Reset flag for parent function
+        if self.current_function_stack:
+            parent_name = self.current_function_stack[-1][0]
+            self.found_call_in_current_function = parent_name in self.calling_functions
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Check if this call matches our target function."""
+        if not self.current_function_stack:
+            # Not inside a function, skip
+            self.generic_visit(node)
+            return
+
+        if self._is_target_function_call(node):
+            current_func_name = self.current_function_stack[-1][0]
+
+            call_location = FunctionCallLocation(
+                calling_function=current_func_name,
+                line=node.lineno,
+                column=node.col_offset
+            )
+
+            self.function_calls.append(call_location)
+            self.calling_functions.add(current_func_name)
+            self.found_call_in_current_function = True
+
+        self.generic_visit(node)
+
+    def _is_target_function_call(self, node: ast.Call) -> bool:
+        """Determine if this call node is calling our target function."""
+        call_name = self._get_call_name(node.func)
+        if not call_name:
+            return False
+
+        # Check if it matches directly
+        if call_name == self.target_function_name:
+            return True
+
+        # Check if it's just the base name matching
+        if call_name == self.target_base_name:
+            # Could be imported with a different name, check imports
+            if call_name in self.imports:
+                imported_path = self.imports[call_name]
+                if imported_path == self.target_function_name or imported_path.endswith(f".{self.target_function_name}"):
+                    return True
+            # Could also be a direct call if we're in the same file
+            return True
+
+        # Check for qualified calls with imports
+        call_parts = call_name.split('.')
+        if call_parts[0] in self.imports:
+            # Resolve the full path using imports
+            base_import = self.imports[call_parts[0]]
+            full_path = f"{base_import}.{'.'.join(call_parts[1:])}" if len(call_parts) > 1 else base_import
+
+            if full_path == self.target_function_name or full_path.endswith(f".{self.target_function_name}"):
+                return True
+
+        return False
+
+    def _get_call_name(self, func_node) -> Optional[str]:
+        """Extract the name being called from a function node."""
+        if isinstance(func_node, ast.Name):
+            return func_node.id
+        elif isinstance(func_node, ast.Attribute):
+            parts = []
+            current = func_node
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
+                return '.'.join(reversed(parts))
+        return None
+
+    def _extract_source_code(self, node: ast.FunctionDef) -> str:
+        """Extract source code for a function node using original source lines."""
+        if not self.source_lines or not hasattr(node, 'lineno'):
+            # Fallback to ast.unparse if available (Python 3.9+)
+            try:
+                return ast.unparse(node)
+            except AttributeError:
+                return f"# Source code extraction not available for {node.name}"
+
+        # Get the lines for this function
+        start_line = node.lineno - 1  # Convert to 0-based index
+        end_line = node.end_lineno if hasattr(node, 'end_lineno') else len(self.source_lines)
+
+        # Extract the function lines
+        func_lines = self.source_lines[start_line:end_line]
+
+        # Find the minimum indentation (excluding empty lines)
+        min_indent = float('inf')
+        for line in func_lines:
+            if line.strip():  # Skip empty lines
+                indent = len(line) - len(line.lstrip())
+                min_indent = min(min_indent, indent)
+
+        # If this is a method (inside a class), preserve one level of indentation
+        if self.current_class_stack:
+            # Keep 4 spaces of indentation for methods
+            dedent_amount = max(0, min_indent - 4)
+            result_lines = []
+            for line in func_lines:
+                if line.strip():  # Only dedent non-empty lines
+                    result_lines.append(line[dedent_amount:] if len(line) > dedent_amount else line)
+                else:
+                    result_lines.append(line)
+        else:
+            # For top-level functions, remove all leading indentation
+            result_lines = []
+            for line in func_lines:
+                if line.strip():  # Only dedent non-empty lines
+                    result_lines.append(line[min_indent:] if len(line) > min_indent else line)
+                else:
+                    result_lines.append(line)
+
+        return ''.join(result_lines).rstrip()
+
+    def get_results(self) -> dict[str, str]:
+        """Get the results of the analysis.
+
+        Returns:
+            A dictionary mapping qualified function names to their source code definitions.
+        """
+        return {
+            info.name: info.source_code
+            for info in self.function_definitions.values()
+        }
+
+
+def find_function_calls(source_code: str, target_function_name: str, target_filepath: str) -> dict[str, str]:
+    """Find all function definitions that call a specific target function.
+
+    Args:
+        source_code: The Python source code to analyze
+        target_function_name: The qualified name of the function to find (e.g., "module.function")
+        target_filepath: The filepath where the target function is defined
+
+    Returns:
+        A dictionary mapping qualified function names to their source code definitions.
+        Example: {"function_a": "def function_a():\n    ...", "MyClass.method_one": "def method_one(self):\n    ..."}
+    """
+    # Parse the source code
+    tree = ast.parse(source_code)
+
+    # Split source into lines for source extraction
+    source_lines = source_code.splitlines(keepends=True)
+
+    # Create and run the visitor
+    visitor = FunctionCallFinder(target_function_name, target_filepath, source_lines)
+    visitor.visit(tree)
+
+    return visitor.get_results()
+
+def find_occurances(
+    qualified_name: str, file_path: str, fn_matches: dict[str, list[tuple[int, str]]], max_len=1000
+) -> str:  # max chars for context
+    #print(fn_matches, max_len)
+    fn_call_context = ""
+    all_res = []
+    for file in fn_matches:
+        with Path(file).open(encoding="utf8") as f:
+            file_content = f.read()
+        results = find_function_calls(file_content, target_function_name=qualified_name, target_filepath=file_path)
+        if results:
+            print(file)
+            all_res.append(results)
+    return fn_call_context
+
+
 def get_opt_impact_metrics(file_path: Path, qualified_name: str, project_root: Path, tests_root: Path) -> ImpactMetrics:
     # grep for function / use rg (respects gitignore)
     # SAFE_GREP_EXECUTABLE command
     # ast visitor for occurances and loop occurances
     # radon lib for complexity metrics
-    print(file_path, qualified_name, project_root, tests_root)
-
+    #print(file_path, qualified_name, project_root, tests_root)
+    function_name = qualified_name.rsplit(".")[-1]
+    matches = search_with_ripgrep(function_name, str(project_root), str(tests_root))
+    find_occurances(
+        qualified_name, str(file_path), matches
+    )  # returns markdown string of ```python:file_name followed by function/class definition
     # grep windows alternative
     return 0

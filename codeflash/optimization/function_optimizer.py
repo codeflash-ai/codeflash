@@ -377,6 +377,7 @@ class FunctionOptimizer:
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
+        get_opt_impact_metrics(self.function_to_optimize.file_path,self.function_to_optimize.qualified_name, self.project_root, self.test_cfg.tests_root)
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
