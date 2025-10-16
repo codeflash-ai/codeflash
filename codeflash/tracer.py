@@ -103,6 +103,11 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             replay_test_paths = []
             if parsed_args.module and unknown_args[0] == "pytest":
                 pytest_splits, test_paths = pytest_split(unknown_args[1:])
+                if pytest_splits is None or test_paths is None:
+                    console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
+                    console.print(f"Current working directory: {Path.cwd()}")
+                    console.print("Please ensure the test directory exists and contains test files.")
+                    sys.exit(1)
 
             if len(pytest_splits) > 1:
                 processes = []
