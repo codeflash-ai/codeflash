@@ -987,7 +987,7 @@ class FunctionCallFinder(ast.NodeVisitor):
             except AttributeError:
                 return f"# Source code extraction not available for {node.name}"
 
-        # Get the lines for this function
+        # Get node.lineno and node.end_lineno only once for efficiency
         start_line = node.lineno - 1  # Convert to 0-based index
         end_line = node.end_lineno if hasattr(node, "end_lineno") else len(self.source_lines)
 
@@ -997,28 +997,31 @@ class FunctionCallFinder(ast.NodeVisitor):
         # Find the minimum indentation (excluding empty lines)
         min_indent = float("inf")
         for line in func_lines:
-            if line.strip():  # Skip empty lines
+            stripped = line.strip()
+            if stripped:  # Skip empty lines
                 indent = len(line) - len(line.lstrip())
                 min_indent = min(min_indent, indent)
 
-        # If this is a method (inside a class), preserve one level of indentation
+        # Handle methods (inside classes)
         if self.current_class_stack:
-            # Keep 4 spaces of indentation for methods
             dedent_amount = max(0, min_indent - 4)
-            result_lines = []
-            for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[dedent_amount:] if len(line) > dedent_amount else line)
-                else:
-                    result_lines.append(line)
         else:
-            # For top-level functions, remove all leading indentation
-            result_lines = []
+            dedent_amount = min_indent
+
+        # Precompute to reduce per-line branch checks
+        result_lines = []
+        append = result_lines.append
+        if dedent_amount > 0:
             for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[min_indent:] if len(line) > min_indent else line)
+                # Only dedent non-empty lines
+                if line.strip():
+                    # Slicing past end just gives '', avoids an if-check
+                    append(line[dedent_amount:])
                 else:
-                    result_lines.append(line)
+                    append(line)
+        else:
+            # No dedent needed, but still copy lines (don't waste time with conditionals)
+            result_lines = func_lines
 
         return "".join(result_lines).rstrip()
 
