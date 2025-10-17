@@ -33,10 +33,9 @@ from codeflash.verification.comparator import comparator
 
 @dataclass
 class ImpactMetrics:
-    complexity_score: int
-    occurances: int
-    loop_occurances: int
-    presence_of_decorators: bool
+    cyclomatic_complexity: Optional[int] = None
+    cyclomatic_complexity_rating: Optional[str] = None
+    calling_fns: Optional[str] = None
 
 
 @dataclass(frozen=True)

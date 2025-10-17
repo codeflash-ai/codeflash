@@ -1474,7 +1474,7 @@ class FunctionOptimizer:
                 self.function_to_optimize.qualified_name,
                 self.project_root,
                 self.test_cfg.tests_root,
-            )  # need module root, tests root only
+            )
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)

@@ -10,20 +10,22 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import jedi
 import libcst as cst
+import radon.visitors
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
+from radon.complexity import cc_visit
 
 # from codeflash.benchmarking.pytest_new_process_trace_benchmarks import project_root
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_IMPACT, TIME_LIMIT_FOR_OPT_IMPACT
-from codeflash.models.models import CodePosition, FunctionParent
+from codeflash.models.models import CodePosition, FunctionParent, ImpactMetrics
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.models.models import FunctionSource, ImpactMetrics
+    from codeflash.models.models import FunctionSource
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
@@ -1092,13 +1094,11 @@ def find_occurances(
                 fn_call_context += f"{fn_definition}\n"
                 context_len += len(fn_definition)
             fn_call_context += "```\n"
-    opt_impact_metrics = {"calling_fn_defs": fn_call_context}
-    # radon metrics = get_radon_metrics(sour)
     return fn_call_context
 
 
 def find_specific_function_in_file(
-    source_code: str, filepath: Union[str, Path], qualified_name: str
+    source_code: str, filepath: Union[str, Path], target_function: str, target_class: str | None
 ) -> Optional[tuple[int, int]]:
     """Find a specific function definition in a Python file and return its location.
 
@@ -1107,17 +1107,13 @@ def find_specific_function_in_file(
     Args:
         source_code: Source code string
         filepath: Path to the Python file
-        qualified_name: Qualified Name of the function to find, classname.functionname
+        target_function: Function Name of the function to find
+        target_class: Class name of the function to find
 
     Returns:
         Tuple of (line_number, column_offset) if found, None otherwise
 
     """
-    qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
-    if len(qualified_name_split) == 1:
-        target_function, target_class = qualified_name_split[0], None
-    else:
-        target_function, target_class = qualified_name_split[1], qualified_name_split[0]
     script = jedi.Script(code=source_code, path=filepath)
     names = script.get_names(all_scopes=True, definitions=True)
     for name in names:
@@ -1134,16 +1130,16 @@ def find_specific_function_in_file(
     return None  # Function not found
 
 
-def get_fn_references_jedi(source_code: str, file_path: Path, qualified_name: str, project_root: Path) -> list[Path]:
-    print(file_path, qualified_name, project_root)
-    # Create a Jedi Script object
-    function_position: CodePosition = find_specific_function_in_file(source_code, file_path, qualified_name)
+def get_fn_references_jedi(
+    source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
+) -> list[Path]:
+    function_position: CodePosition = find_specific_function_in_file(
+        source_code, file_path, target_function, target_class
+    )
     try:
         script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
-
         # Get references to the function
         references = script.get_references(line=function_position.line_no, column=function_position.col_no)
-
         # Collect unique file paths where references are found
         reference_files = set()
         for ref in references:
@@ -1153,9 +1149,7 @@ def get_fn_references_jedi(source_code: str, file_path: Path, qualified_name: st
                 # Skip the definition itself
                 if not (ref_path == file_path and ref.line == function_position.line_no):
                     reference_files.add(ref_path)
-
         return sorted(reference_files)
-
     except Exception as e:
         print(f"Error during Jedi analysis: {e}")
         return []
@@ -1164,9 +1158,36 @@ def get_fn_references_jedi(source_code: str, file_path: Path, qualified_name: st
 def get_opt_impact_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
 ) -> ImpactMetrics:
-    # radon lib for complexity metrics
-    # print(file_path, qualified_name, project_root, tests_root)
-    matches = get_fn_references_jedi(
-        source_code, file_path, qualified_name, project_root
-    )  # jedi is not perfect, it doesn't capture aliased references
-    return find_occurances(qualified_name, str(file_path), matches, project_root, tests_root)
+    metrics = ImpactMetrics()
+    try:
+        qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
+        if len(qualified_name_split) == 1:
+            target_function, target_class = qualified_name_split[0], None
+        else:
+            target_function, target_class = qualified_name_split[1], qualified_name_split[0]
+        matches = get_fn_references_jedi(
+            source_code, file_path, project_root, target_function, target_class
+        )  # jedi is not perfect, it doesn't capture aliased references
+        cyclomatic_complexity_results = cc_visit(source_code)
+        match_found = False
+        for result in cyclomatic_complexity_results:
+            if match_found:
+                break
+            if isinstance(result, radon.visitors.Function) and not target_class:
+                if result.name == target_function:
+                    metrics.cyclomatic_complexity = result.complexity
+                    metrics.cyclomatic_complexity_rating = result.letter
+                    match_found = True
+            elif isinstance(result, radon.visitors.Class) and target_class:  # noqa: SIM102
+                if result.name == target_class:
+                    for method in result.methods:
+                        if match_found:
+                            break
+                        if method.name == target_function:
+                            metrics.cyclomatic_complexity = method.complexity
+                            metrics.cyclomatic_complexity_rating = method.letter
+                            match_found = True
+        metrics.calling_fns = find_occurances(qualified_name, str(file_path), matches, project_root, tests_root)
+    except Exception as e:
+        logger.debug(f"Investigate {e}")
+    return metrics
