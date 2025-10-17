@@ -34,6 +34,7 @@ from codeflash.code_utils.code_utils import (
     cleanup_paths,
     create_rank_dictionary_compact,
     diff_length,
+    extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
@@ -1569,11 +1570,14 @@ class FunctionOptimizer:
                 )
         if not behavioral_results:
             logger.warning(
-                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
         if not coverage_critic(coverage_results, self.args.test_framework):
+            did_pass_all_tests = all(result.did_pass for result in behavioral_results)
+            if not did_pass_all_tests:
+                return Failure("Tests failed to pass for the original code.")
             return Failure(
                 f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
@@ -1601,7 +1605,7 @@ class FunctionOptimizer:
                         )
 
                 try:
-                    benchmarking_results, _ = self.run_and_parse_tests(
+                    benchmarking_results = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1937,6 +1941,12 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
+
+            if is_LSP_enabled():
+                unique_errors = extract_unique_errors(run_result.stdout)
+                if unique_errors:
+                    lsp_log(LspCodeMessage(code="\n".join(unique_errors), file_name="errors"))
+
             if "ModuleNotFoundError" in run_result.stdout:
                 from rich.text import Text
 
