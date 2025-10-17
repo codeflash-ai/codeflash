@@ -12,7 +12,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
 import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
@@ -901,7 +900,7 @@ class FunctionOptimizer:
         optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
-        if should_sort_imports and isort.code(original_code) != original_code:
+        if should_sort_imports and sort_imports(code=original_code) != original_code:
             should_sort_imports = False
 
         optimized_code = ""

@@ -265,6 +265,8 @@ class Tracer:
 
         # These modules have been imported here now the tracer is done. It is safe to import codeflash and external modules here
 
+        from contextlib import suppress
+
         import isort
 
         from codeflash.tracing.replay_test import create_trace_replay_test
@@ -280,7 +282,8 @@ class Tracer:
         test_file_path = get_test_file_path(
             test_dir=Path(self.config["tests_root"]), function_name=function_path, test_type="replay"
         )
-        replay_test = isort.code(replay_test)
+        with suppress(Exception):
+            replay_test = isort.code(replay_test)
 
         with Path(test_file_path).open("w", encoding="utf8") as file:
             file.write(replay_test)
