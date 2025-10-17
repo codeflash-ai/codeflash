@@ -270,14 +270,11 @@ def initialize_function_optimization(
     if server.optimizer is None:
         _initialize_optimizer_if_api_key_is_valid(server)
 
-    server.optimizer.worktree_mode()
-
-    original_args, _ = server.optimizer.original_args_and_test_cfg
-
+    server.optimizer.args.file = file_path
     server.optimizer.args.function = params.functionName
-    original_relative_file_path = file_path.relative_to(original_args.project_root)
-    server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
     server.optimizer.args.previous_checkpoint_functions = False
+
+    server.optimizer.worktree_mode()
 
     server.show_message_log(
         f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"
