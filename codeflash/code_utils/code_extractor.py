@@ -1,4 +1,3 @@
-# ruff: noqa: ARG002
 from __future__ import annotations
 
 import ast
@@ -10,15 +9,13 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import jedi
 import libcst as cst
-import radon.visitors
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
 from libcst.helpers import calculate_module_and_package
-from radon.complexity import cc_visit
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_IMPACT, TIME_LIMIT_FOR_OPT_IMPACT
-from codeflash.models.models import CodePosition, FunctionParent, ImpactMetrics
+from codeflash.models.models import CodePosition, FunctionParent
 
 if TYPE_CHECKING:
     from libcst.helpers import ModuleNameAndPackage
@@ -38,28 +35,28 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         self.scope_depth = 0
         self.if_else_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:  # noqa: ARG002
         self.scope_depth += 1
         return True
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.scope_depth -= 1
 
     def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
         self.scope_depth += 1
         return True
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
         self.scope_depth -= 1
 
-    def visit_If(self, node: cst.If) -> Optional[bool]:
+    def visit_If(self, node: cst.If) -> Optional[bool]:  # noqa: ARG002
         self.if_else_depth += 1
         return True
 
-    def leave_If(self, original_node: cst.If) -> None:
+    def leave_If(self, original_node: cst.If) -> None:  # noqa: ARG002
         self.if_else_depth -= 1
 
-    def visit_Else(self, node: cst.Else) -> Optional[bool]:
+    def visit_Else(self, node: cst.Else) -> Optional[bool]:  # noqa: ARG002
         # Else blocks are already counted as part of the if statement
         return True
 
@@ -86,21 +83,21 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.scope_depth = 0
         self.if_else_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.scope_depth += 1
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         self.scope_depth -= 1
         return updated_node
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
         self.scope_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
         self.scope_depth -= 1
         return updated_node
 
-    def visit_If(self, node: cst.If) -> None:
+    def visit_If(self, node: cst.If) -> None:  # noqa: ARG002
         self.if_else_depth += 1
 
     def leave_If(self, original_node: cst.If, updated_node: cst.If) -> cst.If:
@@ -1156,8 +1153,7 @@ def get_fn_references_jedi(
 
 def get_opt_impact_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
-) -> ImpactMetrics:
-    metrics = ImpactMetrics()
+) -> str:
     try:
         qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
         if len(qualified_name_split) == 1:
@@ -1167,26 +1163,8 @@ def get_opt_impact_metrics(
         matches = get_fn_references_jedi(
             source_code, file_path, project_root, target_function, target_class
         )  # jedi is not perfect, it doesn't capture aliased references
-        cyclomatic_complexity_results = cc_visit(source_code)
-        match_found = False
-        for result in cyclomatic_complexity_results:
-            if match_found:
-                break
-            if isinstance(result, radon.visitors.Function) and not target_class:
-                if result.name == target_function:
-                    metrics.cyclomatic_complexity = result.complexity
-                    metrics.cyclomatic_complexity_rating = result.letter
-                    match_found = True
-            elif isinstance(result, radon.visitors.Class) and target_class:  # noqa: SIM102
-                if result.name == target_class:
-                    for method in result.methods:
-                        if match_found:
-                            break
-                        if method.name == target_function:
-                            metrics.cyclomatic_complexity = method.complexity
-                            metrics.cyclomatic_complexity_rating = method.letter
-                            match_found = True
-        metrics.calling_fns = find_occurances(qualified_name, str(file_path), matches, project_root, tests_root)
+        calling_fns_details = find_occurances(qualified_name, str(file_path), matches, project_root, tests_root)
     except Exception as e:
+        calling_fns_details = ""
         logger.debug(f"Investigate {e}")
-    return metrics
+    return calling_fns_details
