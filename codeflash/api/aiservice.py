@@ -577,6 +577,13 @@ class AiServiceClient:
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
+        # TODO get complexity metrics and fn call heuristics -> constructing a complete static call graph can be expensive for really large repos
+        # grep function name in codebase -> ast parser to get no of calls and no of calls in loop -> radon lib to get complexity metrics -> send as additional context to the AI service
+        # metric 1 -> call count - how many times the function is called in the codebase
+        # metric 2 -> loop call count - how many times the function is called in a loop in the codebase
+        # metric 3 -> presence of decorators like @profile, @cache -> this means the owner of the repo cares about the performance of this function
+        # metric 4 -> cyclomatic complexity (https://en.wikipedia.org/wiki/Cyclomatic_complexity)
+        # metric 5 (for future) -> halstead complexity (https://en.wikipedia.org/wiki/Halstead_complexity_measures)
         logger.info("!lsp|Computing Optimization Impact…")
         payload = {
             "code_diff": code_diff,
