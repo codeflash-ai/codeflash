@@ -6,10 +6,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
-import isort
 import libcst as cst
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -213,7 +213,7 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
         transformer = ImportAdder("from line_profiler import profile as codeflash_line_profile")
         # Apply the transformer to add the import
         module_node = module_node.visit(transformer)
-        modified_code = isort.code(module_node.code, float_to_top=True)
+        modified_code = sort_imports(code=module_node.code, float_to_top=True)
         # write to file
         with file_path.open("w", encoding="utf-8") as file:
             file.write(modified_code)

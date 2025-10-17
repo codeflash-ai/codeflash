@@ -10,6 +10,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
 
@@ -1129,7 +1130,7 @@ def add_async_decorator_to_function(
             import_transformer = AsyncDecoratorImportAdder(mode)
             module = module.visit(import_transformer)
 
-        return isort.code(module.code, float_to_top=True), decorator_transformer.added_decorator
+        return sort_imports(code=module.code, float_to_top=True), decorator_transformer.added_decorator
     except Exception as e:
         logger.exception(f"Error adding async decorator to function {function.qualified_name}: {e}")
         return source_code, False

@@ -6,9 +6,8 @@ import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import isort
-
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
 from codeflash.verification.verification_utils import get_test_file_path
 
@@ -299,7 +298,7 @@ def generate_replay_test(
                 test_framework=test_framework,
                 max_run_count=max_run_count,
             )
-            test_code = isort.code(test_code)
+            test_code = sort_imports(code=test_code)
             output_file = get_test_file_path(
                 test_dir=Path(output_dir), function_name=benchmark_module_path, test_type="replay"
             )
