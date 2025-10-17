@@ -1477,7 +1477,7 @@ class FunctionOptimizer:
                 logger.debug(f"optimization impact response failed, investigate {e}")
             data["optimization_impact"] = opt_impact_response[0]
             new_explanation_with_opt_explanation = Explanation(
-                raw_explanation_message=f"Impact: {opt_impact_response[0]}\n Impact_explanation: {opt_impact_response[1]} END OF IMPACT EXPLANATION\n"
+                raw_explanation_message=f"Impact: {opt_impact_response[0]}\n Impact_explanation: {opt_impact_response[1]} END OF IMPACT EXPLANATION\nCALLING CONTEXT \n{calling_fn_details}\nEND OF CALLING CONTEXT\n"
                 + new_explanation.raw_explanation_message,
                 winning_behavior_test_results=explanation.winning_behavior_test_results,
                 winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
