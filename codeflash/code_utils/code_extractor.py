@@ -16,7 +16,6 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 from radon.complexity import cc_visit
 
-# from codeflash.benchmarking.pytest_new_process_trace_benchmarks import project_root
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_IMPACT, TIME_LIMIT_FOR_OPT_IMPACT
 from codeflash.models.models import CodePosition, FunctionParent, ImpactMetrics
