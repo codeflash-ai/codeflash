@@ -975,7 +975,8 @@ class FunctionCallFinder(ast.NodeVisitor):
                 current = current.value
             if isinstance(current, ast.Name):
                 parts.append(current.id)
-                return ".".join(reversed(parts))
+                parts.reverse()
+                return ".".join(parts)
         return None
 
     def _extract_source_code(self, node: ast.FunctionDef) -> str:
