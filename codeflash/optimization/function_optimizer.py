@@ -12,7 +12,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
 import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
@@ -900,7 +899,7 @@ class FunctionOptimizer:
         optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
-        if should_sort_imports and isort.code(original_code) != original_code:
+        if should_sort_imports and sort_imports(code=original_code) != original_code:
             should_sort_imports = False
 
         optimized_code = ""
@@ -1461,14 +1460,12 @@ class FunctionOptimizer:
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-            # try:
-            #     # modify argument of staging vs pr based on the impact
-            #     opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
-            #     if opt_impact_response == "low":
-            #         raise_pr = False
-            #         staging_review = True
-            # except Exception as e:
-            #     logger.debug(f"optimization impact response failed, investigate {e}")
+            opt_impact_response = ""
+            try:
+                opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+            except Exception as e:
+                logger.debug(f"optimization impact response failed, investigate {e}")
+            data["optimization_impact"] = opt_impact_response
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)

@@ -797,3 +797,11 @@ class ProcessorWithDocs:
         '''Single quote docstring with formatting issues.'''
         return{'result':[item for item in data if self._is_valid(item)]}"""
     _run_formatting_test(source_code, True, optimized_function=optimization_function, expected=expected)
+
+def test_sort_imports_skip_file():
+    """Test that isort skips files with # isort:skip_file."""
+    code = """# isort:skip_file
+
+import sys, os, json  # isort will ignore this file completely"""
+    new_code = sort_imports(code)
+    assert new_code == code

@@ -5,13 +5,13 @@ from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING, Optional, TypeVar
 
-import isort
 import libcst as cst
 from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
 from codeflash.code_utils.config_parser import find_conftest_files
+from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
 from codeflash.models.models import FunctionParent
 
@@ -226,7 +226,7 @@ def add_custom_marker_to_all_tests(test_paths: list[Path]) -> None:
         module = cst.parse_module(file_content)
         importadder = ImportAdder("import pytest")
         modified_module = module.visit(importadder)
-        modified_module = cst.parse_module(isort.code(modified_module.code, float_to_top=True))
+        modified_module = cst.parse_module(sort_imports(code=modified_module.code, float_to_top=True))
         pytest_mark_adder = PytestMarkAdder("codeflash_no_autouse")
         modified_module = modified_module.visit(pytest_mark_adder)
         test_path.write_text(modified_module.code, encoding="utf-8")

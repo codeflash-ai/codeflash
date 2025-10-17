@@ -130,6 +130,7 @@ def suggest_changes(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    optimization_impact: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -155,6 +156,7 @@ def suggest_changes(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimizationImpact": optimization_impact,
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 

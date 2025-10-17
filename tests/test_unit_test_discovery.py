@@ -12,6 +12,9 @@ from codeflash.models.models import TestsInFile, TestType
 from codeflash.verification.verification_utils import TestConfig
 
 
+from pathlib import Path
+from codeflash.discovery.discover_unit_tests import discover_unit_tests
+
 def test_unit_test_discovery_pytest():
     project_path = Path(__file__).parent.parent.resolve() / "code_to_optimize"
     tests_path = project_path / "tests" / "pytest"
@@ -1327,3 +1330,35 @@ def test_target():
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
         assert should_process is False
+
+
+
+def test_discover_unit_tests_caching():
+    tests_root = Path(__file__).parent.resolve() / "tests"
+    project_root_path = tests_root.parent.resolve()
+
+    test_config = TestConfig(
+        tests_root=tests_root,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        tests_project_rootdir=project_root_path,
+        use_cache=False,
+    )
+
+
+
+    non_cached_function_to_tests, non_cached_num_discovered_tests, non_cached_num_discovered_replay_tests = (
+        discover_unit_tests(test_config)
+    )
+    cache_config = TestConfig(
+        tests_root=tests_root,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        tests_project_rootdir=project_root_path,
+        use_cache=True,
+    )
+    tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(cache_config)
+
+    assert non_cached_num_discovered_tests == num_discovered_tests
+    assert non_cached_function_to_tests == tests
+    assert non_cached_num_discovered_replay_tests == num_discovered_replay_tests
