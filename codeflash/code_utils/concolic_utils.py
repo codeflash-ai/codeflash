@@ -70,10 +70,11 @@ class AssertCleanup:
 
 def clean_concolic_tests(test_suite_code: str) -> str:
     try:
-        can_parse = True
         tree = ast.parse(test_suite_code)
-    except SyntaxError:
+        can_parse = True
+    except Exception:
         can_parse = False
+        tree = None
 
     if not can_parse:
         return AssertCleanup().transform_asserts(test_suite_code)
@@ -87,7 +88,6 @@ def clean_concolic_tests(test_suite_code: str) -> str:
                         new_body.append(ast.Expr(value=stmt.test.left))
                     else:
                         new_body.append(stmt)
-
                 else:
                     new_body.append(stmt)
             node.body = new_body

@@ -86,6 +86,7 @@ class FunctionVisitor(cst.CSTVisitor):
                     parents=list(reversed(ast_parents)),
                     starting_line=pos.start.line,
                     ending_line=pos.end.line,
+                    is_async=bool(node.asynchronous),
                 )
             )
 
@@ -101,6 +102,15 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         if function_has_return_statement(node) and not function_is_a_property(node):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
+            )
+
+    def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
+        # Check if the async function has a return statement and add it to the list
+        if function_has_return_statement(node) and not function_is_a_property(node):
+            self.functions.append(
+                FunctionToOptimize(
+                    function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
+                )
             )
 
     def generic_visit(self, node: ast.AST) -> None:
@@ -122,6 +132,7 @@ class FunctionToOptimize:
         parents: A list of parent scopes, which could be classes or functions.
         starting_line: The starting line number of the function in the file.
         ending_line: The ending line number of the function in the file.
+        is_async: Whether this function is defined as async.
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -134,6 +145,7 @@ class FunctionToOptimize:
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
+    is_async: bool = False
 
     @property
     def top_level_parent_name(self) -> str:
@@ -147,7 +159,11 @@ class FunctionToOptimize:
 
     @property
     def qualified_name(self) -> str:
-        return self.function_name if self.parents == [] else f"{self.parents[0].name}.{self.function_name}"
+        if not self.parents:
+            return self.function_name
+        # Join all parent names with dots to handle nested classes properly
+        parent_path = ".".join(parent.name for parent in self.parents)
+        return f"{parent_path}.{self.function_name}"
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
@@ -163,6 +179,8 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
+    *,
+    enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
@@ -173,7 +191,7 @@ def get_functions_to_optimize(
     with warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
-            logger.info("Finding all functions in the module '%s'…", optimize_all)
+            logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
             console.rule()
             functions = get_all_files_and_functions(Path(optimize_all))
         elif replay_test:
@@ -181,7 +199,7 @@ def get_functions_to_optimize(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
             )
         elif file is not None:
-            logger.info("Finding all functions in the file '%s'…", file)
+            logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             functions = find_all_functions_in_file(file)
             if only_get_this_function is not None:
@@ -216,10 +234,16 @@ def get_functions_to_optimize(
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
-            functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
+            functions,
+            test_cfg.tests_root,
+            ignore_paths,
+            project_root,
+            module_root,
+            previous_checkpoint_functions,
+            enable_async=enable_async,
         )
 
-        logger.info(f"Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
+        logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
         if optimize_all:
             three_min_in_ns = int(1.8e11)
             console.rule()
@@ -411,11 +435,27 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
                 )
             )
 
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        if self.class_name is None and node.name == self.function_name:
+            self.is_top_level = True
+            self.function_has_args = any(
+                (
+                    bool(node.args.args),
+                    bool(node.args.kwonlyargs),
+                    bool(node.args.kwarg),
+                    bool(node.args.posonlyargs),
+                    bool(node.args.vararg),
+                )
+            )
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         # iterate over the class methods
         if node.name == self.class_name:
             for body_node in node.body:
-                if isinstance(body_node, ast.FunctionDef) and body_node.name == self.function_name:
+                if (
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and body_node.name == self.function_name
+                ):
                     self.is_top_level = True
                     if any(
                         isinstance(decorator, ast.Name) and decorator.id == "classmethod"
@@ -433,7 +473,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
             # This way, if we don't have the class name, we can still find the static method
             for body_node in node.body:
                 if (
-                    isinstance(body_node, ast.FunctionDef)
+                    isinstance(body_node, (ast.FunctionDef, ast.AsyncFunctionDef))
                     and body_node.name == self.function_name
                     and body_node.lineno in {self.line_no, self.line_no + 1}
                     and any(
@@ -535,7 +575,9 @@ def filter_functions(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
-    disable_logs: bool = False,  # noqa: FBT001, FBT002
+    *,
+    disable_logs: bool = False,
+    enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
@@ -555,6 +597,7 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
+    async_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
 
@@ -610,6 +653,15 @@ def filter_functions(
                 functions_tmp.append(function)
             _functions = functions_tmp
 
+        if not enable_async:
+            functions_tmp = []
+            for function in _functions:
+                if function.is_async:
+                    async_functions_removed_count += 1
+                    continue
+                functions_tmp.append(function)
+            _functions = functions_tmp
+
         filtered_modified_functions[file_path] = _functions
         functions_count += len(_functions)
 
@@ -623,6 +675,7 @@ def filter_functions(
             "Files from ignored submodules": (submodule_ignored_paths_count, "bright_black"),
             "Blocklisted functions removed": (blocklist_funcs_removed_count, "bright_red"),
             "Functions skipped from checkpoint": (previous_checkpoint_functions_removed_count, "green"),
+            "Async functions removed": (async_functions_removed_count, "bright_magenta"),
         }
         tree = Tree(Text("Ignored functions and files", style="bold"))
         for label, (count, color) in log_info.items():

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 from packaging import version
 
-if os.environ.get("CODEFLASH_CFAPI_SERVER", default="prod").lower() == "local":
+if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
     console.rule()
@@ -40,6 +40,7 @@ def make_cfapi_request(
     payload: dict[str, Any] | None = None,
     extra_headers: dict[str, str] | None = None,
     *,
+    api_key: str | None = None,
     suppress_errors: bool = False,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
@@ -51,7 +52,7 @@ def make_cfapi_request(
     :return: The response object from the API.
     """
     url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    cfapi_headers = {"Authorization": f"Bearer {get_codeflash_api_key()}"}
+    cfapi_headers = {"Authorization": f"Bearer {api_key or get_codeflash_api_key()}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
     try:
@@ -83,7 +84,7 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id() -> Optional[str]:
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :return: The userid or None if the request fails.
@@ -91,7 +92,9 @@ def get_user_id() -> Optional[str]:
     if not ensure_codeflash_api_key():
         return None
 
-    response = make_cfapi_request(endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__})
+    response = make_cfapi_request(
+        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key
+    )
     if response.status_code == 200:
         if "min_version" not in response.text:
             return response.text
@@ -127,6 +130,7 @@ def suggest_changes(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    optimization_review: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -152,6 +156,7 @@ def suggest_changes(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimizationImpact": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -168,6 +173,7 @@ def create_pr(
     coverage_message: str,
     replay_tests: str = "",
     concolic_tests: str = "",
+    optimization_review: str = "",
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -192,6 +198,7 @@ def create_pr(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimizationImpact": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -207,6 +214,7 @@ def create_staging(
     replay_tests: str,
     concolic_tests: str,
     root_dir: Path,
+    optimization_review: str = "",
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -247,6 +255,7 @@ def create_staging(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
+        "optimizationImpact": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)

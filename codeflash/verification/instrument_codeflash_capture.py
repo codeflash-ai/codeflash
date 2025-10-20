@@ -4,9 +4,8 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
-
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -33,7 +32,7 @@ def instrument_codeflash_capture(
     modified_code = add_codeflash_capture_to_init(
         target_classes={class_parent.name},
         fto_name=function_to_optimize.function_name,
-        tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         code=original_code,
         tests_root=tests_root,
         is_fto=True,
@@ -46,7 +45,7 @@ def instrument_codeflash_capture(
         modified_code = add_codeflash_capture_to_init(
             target_classes=helper_classes,
             fto_name=function_to_optimize.function_name,
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
             code=original_code,
             tests_root=tests_root,
             is_fto=False,
@@ -70,7 +69,7 @@ def add_codeflash_capture_to_init(
         ast.fix_missing_locations(modified_tree)
 
     # Convert back to source code
-    return isort.code(code=ast.unparse(modified_tree), float_to_top=True)
+    return sort_imports(code=ast.unparse(modified_tree), float_to_top=True)
 
 
 class InitDecorator(ast.NodeTransformer):
@@ -91,6 +90,27 @@ class InitDecorator(ast.NodeTransformer):
         self.has_import = False
         self.tests_root = tests_root
         self.inserted_decorator = False
+
+        # Precompute decorator components to avoid reconstructing on every node visit
+        # Only the `function_name` field changes per class
+        self._base_decorator_keywords = [
+            ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
+            ast.keyword(arg="tests_root", value=ast.Constant(value=self.tests_root.as_posix())),
+            ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
+        ]
+        self._base_decorator_func = ast.Name(id="codeflash_capture", ctx=ast.Load())
+
+        # Preconstruct starred/kwargs for super init injection for perf
+        self._super_starred = ast.Starred(value=ast.Name(id="args", ctx=ast.Load()))
+        self._super_kwarg = ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))
+        self._super_func = ast.Attribute(
+            value=ast.Call(func=ast.Name(id="super", ctx=ast.Load()), args=[], keywords=[]),
+            attr="__init__",
+            ctx=ast.Load(),
+        )
+        self._init_vararg = ast.arg(arg="args")
+        self._init_kwarg = ast.arg(arg="kwargs")
+        self._init_self_arg = ast.arg(arg="self", annotation=None)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         # Check if our import already exists
@@ -114,21 +134,18 @@ class InitDecorator(ast.NodeTransformer):
         if node.name not in self.target_classes:
             return node
 
-        # Look for __init__ method
         has_init = False
-
-        # Create the decorator
+        # Build decorator node ONCE for each class, not per loop iteration
         decorator = ast.Call(
-            func=ast.Name(id="codeflash_capture", ctx=ast.Load()),
+            func=self._base_decorator_func,
             args=[],
             keywords=[
                 ast.keyword(arg="function_name", value=ast.Constant(value=f"{node.name}.__init__")),
-                ast.keyword(arg="tmp_dir_path", value=ast.Constant(value=self.tmp_dir_path)),
-                ast.keyword(arg="tests_root", value=ast.Constant(value=str(self.tests_root))),
-                ast.keyword(arg="is_fto", value=ast.Constant(value=self.is_fto)),
+                *self._base_decorator_keywords,
             ],
         )
 
+        # Only scan node.body once for both __init__ and decorator check
         for item in node.body:
             if (
                 isinstance(item, ast.FunctionDef)
@@ -139,35 +156,28 @@ class InitDecorator(ast.NodeTransformer):
             ):
                 has_init = True
 
-                # Add decorator at the start of the list if not already present
-                if not any(
-                    isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "codeflash_capture"
-                    for d in item.decorator_list
-                ):
+                # Check for existing decorator in-place, stop after finding one
+                for d in item.decorator_list:
+                    if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "codeflash_capture":
+                        break
+                else:
+                    # No decorator found
                     item.decorator_list.insert(0, decorator)
                     self.inserted_decorator = True
 
         if not has_init:
-            # Create super().__init__(*args, **kwargs) call
+            # Create super().__init__(*args, **kwargs) call (use prebuilt AST fragments)
             super_call = ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Call(func=ast.Name(id="super", ctx=ast.Load()), args=[], keywords=[]),
-                        attr="__init__",
-                        ctx=ast.Load(),
-                    ),
-                    args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()))],
-                    keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                )
+                value=ast.Call(func=self._super_func, args=[self._super_starred], keywords=[self._super_kwarg])
             )
-            # Create function arguments: self, *args, **kwargs
+            # Create function arguments: self, *args, **kwargs (reuse arg nodes)
             arguments = ast.arguments(
                 posonlyargs=[],
-                args=[ast.arg(arg="self", annotation=None)],
-                vararg=ast.arg(arg="args"),
+                args=[self._init_self_arg],
+                vararg=self._init_vararg,
                 kwonlyargs=[],
                 kw_defaults=[],
-                kwarg=ast.arg(arg="kwargs"),
+                kwarg=self._init_kwarg,
                 defaults=[],
             )
 

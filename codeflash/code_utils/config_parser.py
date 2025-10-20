@@ -5,6 +5,9 @@ from typing import Any
 
 import tomlkit
 
+PYPROJECT_TOML_CACHE = {}
+ALL_CONFIG_FILES = {}  # map path to closest config file
+
 
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
     # Find the pyproject.toml file on the root of the project
@@ -19,16 +22,48 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
             raise ValueError(msg)
         return config_file
     dir_path = Path.cwd()
-
+    cur_path = dir_path
+    # see if it was encountered before in search
+    if cur_path in PYPROJECT_TOML_CACHE:
+        return PYPROJECT_TOML_CACHE[cur_path]
+    # map current path to closest file
     while dir_path != dir_path.parent:
         config_file = dir_path / "pyproject.toml"
         if config_file.exists():
+            PYPROJECT_TOML_CACHE[cur_path] = config_file
             return config_file
         # Search for pyproject.toml in the parent directories
         dir_path = dir_path.parent
     msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to pyproject.toml with the --config-file argument."
 
     raise ValueError(msg)
+
+
+def get_all_closest_config_files() -> list[Path]:
+    all_closest_config_files = []
+    for file_type in ["pyproject.toml", "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg"]:
+        closest_config_file = find_closest_config_file(file_type)
+        if closest_config_file:
+            all_closest_config_files.append(closest_config_file)
+    return all_closest_config_files
+
+
+def find_closest_config_file(file_type: str) -> Path | None:
+    # Find the closest pyproject.toml, pytest.ini, tox.ini, or setup.cfg file on the root of the project
+    dir_path = Path.cwd()
+    cur_path = dir_path
+    if cur_path in ALL_CONFIG_FILES and file_type in ALL_CONFIG_FILES[cur_path]:
+        return ALL_CONFIG_FILES[cur_path][file_type]
+    while dir_path != dir_path.parent:
+        config_file = dir_path / file_type
+        if config_file.exists():
+            if cur_path not in ALL_CONFIG_FILES:
+                ALL_CONFIG_FILES[cur_path] = {}
+            ALL_CONFIG_FILES[cur_path][file_type] = config_file
+            return config_file
+        # Search for pyproject.toml in the parent directories
+        dir_path = dir_path.parent
+    return None
 
 
 def find_conftest_files(test_paths: list[Path]) -> list[Path]:

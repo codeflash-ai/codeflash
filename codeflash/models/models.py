@@ -5,7 +5,10 @@ from typing import TYPE_CHECKING
 
 from rich.tree import Tree
 
-from codeflash.cli_cmds.console import DEBUG_MODE
+from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
+from codeflash.lsp.lsp_message import LspMarkdownMessage
+from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -100,6 +103,7 @@ class BestOptimization(BaseModel):
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
     line_profiler_test_results: dict
+    async_throughput: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -159,7 +163,7 @@ class CodeString(BaseModel):
 
 
 def get_code_block_splitter(file_path: Path) -> str:
-    return f"# file: {file_path}"
+    return f"# file: {file_path.as_posix()}"
 
 
 markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
@@ -205,7 +209,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         return "\n".join(
             [
-                f"```python{':' + str(code_string.file_path) if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
@@ -250,7 +254,7 @@ class CodeStringsMarkdown(BaseModel):
 
 
 class CodeOptimizationContext(BaseModel):
-    testgen_context_code: str = ""
+    testgen_context: CodeStringsMarkdown
     read_writable_code: CodeStringsMarkdown
     read_only_context_code: str = ""
     hashing_code_context: str = ""
@@ -274,6 +278,7 @@ class OptimizedCandidateResult(BaseModel):
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
     optimization_candidate_index: int
     total_candidate_timing: int
+    async_throughput: Optional[int] = None
 
 
 class GeneratedTests(BaseModel):
@@ -380,6 +385,7 @@ class OriginalCodeBaseline(BaseModel):
     line_profile_results: dict
     runtime: int
     coverage_results: Optional[CoverageData]
+    async_throughput: Optional[int] = None
 
 
 class CoverageStatus(Enum):
@@ -482,27 +488,6 @@ class VerificationType(str, Enum):
     INIT_STATE_HELPER = "init_state_helper"  # Correctness verification for helper class instance attributes after init
 
 
-class TestType(Enum):
-    EXISTING_UNIT_TEST = 1
-    INSPIRED_REGRESSION = 2
-    GENERATED_REGRESSION = 3
-    REPLAY_TEST = 4
-    CONCOLIC_COVERAGE_TEST = 5
-    INIT_STATE_TEST = 6
-
-    def to_name(self) -> str:
-        if self is TestType.INIT_STATE_TEST:
-            return ""
-        names = {
-            TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
-            TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
-            TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
-            TestType.REPLAY_TEST: "⏪ Replay Tests",
-            TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
-        }
-        return names[self]
-
-
 @dataclass(frozen=True)
 class InvocationId:
     test_module_path: str  # The fully qualified name of the test module
@@ -563,6 +548,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+    perf_stdout: Optional[str] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
@@ -644,6 +630,13 @@ class TestResults(BaseModel):  # noqa: PLW1641
     @staticmethod
     def report_to_tree(report: dict[TestType, dict[str, int]], title: str) -> Tree:
         tree = Tree(title)
+
+        if is_LSP_enabled():
+            # Build markdown table
+            markdown = report_to_markdown_table(report, title)
+            lsp_log(LspMarkdownMessage(markdown=markdown))
+            return tree
+
         for test_type in TestType:
             if test_type is TestType.INIT_STATE_TEST:
                 continue
