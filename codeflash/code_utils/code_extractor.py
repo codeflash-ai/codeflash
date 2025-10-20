@@ -317,7 +317,9 @@ class ImportInserter(cst.CSTTransformer):
         self.inserted = False
 
     def leave_SimpleStatementLine(
-        self, original_node: cst.SimpleStatementLine, updated_node: cst.SimpleStatementLine
+        self,
+        original_node: cst.SimpleStatementLine,  # noqa: ARG002
+        updated_node: cst.SimpleStatementLine,
     ) -> cst.Module:
         self.current_line += 1
 
@@ -356,7 +358,9 @@ def find_last_import_line(target_code: str) -> int:
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
-        self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
+        self,
+        original_node: cst.ImportFrom,  # noqa: ARG002
+        updated_node: cst.ImportFrom,
     ) -> cst.BaseSmallStatement | cst.FlattenSentinel[cst.BaseSmallStatement] | cst.RemovalSentinel:
         import libcst.matchers as m
 
