@@ -994,31 +994,34 @@ class FunctionCallFinder(ast.NodeVisitor):
         # Extract the function lines
         func_lines = self.source_lines[start_line:end_line]
 
-        # Find the minimum indentation (excluding empty lines)
+        # Find the minimum indentation (excluding empty lines) - optimize loop
         min_indent = float("inf")
         for line in func_lines:
-            if line.strip():  # Skip empty lines
+            stripped = line.strip()
+            if stripped:
                 indent = len(line) - len(line.lstrip())
-                min_indent = min(min_indent, indent)
+                if indent < min_indent:
+                    min_indent = indent
+                    if min_indent == 0:
+                        break  # Early exit if we hit zero (can’t get lower)
 
-        # If this is a method (inside a class), preserve one level of indentation
+        # Use list comprehension for performance
         if self.current_class_stack:
             # Keep 4 spaces of indentation for methods
             dedent_amount = max(0, min_indent - 4)
-            result_lines = []
-            for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[dedent_amount:] if len(line) > dedent_amount else line)
-                else:
-                    result_lines.append(line)
+            if dedent_amount > 0:
+                result_lines = [
+                    line[dedent_amount:] if line.strip() and len(line) > dedent_amount else line for line in func_lines
+                ]
+            else:
+                result_lines = list(func_lines)
+        # For top-level functions, remove all leading indentation
+        elif min_indent > 0 and min_indent != float("inf"):
+            result_lines = [
+                line[min_indent:] if line.strip() and len(line) > min_indent else line for line in func_lines
+            ]
         else:
-            # For top-level functions, remove all leading indentation
-            result_lines = []
-            for line in func_lines:
-                if line.strip():  # Only dedent non-empty lines
-                    result_lines.append(line[min_indent:] if len(line) > min_indent else line)
-                else:
-                    result_lines.append(line)
+            result_lines = list(func_lines)
 
         return "".join(result_lines).rstrip()
 
