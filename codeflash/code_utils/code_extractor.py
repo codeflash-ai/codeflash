@@ -927,7 +927,11 @@ class FunctionCallFinder(ast.NodeVisitor):
             self.calling_functions.add(current_func_name)
             self.found_call_in_current_function = True
 
-        self.generic_visit(node)
+        # Visit child nodes directly for better performance
+        for arg in node.args:
+            self.visit(arg)
+        for kw in node.keywords:
+            self.visit(kw.value)
 
     def _is_target_function_call(self, node: ast.Call) -> bool:
         """Determine if this call node is calling our target function."""
