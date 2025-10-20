@@ -1085,43 +1085,47 @@ def install_github_app(git_remote: str) -> None:
         )
 
     else:
-        click.prompt(
-            f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
-            f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-            f"Press Enter to open the page to let you install the app…{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
-        )
-        click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
-        click.prompt(
-            f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
-            default="",
-            type=click.STRING,
-            prompt_suffix="",
-            show_default=False,
-        )
-
-        count = 2
-        while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-            if count == 0:
-                click.echo(
-                    f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                    f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
-                    f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
-                )
-                break
+        try:
             click.prompt(
-                f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to continue once you've finished installing the github app…{LF}",
+                f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
+                f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
+                f"Press Enter to open the page to let you install the app…{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix="",
                 show_default=False,
             )
-            count -= 1
+            click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
+            click.prompt(
+                f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
+                default="",
+                type=click.STRING,
+                prompt_suffix="",
+                show_default=False,
+            )
+
+            count = 2
+            while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
+                if count == 0:
+                    click.echo(
+                        f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                        f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
+                        f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
+                    )
+                    break
+                click.prompt(
+                    f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
+                    f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
+                    f"Press Enter to continue once you've finished installing the github app…{LF}",
+                    default="",
+                    type=click.STRING,
+                    prompt_suffix="",
+                    show_default=False,
+                )
+                count -= 1
+        except (KeyboardInterrupt, EOFError, click.exceptions.Abort):
+            # leave empty line for the next prompt to be properly rendered
+            click.echo()
 
 
 class CFAPIKeyType(click.ParamType):
