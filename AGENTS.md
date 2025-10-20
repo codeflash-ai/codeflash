@@ -228,6 +228,7 @@ uv run codeflash --replay-test tests/specific_test.py
 - Extensive use of `@pytest.mark.parametrize`
 - Shared fixtures in conftest.py
 - Test isolation via custom pytest plugin
+- **Trace File Colocation**: When running `codeflash optimize --trace-only -m pytest`, trace files are automatically placed in the tests_root directory alongside replay tests for better organization
 
 ### Key Dependencies
 - **Core**: `libcst`, `jedi`, `gitpython`, `pydantic`

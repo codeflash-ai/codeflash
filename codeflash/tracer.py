@@ -86,6 +86,16 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     outfile = parsed_args.outfile
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
     project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
+
+    # Derive tests_root absolute path for trace file co-location
+    tests_root_abs = None
+    tests_root_cfg = config.get("tests_root")
+    if tests_root_cfg:
+        tests_root_path = Path(tests_root_cfg)
+        if tests_root_path.is_absolute():
+            tests_root_abs = tests_root_path.resolve()
+        else:
+            tests_root_abs = (project_root / tests_root_cfg).resolve()
     if len(unknown_args) > 0:
         args_dict = {
             "functions": parsed_args.only_functions,
@@ -117,8 +127,18 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     result_pickle_file_path = get_run_tmp_file(Path(f"tracer_results_file_{i}.pkl"))
                     result_pickle_file_paths.append(result_pickle_file_path)
                     args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
+
+                    # Place trace files in tests_root when running pytest with default name
                     outpath = parsed_args.outfile
-                    outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
+                    if (
+                        parsed_args.module
+                        and unknown_args[0] == "pytest"
+                        and tests_root_abs is not None
+                        and outpath.name == "codeflash.trace"
+                    ):
+                        outpath = tests_root_abs / f"{outpath.stem}_{i}{outpath.suffix}"
+                    else:
+                        outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
                     args_dict["output"] = str(outpath)
                     updated_sys_argv = []
                     for elem in sys.argv:
@@ -153,7 +173,19 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             else:
                 result_pickle_file_path = get_run_tmp_file(Path("tracer_results_file.pkl"))
                 args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
-                args_dict["output"] = str(parsed_args.outfile)
+
+                # Place trace file in tests_root when running pytest with default name
+                outpath = parsed_args.outfile
+                if (
+                    parsed_args.module
+                    and unknown_args[0] == "pytest"
+                    and tests_root_abs is not None
+                    and outpath.name == "codeflash.trace"
+                ):
+                    outpath = tests_root_abs / outpath.name
+                else:
+                    outpath = parsed_args.outfile
+                args_dict["output"] = str(outpath)
                 args_dict["command"] = " ".join(sys.argv)
 
                 subprocess.run(

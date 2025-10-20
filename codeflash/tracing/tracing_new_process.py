@@ -855,9 +855,14 @@ if __name__ == "__main__":
         }
     args_dict["config"]["module_root"] = Path(args_dict["config"]["module_root"])
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
+
+    # Ensure output directory exists
+    output_path = Path(args_dict["output"]).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     tracer = Tracer(
         config=args_dict["config"],
-        output=Path(args_dict["output"]),
+        output=output_path,
         functions=args_dict["functions"],
         max_function_count=args_dict["max_function_count"],
         timeout=args_dict["timeout"],
