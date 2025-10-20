@@ -15,7 +15,7 @@ import os
 @pytest.fixture
 def temp_dir():
     with tempfile.TemporaryDirectory() as tmpdirname:
-        yield Path(tmpdirname)
+        yield Path(tmpdirname).resolve()
 
 
 def test_is_valid_pyproject_toml_with_empty_config(temp_dir: Path) -> None:
