@@ -341,7 +341,6 @@ def get_all_replay_test_functions(
                 break
         except Exception as e:
             logger.warning(f"Error parsing replay test file {replay_test_file}: {e}")
-
     if not trace_file_path:
         logger.error("Could not find trace_file_path in replay test files.")
         exit_with_message("Could not find trace_file_path in replay test files.")

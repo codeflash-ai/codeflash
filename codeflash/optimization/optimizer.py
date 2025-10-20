@@ -303,14 +303,14 @@ class Optimizer:
                     try:
                         from codeflash.benchmarking.function_ranker import FunctionRanker
 
-                        ranker = FunctionRanker(trace_file_path)
+                        ranker = FunctionRanker("/Users/krrt7/Desktop/work/typeagent-py/codeflash_1.trace")
                         functions_to_optimize = ranker.rank_functions(functions_to_optimize)
                         logger.info(
                             f"Ranked {len(functions_to_optimize)} functions by performance impact in {original_module_path}"
                         )
                         console.rule()
                     except Exception as e:
-                        logger.debug(f"Could not rank functions in {original_module_path}: {e}")
+                        logger.info(f"Could not rank functions in {original_module_path}: {e}")
 
                 for i, function_to_optimize in enumerate(functions_to_optimize):
                     function_iterator_count = i + 1
