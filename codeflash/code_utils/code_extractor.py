@@ -449,7 +449,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
                 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id == "__all__"
             ):
-                if isinstance(node.value, (ast.list, ast.tuple)):
+                if isinstance(node.value, (ast.List, ast.Tuple)):
                     all_names = []
                     for elt in node.value.elts:
                         if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
