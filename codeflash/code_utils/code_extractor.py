@@ -963,19 +963,28 @@ class FunctionCallFinder(ast.NodeVisitor):
 
         return False
 
-    def _get_call_name(self, func_node) -> Optional[str]:  # noqa : ANN001
+    def _get_call_name(self, func_node) -> Optional[str]:
         """Extract the name being called from a function node."""
+        # Fast path short-circuit for ast.Name nodes
         if isinstance(func_node, ast.Name):
             return func_node.id
+
+        # Fast attribute chain extraction (speed: append, loop, join, NO reversed)
         if isinstance(func_node, ast.Attribute):
             parts = []
             current = func_node
-            while isinstance(current, ast.Attribute):
+            # Unwind attribute chain as tight as possible (checked at each loop iteration)
+            while True:
                 parts.append(current.attr)
-                current = current.value
-            if isinstance(current, ast.Name):
-                parts.append(current.id)
-                return ".".join(reversed(parts))
+                val = current.value
+                if isinstance(val, ast.Attribute):
+                    current = val
+                    continue
+                if isinstance(val, ast.Name):
+                    parts.append(val.id)
+                    # Join in-place backwards via slice instead of reversed for slight speedup
+                    return ".".join(parts[::-1])
+                break
         return None
 
     def _extract_source_code(self, node: ast.FunctionDef) -> str:
