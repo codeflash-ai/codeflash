@@ -53,7 +53,7 @@ CODEFLASH_LOGO: str = (
 
 
 @dataclass(frozen=True)
-class SetupInfo:
+class CLISetupInfo:
     module_root: str
     tests_root: str
     benchmarks_root: Union[str, None]
@@ -101,7 +101,7 @@ def init_codeflash() -> None:
         git_remote = config.get("git_remote", "origin") if config else "origin"
 
         if should_modify:
-            setup_info: SetupInfo = collect_setup_info()
+            setup_info: CLISetupInfo = collect_setup_info()
             git_remote = setup_info.git_remote
             configured = configure_pyproject_toml(setup_info)
             if not configured:
@@ -240,7 +240,7 @@ class CommonSections(Enum):
 
 
 @lru_cache(maxsize=1)
-def get_valid_subdirs() -> list[str]:
+def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ignore_subdirs = [
         "venv",
         "node_modules",
@@ -253,8 +253,11 @@ def get_valid_subdirs() -> list[str]:
         "tmp",
         "__pycache__",
     ]
+    path_str = str(current_dir) if current_dir else "."
     return [
-        d for d in next(os.walk("."))[1] if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
+        d
+        for d in next(os.walk(path_str))[1]
+        if not d.startswith(".") and not d.startswith("__") and d not in ignore_subdirs
     ]
 
 
@@ -274,7 +277,7 @@ def get_suggestions(section: str) -> tuple(list[str], Optional[str]):
     raise ValueError(msg)
 
 
-def collect_setup_info() -> SetupInfo:
+def collect_setup_info() -> CLISetupInfo:
     curdir = Path.cwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
@@ -554,7 +557,7 @@ def collect_setup_info() -> SetupInfo:
     enable_telemetry = ask_for_telemetry()
 
     ignore_paths: list[str] = []
-    return SetupInfo(
+    return CLISetupInfo(
         module_root=str(module_root),
         tests_root=str(tests_root),
         benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
@@ -1003,7 +1006,9 @@ def get_formatter_cmds(formatter: str) -> list[str]:
 
 
 # Create or update the pyproject.toml file with the Codeflash dependency & configuration
-def configure_pyproject_toml(setup_info: Union[VsCodeSetupInfo, SetupInfo], config_file: Optional[Path] = None) -> bool:
+def configure_pyproject_toml(
+    setup_info: Union[VsCodeSetupInfo, CLISetupInfo], config_file: Optional[Path] = None
+) -> bool:
     for_vscode = isinstance(setup_info, VsCodeSetupInfo)
     toml_path = config_file or Path.cwd() / "pyproject.toml"
     try:
