@@ -1475,7 +1475,7 @@ class FunctionOptimizer:
                 )
             except Exception as e:
                 logger.debug(f"optimization review response failed, investigate {e}")
-            data["optimization_review"] = opt_review_response[0]
+            data["optimization_review"] = opt_review_response
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
