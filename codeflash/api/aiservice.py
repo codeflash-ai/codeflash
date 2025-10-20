@@ -545,7 +545,7 @@ class AiServiceClient:
         root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
-    ) -> tuple[str, str]:
+    ) -> str:
         """Compute the optimization review of current Pull Request.
 
         Args:
@@ -601,10 +601,10 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return ("", str(e))
+            return ""
 
         if response.status_code == 200:
-            return (cast("str", response.json()["review"]), cast("str", response.json()["review_explanation"]))
+            return cast("str", response.json()["review"])
         try:
             error = cast("str", response.json()["error"])
         except Exception:
@@ -612,7 +612,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return ("", error)
+        return ""
 
 
 class LocalAiServiceClient(AiServiceClient):
