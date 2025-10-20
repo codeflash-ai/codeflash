@@ -532,7 +532,7 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
-    def get_optimization_impact(
+    def get_optimization_review(
         self,
         original_code: dict[Path, str],
         new_code: dict[Path, str],
@@ -544,8 +544,9 @@ class AiServiceClient:
         replay_tests: str,
         root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
+        calling_fn_details: str,
     ) -> str:
-        """Compute the optimization impact of current Pull Request.
+        """Compute the optimization review of current Pull Request.
 
         Args:
         original_code: dict -> data structure mapping file paths to function definition for original code
@@ -558,10 +559,11 @@ class AiServiceClient:
         replay_tests: str -> replay test table
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
+        calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
 
         Returns:
         -------
-        - 'high' or 'low' optimization impact
+        - 'high', 'medium' or 'low' optimization review
 
         """
         diff_str = "\n".join(
@@ -577,14 +579,7 @@ class AiServiceClient:
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
-        # TODO get complexity metrics and fn call heuristics -> constructing a complete static call graph can be expensive for really large repos
-        # grep function name in codebase -> ast parser to get no of calls and no of calls in loop -> radon lib to get complexity metrics -> send as additional context to the AI service
-        # metric 1 -> call count - how many times the function is called in the codebase
-        # metric 2 -> loop call count - how many times the function is called in a loop in the codebase
-        # metric 3 -> presence of decorators like @profile, @cache -> this means the owner of the repo cares about the performance of this function
-        # metric 4 -> cyclomatic complexity (https://en.wikipedia.org/wiki/Cyclomatic_complexity)
-        # metric 5 (for future) -> halstead complexity (https://en.wikipedia.org/wiki/Halstead_complexity_measures)
-        logger.info("!lsp|Computing Optimization Impact…")
+        logger.info("!lsp|Computing Optimization Review…")
         payload = {
             "code_diff": code_diff,
             "explanation": explanation.raw_explanation_message,
@@ -598,22 +593,23 @@ class AiServiceClient:
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
+            "calling_fn_details": calling_fn_details,
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=600)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return ""
 
         if response.status_code == 200:
-            return cast("str", response.json()["impact"])
+            return cast("str", response.json()["review"])
         try:
             error = cast("str", response.json()["error"])
         except Exception:
             error = response.text
-        logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
+        logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return ""
