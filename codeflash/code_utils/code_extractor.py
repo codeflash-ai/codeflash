@@ -240,7 +240,7 @@ class DottedImportCollector(cst.CSTVisitor):
         import dbt.adapters.factory                                                ==> "dbt.adapters.factory"
         from pathlib import Path                                                   ==> "pathlib.Path"
         from recce.adapter.base import BaseAdapter                                 ==> "recce.adapter.base.BaseAdapter"
-        from typing import Any, list, Optional                                     ==> "typing.Any", "typing.list", "typing.Optional"
+        from typing import Any, List, Optional                                     ==> "typing.Any", "typing.List", "typing.Optional"
         from recce.util.lineage import ( build_column_key, filter_dependency_maps) ==> "recce.util.lineage.build_column_key", "recce.util.lineage.filter_dependency_maps"
 
     """
