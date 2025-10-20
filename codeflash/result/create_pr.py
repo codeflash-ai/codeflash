@@ -185,7 +185,7 @@ def check_create_pr(
     concolic_tests: str,
     root_dir: Path,
     git_remote: Optional[str] = None,
-    optimization_impact: str = "",
+    optimization_review: str = "",
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -227,7 +227,7 @@ def check_create_pr(
             coverage_message=coverage_message,
             replay_tests=replay_tests,
             concolic_tests=concolic_tests,
-            optimization_impact=optimization_impact,
+            optimization_review=optimization_review,
         )
         if response.ok:
             logger.info(f"Suggestions were successfully made to PR #{pr_number}")
@@ -277,7 +277,7 @@ def check_create_pr(
             coverage_message=coverage_message,
             replay_tests=replay_tests,
             concolic_tests=concolic_tests,
-            optimization_impact=optimization_impact,
+            optimization_review=optimization_review,
         )
         if response.ok:
             pr_id = response.text

@@ -23,7 +23,7 @@ from codeflash.api.cfapi import CFAPI_BASE_URL, add_code_context_hash, create_st
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import get_opt_impact_metrics
+from codeflash.code_utils.code_extractor import get_opt_review_metrics
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
@@ -1461,36 +1461,21 @@ class FunctionOptimizer:
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-            calling_fn_details = get_opt_impact_metrics(
+            calling_fn_details = get_opt_review_metrics(
                 self.function_to_optimize_source_code,
                 self.function_to_optimize.file_path,
                 self.function_to_optimize.qualified_name,
                 self.project_root,
                 self.test_cfg.tests_root,
             )
-            opt_impact_response = ""
+            opt_review_response = ""
             try:
-                opt_impact_response = self.aiservice_client.get_optimization_impact(
+                opt_review_response = self.aiservice_client.get_optimization_review(
                     **data, calling_fn_details=calling_fn_details
                 )
             except Exception as e:
-                logger.debug(f"optimization impact response failed, investigate {e}")
-            data["optimization_impact"] = opt_impact_response[0]
-            new_explanation_with_opt_explanation = Explanation(
-                raw_explanation_message=f"Impact: {opt_impact_response[0]}\n Impact_explanation: {opt_impact_response[1]} END OF IMPACT EXPLANATION\nCALLING CONTEXT \n{calling_fn_details}\nEND OF CALLING CONTEXT\n"
-                + new_explanation.raw_explanation_message,
-                winning_behavior_test_results=explanation.winning_behavior_test_results,
-                winning_benchmarking_test_results=explanation.winning_benchmarking_test_results,
-                original_runtime_ns=explanation.original_runtime_ns,
-                best_runtime_ns=explanation.best_runtime_ns,
-                function_name=explanation.function_name,
-                file_path=explanation.file_path,
-                benchmark_details=explanation.benchmark_details,
-                original_async_throughput=explanation.original_async_throughput,
-                best_async_throughput=explanation.best_async_throughput,
-            )
-            best_optimization.explanation_v2 = new_explanation_with_opt_explanation.explanation_message()
-            data["explanation"] = new_explanation_with_opt_explanation
+                logger.debug(f"optimization review response failed, investigate {e}")
+            data["optimization_review_response"] = opt_review_response[0]
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)

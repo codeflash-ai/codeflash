@@ -31,13 +31,6 @@ from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
 
-@dataclass
-class ImpactMetrics:
-    cyclomatic_complexity: Optional[int] = None
-    cyclomatic_complexity_rating: Optional[str] = None
-    calling_fns: Optional[str] = None
-
-
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
     optimization_id: str
