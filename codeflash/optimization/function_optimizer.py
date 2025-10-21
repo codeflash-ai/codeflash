@@ -19,10 +19,11 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
+from codeflash.api.cfapi import CFAPI_BASE_URL, add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_extractor import get_opt_review_metrics
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
@@ -1460,19 +1461,28 @@ class FunctionOptimizer:
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-            opt_impact_response = ""
+            calling_fn_details = get_opt_review_metrics(
+                self.function_to_optimize_source_code,
+                self.function_to_optimize.file_path,
+                self.function_to_optimize.qualified_name,
+                self.project_root,
+                self.test_cfg.tests_root,
+            )
+            opt_review_response = ""
             try:
-                opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
+                opt_review_response = self.aiservice_client.get_optimization_review(
+                    **data, calling_fn_details=calling_fn_details
+                )
             except Exception as e:
-                logger.debug(f"optimization impact response failed, investigate {e}")
-            data["optimization_impact"] = opt_impact_response
+                logger.debug(f"optimization review response failed, investigate {e}")
+            data["optimization_review"] = opt_review_response
         if raise_pr and not staging_review:
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
-                staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
+                staging_url = f"{CFAPI_BASE_URL}/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
                 console.print(
                     Panel(
                         f"[bold green]✅ Staging created:[/bold green]\n[link={staging_url}]{staging_url}[/link]",
