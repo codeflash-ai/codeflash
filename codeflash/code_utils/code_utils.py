@@ -366,7 +366,7 @@ def extract_unique_errors(pytest_output: str) -> set[str]:
     pattern = r"^E\s+(.*)$"
 
     for error_message in re.findall(pattern, pytest_output, re.MULTILINE):
-        error_message = error_message.strip()
+        error_message = error_message.strip()  # noqa: PLW2901
         if error_message:
             unique_errors.add(error_message)
 
