@@ -30,7 +30,6 @@ from codeflash.code_utils.code_replacer import (
     replace_function_definitions_in_module,
 )
 from codeflash.code_utils.code_utils import (
-    ImportErrorPattern,
     cleanup_paths,
     create_rank_dictionary_compact,
     diff_length,
@@ -1612,7 +1611,7 @@ class FunctionOptimizer:
                         )
 
                 try:
-                    benchmarking_results = self.run_and_parse_tests(
+                    benchmarking_results, _ = self.run_and_parse_tests(
                         testing_type=TestingMode.PERFORMANCE,
                         test_env=test_env,
                         test_files=self.test_files,
@@ -1949,17 +1948,18 @@ class FunctionOptimizer:
                 f"stderr: {run_result.stderr}\n"
             )
 
-            if is_LSP_enabled():
-                unique_errors = extract_unique_errors(run_result.stdout)
-                if unique_errors:
-                    lsp_log(LspCodeMessage(code="\n".join(unique_errors), file_name="errors"))
+            unique_errors = extract_unique_errors(run_result.stdout)
 
-            if "ModuleNotFoundError" in run_result.stdout:
+            if unique_errors:
                 from rich.text import Text
 
-                match = ImportErrorPattern.search(run_result.stdout).group()
-                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
-                console.print(panel)
+                for error in unique_errors:
+                    if is_LSP_enabled():
+                        lsp_log(LspCodeMessage(code=error, file_name="errors"))
+                    else:
+                        panel = Panel(Text.from_markup(f"⚠️  {error} ", style="bold red"), expand=False)
+                        console.print(panel)
+
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
