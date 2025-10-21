@@ -1959,6 +1959,73 @@ async def async_entrypoint(n):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_recursive_helper_function_not_detected_as_unused():
+    """Test that recursive helper functions are NOT incorrectly detected as unused."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with recursive helper function
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+def gcd_recursive(a: int, b: int) -> int:
+    \"\"\"Calculate greatest common divisor using Euclidean algorithm with recursion.\"\"\"
+    if b == 0:
+        return a
+    return gcd_recursive(b, a % b)
+""")
+
+        # Optimized version that still uses the recursive helper
+        optimized_code = """
+```python:main.py
+def gcd_recursive(a: int, b: int) -> int:
+    \"\"\"Calculate greatest common divisor using Euclidean algorithm with recursion.\"\"\"
+    if b == 0:
+        return a
+    return gcd_recursive(b, a % b)
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, function_name="gcd_recursive", parents=[]
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should NOT detect gcd_recursive as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+
+        assert "gcd_recursive" not in unused_names, f"Recursive function gcd_recursive should NOT be detected as unused, but got unused: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def test_async_generators_and_coroutines():
     """Test detection with async generators and coroutines."""
     temp_dir = Path(tempfile.mkdtemp())
