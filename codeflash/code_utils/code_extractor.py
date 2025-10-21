@@ -963,7 +963,7 @@ class FunctionCallFinder(ast.NodeVisitor):
 
         return False
 
-    def _get_call_name(self, func_node) -> Optional[str]:
+    def _get_call_name(self, func_node) -> Optional[str]:  # noqa: ANN001
         """Extract the name being called from a function node."""
         # Fast path short-circuit for ast.Name nodes
         if isinstance(func_node, ast.Name):
