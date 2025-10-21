@@ -679,7 +679,7 @@ def detect_unused_helper_functions(
         imported_names_map = _analyze_imports_in_optimized_code(optimized_ast, code_context)
 
         # Extract all function calls in the entrypoint function
-        called_function_names = set()
+        called_function_names = {function_to_optimize.function_name}
         for node in ast.walk(entrypoint_function_ast):
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name):
