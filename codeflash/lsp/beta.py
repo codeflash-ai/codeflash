@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from pygls import uris
-
 from codeflash.api.cfapi import get_codeflash_api_key, get_user_id
 from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.code_utils.git_utils import git_root_dir
@@ -111,7 +109,11 @@ def _group_functions_by_file(
 def get_optimizable_functions(
     server: CodeflashLanguageServer, params: OptimizableFunctionsParams
 ) -> dict[str, list[str]]:
-    file_path = Path(uris.to_fs_path(params.textDocument.uri))
+    document_uri = params.textDocument.uri
+    document = server.workspace.get_text_document(document_uri)
+
+    file_path = Path(document.path)
+
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}
 
@@ -264,8 +266,10 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
 def initialize_function_optimization(
     server: CodeflashLanguageServer, params: FunctionOptimizationInitParams
 ) -> dict[str, str]:
-    file_path = Path(uris.to_fs_path(params.textDocument.uri))
-    server.show_message_log(f"Initializing optimization for function: {params.functionName} in {file_path}", "Info")
+    document_uri = params.textDocument.uri
+    document = server.workspace.get_text_document(document_uri)
+
+    server.show_message_log(f"Initializing optimization for function: {params.functionName} in {document_uri}", "Info")
 
     if server.optimizer is None:
         _initialize_optimizer_if_api_key_is_valid(server)
@@ -275,7 +279,7 @@ def initialize_function_optimization(
     original_args, _ = server.optimizer.original_args_and_test_cfg
 
     server.optimizer.args.function = params.functionName
-    original_relative_file_path = file_path.relative_to(original_args.project_root)
+    original_relative_file_path = Path(document.path).relative_to(original_args.project_root)
     server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
     server.optimizer.args.previous_checkpoint_functions = False
 
