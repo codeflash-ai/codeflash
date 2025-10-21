@@ -24,6 +24,7 @@ from rich.text import Text
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
@@ -97,6 +98,8 @@ def init_codeflash() -> None:
         install_github_app(git_remote)
 
         install_github_actions(override_formatter_check=True)
+
+        install_vscode_extension()
 
         module_string = ""
         if "setup_info" in locals():
