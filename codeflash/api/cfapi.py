@@ -261,6 +261,7 @@ def create_staging(
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
 
 
+@lru_cache(maxsize=16)
 def is_github_app_installed_on_repo(owner: str, repo: str, *, suppress_errors: bool = False) -> bool:
     """Check if the Codeflash GitHub App is installed on the specified repository.
 
