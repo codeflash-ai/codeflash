@@ -365,8 +365,8 @@ def extract_unique_errors(pytest_output: str) -> set[str]:
     # - Capture the actual error message
     pattern = r"^E\s+(.*)$"
 
-    for match in re.finditer(pattern, pytest_output, re.MULTILINE):
-        error_message = match.group(1).strip()
+    for error_message in re.findall(pattern, pytest_output, re.MULTILINE):
+        error_message = error_message.strip()
         if error_message:
             unique_errors.add(error_message)
 
