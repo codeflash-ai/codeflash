@@ -31,6 +31,7 @@ from codeflash.discovery.functions_to_optimize import (
 from codeflash.either import is_successful
 from codeflash.lsp.features.perform_optimization import get_cancelled_reponse, sync_perform_optimization
 from codeflash.lsp.server import CodeflashServerSingleton
+from codeflash.optimization.optimizer import Optimizer
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -264,10 +265,11 @@ def _initialize_optimizer_if_api_key_is_valid(api_key: Optional[str] = None) -> 
         error_msg = user_id[7:]
         return {"status": "error", "message": error_msg}
 
-    from codeflash.optimization.optimizer import Optimizer
-
-    new_args = process_args()
-    server.optimizer = Optimizer(new_args)
+    global _optimizer_initialized
+    if not _optimizer_initialized:
+        new_args = process_args()
+        server.optimizer = Optimizer(new_args)
+        _optimizer_initialized = True
     return {"status": "success", "user_id": user_id}
 
 
