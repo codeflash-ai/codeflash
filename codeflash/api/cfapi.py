@@ -28,10 +28,12 @@ from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
+    CFWEBAPP_BASE_URL = "http://localhost:3000"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
     console.rule()
 else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
+    CFWEBAPP_BASE_URL = "https://app.codeflash.ai"
 
 
 def make_cfapi_request(
@@ -156,7 +158,7 @@ def suggest_changes(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
-        "optimizationImpact": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
+        "optimizationReview": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
     }
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -198,7 +200,7 @@ def create_pr(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
-        "optimizationImpact": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -255,7 +257,7 @@ def create_staging(
         "coverage_message": coverage_message,
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
-        "optimizationImpact": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)

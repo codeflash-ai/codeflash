@@ -144,7 +144,7 @@ class AiServiceClient:
         logger.info("!lsp|Generating optimized candidates…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -209,7 +209,7 @@ class AiServiceClient:
             console.rule()
             return []
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -261,7 +261,7 @@ class AiServiceClient:
         logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -506,7 +506,7 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
@@ -597,7 +597,7 @@ class AiServiceClient:
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
