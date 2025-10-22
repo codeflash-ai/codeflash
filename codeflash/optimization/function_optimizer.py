@@ -1458,7 +1458,7 @@ class FunctionOptimizer:
 
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
-
+        opt_review_response = ""
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
             calling_fn_details = get_opt_review_metrics(
@@ -1468,7 +1468,6 @@ class FunctionOptimizer:
                 self.project_root,
                 self.test_cfg.tests_root,
             )
-            opt_review_response = ""
             try:
                 opt_review_response = self.aiservice_client.get_optimization_review(
                     **data, calling_fn_details=calling_fn_details
@@ -1476,7 +1475,7 @@ class FunctionOptimizer:
             except Exception as e:
                 logger.debug(f"optimization review response failed, investigate {e}")
             data["optimization_review"] = opt_review_response
-        if raise_pr and not staging_review:
+        if raise_pr and not staging_review and opt_review_response != "low":
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif staging_review:

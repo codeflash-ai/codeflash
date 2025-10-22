@@ -261,7 +261,7 @@ class AiServiceClient:
         logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -597,7 +597,7 @@ class AiServiceClient:
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
