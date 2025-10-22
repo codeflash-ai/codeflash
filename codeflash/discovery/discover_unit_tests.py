@@ -497,6 +497,8 @@ def discover_tests_pytest(
             test_type = TestType.REPLAY_TEST
         elif "test_concolic_coverage" in test["test_file"]:
             test_type = TestType.CONCOLIC_COVERAGE_TEST
+        elif "test_hypothesis" in test["test_file"]:
+            test_type = TestType.HYPOTHESIS_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
 
@@ -540,6 +542,8 @@ def discover_tests_unittest(
             test_type = TestType.REPLAY_TEST
         elif "test_concolic_coverage" in str(_test_module_path):
             test_type = TestType.CONCOLIC_COVERAGE_TEST
+        elif "test_hypothesis" in str(_test_module_path):
+            test_type = TestType.HYPOTHESIS_TEST
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(

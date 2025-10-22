@@ -95,6 +95,7 @@ from codeflash.result.explanation import Explanation
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
+from codeflash.verification.hypothesis_testing import generate_hypothesis_tests
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
 from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results, parse_test_results
@@ -281,6 +282,8 @@ class FunctionOptimizer:
             GeneratedTestsList,
             dict[str, set[FunctionCalledInTest]],
             str,
+            dict[str, set[FunctionCalledInTest]],
+            str,
             OptimizationSet,
             list[Path],
             list[Path],
@@ -323,9 +326,15 @@ class FunctionOptimizer:
 
         generated_tests: GeneratedTestsList
         optimizations_set: OptimizationSet
-        count_tests, generated_tests, function_to_concolic_tests, concolic_test_str, optimizations_set = (
-            generated_results.unwrap()
-        )
+        (
+            count_tests,
+            generated_tests,
+            function_to_concolic_tests,
+            concolic_test_str,
+            function_to_hypothesis_tests,
+            hypothesis_test_str,
+            optimizations_set,
+        ) = generated_results.unwrap()
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
@@ -345,12 +354,19 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
         if concolic_test_str:
-            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            logger.info(f"Generated test {count_tests - (1 if hypothesis_test_str else 0)}/{count_tests}:")
             code_print(concolic_test_str)
+        if hypothesis_test_str:
+            logger.info(f"Generated test {count_tests}/{count_tests}:")
+            code_print(hypothesis_test_str)
 
         function_to_all_tests = {
-            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
-            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
+            key: (
+                self.function_to_tests.get(key, set())
+                | function_to_concolic_tests.get(key, set())
+                | function_to_hypothesis_tests.get(key, set())
+            )
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests) | set(function_to_hypothesis_tests)
         }
         instrumented_unittests_created_for_function = self.instrument_existing_tests(function_to_all_tests)
 
@@ -366,6 +382,8 @@ class FunctionOptimizer:
                 generated_tests,
                 function_to_concolic_tests,
                 concolic_test_str,
+                function_to_hypothesis_tests,
+                hypothesis_test_str,
                 optimizations_set,
                 generated_test_paths,
                 generated_perf_test_paths,
@@ -398,6 +416,8 @@ class FunctionOptimizer:
             generated_tests,
             function_to_concolic_tests,
             concolic_test_str,
+            function_to_hypothesis_tests,
+            _hypothesis_test_str,
             optimizations_set,
             generated_test_paths,
             generated_perf_test_paths,
@@ -409,6 +429,7 @@ class FunctionOptimizer:
             code_context=code_context,
             original_helper_code=original_helper_code,
             function_to_concolic_tests=function_to_concolic_tests,
+            function_to_hypothesis_tests=function_to_hypothesis_tests,
             generated_test_paths=generated_test_paths,
             generated_perf_test_paths=generated_perf_test_paths,
             instrumented_unittests_created_for_function=instrumented_unittests_created_for_function,
@@ -991,6 +1012,7 @@ class FunctionOptimizer:
         existing_test_files_count = 0
         replay_test_files_count = 0
         concolic_coverage_test_files_count = 0
+        hypothesis_test_files_count = 0
         unique_instrumented_test_files = set()
 
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
@@ -1011,6 +1033,8 @@ class FunctionOptimizer:
                     replay_test_files_count += 1
                 elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
                     concolic_coverage_test_files_count += 1
+                elif test_type == TestType.HYPOTHESIS_TEST:
+                    hypothesis_test_files_count += 1
                 else:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
@@ -1069,9 +1093,11 @@ class FunctionOptimizer:
             logger.info(
                 f"Discovered {existing_test_files_count} existing unit test file"
                 f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
-                f"{'s' if replay_test_files_count != 1 else ''}, and "
+                f"{'s' if replay_test_files_count != 1 else ''}, "
                 f"{concolic_coverage_test_files_count} concolic coverage test file"
-                f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                f"{'s' if concolic_coverage_test_files_count != 1 else ''}, and "
+                f"{hypothesis_test_files_count} hypothesis test file"
+                f"{'s' if hypothesis_test_files_count != 1 else ''} for {func_qualname}"
             )
             console.rule()
         return unique_instrumented_test_files
@@ -1085,7 +1111,15 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         run_experiment: bool = False,  # noqa: FBT001, FBT002
-    ) -> Result[tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet], str]:
+    ) -> Result[
+        tuple[
+            GeneratedTestsList,
+            dict[str, set[FunctionCalledInTest]],
+            dict[str, set[FunctionCalledInTest]],
+            OptimizationSet,
+        ],
+        str,
+    ]:
         n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
         assert len(generated_test_paths) == n_tests
         console.rule()
@@ -1112,7 +1146,10 @@ class FunctionOptimizer:
         future_concolic_tests = self.executor.submit(
             generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
         )
-        futures = [*future_tests, future_optimization_candidates, future_concolic_tests]
+        future_hypothesis_tests = self.executor.submit(
+            generate_hypothesis_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
+        )
+        futures = [*future_tests, future_optimization_candidates, future_concolic_tests, future_hypothesis_tests]
         if run_experiment:
             future_candidates_exp = self.executor.submit(
                 self.local_aiservice_client.optimize_python_code,
@@ -1164,29 +1201,35 @@ class FunctionOptimizer:
             logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
             return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+        function_to_hypothesis_tests, hypothesis_test_str = future_hypothesis_tests.result()
 
         count_tests = len(tests)
         if concolic_test_str:
+            count_tests += 1
+        if hypothesis_test_str:
             count_tests += 1
 
         logger.info(f"Generated '{count_tests}' tests for {self.function_to_optimize.function_name}")
         console.rule()
         generated_tests = GeneratedTestsList(generated_tests=tests)
-        result = (
+
+        self.generate_and_instrument_tests_results = (
             count_tests,
             generated_tests,
             function_to_concolic_tests,
             concolic_test_str,
+            function_to_hypothesis_tests,
+            hypothesis_test_str,
             OptimizationSet(control=candidates, experiment=candidates_experiment),
         )
-        self.generate_and_instrument_tests_results = result
-        return Success(result)
+        return Success(self.generate_and_instrument_tests_results)
 
     def setup_and_establish_baseline(
         self,
         code_context: CodeOptimizationContext,
         original_helper_code: dict[Path, str],
         function_to_concolic_tests: dict[str, set[FunctionCalledInTest]],
+        function_to_hypothesis_tests: dict[str, set[FunctionCalledInTest]],
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
         instrumented_unittests_created_for_function: set[Path],
@@ -1197,8 +1240,12 @@ class FunctionOptimizer:
         """Set up baseline context and establish original code baseline."""
         function_to_optimize_qualified_name = self.function_to_optimize.qualified_name
         function_to_all_tests = {
-            key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
-            for key in set(self.function_to_tests) | set(function_to_concolic_tests)
+            key: (
+                self.function_to_tests.get(key, set())
+                | function_to_concolic_tests.get(key, set())
+                | function_to_hypothesis_tests.get(key, set())
+            )
+            for key in set(self.function_to_tests) | set(function_to_concolic_tests) | set(function_to_hypothesis_tests)
         }
 
         # Get a dict of file_path_to_classes of fto and helpers_of_fto
