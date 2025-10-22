@@ -28,10 +28,12 @@ from packaging import version
 
 if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
     CFAPI_BASE_URL = "http://localhost:3001"
+    CFWEBAPP_BASE_URL = "http://localhost:3000"
     logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
     console.rule()
 else:
     CFAPI_BASE_URL = "https://app.codeflash.ai"
+    CFWEBAPP_BASE_URL = "https://app.codeflash.ai"
 
 
 def make_cfapi_request(
