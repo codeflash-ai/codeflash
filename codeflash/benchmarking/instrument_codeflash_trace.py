@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, Union
 
-import isort
 import libcst as cst
+
+from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -107,7 +108,7 @@ def instrument_codeflash_trace_decorator(file_to_funcs_to_optimize: dict[Path, l
         original_code = file_path.read_text(encoding="utf-8")
         new_code = add_codeflash_decorator_to_code(original_code, functions_to_optimize)
         # Modify the code
-        modified_code = isort.code(code=new_code, float_to_top=True)
+        modified_code = sort_imports(code=new_code, float_to_top=True)
 
         # Write the modified code back to the file
         file_path.write_text(modified_code, encoding="utf-8")

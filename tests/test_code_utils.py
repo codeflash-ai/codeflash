@@ -17,10 +17,11 @@ from codeflash.code_utils.code_utils import (
     is_class_defined_in_file,
     module_name_from_file_path,
     path_belongs_to_site_packages,
-    has_any_async_functions,
+    validate_python_code,
 )
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
-from codeflash.code_utils.coverage_utils import generate_candidates, prepare_coverage_files
+from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
+from codeflash.models.models import CodeStringsMarkdown
 
 
 @pytest.fixture
@@ -254,7 +255,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 
 
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
+    site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
@@ -275,6 +276,66 @@ def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.Mo
 
     file_path = Path("some_package")
     assert path_belongs_to_site_packages(file_path) is False
+
+
+def test_path_belongs_to_site_packages_with_symlinked_site_packages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_site_packages = tmp_path / "real_site_packages"
+    real_site_packages.mkdir()
+    
+    symlinked_site_packages = tmp_path / "symlinked_site_packages"
+    symlinked_site_packages.symlink_to(real_site_packages)
+    
+    package_file = real_site_packages / "some_package" / "__init__.py"
+    package_file.parent.mkdir()
+    package_file.write_text("# package file")
+    
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(symlinked_site_packages)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    symlinked_package_file = symlinked_site_packages / "some_package" / "__init__.py"
+    assert path_belongs_to_site_packages(symlinked_package_file) is True
+
+
+def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_site_packages = tmp_path / "real" / "lib" / "python3.9" / "site-packages"
+    real_site_packages.mkdir(parents=True)
+    
+    link1 = tmp_path / "link1"
+    link1.symlink_to(real_site_packages.parent.parent.parent)
+    
+    link2 = tmp_path / "link2" 
+    link2.symlink_to(link1)
+    
+    package_file = real_site_packages / "test_package" / "module.py"
+    package_file.parent.mkdir()
+    package_file.write_text("# test module")
+    
+    site_packages_via_links = link2 / "lib" / "python3.9" / "site-packages"
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(site_packages_via_links)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    file_via_links = site_packages_via_links / "test_package" / "module.py"
+    assert path_belongs_to_site_packages(file_via_links) is True
+
+
+def test_path_belongs_to_site_packages_resolved_paths_normalization(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    site_packages_dir = tmp_path / "lib" / "python3.9" / "site-packages"
+    site_packages_dir.mkdir(parents=True)
+    
+    package_dir = site_packages_dir / "mypackage"
+    package_dir.mkdir()
+    package_file = package_dir / "module.py"
+    package_file.write_text("# module")
+    
+    complex_site_packages_path = tmp_path / "lib" / "python3.9" / "other" / ".." / "site-packages" / "."
+    monkeypatch.setattr(site, "getsitepackages", lambda: [str(complex_site_packages_path)])
+    
+    assert path_belongs_to_site_packages(package_file) is True
+    
+    complex_file_path = tmp_path / "lib" / "python3.9" / "site-packages" / "other" / ".." / "mypackage" / "module.py"
+    assert path_belongs_to_site_packages(complex_file_path) is True
 
 
 # tests for is_class_defined_in_file
@@ -306,6 +367,93 @@ def my_function():
 """)
 
     assert is_class_defined_in_file("MyClass", test_file) is False
+
+
+@pytest.fixture
+def mock_code_context():
+    """Mock CodeOptimizationContext for testing extract_dependent_function."""
+    from unittest.mock import MagicMock
+    from codeflash.models.models import CodeOptimizationContext
+    
+    context = MagicMock(spec=CodeOptimizationContext)
+    context.preexisting_objects = []
+    return context
+
+
+def test_extract_dependent_function_sync_and_async(mock_code_context):
+    """Test extract_dependent_function with both sync and async functions."""
+    # Test sync function extraction
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+def main_function():
+    pass
+
+def helper_function():
+    pass
+```
+""")
+    assert extract_dependent_function("main_function", mock_code_context) == "helper_function"
+    
+    # Test async function extraction
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+def main_function():
+    pass
+
+async def async_helper_function():
+    pass
+```
+""")
+
+    assert extract_dependent_function("main_function", mock_code_context) == "async_helper_function"
+
+
+def test_extract_dependent_function_edge_cases(mock_code_context):
+    """Test extract_dependent_function edge cases."""
+    # No dependent functions
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+def main_function():
+    pass
+```
+""")
+    assert extract_dependent_function("main_function", mock_code_context) is False
+    
+    # Multiple dependent functions
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+def main_function():
+    pass
+def helper1():
+    pass
+
+async def helper2():
+    pass
+```
+""")
+    assert extract_dependent_function("main_function", mock_code_context) is False
+
+
+def test_extract_dependent_function_mixed_scenarios(mock_code_context):
+    """Test extract_dependent_function with mixed sync/async scenarios."""
+    # Async main with sync helper
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+async def async_main():
+    pass
+
+def sync_helper():
+    pass
+```
+""")
+    assert extract_dependent_function("async_main", mock_code_context) == "sync_helper"
+    
+    # Only async functions
+    mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
+async def async_main():
+    pass
+
+async def async_helper():
+    pass
+```
+""")
+
+    assert extract_dependent_function("async_main", mock_code_context) == "async_helper"
 
 
 def test_is_class_defined_in_file_with_non_existing_file() -> None:
@@ -445,25 +593,41 @@ def test_Grammar_copy():
     assert cleaned_code == expected_cleaned_code.strip()
 
 
-def test_has_any_async_functions_with_async_code() -> None:
+def test_validate_python_code_valid() -> None:
+    code = "def hello():\n    return 'world'"
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_invalid() -> None:
+    code = "def hello(:\n    return 'world'"
+    with pytest.raises(ValueError, match="Invalid Python code"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_empty() -> None:
+    code = ""
+    result = validate_python_code(code)
+    assert result == code
+
+
+def test_validate_python_code_complex_invalid() -> None:
+    code = "if True\n    print('missing colon')"
+    with pytest.raises(ValueError, match="Invalid Python code.*line 1.*column 8"):
+        validate_python_code(code)
+
+
+def test_validate_python_code_valid_complex() -> None:
     code = """
-def normal_function():
-    pass
-
-async def async_function():
-    pass
+def calculate(a, b):
+    if a > b:
+        return a + b
+    else:
+        return a * b
+        
+class MyClass:
+    def __init__(self):
+        self.value = 42
 """
-    result = has_any_async_functions(code)
-    assert result is True
-
-
-def test_has_any_async_functions_without_async_code() -> None:
-    code = """
-def normal_function():
-    pass
-
-def another_function():
-    pass
-"""
-    result = has_any_async_functions(code)
-    assert result is False
+    result = validate_python_code(code)
+    assert result == code

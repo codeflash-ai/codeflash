@@ -166,11 +166,11 @@ def format_code(
         return formatted_code
 
 
-def sort_imports(code: str) -> str:
+def sort_imports(code: str, *, float_to_top: bool = False) -> str:
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
-        sorted_code = isort.code(code)
-    except Exception:
+        sorted_code = isort.code(code=code, float_to_top=float_to_top)
+    except Exception:  # this will also catch the FileSkipComment exception, use this fn everywhere
         logger.exception("Failed to sort imports with isort.")
         return code  # Fall back to original code if isort fails
 

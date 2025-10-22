@@ -40,10 +40,34 @@ matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)
 matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
 
 
+start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+
+
+def calculate_function_throughput_from_test_results(test_results: TestResults, function_name: str) -> int:
+    """Calculate function throughput from TestResults by extracting performance stdout.
+
+    A completed execution is defined as having both a start tag and matching end tag from performance wrappers.
+    Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
+    End:   !######test_module:test_function:function_name:loop_index:iteration_id:duration######!
+    """
+    start_matches = start_pattern.findall(test_results.perf_stdout or "")
+    end_matches = end_pattern.findall(test_results.perf_stdout or "")
+
+    end_matches_truncated = [end_match[:5] for end_match in end_matches]
+    end_matches_set = set(end_matches_truncated)
+
+    function_throughput = 0
+    for start_match in start_matches:
+        if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
+            function_throughput += 1
+    return function_throughput
+
+
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
     test_results = TestResults()
     if not file_location.exists():
-        logger.warning(f"No test results for {file_location} found.")
+        logger.debug(f"No test results for {file_location} found.")
         console.rule()
         return test_results
 
@@ -213,6 +237,11 @@ def parse_test_xml(
 
             test_class_path = testcase.classname
             try:
+                if testcase.name is None:
+                    logger.debug(
+                        f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping"
+                    )
+                    continue
                 test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             except (AttributeError, TypeError) as e:
                 msg = (
@@ -249,16 +278,16 @@ def parse_test_xml(
 
             timed_out = False
             if test_config.test_framework == "pytest":
-                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if "[" in testcase.name else 1
+                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
                 if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "failed: timeout >" in message:
                         timed_out = True
             else:
                 if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
+                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
                 if len(testcase.result) == 1:
                     message = testcase.result[0].message.lower()
                     if "timed out" in message:

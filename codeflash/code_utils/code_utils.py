@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import configparser
 import difflib
 import os
 import re
@@ -15,9 +16,11 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger, paneled_text
-from codeflash.code_utils.config_parser import find_pyproject_toml
+from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
+
+BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
 
 
 def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tofile: str = "modified") -> str:
@@ -81,42 +84,105 @@ def create_rank_dictionary_compact(int_array: list[int]) -> dict[int, int]:
     return {original_index: rank for rank, original_index in enumerate(sorted_indices)}
 
 
-@contextmanager
-def custom_addopts() -> None:
-    pyproject_file = find_pyproject_toml()
-    original_content = None
-    non_blacklist_plugin_args = ""
+def filter_args(addopts_args: list[str]) -> list[str]:
+    # Convert BLACKLIST_ADDOPTS to a set for faster lookup of simple matches
+    # But keep tuple for startswith
+    blacklist = BLACKLIST_ADDOPTS
+    # Precompute the length for re-use
+    n = len(addopts_args)
+    filtered_args = []
+    i = 0
+    while i < n:
+        current_arg = addopts_args[i]
+        if current_arg.startswith(blacklist):
+            i += 1
+            if i < n and not addopts_args[i].startswith("-"):
+                i += 1
+        else:
+            filtered_args.append(current_arg)
+            i += 1
+    return filtered_args
 
+
+def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
+    file_type = config_file.suffix.lower()
+    filename = config_file.name
+    config = None
+    if file_type not in {".toml", ".ini", ".cfg"} or not config_file.exists():
+        return "", False
+    # Read original file
+    with Path.open(config_file, encoding="utf-8") as f:
+        content = f.read()
     try:
-        # Read original file
-        if pyproject_file.exists():
-            with Path.open(pyproject_file, encoding="utf-8") as f:
-                original_content = f.read()
-                data = tomlkit.parse(original_content)
-            # Backup original addopts
+        if filename == "pyproject.toml":
+            # use tomlkit
+            data = tomlkit.parse(content)
             original_addopts = data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("addopts", "")
             # nothing to do if no addopts present
-            if original_addopts != "" and isinstance(original_addopts, list):
-                original_addopts = [x.strip() for x in original_addopts]
-                non_blacklist_plugin_args = re.sub(r"-n(?: +|=)\S+", "", " ".join(original_addopts)).split(" ")
-                non_blacklist_plugin_args = [x for x in non_blacklist_plugin_args if x != ""]
-                if non_blacklist_plugin_args != original_addopts:
-                    data["tool"]["pytest"]["ini_options"]["addopts"] = non_blacklist_plugin_args
-                    # Write modified file
-                    with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                        f.write(tomlkit.dumps(data))
+            if original_addopts == "":
+                return content, False
+            if isinstance(original_addopts, list):
+                original_addopts = " ".join(original_addopts)
+            original_addopts = original_addopts.replace("=", " ")
+            addopts_args = (
+                original_addopts.split()
+            )  # any number of space characters as delimiter, doesn't look at = which is fine
+        else:
+            # use configparser
+            config = configparser.ConfigParser()
+            config.read_string(content)
+            data = {section: dict(config[section]) for section in config.sections()}
+            if config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+                original_addopts = data.get("pytest", {}).get("addopts", "")  # should only be a string
+            else:
+                original_addopts = data.get("tool:pytest", {}).get("addopts", "")  # should only be a string
+            original_addopts = original_addopts.replace("=", " ")
+            addopts_args = original_addopts.split()
+        new_addopts_args = filter_args(addopts_args)
+        if new_addopts_args == addopts_args:
+            return content, False
+        # change addopts now
+        if file_type == ".toml":
+            data["tool"]["pytest"]["ini_options"]["addopts"] = " ".join(new_addopts_args)
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                f.write(tomlkit.dumps(data))
+                return content, True
+        elif config_file.name in {"pytest.ini", ".pytest.ini", "tox.ini"}:
+            config.set("pytest", "addopts", " ".join(new_addopts_args))
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
+        else:
+            config.set("tool:pytest", "addopts", " ".join(new_addopts_args))
+            # Write modified file
+            with Path.open(config_file, "w", encoding="utf-8") as f:
+                config.write(f)
+                return content, True
 
+    except Exception:
+        logger.debug("Trouble parsing")
+        return content, False  # not modified
+
+
+@contextmanager
+def custom_addopts() -> None:
+    closest_config_files = get_all_closest_config_files()
+
+    original_content = {}
+
+    try:
+        for config_file in closest_config_files:
+            original_content[config_file] = modify_addopts(config_file)
         yield
 
     finally:
         # Restore original file
-        if (
-            original_content
-            and pyproject_file.exists()
-            and tuple(original_addopts) not in {(), tuple(non_blacklist_plugin_args)}
-        ):
-            with Path.open(pyproject_file, "w", encoding="utf-8") as f:
-                f.write(original_content)
+        for file, (content, was_modified) in original_content.items():
+            if was_modified:
+                with Path.open(file, "w", encoding="utf-8") as f:
+                    f.write(content)
 
 
 @contextmanager
@@ -173,14 +239,14 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
 
 def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
     try:
-        relative_path = file_path.relative_to(project_root_path)
+        relative_path = file_path.resolve().relative_to(project_root_path.resolve())
         return relative_path.with_suffix("").as_posix().replace("/", ".")
     except ValueError:
         if traverse_up:
             parent = file_path.parent
             while parent not in (project_root_path, parent.parent):
                 try:
-                    relative_path = file_path.relative_to(parent)
+                    relative_path = file_path.resolve().relative_to(parent.resolve())
                     return relative_path.with_suffix("").as_posix().replace("/", ".")
                 except ValueError:
                     parent = parent.parent
@@ -238,15 +304,18 @@ def get_all_function_names(code: str) -> tuple[bool, list[str]]:
     return True, function_names
 
 
-def get_run_tmp_file(file_path: Path) -> Path:
+def get_run_tmp_file(file_path: Path | str) -> Path:
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
     if not hasattr(get_run_tmp_file, "tmpdir"):
         get_run_tmp_file.tmpdir = TemporaryDirectory(prefix="codeflash_")
     return Path(get_run_tmp_file.tmpdir.name) / file_path
 
 
 def path_belongs_to_site_packages(file_path: Path) -> bool:
-    site_packages = [Path(p) for p in site.getsitepackages()]
-    return any(file_path.resolve().is_relative_to(site_package_path) for site_package_path in site_packages)
+    file_path_resolved = file_path.resolve()
+    site_packages = [Path(p).resolve() for p in site.getsitepackages()]
+    return any(file_path_resolved.is_relative_to(site_package_path) for site_package_path in site_packages)
 
 
 def is_class_defined_in_file(class_name: str, file_path: Path) -> bool:
@@ -266,14 +335,6 @@ def validate_python_code(code: str) -> str:
         msg = f"Invalid Python code: {e.msg} (line {e.lineno}, column {e.offset})"
         raise ValueError(msg) from e
     return code
-
-
-def has_any_async_functions(code: str) -> bool:
-    try:
-        module = ast.parse(code)
-    except SyntaxError:
-        return False
-    return any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(module))
 
 
 def cleanup_paths(paths: list[Path]) -> None:

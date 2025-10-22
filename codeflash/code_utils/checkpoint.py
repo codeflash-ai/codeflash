@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -11,13 +10,16 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.prompt import Confirm
 
 from codeflash.cli_cmds.console import console
+from codeflash.code_utils.compat import codeflash_temp_dir
 
 if TYPE_CHECKING:
     import argparse
 
 
 class CodeflashRunCheckpoint:
-    def __init__(self, module_root: Path, checkpoint_dir: Path = Path("/tmp")) -> None:  # noqa: S108
+    def __init__(self, module_root: Path, checkpoint_dir: Path | None = None) -> None:
+        if checkpoint_dir is None:
+            checkpoint_dir = codeflash_temp_dir
         self.module_root = module_root
         self.checkpoint_dir = Path(checkpoint_dir)
         # Create a unique checkpoint file name
@@ -37,7 +39,7 @@ class CodeflashRunCheckpoint:
             "last_updated": time.time(),
         }
 
-        with self.checkpoint_path.open("w") as f:
+        with self.checkpoint_path.open("w", encoding="utf-8") as f:
             f.write(json.dumps(metadata) + "\n")
 
     def add_function_to_checkpoint(
@@ -66,7 +68,7 @@ class CodeflashRunCheckpoint:
             **additional_info,
         }
 
-        with self.checkpoint_path.open("a") as f:
+        with self.checkpoint_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(function_data) + "\n")
 
         # Update the metadata last_updated timestamp
@@ -75,7 +77,7 @@ class CodeflashRunCheckpoint:
     def _update_metadata_timestamp(self) -> None:
         """Update the last_updated timestamp in the metadata."""
         # Read the first line (metadata)
-        with self.checkpoint_path.open() as f:
+        with self.checkpoint_path.open(encoding="utf-8") as f:
             metadata = json.loads(f.readline())
             rest_content = f.read()
 
@@ -84,7 +86,7 @@ class CodeflashRunCheckpoint:
 
         # Write all lines to a temporary file
 
-        with self.checkpoint_path.open("w") as f:
+        with self.checkpoint_path.open("w", encoding="utf-8") as f:
             f.write(json.dumps(metadata) + "\n")
             f.write(rest_content)
 
@@ -94,7 +96,7 @@ class CodeflashRunCheckpoint:
         self.checkpoint_path.unlink(missing_ok=True)
 
         for file in self.checkpoint_dir.glob("codeflash_checkpoint_*.jsonl"):
-            with file.open() as f:
+            with file.open(encoding="utf-8") as f:
                 # Skip the first line (metadata)
                 first_line = next(f)
                 metadata = json.loads(first_line)
@@ -116,7 +118,7 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
     to_delete = []
 
     for file in checkpoint_dir.glob("codeflash_checkpoint_*.jsonl"):
-        with file.open() as f:
+        with file.open(encoding="utf-8") as f:
             # Skip the first line (metadata)
             first_line = next(f)
             metadata = json.loads(first_line)
@@ -139,8 +141,8 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
-    if args.all and (sys.platform == "linux" or sys.platform == "darwin") and Path("/tmp").is_dir():  # noqa: S108 #TODO: use the temp dir from codeutils-compat.py
-        previous_checkpoint_functions = get_all_historical_functions(args.module_root, Path("/tmp"))  # noqa: S108
+    if args.all and codeflash_temp_dir.is_dir():
+        previous_checkpoint_functions = get_all_historical_functions(args.module_root, codeflash_temp_dir)
         if previous_checkpoint_functions and Confirm.ask(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,

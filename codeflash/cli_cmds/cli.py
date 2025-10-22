@@ -1,3 +1,4 @@
+import importlib.util
 import logging
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
@@ -7,6 +8,7 @@ from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
@@ -20,6 +22,8 @@ def parse_args() -> Namespace:
 
     init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
     init_parser.set_defaults(func=init_codeflash)
+
+    subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
@@ -96,6 +100,12 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
+    parser.add_argument(
+        "--async",
+        default=False,
+        action="store_true",
+        help="Enable optimization of async functions. By default, async functions are excluded from optimization.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -115,9 +125,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
         logging_config.set_level(logging.INFO, echo_setting=not is_init)
+
     if args.version:
         logger.info(f"Codeflash version {version}")
         sys.exit()
+
+    if args.command == "vscode-install":
+        install_vscode_extension()
+        sys.exit()
+
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
             exit_with_message("No git repository detected and user aborted run. Exiting...", error_on_exit=True)
@@ -138,6 +154,14 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         args.replay_test = [Path(replay_test).resolve() for replay_test in args.replay_test]
         if env_utils.is_ci():
             args.no_pr = True
+
+    if getattr(args, "async", False) and importlib.util.find_spec("pytest_asyncio") is None:
+        logger.warning(
+            "Warning: The --async flag requires pytest-asyncio to be installed.\n"
+            "Please install it using:\n"
+            '  pip install "codeflash[asyncio]"'
+        )
+        raise SystemExit(1)
 
     return args
 

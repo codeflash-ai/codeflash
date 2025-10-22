@@ -1,45 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
-from pygls import uris
-from pygls.protocol import LanguageServerProtocol, lsp_method
-from pygls.server import LanguageServer
+from lsprotocol.types import LogMessageParams, MessageType
+from pygls.lsp.server import LanguageServer
+from pygls.protocol import LanguageServerProtocol
 
 if TYPE_CHECKING:
-    from lsprotocol.types import InitializeParams, InitializeResult
+    from pathlib import Path
 
+    from codeflash.models.models import CodeOptimizationContext
     from codeflash.optimization.optimizer import Optimizer
 
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
-
-    @lsp_method(INITIALIZE)
-    def lsp_initialize(self, params: InitializeParams) -> InitializeResult:
-        server = self._server
-        initialize_result: InitializeResult = super().lsp_initialize(params)
-
-        workspace_uri = params.root_uri
-        if workspace_uri:
-            workspace_path = uris.to_fs_path(workspace_uri)
-            pyproject_toml_path = self._find_pyproject_toml(workspace_path)
-            if pyproject_toml_path:
-                server.prepare_optimizer_arguments(pyproject_toml_path)
-            else:
-                server.show_message("No pyproject.toml found in workspace.")
-        else:
-            server.show_message("No workspace URI provided.")
-
-        return initialize_result
-
-    def _find_pyproject_toml(self, workspace_path: str) -> Path | None:
-        workspace_path_obj = Path(workspace_path)
-        for file_path in workspace_path_obj.rglob("pyproject.toml"):
-            return file_path.resolve()
-        return None
 
 
 class CodeflashLanguageServer(LanguageServer):
@@ -48,6 +23,7 @@ class CodeflashLanguageServer(LanguageServer):
         self.optimizer: Optimizer | None = None
         self.args_processed_before: bool = False
         self.args = None
+        self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args
@@ -80,9 +56,10 @@ class CodeflashLanguageServer(LanguageServer):
 
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
-        self.lsp.notify("window/logMessage", log_params)
+        self.protocol.notify("window/logMessage", log_params)
 
     def cleanup_the_optimizer(self) -> None:
+        self.current_optimization_init_result = None
         if not self.optimizer:
             return
         try:

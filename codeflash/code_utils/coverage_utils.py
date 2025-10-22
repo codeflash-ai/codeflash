@@ -12,9 +12,12 @@ if TYPE_CHECKING:
 
 def extract_dependent_function(main_function: str, code_context: CodeOptimizationContext) -> str | Literal[False]:
     """Extract the single dependent function from the code context excluding the main function."""
-    ast_tree = ast.parse(code_context.testgen_context_code)
-
-    dependent_functions = {node.name for node in ast_tree.body if isinstance(node, ast.FunctionDef)}
+    dependent_functions = set()
+    for code_string in code_context.testgen_context.code_strings:
+        ast_tree = ast.parse(code_string.code)
+        dependent_functions.update(
+            {node.name for node in ast_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        )
 
     if main_function in dependent_functions:
         dependent_functions.discard(main_function)
@@ -42,17 +45,25 @@ def build_fully_qualified_name(function_name: str, code_context: CodeOptimizatio
 def generate_candidates(source_code_path: Path) -> set[str]:
     """Generate all the possible candidates for coverage data based on the source code path."""
     candidates = set()
-    candidates.add(source_code_path.name)
-    current_path = source_code_path.parent
+    # Add the filename as a candidate
+    name = source_code_path.name
+    candidates.add(name)
 
-    last_added = source_code_path.name
-    while current_path != current_path.parent:
-        candidate_path = str(Path(current_path.name) / last_added)
+    # Precompute parts for efficient candidate path construction
+    parts = source_code_path.parts
+    n = len(parts)
+
+    # Walk up the directory structure without creating Path objects or repeatedly converting to posix
+    last_added = name
+    # Start from the last parent and move up to the root, exclusive (skip the root itself)
+    for i in range(n - 2, 0, -1):
+        # Combine the ith part with the accumulated path (last_added)
+        candidate_path = f"{parts[i]}/{last_added}"
         candidates.add(candidate_path)
         last_added = candidate_path
-        current_path = current_path.parent
 
-    candidates.add(str(source_code_path))
+    # Add the absolute posix path as a candidate
+    candidates.add(source_code_path.as_posix())
     return candidates
 
 
