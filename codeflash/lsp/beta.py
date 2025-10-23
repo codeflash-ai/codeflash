@@ -303,8 +303,8 @@ def process_args(server: CodeflashLanguageServer) -> Namespace:
 def check_api_key(server: CodeflashLanguageServer, _params: any) -> dict[str, str]:
     try:
         return _initialize_optimizer_if_api_key_is_valid(server)
-    except Exception as e:
-        return {"status": "error", "message": f"something went wrong while validating the api key{e!s}"}
+    except Exception:
+        return {"status": "error", "message": "something went wrong while validating the api key"}
 
 
 @server.feature("provideApiKey")
@@ -327,8 +327,8 @@ def provide_api_key(server: CodeflashLanguageServer, params: ProvideApiKeyParams
         if not is_successful(result):
             return {"status": "error", "message": result.failure()}
         return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
-    except Exception as e:
-        return {"status": "error", "message": f"something went wrong while saving the api key{e!s}"}
+    except Exception:
+        return {"status": "error", "message": "something went wrong while saving the api key"}
 
 
 @server.feature("initializeFunctionOptimization")
