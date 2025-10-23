@@ -287,7 +287,8 @@ def _initialize_optimizer(server: CodeflashLanguageServer) -> None:
     from codeflash.optimization.optimizer import Optimizer
 
     new_args = process_args(server)
-    server.optimizer = Optimizer(new_args)
+    if not server.optimizer:
+        server.optimizer = Optimizer(new_args)
 
 
 def process_args(server: CodeflashLanguageServer) -> Namespace:
