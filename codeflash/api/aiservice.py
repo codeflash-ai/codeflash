@@ -144,7 +144,7 @@ class AiServiceClient:
         logger.info("!lsp|Generating optimized candidates…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -209,7 +209,7 @@ class AiServiceClient:
             console.rule()
             return []
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -261,7 +261,7 @@ class AiServiceClient:
         logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -509,7 +509,7 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
@@ -535,7 +535,7 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
-    def get_optimization_impact(
+    def get_optimization_review(
         self,
         original_code: dict[Path, str],
         new_code: dict[Path, str],
@@ -547,8 +547,9 @@ class AiServiceClient:
         replay_tests: str,
         root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
+        calling_fn_details: str,
     ) -> str:
-        """Compute the optimization impact of current Pull Request.
+        """Compute the optimization review of current Pull Request.
 
         Args:
         original_code: dict -> data structure mapping file paths to function definition for original code
@@ -561,10 +562,11 @@ class AiServiceClient:
         replay_tests: str -> replay test table
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
+        calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
 
         Returns:
         -------
-        - 'high' or 'low' optimization impact
+        - 'high', 'medium' or 'low' optimization review
 
         """
         diff_str = "\n".join(
@@ -580,7 +582,7 @@ class AiServiceClient:
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
-        logger.info("!lsp|Computing Optimization Impact…")
+        logger.info("!lsp|Computing Optimization Review…")
         payload = {
             "code_diff": code_diff,
             "explanation": explanation.raw_explanation_message,
@@ -595,22 +597,23 @@ class AiServiceClient:
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
             "codeflash_version": codeflash_version,
+            "calling_fn_details": calling_fn_details,
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return ""
 
         if response.status_code == 200:
-            return cast("str", response.json()["impact"])
+            return cast("str", response.json()["review"])
         try:
             error = cast("str", response.json()["error"])
         except Exception:
             error = response.text
-        logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
+        logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return ""

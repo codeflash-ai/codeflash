@@ -17,17 +17,15 @@ def set_level(level: int, *, echo_setting: bool = True) -> None:
         format=BARE_LOGGING_FORMAT,
     )
     logging.getLogger().setLevel(level)
-    if echo_setting:
-        if level == logging.DEBUG:
-            logging.Formatter.converter = time.gmtime
-            logging.basicConfig(
-                format=VERBOSE_LOGGING_FORMAT,
-                handlers=[
-                    RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
-                ],
-                force=True,
-            )
-            logging.info("Verbose DEBUG logging enabled")
-        else:
-            logging.info("Logging level set to INFO")
+    if echo_setting and level == logging.DEBUG:
+        logging.Formatter.converter = time.gmtime
+        logging.basicConfig(
+            format=VERBOSE_LOGGING_FORMAT,
+            handlers=[
+                RichHandler(rich_tracebacks=True, markup=False, console=console, show_path=False, show_time=False)
+            ],
+            force=True,
+        )
+        logging.info("Verbose DEBUG logging enabled")
+
     console.rule()

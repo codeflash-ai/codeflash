@@ -12,7 +12,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
 import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
@@ -20,10 +19,11 @@ from rich.syntax import Syntax
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
-from codeflash.api.cfapi import add_code_context_hash, create_staging, mark_optimization_success
+from codeflash.api.cfapi import CFWEBAPP_BASE_URL, add_code_context_hash, create_staging, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
+from codeflash.code_utils.code_extractor import get_opt_review_metrics
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
@@ -900,7 +900,7 @@ class FunctionOptimizer:
         optimized_context: CodeStringsMarkdown,
     ) -> tuple[str, dict[Path, str]]:
         should_sort_imports = not self.args.disable_imports_sorting
-        if should_sort_imports and isort.code(original_code) != original_code:
+        if should_sort_imports and sort_imports(code=original_code) != original_code:
             should_sort_imports = False
 
         optimized_code = ""
@@ -1460,24 +1460,31 @@ class FunctionOptimizer:
 
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
-
+        opt_review_response = ""
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
+            calling_fn_details = get_opt_review_metrics(
+                self.function_to_optimize_source_code,
+                self.function_to_optimize.file_path,
+                self.function_to_optimize.qualified_name,
+                self.project_root,
+                self.test_cfg.tests_root,
+            )
             try:
-                # modify argument of staging vs pr based on the impact
-                opt_impact_response = self.aiservice_client.get_optimization_impact(**data)
-                if opt_impact_response == "low":
-                    raise_pr = False
-                    staging_review = True
+                opt_review_response = self.aiservice_client.get_optimization_review(
+                    **data, calling_fn_details=calling_fn_details
+                )
             except Exception as e:
-                logger.debug(f"optimization impact response failed, investigate {e}")
-        if raise_pr and not staging_review:
+                logger.debug(f"optimization review response failed, investigate {e}")
+            data["optimization_review"] = opt_review_response
+        if raise_pr and not staging_review and opt_review_response != "low":
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
-                staging_url = f"https://app.codeflash.ai/review-optimizations/{self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id}"
+                trace_id = self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id
+                staging_url = f"{CFWEBAPP_BASE_URL}/review-optimizations/{trace_id}"
                 console.print(
                     Panel(
                         f"[bold green]✅ Staging created:[/bold green]\n[link={staging_url}]{staging_url}[/link]",

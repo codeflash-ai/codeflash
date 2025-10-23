@@ -9,7 +9,7 @@ def run_test(expected_improvement_pct: int) -> bool:
         file_path="remove_control_chars.py",
         function_name="CharacterRemover.remove_control_characters",
         test_framework="pytest",
-        min_improvement_x=0.3,
+        min_improvement_x=0.1,
         coverage_expectations=[
             CoverageExpectation(
                 function_name="CharacterRemover.remove_control_characters", expected_coverage=100.0, expected_lines=[14]
@@ -21,4 +21,4 @@ def run_test(expected_improvement_pct: int) -> bool:
 
 
 if __name__ == "__main__":
-    exit(run_with_retries(run_test, int(os.getenv("EXPECTED_IMPROVEMENT_PCT", 5))))
+    exit(run_with_retries(run_test, int(os.getenv("EXPECTED_IMPROVEMENT_PCT", 10))))

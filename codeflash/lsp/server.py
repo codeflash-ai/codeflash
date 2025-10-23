@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from lsprotocol.types import LogMessageParams, MessageType
+from pygls.lsp.server import LanguageServer
 from pygls.protocol import LanguageServerProtocol
-from pygls.server import LanguageServer
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,7 +56,7 @@ class CodeflashLanguageServer(LanguageServer):
 
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
-        self.lsp.notify("window/logMessage", log_params)
+        self.protocol.notify("window/logMessage", log_params)
 
     def cleanup_the_optimizer(self) -> None:
         self.current_optimization_init_result = None
