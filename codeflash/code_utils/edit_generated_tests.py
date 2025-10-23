@@ -158,10 +158,10 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             else inv_id.test_function_name
         )
         abs_path = tests_project_rootdir / Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py")
-        abs_path = str(abs_path.resolve().with_suffix(""))
-        if "__unit_test_" not in abs_path:
+        abs_path_str = str(abs_path.resolve())
+        if "__unit_test_" not in abs_path_str:
             continue
-        key = test_qualified_name + "#" + abs_path  # type: ignore[operator]
+        key = test_qualified_name + "#" + abs_path_str
         parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
         cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
