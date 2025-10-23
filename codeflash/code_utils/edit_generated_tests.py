@@ -158,7 +158,7 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             else inv_id.test_function_name
         )
         abs_path = tests_project_rootdir / Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py")
-        abs_path_str = str(abs_path.resolve())
+        abs_path_str = str(abs_path.resolve().with_suffix(""))
         if "__unit_test_" not in abs_path_str or not test_qualified_name:
             continue
         key = test_qualified_name + "#" + abs_path_str
