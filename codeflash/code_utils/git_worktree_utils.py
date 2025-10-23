@@ -93,6 +93,7 @@ def create_diff_patch_from_worktree(
     if not uni_diff_text.endswith("\n"):
         uni_diff_text += "\n"
 
+    patches_dir.mkdir(parents=True, exist_ok=True)
     patch_path = Path(patches_dir / f"{worktree_dir.name}.{fto_name}.patch")
     with patch_path.open("w", encoding="utf8") as f:
         f.write(uni_diff_text)
