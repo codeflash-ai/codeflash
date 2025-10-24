@@ -209,7 +209,7 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
 @server.feature("initProject")
 def init_project(params: ValidateProjectParams) -> dict[str, str]:
     # Always process args in the init project, the extension can call
-    server.args_processed_before = False
+    server.initialized = False
 
     pyproject_toml_path: Path | None = getattr(params, "config_file", None) or getattr(server.args, "config_file", None)
     if pyproject_toml_path is not None:
@@ -250,12 +250,20 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "existingConfig": config,
         }
 
-    args = process_args()
-
+    args = _init()
     return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
 
 def _initialize_optimizer_if_api_key_is_valid(api_key: Optional[str] = None) -> dict[str, str]:
+    key_check_result = _check_api_key_validity(api_key)
+    if key_check_result.get("status") != "success":
+        return key_check_result
+
+    _init()
+    return key_check_result
+
+
+def _check_api_key_validity(api_key: Optional[str]) -> dict[str, str]:
     user_id = get_user_id(api_key=api_key)
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
@@ -264,20 +272,28 @@ def _initialize_optimizer_if_api_key_is_valid(api_key: Optional[str] = None) -> 
         error_msg = user_id[7:]
         return {"status": "error", "message": error_msg}
 
-    from codeflash.optimization.optimizer import Optimizer
-
-    new_args = process_args()
-    server.optimizer = Optimizer(new_args)
     return {"status": "success", "user_id": user_id}
 
 
+def _initialize_optimizer(args: Namespace) -> None:
+    from codeflash.optimization.optimizer import Optimizer
+
+    if not server.optimizer:
+        server.optimizer = Optimizer(args)
+
+
 def process_args() -> Namespace:
-    if server.args_processed_before:
-        return server.args
     new_args = process_pyproject_config(server.args)
     server.args = new_args
-    server.args_processed_before = True
     return new_args
+
+
+def _init() -> Namespace:
+    if not server.initialized:
+        new_args = process_args()
+        _initialize_optimizer(new_args)
+        server.initialized = True
+    return server.args
 
 
 @server.feature("apiKeyExistsAndValid")
@@ -299,12 +315,15 @@ def provide_api_key(params: ProvideApiKeyParams) -> dict[str, str]:
         get_codeflash_api_key.cache_clear()
         get_user_id.cache_clear()
 
-        init_result = _initialize_optimizer_if_api_key_is_valid(api_key)
-        if init_result["status"] == "error":
-            return {"status": "error", "message": "Api key is not valid"}
+        key_check_result = _check_api_key_validity(api_key)
+        if key_check_result.get("status") != "success":
+            return key_check_result
 
-        user_id = init_result["user_id"]
+        user_id = key_check_result["user_id"]
         result = save_api_key_to_rc(api_key)
+
+        # initialize optimizer with the new api key
+        _init()
         if not is_successful(result):
             return {"status": "error", "message": result.failure()}
         return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
@@ -329,6 +348,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
     with execution_context(task_id=params.task_id):
         document_uri = params.textDocument.uri
         document = server.workspace.get_text_document(document_uri)
+        file_path = Path(document.path)
 
         server.show_message_log(
             f"Initializing optimization for function: {params.functionName} in {document_uri}", "Info"
@@ -337,14 +357,11 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
         if server.optimizer is None:
             _initialize_optimizer_if_api_key_is_valid()
 
-        server.optimizer.worktree_mode()
-
-        original_args, _ = server.optimizer.original_args_and_test_cfg
-
+        server.optimizer.args.file = file_path
         server.optimizer.args.function = params.functionName
-        original_relative_file_path = Path(document.path).relative_to(original_args.project_root)
-        server.optimizer.args.file = server.optimizer.current_worktree / original_relative_file_path
         server.optimizer.args.previous_checkpoint_functions = False
+
+        server.optimizer.worktree_mode()
 
         server.show_message_log(
             f"Args set - function: {server.optimizer.args.function}, file: {server.optimizer.args.file}", "Info"

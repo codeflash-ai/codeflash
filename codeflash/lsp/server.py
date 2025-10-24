@@ -37,8 +37,8 @@ class CodeflashServerSingleton:
 class CodeflashLanguageServer(LanguageServer):
     def __init__(self, name: str, version: str, protocol_cls: type[LanguageServerProtocol]) -> None:
         super().__init__(name, version, protocol_cls=protocol_cls)
+        self.initialized: bool = False
         self.optimizer: Optimizer | None = None
-        self.args_processed_before: bool = False
         self.args = None
         self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
         self.execution_context_vars: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
