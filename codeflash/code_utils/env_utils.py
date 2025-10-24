@@ -26,12 +26,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
         return True
 
     exe_name = cmd_tokens[0]
-    command_str = " ".join(formatter_cmds)
+    command_str = " ".join(formatter_cmds).replace(" $file", "")
 
     if shutil.which(exe_name) is None:
         logger.error(
-            f"⚠️  Formatter command not found: {command_str}\n"
-            f"Please install '{exe_name}' or update the 'formatter-cmds' in your pyproject.toml config."
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
 
@@ -44,15 +44,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
             return True
     except FileNotFoundError:
         logger.error(
-            f"⚠️  Formatter command not found: {command_str}\n"
-            f"Please install '{exe_name}' or update the 'formatter-cmds' in your pyproject.toml config."
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
     except Exception as e:
-        logger.error(
-            f"⚠️  Error running formatter '{command_str}': {e}\n"
-            f"Please verify the 'formatter-cmds' in your pyproject.toml config."
-        )
+        logger.error(f"Formatter failed to run: {command_str}\nError: {e}")
         return False
 
 
