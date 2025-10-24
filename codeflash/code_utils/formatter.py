@@ -76,12 +76,9 @@ def apply_formatter_cmds(
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except FileNotFoundError as e:
             from rich.panel import Panel
-            from rich.text import Text
 
-            panel = Panel(
-                Text.from_markup(f"⚠️  Formatter command not found: {' '.join(formatter_cmd_list)}", style="bold red"),
-                expand=False,
-            )
+            command_str = " ".join(str(part) for part in formatter_cmd_list)
+            panel = Panel(f"⚠️  Formatter command not found: {command_str}", expand=False, border_style="yellow")
             console.print(panel)
             if exit_on_failure:
                 raise e from None
