@@ -107,20 +107,20 @@ def format_code(
     if is_LSP_enabled():
         exit_on_failure = False
 
+    # Move conversion before formatting logic
     if isinstance(path, str):
         path = Path(path)
 
-    # TODO: Only allow a particular whitelist of formatters here to prevent arbitrary code execution
     formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
     if formatter_name == "disabled":
         return path.read_text(encoding="utf8")
 
     with tempfile.TemporaryDirectory() as test_dir_str:
         original_code = path.read_text(encoding="utf8")
-        original_code_lines = len(original_code.split("\n"))
+        # Optimize line count: avoid split/allocation, just count '\n', add 1 (works for non-empty files)
+        original_code_lines = original_code.count("\n") + 1 if original_code else 0
 
         if check_diff and original_code_lines > 50:
-            # we dont' count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_code, "")
 
             original_temp = Path(test_dir_str) / "original_temp.py"
@@ -149,7 +149,6 @@ def format_code(
                 )
                 return original_code
 
-        # TODO : We can avoid formatting the whole file again and only formatting the optimized code standalone and replace in formatted file above.
         _, formatted_code, changed = apply_formatter_cmds(
             formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
         )

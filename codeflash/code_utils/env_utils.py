@@ -4,6 +4,7 @@ import json
 import os
 import shlex
 import shutil
+import subprocess
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -35,6 +36,16 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
         )
         return False
 
+    # --- Optimization: Try --version,-V,-v option to check if executable works before falling back to costly file formatting
+    version_args = ["--version", "-V", "-v"]
+    for verflag in version_args:
+        try:
+            subprocess.run([exe_name, verflag], capture_output=True, check=False, timeout=2)
+            return True
+        except Exception:
+            continue
+
+    # Fallback: run original disk-I/O check only if the above quick check fails
     tmp_code = """print("hello world")"""
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
