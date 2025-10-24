@@ -9,8 +9,8 @@
   },
   "favicon": "/favicon.ico",
   "integrations": {
-    "intercom": {
-      "appId": "ljxo1nzr"
+    "posthog": {
+        "apiKey": "phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol"
     }
   },
   "navigation": {
