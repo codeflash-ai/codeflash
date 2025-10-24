@@ -18,22 +18,6 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
 
 
-class CodeflashServerSingleton:
-    _instance: CodeflashLanguageServer | None = None
-
-    @classmethod
-    def get(cls) -> CodeflashLanguageServer:
-        if cls._instance is None:
-            cls._instance = CodeflashLanguageServer(
-                "codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol
-            )
-        return cls._instance
-
-    def __init__(self) -> None:
-        # This is a singleton class, so we don't want to initialize.
-        ...
-
-
 class CodeflashLanguageServer(LanguageServer):
     def __init__(self, name: str, version: str, protocol_cls: type[LanguageServerProtocol]) -> None:
         super().__init__(name, version, protocol_cls=protocol_cls)

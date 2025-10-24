@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from codeflash.lsp.helpers import replace_quotes_with_backticks, simplify_worktree_paths
-from codeflash.lsp.server import CodeflashServerSingleton
 
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
@@ -35,8 +34,9 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
-        lsp_server_instance = CodeflashServerSingleton.get()
-        current_task_id = lsp_server_instance.execution_context_vars.get().get("task_id", None)
+        from codeflash.lsp.beta import server
+
+        current_task_id = server.execution_context_vars.get().get("task_id", None)
         data = self._loop_through(asdict(self))
         ordered = {"type": self.type(), "task_id": current_task_id, **data}
         return message_delimiter + json.dumps(ordered) + message_delimiter

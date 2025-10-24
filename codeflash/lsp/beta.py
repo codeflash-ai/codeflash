@@ -30,7 +30,7 @@ from codeflash.discovery.functions_to_optimize import (
 )
 from codeflash.either import is_successful
 from codeflash.lsp.features.perform_optimization import get_cancelled_reponse, sync_perform_optimization
-from codeflash.lsp.server import CodeflashServerSingleton
+from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -87,7 +87,7 @@ class WriteConfigParams:
     config: any
 
 
-server = CodeflashServerSingleton.get()
+server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
@@ -421,7 +421,7 @@ async def perform_function_optimization(params: FunctionOptimizationParams) -> d
 
         try:
             ctx = contextvars.copy_context()
-            return await loop.run_in_executor(None, ctx.run, sync_perform_optimization, params)
+            return await loop.run_in_executor(None, ctx.run, sync_perform_optimization, server, params)
         except asyncio.CancelledError:
             server.cancel_event.set()
             return get_cancelled_reponse()

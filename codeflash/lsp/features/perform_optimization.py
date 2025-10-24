@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.either import is_successful
-from codeflash.lsp.server import CodeflashServerSingleton
 
 if TYPE_CHECKING:
     import threading
+
+    from codeflash.lsp.server import CodeflashLanguageServer
 
 
 def get_cancelled_reponse() -> dict[str, str]:
@@ -22,8 +23,7 @@ def abort_if_cancelled(cancel_event: threading.Event) -> None:
         raise RuntimeError("cancelled")
 
 
-def sync_perform_optimization(params) -> dict[str, str]:  # noqa
-    server = CodeflashServerSingleton.get()
+def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:  # noqa
     cancel_event = server.cancel_event
     server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
     should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
