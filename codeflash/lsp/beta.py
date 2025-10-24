@@ -289,11 +289,12 @@ def process_args() -> Namespace:
 
 
 def _init() -> Namespace:
-    if not server.initialized:
-        new_args = process_args()
-        _initialize_optimizer(new_args)
-        server.initialized = True
-    return server.args
+    if server.initialized:
+        return server.args
+    new_args = process_args()
+    _initialize_optimizer(new_args)
+    server.initialized = True
+    return new_args
 
 
 @server.feature("apiKeyExistsAndValid")
@@ -417,13 +418,13 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
 async def perform_function_optimization(params: FunctionOptimizationParams) -> dict[str, str]:
     with execution_context(task_id=params.task_id):
         loop = asyncio.get_running_loop()
-        server.cancel_event = threading.Event()
+        cancel_event = threading.Event()
 
         try:
             ctx = contextvars.copy_context()
-            return await loop.run_in_executor(None, ctx.run, sync_perform_optimization, server, params)
+            return await loop.run_in_executor(None, ctx.run, sync_perform_optimization, server, cancel_event, params)
         except asyncio.CancelledError:
-            server.cancel_event.set()
+            cancel_event.set()
             return get_cancelled_reponse()
         finally:
             server.cleanup_the_optimizer()

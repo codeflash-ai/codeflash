@@ -36,7 +36,8 @@ class LspMessage:
     def serialize(self) -> str:
         from codeflash.lsp.beta import server
 
-        current_task_id = server.execution_context_vars.get().get("task_id", None)
+        execution_ctx = server.execution_context_vars.get()
+        current_task_id = execution_ctx.get("task_id", None)
         data = self._loop_through(asdict(self))
         ordered = {"type": self.type(), "task_id": current_task_id, **data}
         return message_delimiter + json.dumps(ordered) + message_delimiter

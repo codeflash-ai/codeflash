@@ -23,8 +23,7 @@ def abort_if_cancelled(cancel_event: threading.Event) -> None:
         raise RuntimeError("cancelled")
 
 
-def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:  # noqa
-    cancel_event = server.cancel_event
+def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: threading.Event, params) -> dict[str, str]:  # noqa
     server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
     should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
     function_optimizer = server.optimizer.current_function_optimizer
