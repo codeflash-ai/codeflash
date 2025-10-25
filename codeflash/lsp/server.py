@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import contextvars
+from typing import TYPE_CHECKING
 
 from lsprotocol.types import LogMessageParams, MessageType
 from pygls.lsp.server import LanguageServer
@@ -18,12 +19,16 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
 
 
 class CodeflashLanguageServer(LanguageServer):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-        super().__init__(*args, **kwargs)
+    def __init__(self, name: str, version: str, protocol_cls: type[LanguageServerProtocol]) -> None:
+        super().__init__(name, version, protocol_cls=protocol_cls)
+        self.initialized: bool = False
         self.optimizer: Optimizer | None = None
-        self.args_processed_before: bool = False
         self.args = None
         self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
+        self.execution_context_vars: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
+            "execution_context_vars",
+            default={},  # noqa: B039
+        )
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args
