@@ -4,7 +4,7 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 from libcst import MetadataWrapper
@@ -149,7 +149,7 @@ class CommentAdder(cst.CSTTransformer):
         return updated_node
 
 
-def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
+def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
     for inv_id, runtimes in inv_id_runtimes.items():
         test_qualified_name = (
@@ -157,10 +157,11 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, i
             if inv_id.test_class_name
             else inv_id.test_function_name
         )
-        abs_path = str(Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve().with_suffix(""))
-        if "__unit_test_" not in abs_path:
+        abs_path = tests_project_rootdir / Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py")
+        abs_path_str = str(abs_path.resolve().with_suffix(""))
+        if "__unit_test_" not in abs_path_str or not test_qualified_name:
             continue
-        key = test_qualified_name + "#" + abs_path  # type: ignore[operator]
+        key = test_qualified_name + "#" + abs_path_str
         parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
         cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
@@ -174,10 +175,11 @@ def add_runtime_comments_to_generated_tests(
     generated_tests: GeneratedTestsList,
     original_runtimes: dict[InvocationId, list[int]],
     optimized_runtimes: dict[InvocationId, list[int]],
+    tests_project_rootdir: Optional[Path] = None,
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
-    original_runtimes_dict = unique_inv_id(original_runtimes)
-    optimized_runtimes_dict = unique_inv_id(optimized_runtimes)
+    original_runtimes_dict = unique_inv_id(original_runtimes, tests_project_rootdir or Path())
+    optimized_runtimes_dict = unique_inv_id(optimized_runtimes, tests_project_rootdir or Path())
     # Process each generated test
     modified_tests = []
     for test in generated_tests.generated_tests:

@@ -3,9 +3,8 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import time
-from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import git
 
@@ -13,23 +12,8 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 
-if TYPE_CHECKING:
-    from git import Repo
-
-
 worktree_dirs = codeflash_cache_dir / "worktrees"
 patches_dir = codeflash_cache_dir / "patches"
-
-if TYPE_CHECKING:
-    from git import Repo
-
-
-@lru_cache(maxsize=1)
-def get_git_project_id() -> str:
-    """Return the first commit sha of the repo."""
-    repo: Repo = git.Repo(search_parent_directories=True)
-    root_commits = list(repo.iter_commits(rev="HEAD", max_parents=0))
-    return root_commits[0].hexsha
 
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
@@ -96,12 +80,6 @@ def remove_worktree(worktree_dir: Path) -> None:
         logger.exception(f"Failed to remove worktree: {worktree_dir}")
 
 
-@lru_cache(maxsize=1)
-def get_patches_dir_for_project() -> Path:
-    project_id = get_git_project_id() or ""
-    return Path(patches_dir / project_id)
-
-
 def create_diff_patch_from_worktree(
     worktree_dir: Path, files: list[str], fto_name: Optional[str] = None
 ) -> Optional[Path]:
@@ -115,10 +93,8 @@ def create_diff_patch_from_worktree(
     if not uni_diff_text.endswith("\n"):
         uni_diff_text += "\n"
 
-    project_patches_dir = get_patches_dir_for_project()
-    project_patches_dir.mkdir(parents=True, exist_ok=True)
-
-    patch_path = project_patches_dir / f"{worktree_dir.name}.{fto_name}.patch"
+    patches_dir.mkdir(parents=True, exist_ok=True)
+    patch_path = Path(patches_dir / f"{worktree_dir.name}.{fto_name}.patch")
     with patch_path.open("w", encoding="utf8") as f:
         f.write(uni_diff_text)
 
