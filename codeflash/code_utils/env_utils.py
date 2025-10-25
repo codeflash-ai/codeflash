@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -14,21 +16,41 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, sav
 
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
-    return_code = True
-    if formatter_cmds[0] == "disabled":
-        return return_code
+    if not formatter_cmds or formatter_cmds[0] == "disabled":
+        return True
+
+    first_cmd = formatter_cmds[0]
+    cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
+
+    if not cmd_tokens:
+        return True
+
+    exe_name = cmd_tokens[0]
+    command_str = " ".join(formatter_cmds).replace(" $file", "")
+
+    if shutil.which(exe_name) is None:
+        logger.error(
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
+        )
+        return False
+
     tmp_code = """print("hello world")"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_file = Path(tmpdir) / "test_codeflash_formatter.py"
-        tmp_file.write_text(tmp_code, encoding="utf-8")
-        try:
-            format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=exit_on_failure)
-        except Exception:
-            exit_with_message(
-                "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again.",
-                error_on_exit=True,
-            )
-        return return_code
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_file = Path(tmpdir) / "test_codeflash_formatter.py"
+            tmp_file.write_text(tmp_code, encoding="utf-8")
+            format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=False)
+            return True
+    except FileNotFoundError:
+        logger.error(
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Formatter failed to run: {command_str}\nError: {e}")
+        return False
 
 
 @lru_cache(maxsize=1)

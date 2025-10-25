@@ -138,7 +138,7 @@ def generate_hypothesis_tests(
             qualified_function_path = get_qualified_function_path(
                 function_to_optimize.file_path, args.project_root, function_to_optimize.qualified_name
             )
-            logger.info(f"command: hypothesis write {function_to_optimize.file_path.stem}")
+            logger.info(f"command: hypothesis write {qualified_function_path}")
 
             hypothesis_result = subprocess.run(
                 ["hypothesis", "write", qualified_function_path],
@@ -182,8 +182,9 @@ def generate_hypothesis_tests(
             unparsed = ast.unparse(modified_tree)
 
             hypothesis_test_suite_code = format_code(
-                make_hypothesis_tests_deterministic(remove_functions_with_only_any_type(unparsed)),
+                args.formatter_cmds,
                 function_to_optimize.file_path,
+                optimized_code=make_hypothesis_tests_deterministic(remove_functions_with_only_any_type(unparsed)),
             )
             with hypothesis_path.open("w", encoding="utf-8") as f:
                 f.write(hypothesis_test_suite_code)
