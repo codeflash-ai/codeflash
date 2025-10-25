@@ -181,9 +181,11 @@ def generate_hypothesis_tests(
             ast.fix_missing_locations(modified_tree)
             unparsed = ast.unparse(modified_tree)
 
+            console.print(f"modified src: {unparsed}")
+
             hypothesis_test_suite_code = format_code(
                 args.formatter_cmds,
-                function_to_optimize.file_path,
+                hypothesis_path,
                 optimized_code=make_hypothesis_tests_deterministic(remove_functions_with_only_any_type(unparsed)),
             )
             with hypothesis_path.open("w", encoding="utf-8") as f:
