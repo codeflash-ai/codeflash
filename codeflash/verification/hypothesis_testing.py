@@ -105,68 +105,82 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
     except SyntaxError:
         return code
 
-    settings_imported = any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "hypothesis"
-        and any(alias.name == "settings" for alias in node.names)
-        for node in tree.body
-    )
+    # Gather ImportFrom nodes and function defs in a single fast pass
+    import_indices = []
+    settings_imported = False
+    function_defs = []
+
+    for i, node in enumerate(tree.body):
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "hypothesis" and any(alias.name == "settings" for alias in node.names):
+                settings_imported = True
+        if isinstance(node, ast.FunctionDef):
+            function_defs.append(node)
 
     if not settings_imported:
         tree.body.insert(0, ast.parse("from hypothesis import settings").body[0])
+
+    FLOAT_KWARGS = {"min_value", "max_value", "allow_nan", "allow_infinity"}
+    INT_KWARGS = {"min_value", "max_value"}
+    _FLOATS_KEYWORDS = [
+        ast.keyword(arg="min_value", value=ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=1e6))),
+        ast.keyword(arg="max_value", value=ast.Constant(value=1e6)),
+        ast.keyword(arg="allow_nan", value=ast.Constant(value=False)),
+        ast.keyword(arg="allow_infinity", value=ast.Constant(value=False)),
+    ]
+    _INTEGERS_KEYWORDS = [
+        ast.keyword(arg="min_value", value=ast.Constant(value=-10000)),
+        ast.keyword(arg="max_value", value=ast.Constant(value=10000)),
+    ]
 
     class StrategyConstrainer(ast.NodeTransformer):
         def visit_Call(self, node: ast.Call) -> ast.Call:
             self.generic_visit(node)
 
-            # Check if this is a strategy call (st.floats(), st.integers(), etc.)
-            if (
-                isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "st"
-            ):
-                if node.func.attr == "floats" and not any(
-                    k.arg in ["min_value", "max_value", "allow_nan", "allow_infinity"] for k in node.keywords
-                ):
-                    # Constrain floats to reasonable bounds
-                    node.keywords.extend(
-                        [
-                            ast.keyword(
-                                arg="min_value", value=ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=1e6))
-                            ),
-                            ast.keyword(arg="max_value", value=ast.Constant(value=1e6)),
-                            ast.keyword(arg="allow_nan", value=ast.Constant(value=False)),
-                            ast.keyword(arg="allow_infinity", value=ast.Constant(value=False)),
-                        ]
-                    )
-                elif node.func.attr == "integers" and not any(
-                    k.arg in ["min_value", "max_value"] for k in node.keywords
-                ):
-                    # Constrain integers to reasonable bounds (including negatives)
-                    node.keywords.extend(
-                        [
-                            ast.keyword(arg="min_value", value=ast.Constant(value=-10000)),
-                            ast.keyword(arg="max_value", value=ast.Constant(value=10000)),
-                        ]
-                    )
+            func = node.func
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "st":
+                # Avoid generator expressions in any() for better speed in hot loop
+                attr = func.attr
+                kwds = node.keywords
+                if attr == "floats":
+                    found = False
+                    for k in kwds:
+                        if k.arg in FLOAT_KWARGS:
+                            found = True
+                            break
+                    if not found:
+                        node.keywords.extend([ast.copy_location(kw, node) for kw in _FLOATS_KEYWORDS])
+                elif attr == "integers":
+                    found = False
+                    for k in kwds:
+                        if k.arg in INT_KWARGS:
+                            found = True
+                            break
+                    if not found:
+                        node.keywords.extend([ast.copy_location(kw, node) for kw in _INTEGERS_KEYWORDS])
             return node
 
     tree = StrategyConstrainer().visit(tree)
     ast.fix_missing_locations(tree)
 
-    for node in ast.walk(tree):
+    # Since ast.walk is expensive, prefer explicit visit to known FunctionDef nodes,
+    # which are already collected above
+    for node in ast.walk(tree) if not function_defs else function_defs:
         if isinstance(node, ast.FunctionDef):
-            settings_decorator = next(
-                (
-                    d
-                    for d in node.decorator_list
-                    if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "settings"
-                ),
-                None,
-            )
+            # Use for...else to find decorator efficiently
+            settings_decorator = None
+            for d in node.decorator_list:
+                if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "settings":
+                    settings_decorator = d
+                    break
 
             if settings_decorator:
-                if not any(k.arg == "derandomize" for k in settings_decorator.keywords):
+                derandomize_already = False
+                for k in settings_decorator.keywords:
+                    if k.arg == "derandomize":
+                        derandomize_already = True
+                        break
+                if not derandomize_already:
                     settings_decorator.keywords.append(ast.keyword(arg="derandomize", value=ast.Constant(value=True)))
             else:
                 node.decorator_list.append(
