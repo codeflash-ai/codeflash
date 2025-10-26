@@ -75,6 +75,7 @@ def filter_hypothesis_tests_by_function_name(code: str, function_name: str) -> s
 
     Returns:
         Filtered code with only matching tests
+
     """
     tree = ast.parse(code)
 
@@ -86,10 +87,9 @@ def filter_hypothesis_tests_by_function_name(code: str, function_name: str) -> s
                 if isinstance(item, (ast.Import, ast.ImportFrom, ast.Assign)):
                     # Keep all imports and module-level assignments
                     new_body.append(item)
-                elif isinstance(item, ast.FunctionDef):
+                elif isinstance(item, ast.FunctionDef) and item.name.startswith("test_") and function_name in item.name:
                     # Only keep test functions that match the function name
-                    if item.name.startswith("test_") and function_name in item.name:
-                        new_body.append(item)
+                    new_body.append(item)
             node.body = new_body
             return node
 
@@ -126,25 +126,17 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
                 and node.func.value.id == "st"
             ):
                 if node.func.attr == "floats" and not any(
-                    k.arg in ["min_value", "max_value", "allow_nan", "allow_infinity"]
-                    for k in node.keywords
+                    k.arg in ["min_value", "max_value", "allow_nan", "allow_infinity"] for k in node.keywords
                 ):
                     # Constrain floats to reasonable bounds
                     node.keywords.extend(
                         [
                             ast.keyword(
-                                arg="min_value",
-                                value=ast.UnaryOp(
-                                    op=ast.USub(), operand=ast.Constant(value=1e6)
-                                ),
+                                arg="min_value", value=ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=1e6))
                             ),
                             ast.keyword(arg="max_value", value=ast.Constant(value=1e6)),
-                            ast.keyword(
-                                arg="allow_nan", value=ast.Constant(value=False)
-                            ),
-                            ast.keyword(
-                                arg="allow_infinity", value=ast.Constant(value=False)
-                            ),
+                            ast.keyword(arg="allow_nan", value=ast.Constant(value=False)),
+                            ast.keyword(arg="allow_infinity", value=ast.Constant(value=False)),
                         ]
                     )
                 elif node.func.attr == "integers" and not any(
@@ -154,9 +146,7 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
                     node.keywords.extend(
                         [
                             ast.keyword(arg="min_value", value=ast.Constant(value=-10000)),
-                            ast.keyword(
-                                arg="max_value", value=ast.Constant(value=10000)
-                            ),
+                            ast.keyword(arg="max_value", value=ast.Constant(value=10000)),
                         ]
                     )
             return node
@@ -170,28 +160,20 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
                 (
                     d
                     for d in node.decorator_list
-                    if isinstance(d, ast.Call)
-                    and isinstance(d.func, ast.Name)
-                    and d.func.id == "settings"
+                    if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "settings"
                 ),
                 None,
             )
 
             if settings_decorator:
                 if not any(k.arg == "derandomize" for k in settings_decorator.keywords):
-                    settings_decorator.keywords.append(
-                        ast.keyword(arg="derandomize", value=ast.Constant(value=True))
-                    )
+                    settings_decorator.keywords.append(ast.keyword(arg="derandomize", value=ast.Constant(value=True)))
             else:
                 node.decorator_list.append(
                     ast.Call(
                         func=ast.Name(id="settings", ctx=ast.Load()),
                         args=[],
-                        keywords=[
-                            ast.keyword(
-                                arg="derandomize", value=ast.Constant(value=True)
-                            )
-                        ],
+                        keywords=[ast.keyword(arg="derandomize", value=ast.Constant(value=True))],
                     )
                 )
 
@@ -199,10 +181,7 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
 
 
 def generate_hypothesis_tests(
-    test_cfg: TestConfig,
-    args: Namespace,
-    function_to_optimize: FunctionToOptimize,
-    function_to_optimize_ast: ast.AST,
+    test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
 ) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
     """Generate property-based tests using Hypothesis ghostwriter.
 
@@ -223,9 +202,7 @@ def generate_hypothesis_tests(
 
     if (
         test_cfg.project_root_path
-        and isinstance(
-            function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef)
-        )
+        and isinstance(function_to_optimize_ast, (ast.FunctionDef, ast.AsyncFunctionDef))
         and has_typed_parameters(function_to_optimize_ast, function_to_optimize.parents)
     ):
         logger.info("Generating Hypothesis tests for the original code…")
@@ -233,9 +210,7 @@ def generate_hypothesis_tests(
 
         try:
             qualified_function_path = get_qualified_function_path(
-                function_to_optimize.file_path,
-                args.project_root,
-                function_to_optimize.qualified_name,
+                function_to_optimize.file_path, args.project_root, function_to_optimize.qualified_name
             )
             logger.info(f"command: hypothesis write {qualified_function_path}")
 
@@ -250,9 +225,7 @@ def generate_hypothesis_tests(
         except subprocess.TimeoutExpired:
             logger.debug("Hypothesis test generation timed out")
             end_time = time.perf_counter()
-            logger.debug(
-                f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds"
-            )
+            logger.debug(f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds")
             return function_to_hypothesis_tests, hypothesis_test_suite_code
 
         if hypothesis_result.returncode == 0:
@@ -269,29 +242,25 @@ def generate_hypothesis_tests(
                 pytest_cmd=args.pytest_cmd,
             )
             file_to_funcs = {function_to_optimize.file_path: [function_to_optimize]}
-            function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = (
-                discover_unit_tests(hypothesis_config, file_to_funcs_to_optimize=file_to_funcs)
+            function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = discover_unit_tests(
+                hypothesis_config, file_to_funcs_to_optimize=file_to_funcs
             )
             with hypothesis_path.open("r", encoding="utf-8") as f:
                 original_code = f.read()
 
-            unparsed = filter_hypothesis_tests_by_function_name(
-                original_code, function_to_optimize.function_name
-            )
+            unparsed = filter_hypothesis_tests_by_function_name(original_code, function_to_optimize.function_name)
 
             console.print(f"modified src: {unparsed}")
 
             hypothesis_test_suite_code = format_code(
                 args.formatter_cmds,
                 hypothesis_path,
-                optimized_code=make_hypothesis_tests_deterministic(
-                    remove_functions_with_only_any_type(unparsed)
-                ),
+                optimized_code=make_hypothesis_tests_deterministic(remove_functions_with_only_any_type(unparsed)),
             )
             with hypothesis_path.open("w", encoding="utf-8") as f:
                 f.write(hypothesis_test_suite_code)
-            function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = (
-                discover_unit_tests(hypothesis_config, file_to_funcs_to_optimize=file_to_funcs)
+            function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = discover_unit_tests(
+                hypothesis_config, file_to_funcs_to_optimize=file_to_funcs
             )
             logger.info(
                 f"Created {num_discovered_hypothesis_tests} "
@@ -299,9 +268,7 @@ def generate_hypothesis_tests(
             )
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(
-                f"Generated hypothesis tests in {end_time - start_time:.2f} seconds"
-            )
+            logger.debug(f"Generated hypothesis tests in {end_time - start_time:.2f} seconds")
             return function_to_hypothesis_tests, hypothesis_test_suite_code
 
         logger.debug(
@@ -310,7 +277,5 @@ def generate_hypothesis_tests(
         console.rule()
 
     end_time = time.perf_counter()
-    logger.debug(
-        f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds"
-    )
+    logger.debug(f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds")
     return function_to_hypothesis_tests, hypothesis_test_suite_code

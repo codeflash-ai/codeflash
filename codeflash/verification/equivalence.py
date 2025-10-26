@@ -2,7 +2,7 @@ import sys
 from collections import defaultdict
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import TestResults, TestType, VerificationType
+from codeflash.models.models import FunctionTestInvocation, TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
 
 INCREASED_RECURSION_LIMIT = 5000
@@ -139,7 +139,7 @@ def _compare_hypothesis_tests_semantic(original_hypothesis: list, candidate_hypo
     """
 
     # Group by test function (excluding loop index and iteration_id from comparison)
-    def get_test_key(test_result):
+    def get_test_key(test_result: FunctionTestInvocation) -> tuple[str, str, str, str]:
         """Get unique key for a Hypothesis test function."""
         return (
             test_result.id.test_module_path,
