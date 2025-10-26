@@ -9,7 +9,6 @@ import pickle
 import re
 import sqlite3
 import subprocess
-import sys
 import unittest
 from collections import defaultdict
 from pathlib import Path
