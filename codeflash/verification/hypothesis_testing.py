@@ -150,10 +150,10 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
                 elif node.func.attr == "integers" and not any(
                     k.arg in ["min_value", "max_value"] for k in node.keywords
                 ):
-                    # Constrain integers to reasonable bounds
+                    # Constrain integers to reasonable bounds (including negatives)
                     node.keywords.extend(
                         [
-                            ast.keyword(arg="min_value", value=ast.Constant(value=0)),
+                            ast.keyword(arg="min_value", value=ast.Constant(value=-10000)),
                             ast.keyword(
                                 arg="max_value", value=ast.Constant(value=10000)
                             ),
