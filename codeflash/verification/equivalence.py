@@ -172,7 +172,7 @@ def _compare_hypothesis_tests_semantic(original_hypothesis: list, candidate_hypo
     )
 
     # Compare only for test_keys present in original
-    for test_key, (orig_count, orig_had_failure) in orig_by_func.items():
+    for test_key, (_orig_count, orig_had_failure) in orig_by_func.items():
         cand_group = cand_by_func.get(test_key)
         if cand_group is None:
             continue  # Already handled above
