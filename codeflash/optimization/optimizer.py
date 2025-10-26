@@ -261,8 +261,6 @@ class Optimizer:
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
-        if not env_utils.check_formatter_installed(self.args.formatter_cmds):
-            return
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return

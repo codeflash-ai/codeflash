@@ -1429,7 +1429,7 @@ class FunctionOptimizer:
         )
 
         generated_tests = add_runtime_comments_to_generated_tests(
-            generated_tests, original_runtime_by_test, optimized_runtime_by_test
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
         )
 
         generated_tests_str = "\n#------------------------------------------------\n".join(
