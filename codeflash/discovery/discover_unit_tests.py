@@ -71,10 +71,11 @@ def _extract_dotted_call_name(node: ast.expr) -> str | None:
     parts = []
     current = node
     while isinstance(current, ast.Attribute):
-        parts.insert(0, current.attr)
+        parts.append(current.attr)
         current = current.value
     if isinstance(current, ast.Name):
-        parts.insert(0, current.id)
+        parts.append(current.id)
+        parts.reverse()
         return ".".join(parts) if parts else None
     return None
 
