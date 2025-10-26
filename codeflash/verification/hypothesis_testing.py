@@ -268,8 +268,9 @@ def generate_hypothesis_tests(
                 test_framework=args.test_framework,
                 pytest_cmd=args.pytest_cmd,
             )
+            file_to_funcs = {function_to_optimize.file_path: [function_to_optimize]}
             function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = (
-                discover_unit_tests(hypothesis_config)
+                discover_unit_tests(hypothesis_config, file_to_funcs_to_optimize=file_to_funcs)
             )
             with hypothesis_path.open("r", encoding="utf-8") as f:
                 original_code = f.read()
@@ -290,7 +291,7 @@ def generate_hypothesis_tests(
             with hypothesis_path.open("w", encoding="utf-8") as f:
                 f.write(hypothesis_test_suite_code)
             function_to_hypothesis_tests, num_discovered_hypothesis_tests, _ = (
-                discover_unit_tests(hypothesis_config)
+                discover_unit_tests(hypothesis_config, file_to_funcs_to_optimize=file_to_funcs)
             )
             logger.info(
                 f"Created {num_discovered_hypothesis_tests} "
