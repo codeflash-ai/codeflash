@@ -53,6 +53,7 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
+        self.hypothesis_tests_dirs: list[Path] = []  # Track all hypothesis test directories
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
@@ -337,6 +338,9 @@ class Optimizer:
                             function_optimizer  # needed to clean up from the outside of this function
                         )
                         best_optimization = function_optimizer.optimize_function()
+                        # Track hypothesis test directory for cleanup
+                        if function_optimizer.hypothesis_tests_dir:
+                            self.hypothesis_tests_dirs.append(function_optimizer.hypothesis_tests_dir)
                         if self.functions_checkpoint:
                             self.functions_checkpoint.add_function_to_checkpoint(
                                 function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
@@ -430,7 +434,12 @@ class Optimizer:
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
+
+        # Cleanup all temporary test directories
+        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir, self.replay_tests_dir]
+        paths_to_cleanup.extend(self.hypothesis_tests_dirs)
+        cleanup_paths(paths_to_cleanup)
+        self.hypothesis_tests_dirs.clear()
 
     def worktree_mode(self) -> None:
         if self.current_worktree:

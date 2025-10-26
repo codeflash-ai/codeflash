@@ -240,6 +240,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.hypothesis_tests_dir: Path | None = None
         self.generate_and_instrument_tests_results: (
             tuple[GeneratedTestsList, dict[str, set[FunctionCalledInTest]], OptimizationSet] | None
         ) = None
@@ -1147,7 +1148,11 @@ class FunctionOptimizer:
             generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
         )
         future_hypothesis_tests = self.executor.submit(
-            generate_hypothesis_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
+            generate_hypothesis_tests,
+            self.test_cfg,
+            self.args,
+            self.function_to_optimize,
+            self.function_to_optimize_ast,
         )
         futures = [*future_tests, future_optimization_candidates, future_concolic_tests, future_hypothesis_tests]
         if run_experiment:
@@ -1201,7 +1206,8 @@ class FunctionOptimizer:
             logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
             return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
-        function_to_hypothesis_tests, hypothesis_test_str = future_hypothesis_tests.result()
+        function_to_hypothesis_tests, hypothesis_test_str, hypothesis_test_suite_dir = future_hypothesis_tests.result()
+        self.hypothesis_tests_dir = hypothesis_test_suite_dir
 
         count_tests = len(tests)
         if concolic_test_str:
@@ -2051,7 +2057,12 @@ class FunctionOptimizer:
             paths_to_cleanup.append(test_file.instrumented_behavior_file_path)
             paths_to_cleanup.append(test_file.benchmarking_file_path)
 
+        # Add hypothesis test directory to cleanup
+        if self.hypothesis_tests_dir and self.hypothesis_tests_dir.exists():
+            paths_to_cleanup.append(self.hypothesis_tests_dir)
+
         cleanup_paths(paths_to_cleanup)
+        self.hypothesis_tests_dir = None
 
     def get_test_env(
         self, codeflash_loop_index: int, codeflash_test_iteration: int, codeflash_tracer_disable: int = 1
