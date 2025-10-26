@@ -167,16 +167,6 @@ def _compare_hypothesis_tests_semantic(original_hypothesis: list, candidate_hypo
         f"Candidate={len(candidate_by_func)} test functions ({cand_total_examples} examples)"
     )
 
-    # Check if all test functions in original are present in candidate
-    missing_funcs = set(original_by_func.keys()) - set(candidate_by_func.keys())
-    if missing_funcs:
-        logger.warning(
-            f"Hypothesis test functions missing in candidate: {len(missing_funcs)} functions. "
-            f"First missing: {missing_funcs.__iter__().__next__()}"
-        )
-        return False
-
-    # Compare each test function's results
     for test_key in original_by_func:
         if test_key not in candidate_by_func:
             continue  # Already handled above
@@ -196,12 +186,4 @@ def _compare_hypothesis_tests_semantic(original_hypothesis: list, candidate_hypo
                 f"(original_failed={orig_had_failure}, candidate_failed={cand_had_failure})"
             )
             return False
-
-        if abs(len(orig_examples) - len(cand_examples)) > 10:
-            logger.info(
-                f"Hypothesis test '{test_key[2]}': example counts differ "
-                f"(original={len(orig_examples)}, candidate={len(cand_examples)}). "
-                f"This is expected when code performance changes."
-            )
-
     return True

@@ -182,7 +182,7 @@ def make_hypothesis_tests_deterministic(code: str) -> str:
 
 def generate_hypothesis_tests(
     test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
-) -> tuple[dict[str, list[FunctionCalledInTest]], str]:
+) -> tuple[dict[str, list[FunctionCalledInTest]], str, Path | None]:
     """Generate property-based tests using Hypothesis ghostwriter.
 
     This function:
@@ -193,12 +193,14 @@ def generate_hypothesis_tests(
     5. Formats the tests with the project formatter
 
     Returns:
-        Tuple of (function_to_tests_map, test_suite_code)
+        Tuple of (function_to_tests_map, test_suite_code, hypothesis_test_suite_dir)
+        The hypothesis_test_suite_dir is None if no tests were generated.
 
     """
     start_time = time.perf_counter()
     function_to_hypothesis_tests: dict[str, list[FunctionCalledInTest]] = {}
     hypothesis_test_suite_code: str = ""
+    hypothesis_test_suite_dir: Path | None = None
 
     if (
         test_cfg.project_root_path
@@ -212,8 +214,6 @@ def generate_hypothesis_tests(
             qualified_function_path = get_qualified_function_path(
                 function_to_optimize.file_path, args.project_root, function_to_optimize.qualified_name
             )
-            logger.info(f"command: hypothesis write {qualified_function_path}")
-
             hypothesis_result = subprocess.run(
                 ["hypothesis", "write", qualified_function_path],
                 capture_output=True,
@@ -226,11 +226,11 @@ def generate_hypothesis_tests(
             logger.debug("Hypothesis test generation timed out")
             end_time = time.perf_counter()
             logger.debug(f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds")
-            return function_to_hypothesis_tests, hypothesis_test_suite_code
+            return function_to_hypothesis_tests, hypothesis_test_suite_code, hypothesis_test_suite_dir
 
         if hypothesis_result.returncode == 0:
             hypothesis_test_suite_code = hypothesis_result.stdout
-            hypothesis_test_suite_dir = Path(tempfile.mkdtemp(dir=test_cfg.tests_root))
+            hypothesis_test_suite_dir = Path(tempfile.mkdtemp(prefix="codeflash_hypothesis_", dir=test_cfg.tests_root))
             hypothesis_path = hypothesis_test_suite_dir / "test_hypothesis.py"
             hypothesis_path.write_text(hypothesis_test_suite_code, encoding="utf8")
 
@@ -250,12 +250,11 @@ def generate_hypothesis_tests(
 
             unparsed = filter_hypothesis_tests_by_function_name(original_code, function_to_optimize.function_name)
 
-            console.print(f"modified src: {unparsed}")
-
             hypothesis_test_suite_code = format_code(
                 args.formatter_cmds,
                 hypothesis_path,
                 optimized_code=make_hypothesis_tests_deterministic(remove_functions_with_only_any_type(unparsed)),
+                print_status=False,
             )
             with hypothesis_path.open("w", encoding="utf-8") as f:
                 f.write(hypothesis_test_suite_code)
@@ -269,7 +268,7 @@ def generate_hypothesis_tests(
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"Generated hypothesis tests in {end_time - start_time:.2f} seconds")
-            return function_to_hypothesis_tests, hypothesis_test_suite_code
+            return function_to_hypothesis_tests, hypothesis_test_suite_code, hypothesis_test_suite_dir
 
         logger.debug(
             f"Error running hypothesis write {': ' + hypothesis_result.stderr if hypothesis_result.stderr else '.'}"
@@ -278,4 +277,4 @@ def generate_hypothesis_tests(
 
     end_time = time.perf_counter()
     logger.debug(f"Hypothesis test generation completed in {end_time - start_time:.2f} seconds")
-    return function_to_hypothesis_tests, hypothesis_test_suite_code
+    return function_to_hypothesis_tests, hypothesis_test_suite_code, hypothesis_test_suite_dir
