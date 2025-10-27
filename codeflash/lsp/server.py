@@ -63,10 +63,10 @@ class CodeflashLanguageServer(LanguageServer):
         log_params = LogMessageParams(type=lsp_message_type, message=message)
         self.protocol.notify("window/logMessage", log_params)
 
-    def cleanup_the_optimizer(self) -> None:
+    def cleanup_the_optimizer(self) -> bool:
         self.current_optimization_init_result = None
         if not self.optimizer:
-            return
+            return False
         try:
             self.optimizer.cleanup_temporary_paths()
             # restore args and test cfg
@@ -77,6 +77,8 @@ class CodeflashLanguageServer(LanguageServer):
             self.optimizer.current_function_optimizer = None
         except Exception:
             self.show_message_log("Failed to cleanup optimizer", "Error")
+            return False
+        return True
 
     def shutdown(self) -> None:
         """Gracefully shutdown the server."""

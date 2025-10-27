@@ -344,6 +344,13 @@ def execution_context(**kwargs: str) -> None:
         server.execution_context_vars.reset(token)
 
 
+@server.feature("cleanupCurrentOptimizerSession")
+def cleanup_optimizer(_params: any) -> dict[str, str]:
+    if not server.cleanup_the_optimizer():
+        return {"status": "error", "message": "Failed to cleanup optimizer"}
+    return {"status": "success"}
+
+
 @server.feature("initializeFunctionOptimization")
 def initialize_function_optimization(params: FunctionOptimizationInitParams) -> dict[str, str]:
     with execution_context(task_id=params.task_id):
