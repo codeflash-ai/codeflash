@@ -82,6 +82,7 @@ from codeflash.models.models import (
     TestingMode,
     TestResults,
     TestType,
+DBOptimizedCandidate
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import (
@@ -125,6 +126,7 @@ class CandidateProcessor:
         initial_candidates: list,
         future_line_profile_results: concurrent.futures.Future,
         future_all_refinements: list,
+        future_evolver:
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
@@ -246,6 +248,7 @@ class FunctionOptimizer:
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 2 if self.experiment_id is None else n_tests + 3
         )
+        self.optimizations_db = []
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -494,11 +497,28 @@ class FunctionOptimizer:
             else None,
         )
 
+        # TODO: This needs to be called later on, not upfront, maybe similar to how refinement is called.
+
+        future_evolver_results = self.executor.submit(
+            ai_service_client.optimize_python_code_evolve,
+            source_code=code_context.read_writable_code.markdown,
+            dependency_code=code_context.read_only_context_code,
+            original_runtime=original_code_baseline.runtime,
+            candidates=random.sample(self.optimizations_db, k=2),
+            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            num_candidates=2,
+            experiment_metadata=ExperimentMetadata(
+                id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
+            )
+            if self.experiment_id
+            else None,
+        )
+
         # Initialize candidate processor
         processor = CandidateProcessor(candidates, future_line_profile_results, future_all_refinements)
         candidate_index = 0
 
-        # Process candidates using queue-based approach
+        # Process candidates using a queue-based approach
         while not processor.is_done():
             candidate = processor.get_next_candidate()
             if candidate is None:
@@ -579,6 +599,7 @@ class FunctionOptimizer:
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
+                    self.optimizations_db.append(DBOptimizedCandidate(candidate=candidate, runtime=best_test_runtime))
                     perf_gain = performance_gain(
                         original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
                     )

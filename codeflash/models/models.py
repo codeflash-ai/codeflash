@@ -719,3 +719,12 @@ class TestResults(BaseModel):  # noqa: PLW1641
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
+
+@dataclass
+class DBOptimizedCandidate:
+    candidate: OptimizedCandidate
+    runtime: int
+
+    def get_top_n_candidates(self, n: int):
+        sorted_candidates = sorted(self.candidate, key=lambda x: x.runtime)
+        return sorted_candidates[:n]

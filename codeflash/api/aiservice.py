@@ -19,7 +19,8 @@ from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, 
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
-from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
+from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate, \
+    DBOptimizedCandidate
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -282,6 +283,70 @@ class AiServiceClient:
                 for c in refinements
             ]
 
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def optimize_python_code_evolve(  # noqa: D417
+        self,
+        source_code: str,
+        dependency_code: str,
+        original_runtime: int,
+        candidates: DBOptimizedCandidate,
+        trace_id: str,
+        num_candidates: int = 10,
+        experiment_metadata: ExperimentMetadata | None = None,
+    ) -> list[OptimizedCandidate]:
+        """Evolve the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = {
+            "source_code": source_code,
+            "dependency_code": dependency_code,
+            "original_runtime": humanize_runtime(original_runtime),
+            "num_variants": num_candidates,
+            "candidates": [{"source_code": candidate.source_code.markdown,
+                            "runtime": humanize_runtime(candidate.runtime)} for candidate in candidates],
+            "trace_id": trace_id,
+            "python_version": platform.python_version(),
+            "experiment_metadata": experiment_metadata,
+            "codeflash_version": codeflash_version,
+            "lsp_mode": is_LSP_enabled(),
+            "n_candidates": 2,
+        }
+
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/evolve", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            logger.info(
+                f"!lsp|Generated {len(optimizations_json)} candidate optimizations by evolving the original code."
+            )
+            console.rule()
+            return self._get_valid_candidates(optimizations_json)
         try:
             error = response.json()["error"]
         except Exception:
