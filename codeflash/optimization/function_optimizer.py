@@ -2047,7 +2047,7 @@ class FunctionOptimizer:
         # this will happen when a timeoutexpired exception happens
         if isinstance(line_profile_results, TestResults) and not line_profile_results.test_results:
             logger.warning(
-                f"Timeout occured while running line profiler for original function {self.function_to_optimize.function_name}"
+                f"Timeout occurred while running line profiler for original function {self.function_to_optimize.function_name}"
             )
             # set default value for line profiler results
             return {"timings": {}, "unit": 0, "str_out": ""}
