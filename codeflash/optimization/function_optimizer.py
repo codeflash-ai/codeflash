@@ -30,10 +30,10 @@ from codeflash.code_utils.code_replacer import (
     replace_function_definitions_in_module,
 )
 from codeflash.code_utils.code_utils import (
-    ImportErrorPattern,
     cleanup_paths,
     create_rank_dictionary_compact,
     diff_length,
+    extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
@@ -1576,11 +1576,14 @@ class FunctionOptimizer:
                 )
         if not behavioral_results:
             logger.warning(
-                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
         if not coverage_critic(coverage_results, self.args.test_framework):
+            did_pass_all_tests = all(result.did_pass for result in behavioral_results)
+            if not did_pass_all_tests:
+                return Failure("Tests failed to pass for the original code.")
             return Failure(
                 f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
@@ -1944,12 +1947,19 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
-            if "ModuleNotFoundError" in run_result.stdout:
+
+            unique_errors = extract_unique_errors(run_result.stdout)
+
+            if unique_errors:
                 from rich.text import Text
 
-                match = ImportErrorPattern.search(run_result.stdout).group()
-                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
-                console.print(panel)
+                for error in unique_errors:
+                    if is_LSP_enabled():
+                        lsp_log(LspCodeMessage(code=error, file_name="errors"))
+                    else:
+                        panel = Panel(Text.from_markup(f"⚠️  {error} ", style="bold red"), expand=False)
+                        console.print(panel)
+
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
