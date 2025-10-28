@@ -1,13 +1,29 @@
+from __future__ import annotations
+
 import contextlib
 import os
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import code_print
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.either import is_successful
-from codeflash.lsp.server import CodeflashLanguageServer
+
+if TYPE_CHECKING:
+    import threading
+
+    from codeflash.lsp.server import CodeflashLanguageServer
 
 
-def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[str, str]:  # noqa: ANN001
+def get_cancelled_reponse() -> dict[str, str]:
+    return {"status": "canceled", "message": "Task was canceled"}
+
+
+def abort_if_cancelled(cancel_event: threading.Event) -> None:
+    if cancel_event.is_set():
+        raise RuntimeError("cancelled")
+
+
+def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: threading.Event, params) -> dict[str, str]:  # noqa
     server.show_message_log(f"Starting optimization for function: {params.functionName}", "Info")
     should_run_experiment, code_context, original_helper_code = server.current_optimization_init_result
     function_optimizer = server.optimizer.current_function_optimizer
@@ -18,6 +34,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         file_name=current_function.file_path,
         function_name=current_function.function_name,
     )
+    abort_if_cancelled(cancel_event)
 
     optimizable_funcs = {current_function.file_path: [current_function]}
 
@@ -26,9 +43,11 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         function_to_tests, _num_discovered_tests = server.optimizer.discover_tests(optimizable_funcs)
         function_optimizer.function_to_tests = function_to_tests
 
+    abort_if_cancelled(cancel_event)
     test_setup_result = function_optimizer.generate_and_instrument_tests(
         code_context, should_run_experiment=should_run_experiment
     )
+    abort_if_cancelled(cancel_event)
     if not is_successful(test_setup_result):
         return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
     (
@@ -52,6 +71,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         original_conftest_content=original_conftest_content,
     )
 
+    abort_if_cancelled(cancel_event)
     if not is_successful(baseline_setup_result):
         return {"functionName": params.functionName, "status": "error", "message": baseline_setup_result.failure()}
 
@@ -76,6 +96,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         concolic_test_str=concolic_test_str,
     )
 
+    abort_if_cancelled(cancel_event)
     if not best_optimization:
         server.show_message_log(
             f"No best optimizations found for function {function_to_optimize_qualified_name}", "Warning"
@@ -93,6 +114,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, params) -> dict[s
         server.optimizer.current_worktree, relative_file_paths, function_to_optimize_qualified_name
     )
 
+    abort_if_cancelled(cancel_event)
     if not patch_path:
         return {
             "functionName": params.functionName,

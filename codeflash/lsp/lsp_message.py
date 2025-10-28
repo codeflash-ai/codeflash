@@ -34,8 +34,12 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
+        from codeflash.lsp.beta import server
+
+        execution_ctx = server.execution_context_vars.get()
+        current_task_id = execution_ctx.get("task_id", None)
         data = self._loop_through(asdict(self))
-        ordered = {"type": self.type(), **data}
+        ordered = {"type": self.type(), "task_id": current_task_id, **data}
         return message_delimiter + json.dumps(ordered) + message_delimiter
 
 
