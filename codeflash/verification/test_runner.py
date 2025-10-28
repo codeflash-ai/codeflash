@@ -166,15 +166,10 @@ def run_line_profile_tests(
         )
         test_files: list[str] = []
         for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
+            if file.test_type == TestType.REPLAY_TEST:
+                # TODO: Does this work for unittest framework?
                 test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
+                    [str(file.benchmarking_file_path) + "::" + test.test_function for test in file.tests_in_file]
                 )
             else:
                 test_files.append(str(file.benchmarking_file_path))
@@ -251,15 +246,10 @@ def run_benchmarking_tests(
         )
         test_files: list[str] = []
         for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
+            if file.test_type == TestType.REPLAY_TEST:
+                # TODO: Does this work for unittest framework?
                 test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
+                    [str(file.benchmarking_file_path) + "::" + test.test_function for test in file.tests_in_file]
                 )
             else:
                 test_files.append(str(file.benchmarking_file_path))
