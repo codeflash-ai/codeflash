@@ -91,7 +91,7 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
 
     :return: The userid or None if the request fails.
     """
-    if not ensure_codeflash_api_key():
+    if not api_key and not ensure_codeflash_api_key():
         return None
 
     response = make_cfapi_request(
