@@ -13,6 +13,7 @@ import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
@@ -118,6 +119,49 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
 
     logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
     return None
+
+
+def validate_api_key() -> None:
+    """Validate the API key by making a request to the /cfapi/cli-get-user endpoint.
+    
+    Raises SystemExit if the API key is invalid (403) or missing.
+    This should be called early in the CLI flow before starting optimization.
+    """
+    logger.debug("validate_api_key: Starting API key validation")
+    api_key = get_codeflash_api_key()
+    
+    response = make_cfapi_request(
+        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key, suppress_errors=True
+    )
+    
+    if response.status_code == 403:
+        error_message = "Invalid API key"
+        try:
+            json_response = response.json()
+            if "error" in json_response:
+                error_message = json_response["error"]
+            elif "message" in json_response:
+                error_message = json_response["message"]
+        except (ValueError, TypeError):
+            error_message = response.text or "Invalid API key"
+        
+        msg = (
+            f"Invalid Codeflash API key. {error_message}\n"
+            "You can generate a valid API key at https://app.codeflash.ai/app/apikeys,\n"
+            "then set it as a CODEFLASH_API_KEY environment variable."
+        )
+        logger.error(f"validate_api_key: API key validation failed with 403 - {error_message}")
+        exit_with_message(msg, error_on_exit=True)
+    
+    if response.status_code != 200:
+        msg = (
+            f"Failed to validate API key (status {response.status_code}: {response.reason})\n"
+            "Please check your API key at https://app.codeflash.ai/app/apikeys"
+        )
+        logger.error(f"validate_api_key: API key validation failed with status {response.status_code}")
+        exit_with_message(msg, error_on_exit=True)
+    
+    logger.debug("validate_api_key: API key validation successful")
 
 
 def suggest_changes(
