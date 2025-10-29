@@ -123,17 +123,21 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
 
 def validate_api_key() -> None:
     """Validate the API key by making a request to the /cfapi/cli-get-user endpoint.
-    
+
     Raises SystemExit if the API key is invalid (403) or missing.
     This should be called early in the CLI flow before starting optimization.
     """
     logger.debug("validate_api_key: Starting API key validation")
     api_key = get_codeflash_api_key()
-    
+
     response = make_cfapi_request(
-        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key, suppress_errors=True
+        endpoint="/cli-get-user",
+        method="GET",
+        extra_headers={"cli_version": __version__},
+        api_key=api_key,
+        suppress_errors=True,
     )
-    
+
     if response.status_code == 403:
         error_message = "Invalid API key"
         try:
@@ -144,7 +148,7 @@ def validate_api_key() -> None:
                 error_message = json_response["message"]
         except (ValueError, TypeError):
             error_message = response.text or "Invalid API key"
-        
+
         msg = (
             f"Invalid Codeflash API key. {error_message}\n"
             "You can generate a valid API key at https://app.codeflash.ai/app/apikeys,\n"
@@ -152,7 +156,7 @@ def validate_api_key() -> None:
         )
         logger.error(f"validate_api_key: API key validation failed with 403 - {error_message}")
         exit_with_message(msg, error_on_exit=True)
-    
+
     if response.status_code != 200:
         msg = (
             f"Failed to validate API key (status {response.status_code}: {response.reason})\n"
@@ -160,7 +164,7 @@ def validate_api_key() -> None:
         )
         logger.error(f"validate_api_key: API key validation failed with status {response.status_code}")
         exit_with_message(msg, error_on_exit=True)
-    
+
     logger.debug("validate_api_key: API key validation successful")
 
 
