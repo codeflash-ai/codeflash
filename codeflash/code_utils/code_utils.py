@@ -360,3 +360,19 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
+
+
+def extract_unique_errors(pytest_output: str) -> set[str]:
+    unique_errors = set()
+
+    # Regex pattern to match error lines:
+    # - Start with 'E' followed by optional whitespace
+    # - Capture the actual error message
+    pattern = r"^E\s+(.*)$"
+
+    for error_message in re.findall(pattern, pytest_output, re.MULTILINE):
+        error_message = error_message.strip()  # noqa: PLW2901
+        if error_message:
+            unique_errors.add(error_message)
+
+    return unique_errors

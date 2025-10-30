@@ -48,8 +48,8 @@ class TestDeterministicPatches:
         original_os_urandom = os.urandom
 
         # Create deterministic implementations (matching pytest_plugin.py)
-        fixed_timestamp = 1609459200.0  # 2021-01-01 00:00:00 UTC
-        fixed_datetime = datetime.datetime(2021, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_timestamp = 1761717605.108106
+        fixed_datetime = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
         fixed_uuid = uuid.UUID("12345678-1234-5678-9abc-123456789012")
 
         # Counter for perf_counter
@@ -159,7 +159,7 @@ class TestDeterministicPatches:
 
     def test_time_time_deterministic(self, setup_deterministic_environment):
         """Test that time.time() returns a fixed deterministic value."""
-        expected_timestamp = 1609459200.0  # 2021-01-01 00:00:00 UTC
+        expected_timestamp = 1761717605.108106
 
         # Call multiple times and verify consistent results
         result1 = time.time()
@@ -311,7 +311,7 @@ class TestDeterministicPatches:
         result1 = mock_now()
         result2 = mock_utcnow()
 
-        expected_dt = datetime.datetime(2021, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        expected_dt = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
         assert result1 == expected_dt
         assert result2 == expected_dt
 
@@ -355,7 +355,7 @@ class TestDeterministicPatches:
     def test_patches_applied_correctly(self, setup_deterministic_environment):
         """Test that patches are applied correctly."""
         # Test that functions return expected deterministic values
-        assert time.time() == 1609459200.0
+        assert time.time() == 1761717605.108106
         assert uuid.uuid4() == uuid.UUID("12345678-1234-5678-9abc-123456789012")
         assert random.random() == 0.123456789
         assert os.urandom(4) == b"\x42\x42\x42\x42"
@@ -378,7 +378,7 @@ class TestDeterministicPatches:
         # Test with different timezone
         utc_tz = datetime.timezone.utc
         result_with_tz = mock_now(utc_tz)
-        expected_with_tz = datetime.datetime(2021, 1, 1, 0, 0, 0, tzinfo=utc_tz)
+        expected_with_tz = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
         assert result_with_tz == expected_with_tz
 
     def test_integration_with_actual_optimization_scenario(self, setup_deterministic_environment):

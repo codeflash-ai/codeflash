@@ -30,10 +30,10 @@ from codeflash.code_utils.code_replacer import (
     replace_function_definitions_in_module,
 )
 from codeflash.code_utils.code_utils import (
-    ImportErrorPattern,
     cleanup_paths,
     create_rank_dictionary_compact,
     diff_length,
+    extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
@@ -66,7 +66,7 @@ from codeflash.context.unused_definition_remover import detect_unused_helper_fun
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
-from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage
+from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -532,7 +532,11 @@ class FunctionOptimizer:
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"h3|Optimization candidate {candidate_index}/{processor.candidate_len}:")
-                code_print(candidate.source_code.flat, file_name=f"candidate_{candidate_index}.py")
+                code_print(
+                    candidate.source_code.flat,
+                    file_name=f"candidate_{candidate_index}.py",
+                    lsp_message_id=LSPMessageId.CANDIDATE.value,
+                )
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
                 try:
@@ -1344,6 +1348,7 @@ class FunctionOptimizer:
                     best_optimization.candidate.source_code.flat,
                     file_name="best_candidate.py",
                     function_name=self.function_to_optimize.function_name,
+                    lsp_message_id=LSPMessageId.BEST_CANDIDATE.value,
                 )
                 processed_benchmark_info = None
                 if self.args.benchmark:
@@ -1629,17 +1634,20 @@ class FunctionOptimizer:
                 )
         if not behavioral_results:
             logger.warning(
-                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. SKIPPING OPTIMIZING THIS FUNCTION."
+                f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
         if not coverage_critic(coverage_results, self.args.test_framework):
+            did_pass_all_tests = all(result.did_pass for result in behavioral_results)
+            if not did_pass_all_tests:
+                return Failure("Tests failed to pass for the original code.")
             return Failure(
                 f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
 
         if test_framework == "pytest":
-            with progress_bar("Running line profiling to identify performance bottlenecks..."):
+            with progress_bar("Running line profiler to identify performance bottlenecks..."):
                 line_profile_results = self.line_profiler_step(
                     code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
                 )
@@ -1939,7 +1947,7 @@ class FunctionOptimizer:
         *,
         enable_coverage: bool = False,
         pytest_min_loops: int = 5,
-        pytest_max_loops: int = 100_000,
+        pytest_max_loops: int = 250,
         code_context: CodeOptimizationContext | None = None,
         unittest_loop_index: int | None = None,
         line_profiler_output_file: Path | None = None,
@@ -1997,12 +2005,19 @@ class FunctionOptimizer:
                 f"stdout: {run_result.stdout}\n"
                 f"stderr: {run_result.stderr}\n"
             )
-            if "ModuleNotFoundError" in run_result.stdout:
+
+            unique_errors = extract_unique_errors(run_result.stdout)
+
+            if unique_errors:
                 from rich.text import Text
 
-                match = ImportErrorPattern.search(run_result.stdout).group()
-                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
-                console.print(panel)
+                for error in unique_errors:
+                    if is_LSP_enabled():
+                        lsp_log(LspCodeMessage(code=error, file_name="errors"))
+                    else:
+                        panel = Panel(Text.from_markup(f"⚠️  {error} ", style="bold red"), expand=False)
+                        console.print(panel)
+
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
@@ -2101,6 +2116,13 @@ class FunctionOptimizer:
             self.write_code_and_helpers(
                 self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
             )
+        # this will happen when a timeoutexpired exception happens
+        if isinstance(line_profile_results, TestResults) and not line_profile_results.test_results:
+            logger.warning(
+                f"Timeout occurred while running line profiler for original function {self.function_to_optimize.function_name}"
+            )
+            # set default value for line profiler results
+            return {"timings": {}, "unit": 0, "str_out": ""}
         if line_profile_results["str_out"] == "":
             logger.warning(
                 f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
