@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -14,10 +15,17 @@ max_code_lines_before_collapse = 45
 message_delimiter = "\u241f"
 
 
+# allow the client to know which message it is receiving
+class LSPMessageId(enum.Enum):
+    BEST_CANDIDATE = "best_candidate"
+    CANDIDATE = "candidate"
+
+
 @dataclass
 class LspMessage:
     # to show a loading indicator if the operation is taking time like generating candidates or tests
     takes_time: bool = False
+    message_id: Optional[str] = None
 
     def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
         if isinstance(obj, list):

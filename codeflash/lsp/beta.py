@@ -353,7 +353,7 @@ def cleanup_optimizer(_params: any) -> dict[str, str]:
 
 @server.feature("initializeFunctionOptimization")
 def initialize_function_optimization(params: FunctionOptimizationInitParams) -> dict[str, str]:
-    with execution_context(task_id=params.task_id):
+    with execution_context(task_id=getattr(params, "task_id", None)):
         document_uri = params.textDocument.uri
         document = server.workspace.get_text_document(document_uri)
         file_path = Path(document.path)
@@ -423,7 +423,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
 
 @server.feature("performFunctionOptimization")
 async def perform_function_optimization(params: FunctionOptimizationParams) -> dict[str, str]:
-    with execution_context(task_id=params.task_id):
+    with execution_context(task_id=getattr(params, "task_id", None)):
         loop = asyncio.get_running_loop()
         cancel_event = threading.Event()
 

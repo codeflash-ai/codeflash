@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.lsp.lsp_message import LspTextMessage, message_delimiter
+from codeflash.lsp.lsp_message import LSPMessageId, LspTextMessage, message_delimiter
 
 root_logger = None
+
+message_id_prefix = "id:"
 
 
 @dataclass
@@ -18,6 +20,7 @@ class LspMessageTags:
     lsp: bool = False  # lsp                (lsp only)
     force_lsp: bool = False  # force_lsp    (you can use this to force a message to be sent to the LSP even if the level is not supported)
     loading: bool = False  # loading        (you can use this to indicate that the message is a loading message)
+    message_id: Optional[LSPMessageId] = None  # example: id:best_candidate
     highlight: bool = False  # highlight    (you can use this to highlight the message by wrapping it in ``)
     h1: bool = False  # h1
     h2: bool = False  # h2
@@ -52,24 +55,27 @@ def extract_tags(msg: str) -> tuple[LspMessageTags, str]:
         tags = {tag.strip() for tag in tags_str.split(",")}
         message_tags = LspMessageTags()
         # manually check and set to avoid repeated membership tests
-        if "lsp" in tags:
-            message_tags.lsp = True
-        if "!lsp" in tags:
-            message_tags.not_lsp = True
-        if "force_lsp" in tags:
-            message_tags.force_lsp = True
-        if "loading" in tags:
-            message_tags.loading = True
-        if "highlight" in tags:
-            message_tags.highlight = True
-        if "h1" in tags:
-            message_tags.h1 = True
-        if "h2" in tags:
-            message_tags.h2 = True
-        if "h3" in tags:
-            message_tags.h3 = True
-        if "h4" in tags:
-            message_tags.h4 = True
+        for tag in tags:
+            if tag.startswith(message_id_prefix):
+                message_tags.message_id = LSPMessageId(tag[len(message_id_prefix) :]).value
+            elif tag == "lsp":
+                message_tags.lsp = True
+            elif tag == "!lsp":
+                message_tags.not_lsp = True
+            elif tag == "force_lsp":
+                message_tags.force_lsp = True
+            elif tag == "loading":
+                message_tags.loading = True
+            elif tag == "highlight":
+                message_tags.highlight = True
+            elif tag == "h1":
+                message_tags.h1 = True
+            elif tag == "h2":
+                message_tags.h2 = True
+            elif tag == "h3":
+                message_tags.h3 = True
+            elif tag == "h4":
+                message_tags.h4 = True
         return message_tags, content
 
     return LspMessageTags(), msg
@@ -118,7 +124,7 @@ def enhanced_log(
     if is_normal_text_message:
         clean_msg = add_heading_tags(clean_msg, tags)
         clean_msg = add_highlight_tags(clean_msg, tags)
-        clean_msg = LspTextMessage(text=clean_msg, takes_time=tags.loading).serialize()
+        clean_msg = LspTextMessage(text=clean_msg, takes_time=tags.loading, message_id=tags.message_id).serialize()
 
     actual_log_fn(clean_msg, *args, **kwargs)
 
