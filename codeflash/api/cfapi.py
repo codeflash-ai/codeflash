@@ -99,7 +99,11 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
         return None
 
     response = make_cfapi_request(
-        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key
+        endpoint="/cli-get-user",
+        method="GET",
+        extra_headers={"cli_version": __version__},
+        api_key=api_key,
+        suppress_errors=True,
     )
     if response.status_code == 200:
         if "min_version" not in response.text:
@@ -131,7 +135,6 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
             "or\n"
             "https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#automated-setup-recommended"
         )
-        logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
         exit_with_message(msg, error_on_exit=True)
 
     # For other errors, log and return None (backward compatibility)
