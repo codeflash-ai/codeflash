@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from codeflash.lsp.helpers import replace_quotes_with_backticks, simplify_worktree_paths
+from codeflash.lsp.helpers import is_LSP_enabled, replace_quotes_with_backticks, simplify_worktree_paths
 
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
@@ -42,6 +42,8 @@ class LspMessage:
         raise NotImplementedError
 
     def serialize(self) -> str:
+        if not is_LSP_enabled():
+            return ""
         from codeflash.lsp.beta import server
 
         execution_ctx = server.execution_context_vars.get()
