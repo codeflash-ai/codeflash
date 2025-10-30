@@ -66,7 +66,7 @@ from codeflash.context.unused_definition_remover import detect_unused_helper_fun
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
-from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage
+from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     BestOptimization,
@@ -510,7 +510,11 @@ class FunctionOptimizer:
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
                 get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
                 logger.info(f"h3|Optimization candidate {candidate_index}/{processor.candidate_len}:")
-                code_print(candidate.source_code.flat, file_name=f"candidate_{candidate_index}.py")
+                code_print(
+                    candidate.source_code.flat,
+                    file_name=f"candidate_{candidate_index}.py",
+                    lsp_message_id=LSPMessageId.CANDIDATE.value,
+                )
                 # map ast normalized code to diff len, unnormalized code
                 # map opt id to the shortest unnormalized code
                 try:
@@ -1291,6 +1295,7 @@ class FunctionOptimizer:
                     best_optimization.candidate.source_code.flat,
                     file_name="best_candidate.py",
                     function_name=self.function_to_optimize.function_name,
+                    lsp_message_id=LSPMessageId.BEST_CANDIDATE.value,
                 )
                 processed_benchmark_info = None
                 if self.args.benchmark:
