@@ -1,3 +1,5 @@
+"""Module for interacting with the Codeflash API."""
+
 from __future__ import annotations
 
 import json
@@ -90,6 +92,7 @@ def make_cfapi_request(
 def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
+    :param api_key: The API key to use. If None, uses get_codeflash_api_key().
     :return: The userid or None if the request fails.
     """
     if not api_key and not ensure_codeflash_api_key():
@@ -117,55 +120,23 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
         logger.error("Failed to retrieve userid from the response.")
         return None
 
+    # Handle 403 (Invalid API key) - exit with error message
+    if response.status_code == 403:
+        msg = (
+            "Invalid Codeflash API key. The API key you provided is not valid.\n"
+            "Please generate a new one at https://app.codeflash.ai/app/apikeys ,\n"
+            "then set it as a CODEFLASH_API_KEY environment variable.\n"
+            "For more information, refer to the documentation at \n"
+            "https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#manual-setup\n"
+            "or\n"
+            "https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#automated-setup-recommended"
+        )
+        logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
+        exit_with_message(msg, error_on_exit=True)
+
+    # For other errors, log and return None (backward compatibility)
     logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
     return None
-
-
-def validate_api_key() -> None:
-    """Validate the API key by making a request to the /cfapi/cli-get-user endpoint.
-
-    Raises SystemExit if the API key is invalid (403) or missing.
-    This should be called early in the CLI flow before starting optimization.
-    """
-    logger.debug("validate_api_key: Starting API key validation")
-    api_key = get_codeflash_api_key()
-
-    response = make_cfapi_request(
-        endpoint="/cli-get-user",
-        method="GET",
-        extra_headers={"cli_version": __version__},
-        api_key=api_key,
-        suppress_errors=True,
-    )
-
-    if response.status_code == 403:
-        error_message = "Invalid API key"
-        try:
-            json_response = response.json()
-            if "error" in json_response:
-                error_message = json_response["error"]
-            elif "message" in json_response:
-                error_message = json_response["message"]
-        except (ValueError, TypeError):
-            error_message = response.text or "Invalid API key"
-
-        msg = (
-            f"Invalid Codeflash API key. {error_message}\n"
-            "You can generate a valid API key at https://app.codeflash.ai/app/apikeys,\n"
-            "then set it as a CODEFLASH_API_KEY environment variable."
-        )
-        logger.error(f"validate_api_key: API key validation failed with 403 - {error_message}")
-        exit_with_message(msg, error_on_exit=True)
-
-    if response.status_code != 200:
-        msg = (
-            f"Failed to validate API key (status {response.status_code}: {response.reason})\n"
-            "Please check your API key at https://app.codeflash.ai/app/apikeys"
-        )
-        logger.error(f"validate_api_key: API key validation failed with status {response.status_code}")
-        exit_with_message(msg, error_on_exit=True)
-
-    logger.debug("validate_api_key: API key validation successful")
 
 
 def suggest_changes(

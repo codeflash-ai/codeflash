@@ -6,7 +6,6 @@ solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 
 from pathlib import Path
 
-from codeflash.api.cfapi import validate_api_key
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
 from codeflash.cli_cmds.console import paneled_text
@@ -43,8 +42,6 @@ def main() -> None:
         args = process_pyproject_config(args)
         if not env_utils.check_formatter_installed(args.formatter_cmds):
             return
-        # Validate API key early before starting optimization
-        validate_api_key()
         args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
         init_sentry(not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(not args.disable_telemetry)
