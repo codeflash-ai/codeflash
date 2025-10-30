@@ -110,6 +110,10 @@ def enhanced_log(
             actual_log_fn(clean_msg, *args, **kwargs)
             return
 
+    if not lsp_enabled:
+        # it's for LSP and LSP is disabled
+        return
+
     # ---- LSP logging path ----
     if is_normal_text_message:
         clean_msg = add_heading_tags(clean_msg, tags)
