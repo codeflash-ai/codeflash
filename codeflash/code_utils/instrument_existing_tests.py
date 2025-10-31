@@ -83,6 +83,44 @@ class InjectPerfOnly(ast.NodeTransformer):
                     if self.function_object.is_async:
                         return [test_node]
 
+                    # Create the signature binding statements
+                    bind_call = ast.Assign(
+                        targets=[ast.Name(id="_call__bound__arguments", ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Call(
+                                    func=ast.Attribute(
+                                        value=ast.Name(id="inspect", ctx=ast.Load()),
+                                        attr="signature",
+                                        ctx=ast.Load()
+                                    ),
+                                    args=[ast.Name(id=function_name, ctx=ast.Load())],
+                                    keywords=[]
+                                ),
+                                attr="bind",
+                                ctx=ast.Load()
+                            ),
+                            args=[ast.Starred(value=ast.Attribute(value=call_node, attr="args", ctx=ast.Load()), ctx=ast.Load())],
+                            keywords=[ast.keyword(arg=None, value=ast.Attribute(value=call_node, attr="keywords", ctx=ast.Load()))]
+                        ),
+                        lineno=test_node.lineno if hasattr(test_node, 'lineno') else 1,
+                        col_offset=test_node.col_offset if hasattr(test_node, 'col_offset') else 0
+                    )
+
+                    apply_defaults = ast.Expr(
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                attr="apply_defaults",
+                                ctx=ast.Load()
+                            ),
+                            args=[],
+                            keywords=[]
+                        ),
+                        lineno=test_node.lineno + 1,
+                        col_offset=test_node.col_offset
+                    )
+
                     node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                     node.args = [
                         ast.Name(id=function_name, ctx=ast.Load()),
@@ -100,7 +138,9 @@ class InjectPerfOnly(ast.NodeTransformer):
                         *call_node.args,
                     ]
                     node.keywords = call_node.keywords
-                    break
+
+                    # Return the signature binding statements along with the test_node
+                    return [bind_call, apply_defaults, test_node]
                 if isinstance(node.func, ast.Attribute):
                     function_to_test = node.func.attr
                     if function_to_test == self.function_object.function_name:
@@ -108,6 +148,45 @@ class InjectPerfOnly(ast.NodeTransformer):
                             return [test_node]
 
                         function_name = ast.unparse(node.func)
+
+                        # Create the signature binding statements
+                        bind_call = ast.Assign(
+                            targets=[ast.Name(id="_call__bound__arguments", ctx=ast.Store())],
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Call(
+                                        func=ast.Attribute(
+                                            value=ast.Name(id="inspect", ctx=ast.Load()),
+                                            attr="signature",
+                                            ctx=ast.Load()
+                                        ),
+                                        args=function_name,
+                                        keywords=[]
+                                    ),
+                                    attr="bind",
+                                    ctx=ast.Load()
+                                ),
+                                args=call_node.args,
+                                keywords=call_node.keywords
+                            ),
+                            lineno=test_node.lineno,
+                            col_offset=test_node.col_offset
+                        )
+
+                        apply_defaults = ast.Expr(
+                            value=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                    attr="apply_defaults",
+                                    ctx=ast.Load()
+                                ),
+                                args=[],
+                                keywords=[]
+                            ),
+                            lineno=test_node.lineno + 1,
+                            col_offset=test_node.col_offset
+                        )
+
                         node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                         node.args = [
                             ast.Name(id=function_name, ctx=ast.Load()),
@@ -128,11 +207,14 @@ class InjectPerfOnly(ast.NodeTransformer):
                             *call_node.args,
                         ]
                         node.keywords = call_node.keywords
+
+                        # Return the signature binding statements along with the test_node
+                        return_statement = [bind_call, apply_defaults, test_node]
                         break
 
         if call_node is None:
             return None
-        return [test_node]
+        return return_statement
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         # TODO: Ensure that this class inherits from unittest.TestCase. Don't modify non unittest.TestCase classes.
@@ -590,6 +672,7 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
+        ast.Import(names=[ast.alias(name="inspect")]),
     ]
     if mode == TestingMode.BEHAVIOR:
         new_imports.extend(
