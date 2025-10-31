@@ -1310,6 +1310,30 @@ def test_target():
 
         assert should_process is True
 
+def test_analyze_imports_method():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+
+
+def test_topological_sort():
+    g = Graph(6)
+    g.addEdge(5, 2)
+    g.addEdge(5, 0)
+    g.addEdge(4, 0)
+    g.addEdge(4, 1)
+    g.addEdge(2, 3)
+    g.addEdge(3, 1)
+
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
 
 def test_analyze_imports_aliased_class_method_negative():
     with tempfile.TemporaryDirectory() as tmpdirname:

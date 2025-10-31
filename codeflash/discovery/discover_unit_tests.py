@@ -212,6 +212,8 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.wildcard_modules: set[str] = set()
         # Track aliases: alias_name -> original_name
         self.alias_mapping: dict[str, str] = {}
+        # Track instances: variable_name -> class_name
+        self.instance_mapping: dict[str, str] = {}
 
         # Precompute function_names for prefix search
         # For prefix match, store mapping from prefix-root to candidates for O(1) matching
@@ -246,6 +248,24 @@ class ImportAnalyzer(ast.NodeVisitor):
                     self.found_any_target_function = True
                     self.found_qualified_name = target_func
                     return
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Track variable assignments, especially class instantiations."""
+        if self.found_any_target_function:
+            return
+
+        # Check if the assignment is a class instantiation
+        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
+            class_name = node.value.func.id
+            if class_name in self.imported_modules:
+                # Track all target variables as instances of the imported class
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        # Map the variable to the actual class name (handling aliases)
+                        original_class = self.alias_mapping.get(class_name, class_name)
+                        self.instance_mapping[target.id] = original_class
+
+        self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
@@ -322,6 +342,17 @@ class ImportAnalyzer(ast.NodeVisitor):
                             self.found_any_target_function = True
                             self.found_qualified_name = target_func
                             return
+
+        # Check if this is accessing a method on an instance variable
+        if isinstance(node.value, ast.Name) and node.value.id in self.instance_mapping:
+            class_name = self.instance_mapping[node.value.id]
+            for target_func in self.function_names_to_find:
+                if "." in target_func:
+                    target_class, method_name = target_func.rsplit(".", 1)
+                    if node.attr == method_name and class_name == target_class:
+                        self.found_any_target_function = True
+                        self.found_qualified_name = target_func
+                        return
 
         # Check if this is accessing a target function through a dynamically imported module
         # Only if we've detected dynamic imports are being used
