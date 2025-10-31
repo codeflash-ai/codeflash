@@ -265,6 +265,10 @@ class ImportAnalyzer(ast.NodeVisitor):
                         original_class = self.alias_mapping.get(class_name, class_name)
                         self.instance_mapping[target.id] = original_class
 
+        # Skip generic_visit if all targets are simple names (no complex subtree to visit)
+        if all(isinstance(target, ast.Name) for target in node.targets):
+            return
+
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
