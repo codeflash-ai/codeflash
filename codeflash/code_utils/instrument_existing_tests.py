@@ -738,11 +738,14 @@ def inject_profiling_into_existing_test(
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
         ast.Import(names=[ast.alias(name="os")]),
-        ast.Import(names=[ast.alias(name="inspect")]),
     ]
     if mode == TestingMode.BEHAVIOR:
         new_imports.extend(
-            [ast.Import(names=[ast.alias(name="sqlite3")]), ast.Import(names=[ast.alias(name="dill", asname="pickle")])]
+            [
+                ast.Import(names=[ast.alias(name="inspect")]),
+                ast.Import(names=[ast.alias(name="sqlite3")]),
+                ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
+            ]
         )
     if test_framework == "unittest" and platform.system() != "Windows":
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
