@@ -296,6 +296,17 @@ class ImportAnalyzer(ast.NodeVisitor):
                     self.found_qualified_name = target_func
                     return
 
+            # Check if any target function is a method of the imported class/module
+            # e.g., importing Graph and looking for Graph.topologicalSort
+            # TODO will pick up all tests which have the same class name (could be coming from a different file)
+            for target_func in fnames:
+                if "." in target_func:
+                    class_name, method_name = target_func.split(".", 1)
+                    if aname == class_name:
+                        self.found_any_target_function = True
+                        self.found_qualified_name = target_func
+                        return
+
     def visit_Attribute(self, node: ast.Attribute) -> None:
         """Handle attribute access like module.function_name."""
         if self.found_any_target_function:
