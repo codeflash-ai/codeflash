@@ -1354,7 +1354,7 @@ def test_target():
         target_functions = {"GoogleJsonSchemaTransformer.transform"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
-        assert should_process is True  # Conservative approach
+        assert should_process is False
 
 
 
