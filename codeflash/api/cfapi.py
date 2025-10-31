@@ -1,3 +1,5 @@
+"""Module for interacting with the Codeflash API."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,7 @@ import sentry_sdk
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.env_utils import ensure_codeflash_api_key, get_codeflash_api_key, get_pr_number
 from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
 from codeflash.github.PrComment import FileDiffContent, PrComment
@@ -89,13 +92,18 @@ def make_cfapi_request(
 def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
+    :param api_key: The API key to use. If None, uses get_codeflash_api_key().
     :return: The userid or None if the request fails.
     """
     if not api_key and not ensure_codeflash_api_key():
         return None
 
     response = make_cfapi_request(
-        endpoint="/cli-get-user", method="GET", extra_headers={"cli_version": __version__}, api_key=api_key
+        endpoint="/cli-get-user",
+        method="GET",
+        extra_headers={"cli_version": __version__},
+        api_key=api_key,
+        suppress_errors=True,
     )
     if response.status_code == 200:
         if "min_version" not in response.text:
@@ -116,6 +124,20 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
         logger.error("Failed to retrieve userid from the response.")
         return None
 
+    # Handle 403 (Invalid API key) - exit with error message
+    if response.status_code == 403:
+        msg = (
+            "Invalid Codeflash API key. The API key you provided is not valid.\n"
+            "Please generate a new one at https://app.codeflash.ai/app/apikeys ,\n"
+            "then set it as a CODEFLASH_API_KEY environment variable.\n"
+            "For more information, refer to the documentation at \n"
+            "https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#manual-setup\n"
+            "or\n"
+            "https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#automated-setup-recommended"
+        )
+        exit_with_message(msg, error_on_exit=True)
+
+    # For other errors, log and return None (backward compatibility)
     logger.error(f"Failed to look up your userid; is your CF API key valid? ({response.reason})")
     return None
 
