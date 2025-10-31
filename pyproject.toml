@@ -44,6 +44,7 @@ dependencies = [
     "pygls>=2.0.0,<3.0.0",
     "codeflash-benchmark",
     "filelock",
+    "hypothesis>=6.141.1",
 ]
 
 [project.urls]

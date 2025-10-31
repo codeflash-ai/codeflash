@@ -254,6 +254,11 @@ def module_name_from_file_path(file_path: Path, project_root_path: Path, *, trav
         raise ValueError(msg)  # noqa: B904
 
 
+def get_qualified_function_path(file_path: Path, project_root_path: Path, qualified_name: str) -> str:
+    module_path = file_path.relative_to(project_root_path).with_suffix("").as_posix().replace("/", ".")
+    return f"{module_path}.{qualified_name}"
+
+
 def file_path_from_module_name(module_name: str, project_root_path: Path) -> Path:
     """Get file path from module path."""
     return project_root_path / (module_name.replace(".", os.sep) + ".py")
