@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import platform
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,16 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from codeflash.models.models import CodePosition
+
+
+@dataclass(frozen=True)
+class FunctionCallNodeArguments:
+    args: list[ast.expr]
+    keywords: list[ast.keyword]
+
+
+def get_call_arguments(call_node: ast.Call) -> FunctionCallNodeArguments:
+    return FunctionCallNodeArguments(call_node.args, call_node.keywords)
 
 
 def node_in_call_position(node: ast.AST, call_positions: list[CodePosition]) -> bool:
@@ -73,10 +84,12 @@ class InjectPerfOnly(ast.NodeTransformer):
     def find_and_update_line_node(
         self, test_node: ast.stmt, node_name: str, index: str, test_class_name: str | None = None
     ) -> Iterable[ast.stmt] | None:
+        return_statement = [test_node]
         call_node = None
         for node in ast.walk(test_node):
             if isinstance(node, ast.Call) and node_in_call_position(node, self.call_positions):
                 call_node = node
+                all_args = get_call_arguments(call_node)
                 if isinstance(node.func, ast.Name):
                     function_name = node.func.id
 
@@ -90,21 +103,19 @@ class InjectPerfOnly(ast.NodeTransformer):
                             func=ast.Attribute(
                                 value=ast.Call(
                                     func=ast.Attribute(
-                                        value=ast.Name(id="inspect", ctx=ast.Load()),
-                                        attr="signature",
-                                        ctx=ast.Load()
+                                        value=ast.Name(id="inspect", ctx=ast.Load()), attr="signature", ctx=ast.Load()
                                     ),
                                     args=[ast.Name(id=function_name, ctx=ast.Load())],
-                                    keywords=[]
+                                    keywords=[],
                                 ),
                                 attr="bind",
-                                ctx=ast.Load()
+                                ctx=ast.Load(),
                             ),
-                            args=[ast.Starred(value=ast.Attribute(value=call_node, attr="args", ctx=ast.Load()), ctx=ast.Load())],
-                            keywords=[ast.keyword(arg=None, value=ast.Attribute(value=call_node, attr="keywords", ctx=ast.Load()))]
+                            args=all_args.args,
+                            keywords=all_args.keywords,
                         ),
-                        lineno=test_node.lineno if hasattr(test_node, 'lineno') else 1,
-                        col_offset=test_node.col_offset if hasattr(test_node, 'col_offset') else 0
+                        lineno=test_node.lineno,
+                        col_offset=test_node.col_offset,
                     )
 
                     apply_defaults = ast.Expr(
@@ -112,13 +123,13 @@ class InjectPerfOnly(ast.NodeTransformer):
                             func=ast.Attribute(
                                 value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
                                 attr="apply_defaults",
-                                ctx=ast.Load()
+                                ctx=ast.Load(),
                             ),
                             args=[],
-                            keywords=[]
+                            keywords=[],
                         ),
                         lineno=test_node.lineno + 1,
-                        col_offset=test_node.col_offset
+                        col_offset=test_node.col_offset,
                     )
 
                     node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
@@ -135,12 +146,40 @@ class InjectPerfOnly(ast.NodeTransformer):
                             if self.mode == TestingMode.BEHAVIOR
                             else []
                         ),
-                        *call_node.args,
+                        *(
+                            call_node.args
+                            if self.mode == TestingMode.PERFORMANCE
+                            else [
+                                ast.Starred(
+                                    value=ast.Attribute(
+                                        value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                        attr="args",
+                                        ctx=ast.Load(),
+                                    ),
+                                    ctx=ast.Load(),
+                                )
+                            ]
+                        ),
                     ]
-                    node.keywords = call_node.keywords
+                    node.keywords = (
+                        [
+                            ast.keyword(
+                                value=ast.Attribute(
+                                    value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                    attr="kwargs",
+                                    ctx=ast.Load(),
+                                )
+                            )
+                        ]
+                        if self.mode == TestingMode.BEHAVIOR
+                        else call_node.keywords
+                    )
 
                     # Return the signature binding statements along with the test_node
-                    return [bind_call, apply_defaults, test_node]
+                    return_statement = (
+                        [bind_call, apply_defaults, test_node] if self.mode == TestingMode.BEHAVIOR else [test_node]
+                    )
+                    break
                 if isinstance(node.func, ast.Attribute):
                     function_to_test = node.func.attr
                     if function_to_test == self.function_object.function_name:
@@ -158,19 +197,19 @@ class InjectPerfOnly(ast.NodeTransformer):
                                         func=ast.Attribute(
                                             value=ast.Name(id="inspect", ctx=ast.Load()),
                                             attr="signature",
-                                            ctx=ast.Load()
+                                            ctx=ast.Load(),
                                         ),
-                                        args=function_name,
-                                        keywords=[]
+                                        args=[ast.parse(function_name, mode="eval").body],
+                                        keywords=[],
                                     ),
                                     attr="bind",
-                                    ctx=ast.Load()
+                                    ctx=ast.Load(),
                                 ),
-                                args=call_node.args,
-                                keywords=call_node.keywords
+                                args=all_args.args,
+                                keywords=all_args.keywords,
                             ),
                             lineno=test_node.lineno,
-                            col_offset=test_node.col_offset
+                            col_offset=test_node.col_offset,
                         )
 
                         apply_defaults = ast.Expr(
@@ -178,18 +217,18 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 func=ast.Attribute(
                                     value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
                                     attr="apply_defaults",
-                                    ctx=ast.Load()
+                                    ctx=ast.Load(),
                                 ),
                                 args=[],
-                                keywords=[]
+                                keywords=[],
                             ),
                             lineno=test_node.lineno + 1,
-                            col_offset=test_node.col_offset
+                            col_offset=test_node.col_offset,
                         )
 
                         node.func = ast.Name(id="codeflash_wrap", ctx=ast.Load())
                         node.args = [
-                            ast.Name(id=function_name, ctx=ast.Load()),
+                            ast.parse(function_name, mode="eval").body,
                             ast.Constant(value=self.module_path),
                             ast.Constant(value=test_class_name or None),
                             ast.Constant(value=node_name),
@@ -204,12 +243,39 @@ class InjectPerfOnly(ast.NodeTransformer):
                                 if self.mode == TestingMode.BEHAVIOR
                                 else []
                             ),
-                            *call_node.args,
+                            *(
+                                call_node.args
+                                if self.mode == TestingMode.PERFORMANCE
+                                else [
+                                    ast.Starred(
+                                        value=ast.Attribute(
+                                            value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                            attr="args",
+                                            ctx=ast.Load(),
+                                        ),
+                                        ctx=ast.Load(),
+                                    )
+                                ]
+                            ),
                         ]
-                        node.keywords = call_node.keywords
+                        node.keywords = (
+                            [
+                                ast.keyword(
+                                    value=ast.Attribute(
+                                        value=ast.Name(id="_call__bound__arguments", ctx=ast.Load()),
+                                        attr="kwargs",
+                                        ctx=ast.Load(),
+                                    )
+                                )
+                            ]
+                            if self.mode == TestingMode.BEHAVIOR
+                            else call_node.keywords
+                        )
 
                         # Return the signature binding statements along with the test_node
-                        return_statement = [bind_call, apply_defaults, test_node]
+                        return_statement = (
+                            [bind_call, apply_defaults, test_node] if self.mode == TestingMode.BEHAVIOR else [test_node]
+                        )
                         break
 
         if call_node is None:
