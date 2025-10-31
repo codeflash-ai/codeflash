@@ -1349,8 +1349,7 @@ def test_target():
 """
         test_file.write_text(test_content)
 
-        # Looking for transform but code uses validate
-        # Our fix conservatively includes when class is imported
+        # Looking for transform but code uses validate - should not match
         target_functions = {"GoogleJsonSchemaTransformer.transform"}
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
