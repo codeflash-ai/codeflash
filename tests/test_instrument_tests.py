@@ -91,6 +91,7 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(codeflash_wrapped, codefl
 
 def build_expected_unittest_imports(extra_imports: str = "") -> str:
     imports = """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -140,6 +141,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(sorter(input), list(range(5000)))
 """
     imports = """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -148,7 +150,7 @@ import unittest
 import dill as pickle"""
     if platform.system() != "Windows":
         imports += "\nimport timeout_decorator"
-    
+
     imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
     wrapper_func = codeflash_wrap_string
@@ -166,13 +168,19 @@ import dill as pickle"""
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(5000)))
-        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input), list(range(5000)))
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs), list(range(5000)))
         codeflash_con.close()
 """
 
@@ -211,6 +219,7 @@ def test_prepare_image_for_yolo():
         assert compare_results(return_val_1, ret)
 """
     expected = """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -272,7 +281,9 @@ def test_prepare_image_for_yolo():
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+        _call__bound__arguments = inspect.signature(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo).bind(**args)
+        _call__bound__arguments.apply_defaults()
+        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
@@ -312,6 +323,7 @@ def test_sort():
     expected = (
         """import datetime
 import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -332,10 +344,14 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     print(datetime.datetime.now().isoformat())
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -572,6 +588,7 @@ def test_sort_parametrized(input, expected_output):
 """
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -592,7 +609,9 @@ def test_sort_parametrized(input, expected_output):
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == expected_output
     codeflash_con.close()
 """
@@ -841,6 +860,7 @@ def test_sort_parametrized_loop(input, expected_output):
 """
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -862,7 +882,9 @@ def test_sort_parametrized_loop(input, expected_output):
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     for i in range(2):
-        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -1194,6 +1216,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -1217,7 +1240,9 @@ def test_sort():
     for i in range(3):
         input = inputs[i]
         expected_output = expected_outputs[i]
-        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -1483,6 +1508,7 @@ class TestPigLatin(unittest.TestCase):
     if is_windows:
         expected = (
             """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -1505,13 +1531,19 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(50)))
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
@@ -1546,6 +1578,7 @@ class TestPigLatin(unittest.TestCase):
     else:
         expected = (
             """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -1570,13 +1603,19 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(50)))
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
@@ -1839,7 +1878,9 @@ class TestPigLatin(unittest.TestCase):
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
@@ -2092,11 +2133,13 @@ class TestPigLatin(unittest.TestCase):
         for i in range(3):
             input = inputs[i]
             expected_output = expected_outputs[i]
-            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+            _call__bound__arguments = inspect.signature(sorter).bind(input)
+            _call__bound__arguments.apply_defaults()
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    
+
     expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
 
     # Build expected perf output with platform-aware imports
@@ -2349,11 +2392,13 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         for i in range(2):
-            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+            _call__bound__arguments = inspect.signature(sorter).bind(input)
+            _call__bound__arguments.apply_defaults()
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    
+
     expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
     # Build expected perf output with platform-aware imports
     imports_perf = """import gc
@@ -2668,6 +2713,7 @@ def test_class_name_A_function_name():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2685,7 +2731,9 @@ def test_class_name_A_function_name():
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-    ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+    _call__bound__arguments = inspect.signature(class_name_A.function_name).bind(**args)
+    _call__bound__arguments.apply_defaults()
+    ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     codeflash_con.close()
 """
     )
@@ -2736,6 +2784,7 @@ def test_common_tags_1():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2755,9 +2804,13 @@ def test_common_tags_1():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     articles_1 = [1, 2, 3]
-    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_loop_index, codeflash_cur, codeflash_con, articles_1) == set(1, 2)
+    _call__bound__arguments = inspect.signature(find_common_tags).bind(articles_1)
+    _call__bound__arguments.apply_defaults()
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == set(1, 2)
     articles_2 = [1, 2]
-    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_loop_index, codeflash_cur, codeflash_con, articles_2) == set(1)
+    _call__bound__arguments = inspect.signature(find_common_tags).bind(articles_2)
+    _call__bound__arguments.apply_defaults()
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == set(1)
     codeflash_con.close()
 """
     )
@@ -2803,6 +2856,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2823,7 +2877,9 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     if len(input) > 0:
-        assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, input) == [0, 1, 2, 3, 4, 5]
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == [0, 1, 2, 3, 4, 5]
     codeflash_con.close()
 """
     )
@@ -2870,6 +2926,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2889,10 +2946,14 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -2972,6 +3033,7 @@ def test_code_replacement10() -> None:
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2996,9 +3058,13 @@ def test_code_replacement10() -> None:
     func_top_optimize = FunctionToOptimize(function_name='main_method', file_path=str(file_path), parents=[FunctionParent('MainClass', 'ClassDef')])
     with open(file_path) as f:
         original_code = f.read()
-        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code).unwrap()
+        _call__bound__arguments = inspect.signature(opt.get_code_optimization_context).bind(function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments.apply_defaults()
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs).unwrap()
         assert code_context.testgen_context_code == get_code_output
-        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments = inspect.signature(opt.get_code_optimization_context).bind(function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments.apply_defaults()
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert code_context.testgen_context_code == get_code_output
     codeflash_con.close()
 """

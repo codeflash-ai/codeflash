@@ -212,15 +212,25 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.wildcard_modules: set[str] = set()
         # Track aliases: alias_name -> original_name
         self.alias_mapping: dict[str, str] = {}
+        # Track instances: variable_name -> class_name
+        self.instance_mapping: dict[str, str] = {}
 
         # Precompute function_names for prefix search
         # For prefix match, store mapping from prefix-root to candidates for O(1) matching
         self._exact_names = function_names_to_find
         self._prefix_roots: dict[str, list[str]] = {}
+        # Precompute sets for faster lookup during visit_Attribute()
+        self._dot_names: set[str] = set()
+        self._dot_methods: dict[str, set[str]] = {}
+        self._class_method_to_target: dict[tuple[str, str], str] = {}
         for name in function_names_to_find:
             if "." in name:
-                root = name.split(".", 1)[0]
-                self._prefix_roots.setdefault(root, []).append(name)
+                root, method = name.rsplit(".", 1)
+                self._dot_names.add(name)
+                self._dot_methods.setdefault(method, set()).add(root)
+                self._class_method_to_target[(root, method)] = name
+                root_prefix = name.split(".", 1)[0]
+                self._prefix_roots.setdefault(root_prefix, []).append(name)
 
     def visit_Import(self, node: ast.Import) -> None:
         """Handle 'import module' statements."""
@@ -246,6 +256,41 @@ class ImportAnalyzer(ast.NodeVisitor):
                     self.found_any_target_function = True
                     self.found_qualified_name = target_func
                     return
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Track variable assignments, especially class instantiations."""
+        if self.found_any_target_function:
+            return
+
+        # Check if the assignment is a class instantiation
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+            class_name = value.func.id
+            if class_name in self.imported_modules:
+                # Map the variable to the actual class name (handling aliases)
+                original_class = self.alias_mapping.get(class_name, class_name)
+                # Use list comprehension for direct assignment to instance_mapping, reducing loop overhead
+                targets = node.targets
+                instance_mapping = self.instance_mapping
+                # since ast.Name nodes are heavily used, avoid local lookup for isinstance
+                # and reuse locals for faster attribute access
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        instance_mapping[target.id] = original_class
+
+        # Replace self.generic_visit(node) with an optimized, inlined version that
+        # stops traversal when self.found_any_target_function is set.
+        # This eliminates interpretive overhead of super() and function call.
+        stack = [node]
+        append = stack.append
+        pop = stack.pop
+        found_flag = self.found_any_target_function
+        while stack:
+            current_node = pop()
+            if self.found_any_target_function:
+                break
+            for child in ast.iter_child_nodes(current_node):
+                append(child)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
@@ -287,6 +332,18 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.found_qualified_name = qname
                 return
 
+            # Check if any target function is a method of the imported class/module
+            # Be conservative except when an alias is used (which requires exact method matching)
+            for target_func in fnames:
+                if "." in target_func:
+                    class_name, method_name = target_func.split(".", 1)
+                    if aname == class_name and not alias.asname:
+                        # If an alias is used, don't match conservatively
+                        # The actual method usage should be detected in visit_Attribute
+                        self.found_any_target_function = True
+                        self.found_qualified_name = target_func
+                        return
+
             prefix = qname + "."
             # Only bother if one of the targets startswith the prefix-root
             candidates = proots.get(qname, ())
@@ -302,32 +359,44 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         # Check if this is accessing a target function through an imported module
+
+        node_value = node.value
+        node_attr = node.attr
+
+        # Check if this is accessing a target function through an imported module
         if (
-            isinstance(node.value, ast.Name)
-            and node.value.id in self.imported_modules
-            and node.attr in self.function_names_to_find
+            isinstance(node_value, ast.Name)
+            and node_value.id in self.imported_modules
+            and node_attr in self.function_names_to_find
         ):
             self.found_any_target_function = True
-            self.found_qualified_name = node.attr
+            self.found_qualified_name = node_attr
             return
 
-        if isinstance(node.value, ast.Name) and node.value.id in self.imported_modules:
-            for target_func in self.function_names_to_find:
-                if "." in target_func:
-                    class_name, method_name = target_func.rsplit(".", 1)
-                    if node.attr == method_name:
-                        imported_name = node.value.id
-                        original_name = self.alias_mapping.get(imported_name, imported_name)
-                        if original_name == class_name:
-                            self.found_any_target_function = True
-                            self.found_qualified_name = target_func
-                            return
+        # Check for methods via imported modules using precomputed _dot_methods and _class_method_to_target
+        if isinstance(node_value, ast.Name) and node_value.id in self.imported_modules:
+            roots_possible = self._dot_methods.get(node_attr)
+            if roots_possible:
+                imported_name = node_value.id
+                original_name = self.alias_mapping.get(imported_name, imported_name)
+                if original_name in roots_possible:
+                    self.found_any_target_function = True
+                    self.found_qualified_name = self._class_method_to_target[(original_name, node_attr)]
+                    return
 
-        # Check if this is accessing a target function through a dynamically imported module
-        # Only if we've detected dynamic imports are being used
-        if self.has_dynamic_imports and node.attr in self.function_names_to_find:
+        # Check if this is accessing a method on an instance variable
+        if isinstance(node_value, ast.Name) and node_value.id in self.instance_mapping:
+            class_name = self.instance_mapping[node_value.id]
+            roots_possible = self._dot_methods.get(node_attr)
+            if roots_possible and class_name in roots_possible:
+                self.found_any_target_function = True
+                self.found_qualified_name = self._class_method_to_target[(class_name, node_attr)]
+                return
+
+        # Check for dynamic import match
+        if self.has_dynamic_imports and node_attr in self.function_names_to_find:
             self.found_any_target_function = True
-            self.found_qualified_name = node.attr
+            self.found_qualified_name = node_attr
             return
 
         self.generic_visit(node)
