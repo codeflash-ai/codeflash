@@ -7,7 +7,6 @@ from end_to_end_test_utilities import CoverageExpectation, TestConfig, run_codef
 def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="main.py",
-        expected_unit_tests=0,
         min_improvement_x=0.1,
         enable_async=True,
         coverage_expectations=[

@@ -10,7 +10,7 @@ def test_topological_sort():
     g.addEdge(2, 3)
     g.addEdge(3, 1)
 
-    assert g.topologicalSort() == [5, 4, 2, 3, 1, 0]
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
 
 
 def test_topological_sort_2():
@@ -20,7 +20,7 @@ def test_topological_sort_2():
         for j in range(i + 1, 10):
             g.addEdge(i, j)
 
-    assert g.topologicalSort() == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert g.topologicalSort()[0] == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     g = Graph(10)
 
@@ -28,7 +28,7 @@ def test_topological_sort_2():
         for j in range(i + 1, 10):
             g.addEdge(i, j)
 
-    assert g.topologicalSort() == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert g.topologicalSort()[0] == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 def test_topological_sort_3():
@@ -38,4 +38,4 @@ def test_topological_sort_3():
         for j in range(i + 1, 1000):
             g.addEdge(j, i)
 
-    assert g.topologicalSort() == list(reversed(range(1000)))
+    assert g.topologicalSort()[0] == list(reversed(range(1000)))

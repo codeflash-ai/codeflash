@@ -1310,6 +1310,30 @@ def test_target():
 
         assert should_process is True
 
+def test_analyze_imports_method():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+
+
+def test_topological_sort():
+    g = Graph(6)
+    g.addEdge(5, 2)
+    g.addEdge(5, 0)
+    g.addEdge(4, 0)
+    g.addEdge(4, 1)
+    g.addEdge(2, 3)
+    g.addEdge(3, 1)
+
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
 
 def test_analyze_imports_aliased_class_method_negative():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1331,6 +1355,368 @@ def test_target():
 
         assert should_process is False
 
+
+
+def test_analyze_imports_class_with_multiple_methods():
+    """Test importing a class when looking for multiple methods of that class."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_methods():
+    obj = MyClass()
+    assert obj.method1() is True
+    assert obj.method2() is False
+    assert obj.method3() == 42
+"""
+        test_file.write_text(test_content)
+
+        # Looking for multiple methods of the same class
+        target_functions = {"MyClass.method1", "MyClass.method2", "MyClass.method3"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_with_nested_classes():
+    """Test importing nested classes and their methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import OuterClass
+
+def test_nested():
+    outer = OuterClass()
+    inner = outer.InnerClass()
+    assert inner.inner_method() is True
+"""
+        test_file.write_text(test_content)
+
+        # This would require more complex analysis of nested classes
+        # Currently only direct class.method patterns are supported
+        target_functions = {"OuterClass.InnerClass.inner_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Our fix detects OuterClass from OuterClass.InnerClass.inner_method
+        # This is overly broad but conservative (better to include than exclude)
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_partial_match():
+    """Test that partial class names don't match incorrectly."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import GraphBuilder
+
+def test_builder():
+    builder = GraphBuilder()
+    assert builder.build() is not None
+"""
+        test_file.write_text(test_content)
+
+        # Looking for Graph.topologicalSort, not GraphBuilder
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_method_with_inheritance():
+    """Test importing a child class when looking for parent class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import ChildClass
+
+def test_inherited():
+    child = ChildClass()
+    # Assuming ChildClass inherits from ParentClass
+    assert child.parent_method() is True
+"""
+        test_file.write_text(test_content)
+
+        # Looking for parent class method, but only child is imported
+        target_functions = {"ParentClass.parent_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_static_and_class_methods():
+    """Test importing a class and calling static/class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_static_and_class_methods():
+    # Static method call
+    assert MyClass.static_method() is True
+
+    # Class method call
+    result = MyClass.class_method()
+    assert result == "expected"
+
+    # Instance method call
+    obj = MyClass()
+    assert obj.instance_method() is False
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.static_method", "MyClass.class_method", "MyClass.instance_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_multiple_classes_same_module():
+    """Test importing multiple classes from the same module."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import ClassA, ClassB, ClassC
+
+def test_multiple_classes():
+    a = ClassA()
+    b = ClassB()
+    c = ClassC()
+
+    assert a.methodA() is True
+    assert b.methodB() is False
+    assert c.methodC() == 42
+"""
+        test_file.write_text(test_content)
+
+        # Looking for methods from different classes
+        target_functions = {"ClassA.methodA", "ClassB.methodB", "ClassD.methodD"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # ClassA and ClassB are imported
+
+
+def test_analyze_imports_class_method_case_sensitive():
+    """Test that class name matching is case-sensitive."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import graph
+
+def test_lowercase():
+    g = graph()
+    assert g.topologicalSort() is not None
+"""
+        test_file.write_text(test_content)
+
+        # Looking for Graph (capital G), but imported graph (lowercase)
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_from_submodule():
+    """Test importing a class from a submodule."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from package.subpackage.module import MyClass
+
+def test_submodule_class():
+    obj = MyClass()
+    assert obj.my_method() is True
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.my_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_aliased_class_with_methods():
+    """Test importing a class with an alias and looking for its methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import Graph as G
+
+def test_aliased_class():
+    graph = G(10)
+    result = graph.topologicalSort()
+    assert result is not None
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_property_access():
+    """Test importing a class and accessing properties (not methods)."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_properties():
+    obj = MyClass()
+    # Accessing properties, not methods
+    assert obj.size == 10
+    assert obj.name == "test"
+"""
+        test_file.write_text(test_content)
+
+        # Looking for methods, but only properties are accessed
+        # Our fix conservatively includes when class is imported
+        target_functions = {"MyClass.get_size", "MyClass.get_name"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # Conservative approach
+
+
+def test_analyze_imports_class_constructor_params():
+    """Test class import when looking for __init__ method."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_constructor():
+    # Testing the constructor
+    obj1 = MyClass()
+    obj2 = MyClass(10)
+    obj3 = MyClass(size=20, name="test")
+
+    assert obj1 is not None
+    assert obj2 is not None
+    assert obj3 is not None
+"""
+        test_file.write_text(test_content)
+
+        # __init__ is a special method that would require additional logic
+        target_functions = {"MyClass.__init__"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Our fix now detects MyClass from MyClass.__init__
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_chaining():
+    """Test method chaining on imported classes."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import Builder
+
+def test_chaining():
+    result = Builder().add_item("a").add_item("b").build()
+    assert result is not None
+"""
+        test_file.write_text(test_content)
+
+        # Method chaining requires tracking object types through chained calls
+        target_functions = {"Builder.add_item", "Builder.build"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Currently detects Builder import and methods
+        assert should_process is True
+
+
+def test_analyze_imports_mixed_function_and_class_imports():
+    """Test mixed imports of functions and classes from the same module."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass, standalone_function, AnotherClass
+
+def test_mixed():
+    # Using class method
+    obj = MyClass()
+    assert obj.method() is True
+
+    # Using standalone function
+    assert standalone_function() is False
+
+    # Using another class
+    other = AnotherClass()
+    assert other.other_method() == 42
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method", "standalone_function", "YetAnotherClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # MyClass.method and standalone_function are imported
+
+
+def test_analyze_imports_class_with_module_prefix():
+    """Test looking for fully qualified class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+
+def test_fully_qualified():
+    g = Graph(5)
+    assert g.topologicalSort() == [4, 3, 2, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        # Looking with full module path would require more complex module resolution
+        target_functions = {"code_to_optimize.topological_sort.Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Currently not supported - would need to match module path with imports
+        assert should_process is False
+
+
+def test_analyze_imports_reimport_in_function():
+    """Test class import inside a function."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+def test_local_import():
+    from mymodule import MyClass
+    obj = MyClass()
+    assert obj.method() is True
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_in_type_annotation():
+    """Test class used only in type annotations."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from typing import Optional
+from mymodule import MyClass
+
+def helper_function(obj: Optional[MyClass]) -> bool:
+    if obj:
+        return obj.method()
+    return False
+
+def test_with_type_annotation():
+    # MyClass is imported but only used in type annotation
+    result = helper_function(None)
+    assert result is False
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # MyClass is imported, so class.method pattern should match
+        assert should_process is True
 
 
 def test_discover_unit_tests_caching():
