@@ -44,9 +44,9 @@ class LspMessage:
     def serialize(self) -> str:
         if not is_LSP_enabled():
             return ""
-        from codeflash.lsp.beta import server
+        from codeflash.lsp.context import execution_context_vars
 
-        execution_ctx = server.execution_context_vars.get()
+        execution_ctx = execution_context_vars.get()
         current_task_id = execution_ctx.get("task_id", None)
         data = self._loop_through(asdict(self))
         ordered = {"type": self.type(), "task_id": current_task_id, **data}
