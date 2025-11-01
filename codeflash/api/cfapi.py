@@ -1,5 +1,3 @@
-"""Module for interacting with the Codeflash API."""
-
 from __future__ import annotations
 
 import json
