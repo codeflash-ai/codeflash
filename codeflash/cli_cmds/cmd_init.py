@@ -264,7 +264,7 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ]
 
 
-def get_suggestions(section: str) -> tuple(list[str], Optional[str]):
+def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
     valid_subdirs = get_valid_subdirs()
     if section == CommonSections.module_root:
         return [d for d in valid_subdirs if d != "tests"], None
@@ -391,7 +391,7 @@ def collect_setup_info() -> CLISetupInfo:
     tests_root_answer = tests_answers["tests_root"]
 
     if tests_root_answer == create_for_me_option:
-        tests_root = Path(curdir) / default_tests_subdir
+        tests_root = Path(curdir) / (default_tests_subdir or "tests")
         tests_root.mkdir()
         click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
