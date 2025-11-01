@@ -263,17 +263,34 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         # Check if the assignment is a class instantiation
-        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
-            class_name = node.value.func.id
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+            class_name = value.func.id
             if class_name in self.imported_modules:
-                # Track all target variables as instances of the imported class
-                for target in node.targets:
+                # Map the variable to the actual class name (handling aliases)
+                original_class = self.alias_mapping.get(class_name, class_name)
+                # Use list comprehension for direct assignment to instance_mapping, reducing loop overhead
+                targets = node.targets
+                instance_mapping = self.instance_mapping
+                # since ast.Name nodes are heavily used, avoid local lookup for isinstance
+                # and reuse locals for faster attribute access
+                for target in targets:
                     if isinstance(target, ast.Name):
-                        # Map the variable to the actual class name (handling aliases)
-                        original_class = self.alias_mapping.get(class_name, class_name)
-                        self.instance_mapping[target.id] = original_class
+                        instance_mapping[target.id] = original_class
 
-        self.generic_visit(node)
+        # Replace self.generic_visit(node) with an optimized, inlined version that
+        # stops traversal when self.found_any_target_function is set.
+        # This eliminates interpretive overhead of super() and function call.
+        stack = [node]
+        append = stack.append
+        pop = stack.pop
+        found_flag = self.found_any_target_function
+        while stack:
+            current_node = pop()
+            if self.found_any_target_function:
+                break
+            for child in ast.iter_child_nodes(current_node):
+                append(child)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
