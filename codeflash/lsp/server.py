@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextvars
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,11 +28,7 @@ class CodeflashLanguageServer(LanguageServer):
         self.initialized: bool = False
         self.optimizer: Optimizer | None = None
         self.args = None
-        self.current_optimization_init_result: InitializationResultT | None = None
-        self.execution_context_vars: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
-            "execution_context_vars",
-            default={},  # noqa: B039
-        )
+        self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args

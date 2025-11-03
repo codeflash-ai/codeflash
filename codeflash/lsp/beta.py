@@ -31,6 +31,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
+from codeflash.lsp.context import execution_context_vars
 from codeflash.lsp.features.perform_optimization import get_cancelled_reponse, sync_perform_optimization
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -341,12 +342,12 @@ def provide_api_key(params: ProvideApiKeyParams) -> dict[str, str]:
 def execution_context(**kwargs: str) -> None:
     """Temporarily set context values for the current async task."""
     # Create a fresh copy per use
-    current = {**server.execution_context_vars.get(), **kwargs}
-    token = server.execution_context_vars.set(current)
+    current = {**execution_context_vars.get(), **kwargs}
+    token = execution_context_vars.set(current)
     try:
         yield
     finally:
-        server.execution_context_vars.reset(token)
+        execution_context_vars.reset(token)
 
 
 @server.feature("cleanupCurrentOptimizerSession")
