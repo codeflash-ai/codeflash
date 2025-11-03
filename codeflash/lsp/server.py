@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 import contextvars
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lsprotocol.types import LogMessageParams, MessageType
 from pygls.lsp.server import LanguageServer
 from pygls.protocol import LanguageServerProtocol
 
-if TYPE_CHECKING:
-    from pathlib import Path
+from codeflash.either import Result
+from codeflash.models.models import CodeOptimizationContext
 
-    from codeflash.models.models import CodeOptimizationContext
+if TYPE_CHECKING:
     from codeflash.optimization.optimizer import Optimizer
 
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
+
+
+InitializationResultT = tuple[bool, CodeOptimizationContext, dict[Path, str]]
+WrappedInitializationResultT = Result[InitializationResultT, str]
 
 
 class CodeflashLanguageServer(LanguageServer):
@@ -24,7 +29,7 @@ class CodeflashLanguageServer(LanguageServer):
         self.initialized: bool = False
         self.optimizer: Optimizer | None = None
         self.args = None
-        self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
+        self.current_optimization_init_result: InitializationResultT | None = None
         self.execution_context_vars: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
             "execution_context_vars",
             default={},  # noqa: B039

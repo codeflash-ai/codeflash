@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -26,14 +27,24 @@ if TYPE_CHECKING:
 
 from packaging import version
 
-if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
-    CFAPI_BASE_URL = "http://localhost:3001"
-    CFWEBAPP_BASE_URL = "http://localhost:3000"
-    logger.info(f"Using local CF API at {CFAPI_BASE_URL}.")
-    console.rule()
-else:
-    CFAPI_BASE_URL = "https://app.codeflash.ai"
-    CFWEBAPP_BASE_URL = "https://app.codeflash.ai"
+
+@dataclass
+class BaseUrls:
+    cfapi_base_url: Optional[str] = None
+    cfwebapp_base_url: Optional[str] = None
+
+
+@lru_cache(maxsize=1)
+def get_cfapi_base_urls() -> BaseUrls:
+    if os.environ.get("CODEFLASH_CFAPI_SERVER", "prod").lower() == "local":
+        cfapi_base_url = "http://localhost:3001"
+        cfwebapp_base_url = "http://localhost:3000"
+        logger.info(f"Using local CF API at {cfapi_base_url}.")
+        console.rule()
+    else:
+        cfapi_base_url = "https://app.codeflash.ai"
+        cfwebapp_base_url = "https://app.codeflash.ai"
+    return BaseUrls(cfapi_base_url=cfapi_base_url, cfwebapp_base_url=cfwebapp_base_url)
 
 
 def make_cfapi_request(
@@ -53,8 +64,9 @@ def make_cfapi_request(
     :param suppress_errors: If True, suppress error logging for HTTP errors.
     :return: The response object from the API.
     """
-    url = f"{CFAPI_BASE_URL}/cfapi{endpoint}"
-    cfapi_headers = {"Authorization": f"Bearer {api_key or get_codeflash_api_key()}"}
+    url = f"{get_cfapi_base_urls().cfapi_base_url}/cfapi{endpoint}"
+    final_api_key = api_key or get_codeflash_api_key()
+    cfapi_headers = {"Authorization": f"Bearer {final_api_key}"}
     if extra_headers:
         cfapi_headers.update(extra_headers)
     try:
