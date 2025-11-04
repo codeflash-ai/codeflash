@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -87,12 +86,13 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:  # noqa: PLR0911
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :param api_key: The API key to use. If None, uses get_codeflash_api_key().
     :return: The userid or None if the request fails.
     """
+    lsp_enabled = is_LSP_enabled()
     if not api_key and not ensure_codeflash_api_key():
         return None
 
@@ -113,19 +113,21 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
             if min_version and version.parse(min_version) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
-                if is_LSP_enabled():
+                if lsp_enabled:
                     logger.debug(msg)
                     return f"Error: {msg}"
-                sys.exit(1)
+                exit_with_message(msg, error_on_exit=True)
             return userid
 
         logger.error("Failed to retrieve userid from the response.")
         return None
 
-    # Handle 403 (Invalid API key) - exit with error message
     if response.status_code == 403:
+        error_title = "Invalid Codeflash API key. The API key you provided is not valid."
+        if lsp_enabled:
+            return f"Error: {error_title}"
         msg = (
-            "Invalid Codeflash API key. The API key you provided is not valid.\n"
+            f"{error_title}\n"
             "Please generate a new one at https://app.codeflash.ai/app/apikeys ,\n"
             "then set it as a CODEFLASH_API_KEY environment variable.\n"
             "For more information, refer to the documentation at \n"
