@@ -94,6 +94,7 @@ tests = [
     "scipy>=1.13.1",
     "torch>=2.8.0",
     "xarray>=2024.7.0",
+    "eval_type_backport"
 ]
 
 [tool.hatch.build.targets.sdist]
