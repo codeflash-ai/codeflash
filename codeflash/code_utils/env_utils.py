@@ -13,6 +13,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
+from codeflash.lsp.helpers import is_LSP_enabled
 
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
@@ -70,7 +71,10 @@ def get_codeflash_api_key() -> str:
         except Exception as e:
             logger.debug(f"Failed to automatically save API key to shell config: {e}")
 
-    api_key = env_api_key or shell_api_key
+    # Prefer the shell configuration over environment variables for lsp,
+    # as the API key may change in the RC file during lsp runtime. Since the LSP client (extension) can restart
+    # within the same process, the environment variable could become outdated.
+    api_key = shell_api_key or env_api_key if is_LSP_enabled() else env_api_key or shell_api_key
 
     api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
     if not api_key:
