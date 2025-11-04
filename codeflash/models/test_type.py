@@ -8,6 +8,7 @@ class TestType(Enum):
     REPLAY_TEST = 4
     CONCOLIC_COVERAGE_TEST = 5
     INIT_STATE_TEST = 6
+    HYPOTHESIS_TEST = 7
 
     def to_name(self) -> str:
         if self is TestType.INIT_STATE_TEST:
@@ -18,5 +19,6 @@ class TestType(Enum):
             TestType.GENERATED_REGRESSION: "🌀 Generated Regression Tests",
             TestType.REPLAY_TEST: "⏪ Replay Tests",
             TestType.CONCOLIC_COVERAGE_TEST: "🔎 Concolic Coverage Tests",
+            TestType.HYPOTHESIS_TEST: "🔮 Hypothesis Tests",
         }
         return names[self]

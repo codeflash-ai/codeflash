@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.code_utils import get_qualified_function_path
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.static_analysis import has_typed_parameters
@@ -42,6 +43,9 @@ def generate_concolic_tests(
         logger.info("Generating concolic opcode coverage tests for the original code…")
         console.rule()
         try:
+            qualified_function_path = get_qualified_function_path(
+                function_to_optimize.file_path, args.project_root, function_to_optimize.qualified_name
+            )
             cover_result = subprocess.run(
                 [
                     SAFE_SYS_EXECUTABLE,
@@ -50,15 +54,7 @@ def generate_concolic_tests(
                     "cover",
                     "--example_output_format=pytest",
                     "--per_condition_timeout=20",
-                    ".".join(
-                        [
-                            function_to_optimize.file_path.relative_to(args.project_root)
-                            .with_suffix("")
-                            .as_posix()
-                            .replace("/", "."),
-                            function_to_optimize.qualified_name,
-                        ]
-                    ),
+                    qualified_function_path,
                 ],
                 capture_output=True,
                 text=True,
@@ -84,7 +80,10 @@ def generate_concolic_tests(
                 test_framework=args.test_framework,
                 pytest_cmd=args.pytest_cmd,
             )
-            function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
+            file_to_funcs = {function_to_optimize.file_path: [function_to_optimize]}
+            function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(
+                concolic_test_cfg, file_to_funcs_to_optimize=file_to_funcs
+            )
             logger.info(
                 f"Created {num_discovered_concolic_tests} "
                 f"concolic unit test case{'s' if num_discovered_concolic_tests != 1 else ''} "
