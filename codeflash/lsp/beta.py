@@ -29,6 +29,7 @@ from codeflash.discovery.functions_to_optimize import (
     get_functions_within_git_diff,
 )
 from codeflash.either import is_successful
+from codeflash.lsp.context import execution_context_vars
 from codeflash.lsp.features.perform_optimization import get_cancelled_reponse, sync_perform_optimization
 from codeflash.lsp.server import CodeflashLanguageServer, CodeflashLanguageServerProtocol
 
@@ -72,11 +73,6 @@ class ValidateProjectParams:
 
 
 @dataclass
-class OnPatchAppliedParams:
-    task_id: str
-
-
-@dataclass
 class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
@@ -88,6 +84,11 @@ class WriteConfigParams:
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+
+
+@server.feature("server/listFeatures")
+def list_features(_params: any) -> list[str]:
+    return list(server.protocol.fm.features)
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
@@ -250,7 +251,7 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "existingConfig": config,
         }
 
-    args = _init()
+    args = process_args()
     return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
 
@@ -268,8 +269,9 @@ def _check_api_key_validity(api_key: Optional[str]) -> dict[str, str]:
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
 
-    if user_id.startswith("Error: "):
-        error_msg = user_id[7:]
+    error_prefix = "Error: "
+    if user_id.startswith(error_prefix):
+        error_msg = user_id[len(error_prefix) :]
         return {"status": "error", "message": error_msg}
 
     return {"status": "success", "user_id": user_id}
@@ -336,12 +338,12 @@ def provide_api_key(params: ProvideApiKeyParams) -> dict[str, str]:
 def execution_context(**kwargs: str) -> None:
     """Temporarily set context values for the current async task."""
     # Create a fresh copy per use
-    current = {**server.execution_context_vars.get(), **kwargs}
-    token = server.execution_context_vars.set(current)
+    current = {**execution_context_vars.get(), **kwargs}
+    token = execution_context_vars.set(current)
     try:
         yield
     finally:
-        server.execution_context_vars.reset(token)
+        execution_context_vars.reset(token)
 
 
 @server.feature("cleanupCurrentOptimizerSession")
