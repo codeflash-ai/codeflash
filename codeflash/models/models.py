@@ -44,6 +44,7 @@ class AIServiceRefinerRequest:
     trace_id: str
     original_line_profiler_results: str
     optimized_line_profiler_results: str
+    function_references: str | None = None
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
