@@ -263,17 +263,21 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         # Check if the assignment is a class instantiation
-        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
+        handled_assignment = False
+        if isinstance(node.value, ast.Call) and type(node.value.func) is ast.Name:
             class_name = node.value.func.id
             if class_name in self.imported_modules:
                 # Track all target variables as instances of the imported class
                 for target in node.targets:
-                    if isinstance(target, ast.Name):
+                    if type(target) is ast.Name:
                         # Map the variable to the actual class name (handling aliases)
                         original_class = self.alias_mapping.get(class_name, class_name)
                         self.instance_mapping[target.id] = original_class
+                handled_assignment = True
 
-        self.generic_visit(node)
+        # Only traverse child nodes if we didn't handle a class instantiation assignment
+        if not handled_assignment:
+            self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
