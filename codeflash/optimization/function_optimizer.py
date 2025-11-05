@@ -1195,7 +1195,7 @@ class FunctionOptimizer:
         if concolic_test_str:
             count_tests += 1
 
-        logger.info(f"Generated '{count_tests}' tests for {self.function_to_optimize.function_name}")
+        logger.info(f"Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
         console.rule()
         generated_tests = GeneratedTestsList(generated_tests=tests)
         result = (
