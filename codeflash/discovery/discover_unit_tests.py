@@ -284,7 +284,7 @@ class ImportAnalyzer(ast.NodeVisitor):
         stack = [node]
         append = stack.append
         pop = stack.pop
-        found_flag = self.found_any_target_function
+        # found_flag = self.found_any_target_function
         while stack:
             current_node = pop()
             if self.found_any_target_function:

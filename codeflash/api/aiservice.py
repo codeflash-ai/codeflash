@@ -255,6 +255,8 @@ class AiServiceClient:
                 "optimized_code_runtime": opt.optimized_code_runtime,
                 "speedup": opt.speedup,
                 "trace_id": opt.trace_id,
+                "function_references": opt.function_references,
+                "python_version": platform.python_version(),
             }
             for opt in request
         ]
@@ -308,6 +310,7 @@ class AiServiceClient:
         original_throughput: str | None = None,
         optimized_throughput: str | None = None,
         throughput_improvement: str | None = None,
+        function_references: str | None = None,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -327,6 +330,7 @@ class AiServiceClient:
         - original_throughput: str | None - throughput for the baseline code (operations per second)
         - optimized_throughput: str | None - throughput for the optimized code (operations per second)
         - throughput_improvement: str | None - throughput improvement percentage
+        - function_references: str | None - where the function is called in the codebase
 
         Returns
         -------
@@ -349,6 +353,7 @@ class AiServiceClient:
             "original_throughput": original_throughput,
             "optimized_throughput": optimized_throughput,
             "throughput_improvement": throughput_improvement,
+            "function_references": function_references,
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -373,7 +378,12 @@ class AiServiceClient:
         return ""
 
     def generate_ranking(  # noqa: D417
-        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[float]
+        self,
+        trace_id: str,
+        diffs: list[str],
+        optimization_ids: list[str],
+        speedups: list[float],
+        function_references: str | None = None,
     ) -> list[int] | None:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -382,6 +392,7 @@ class AiServiceClient:
         - trace_id : unique uuid of function
         - diffs : list of unified diff strings of opt candidates
         - speedups : list of speedups of opt candidates
+        - function_references : where the function is called in the codebase
 
         Returns
         -------
@@ -394,6 +405,7 @@ class AiServiceClient:
             "speedups": speedups,
             "optimization_ids": optimization_ids,
             "python_version": platform.python_version(),
+            "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
         console.rule()
@@ -594,6 +606,7 @@ class AiServiceClient:
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
             "calling_fn_details": calling_fn_details,
+            "python_version": platform.python_version(),
         }
         console.rule()
         try:
