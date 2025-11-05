@@ -80,7 +80,7 @@
     "primary": {
       "type": "button",
       "label": "Try Codeflash",
-      "href": "https://www.codeflash.ai"
+      "href": "https://app.codeflash.ai/login"
     }
   },
   "contextual": {
