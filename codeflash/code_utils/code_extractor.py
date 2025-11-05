@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import time
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
@@ -1138,6 +1139,7 @@ def find_specific_function_in_file(
 def get_fn_references_jedi(
     source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
 ) -> list[Path]:
+    start_time = time.perf_counter()
     function_position: CodePosition = find_specific_function_in_file(
         source_code, file_path, target_function, target_class
     )
@@ -1146,6 +1148,8 @@ def get_fn_references_jedi(
         # Get references to the function
         references = script.get_references(line=function_position.line_no, column=function_position.col_no)
         # Collect unique file paths where references are found
+        end_time = time.perf_counter()
+        logger.debug(f"Jedi for function references ran in {end_time - start_time:.2f} seconds")
         reference_files = set()
         for ref in references:
             if ref.module_path:
@@ -1163,6 +1167,7 @@ def get_fn_references_jedi(
 def get_opt_review_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
 ) -> str:
+    start_time = time.perf_counter()
     try:
         qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
         if len(qualified_name_split) == 1:
@@ -1176,4 +1181,6 @@ def get_opt_review_metrics(
     except Exception as e:
         calling_fns_details = ""
         logger.debug(f"Investigate {e}")
+    end_time = time.perf_counter()
+    logger.debug(f"Got function references in {end_time - start_time:.2f} seconds")
     return calling_fns_details
