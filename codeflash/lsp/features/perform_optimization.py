@@ -59,6 +59,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         generated_perf_test_paths,
         instrumented_unittests_created_for_function,
         original_conftest_content,
+        function_references,
     ) = test_setup_result.unwrap()
 
     baseline_setup_result = function_optimizer.setup_and_establish_baseline(
@@ -94,6 +95,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         generated_tests=generated_tests,
         test_functions_to_remove=test_functions_to_remove,
         concolic_test_str=concolic_test_str,
+        function_references=function_references,
     )
 
     abort_if_cancelled(cancel_event)
