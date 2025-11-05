@@ -449,7 +449,37 @@ class ImportAnalyzer(ast.NodeVisitor):
         if self.found_any_target_function:
             return
         # Direct base call improves run speed (avoids extra method resolution)
-        ast.NodeVisitor.generic_visit(self, node)
+        self._fast_generic_visit(node)
+
+    def _fast_generic_visit(self, node: ast.AST) -> None:
+        """Faster generic_visit: Inline traversal, avoiding method resolution overhead.
+        Short-circuits (returns) if found_any_target_function is True.
+        """
+        # This logic is derived from ast.NodeVisitor.generic_visit, but with optimizations.
+        found_flag = self.found_any_target_function
+        # Micro-optimization: store fATF in local variable for quick repeated early exit
+        if found_flag:
+            return
+        for field in node._fields:
+            value = getattr(node, field, None)
+            if isinstance(value, list):
+                for item in value:
+                    if self.found_any_target_function:
+                        return
+                    if isinstance(item, ast.AST):
+                        meth = getattr(self, "visit_" + item.__class__.__name__, None)
+                        if meth is not None:
+                            meth(item)
+                        else:
+                            self._fast_generic_visit(item)
+            elif isinstance(value, ast.AST):
+                if self.found_any_target_function:
+                    return
+                meth = getattr(self, "visit_" + value.__class__.__name__, None)
+                if meth is not None:
+                    meth(value)
+                else:
+                    self._fast_generic_visit(value)
 
 
 def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> bool:
