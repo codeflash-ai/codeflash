@@ -6,6 +6,7 @@ from typing import Any
 import tomlkit
 
 from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.cli_cmds.console import logger
 
 PYPROJECT_TOML_CACHE = {}
 ALL_CONFIG_FILES = {}  # map path to closest config file
@@ -100,7 +101,7 @@ def parse_config_file(
     try:
         tool = data["tool"]
         assert isinstance(tool, dict)
-        config = tool.get("codeflash", {})
+        config = tool["codeflash"]
     except tomlkit.exceptions.NonExistentKey as e:
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
