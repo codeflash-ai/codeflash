@@ -80,11 +80,6 @@ class ValidateProjectParams:
 
 
 @dataclass
-class OnPatchAppliedParams:
-    task_id: str
-
-
-@dataclass
 class OptimizableFunctionsInCommitParams:
     commit_hash: str
 
@@ -96,6 +91,11 @@ class WriteConfigParams:
 
 
 server = CodeflashLanguageServer("codeflash-language-server", "v1.0", protocol_cls=CodeflashLanguageServerProtocol)
+
+
+@server.feature("server/listFeatures")
+def list_features(_params: any) -> list[str]:
+    return list(server.protocol.fm.features)
 
 
 @server.feature("getOptimizableFunctionsInCurrentDiff")
@@ -258,7 +258,7 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "existingConfig": config,
         }
 
-    args = _init()
+    args = process_args()
     return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
 
 
@@ -274,8 +274,9 @@ def _check_api_key_validity(api_key: Optional[str]) -> dict[str, str]:
     if user_id is None:
         return {"status": "error", "message": "api key not found or invalid"}
 
-    if user_id.startswith("Error: "):
-        error_msg = user_id[7:]
+    error_prefix = "Error: "
+    if user_id.startswith(error_prefix):
+        error_msg = user_id[len(error_prefix) :]
         return {"status": "error", "message": error_msg}
 
     return {"status": "success", "user_id": user_id}
