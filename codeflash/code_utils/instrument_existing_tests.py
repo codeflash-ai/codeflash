@@ -93,7 +93,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         # it's much more efficient to visit nodes manually. We'll only descend into expressions/statements.
 
         # Helper for manual walk
-        def iter_ast_calls(node):
+        def iter_ast_calls(node):  # noqa: ANN202, ANN001
             # Generator to yield each ast.Call in test_node, preserves node identity
             stack = [node]
             while stack:
@@ -102,11 +102,11 @@ class InjectPerfOnly(ast.NodeTransformer):
                     yield n
                 # Instead of using ast.walk (which calls iter_child_nodes under the hood in Python, which copy lists and stack-frames for EVERY node),
                 # do a specialized BFS with only the necessary attributes
-                for field, value in ast.iter_fields(n):
+                for _field, value in ast.iter_fields(n):
                     if isinstance(value, list):
                         for item in reversed(value):
                             if isinstance(item, ast.AST):
-                                stack.append(item)
+                                stack.append(item)  # noqa: PERF401
                     elif isinstance(value, ast.AST):
                         stack.append(value)
 
@@ -136,6 +136,10 @@ class InjectPerfOnly(ast.NodeTransformer):
 
             if isinstance(node_func, ast.Name):
                 function_name = node_func.id
+
+                # Check if this is the function we want to instrument
+                if function_name != fn_obj.function_name:
+                    continue
 
                 if fn_obj.is_async:
                     return [test_node]
