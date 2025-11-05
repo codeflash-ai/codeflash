@@ -461,7 +461,6 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         # Local bindings for improved lookup speed (10-15% faster for inner loop)
-        found_any = self.found_any_target_function
         visit_cache = type(self).__dict__
         node_fields = node._fields
 
