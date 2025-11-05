@@ -1231,6 +1231,7 @@ def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
         console.rule()
 
     file_path.write_text(find_common_tags_content, encoding="utf8")
+    logger.info(f"Created demo optimization file: {file_path}")
 
     return file_path
 

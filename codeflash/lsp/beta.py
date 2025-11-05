@@ -308,8 +308,8 @@ def _init() -> Namespace:
 def check_api_key(_params: any) -> dict[str, str]:
     try:
         return _initialize_optimizer_if_api_key_is_valid()
-    except Exception:
-        return {"status": "error", "message": "something went wrong while validating the api key"}
+    except Exception as ex:
+        return {"status": "error", "message": "something went wrong while validating the api key " + str(ex)}
 
 
 @server.feature("provideApiKey")
