@@ -81,7 +81,7 @@ def remove_worktree(worktree_dir: Path) -> None:
 
 
 def create_diff_patch_from_worktree(
-    worktree_dir: Path, files: list[str], fto_name: Optional[str] = None
+    worktree_dir: Path, files: list[Path], fto_name: Optional[str] = None
 ) -> Optional[Path]:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
