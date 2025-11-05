@@ -453,6 +453,7 @@ class ImportAnalyzer(ast.NodeVisitor):
 
     def _fast_generic_visit(self, node: ast.AST) -> None:
         """Faster generic_visit: Inline traversal, avoiding method resolution overhead.
+
         Short-circuits (returns) if found_any_target_function is True.
         """
         # This logic is derived from ast.NodeVisitor.generic_visit, but with optimizations.
