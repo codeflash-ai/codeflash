@@ -278,19 +278,8 @@ class ImportAnalyzer(ast.NodeVisitor):
                     if isinstance(target, ast.Name):
                         instance_mapping[target.id] = original_class
 
-        # Replace self.generic_visit(node) with an optimized, inlined version that
-        # stops traversal when self.found_any_target_function is set.
-        # This eliminates interpretive overhead of super() and function call.
-        stack = [node]
-        append = stack.append
-        pop = stack.pop
-        # found_flag = self.found_any_target_function
-        while stack:
-            current_node = pop()
-            if self.found_any_target_function:
-                break
-            for child in ast.iter_child_nodes(current_node):
-                append(child)
+        # Continue visiting child nodes
+        self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
@@ -338,11 +327,11 @@ class ImportAnalyzer(ast.NodeVisitor):
                 if "." in target_func:
                     class_name, method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
-                        # If an alias is used, don't match conservatively
-                        # The actual method usage should be detected in visit_Attribute
                         self.found_any_target_function = True
                         self.found_qualified_name = target_func
                         return
+                        # If an alias is used, track it for later method access detection
+                        # The actual method usage will be detected in visit_Attribute
 
             prefix = qname + "."
             # Only bother if one of the targets startswith the prefix-root
@@ -383,6 +372,14 @@ class ImportAnalyzer(ast.NodeVisitor):
                     self.found_any_target_function = True
                     self.found_qualified_name = self._class_method_to_target[(original_name, node_attr)]
                     return
+                # Also check if the imported name itself (without resolving alias) matches
+                # This handles cases where the class itself is the target
+                if imported_name in roots_possible:
+                    self.found_any_target_function = True
+                    self.found_qualified_name = self._class_method_to_target.get(
+                        (imported_name, node_attr), f"{imported_name}.{node_attr}"
+                    )
+                    return
 
         # Check if this is accessing a method on an instance variable
         if isinstance(node_value, ast.Name) and node_value.id in self.instance_mapping:
@@ -401,6 +398,19 @@ class ImportAnalyzer(ast.NodeVisitor):
 
         self.generic_visit(node)
 
+    def visit_Call(self, node: ast.Call) -> None:
+        """Handle function calls, particularly __import__."""
+        if self.found_any_target_function:
+            return
+
+        # Check if this is a __import__ call
+        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+            self.has_dynamic_imports = True
+            # When __import__ is used, any target function could potentially be imported
+            # Be conservative and assume it might import target functions
+
+        self.generic_visit(node)
+
     def visit_Name(self, node: ast.Name) -> None:
         """Handle direct name usage like target_function()."""
         if self.found_any_target_function:
@@ -410,6 +420,8 @@ class ImportAnalyzer(ast.NodeVisitor):
         if node.id == "__import__":
             self.has_dynamic_imports = True
 
+        # Check if this is a direct usage of a target function name
+        # This catches cases like: result = target_function()
         if node.id in self.function_names_to_find:
             self.found_any_target_function = True
             self.found_qualified_name = node.id
@@ -444,12 +456,22 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
     except (SyntaxError, FileNotFoundError) as e:
         logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
         return True
-    else:
-        if analyzer.found_any_target_function:
-            logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
-            return True
-        logger.debug(f"Test file {test_file_path} does not import any target functions.")
-        return False
+
+    if analyzer.found_any_target_function:
+        logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
+        return True
+
+    # Be conservative with dynamic imports - if __import__ is used and a target function
+    # is referenced, we should process the file
+    if analyzer.has_dynamic_imports:
+        # Check if any target function name appears as a string literal or direct usage
+        for target_func in target_functions:
+            if target_func in source_code:
+                logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
+                return True
+
+    logger.debug(f"Test file {test_file_path} does not import any target functions.")
+    return False
 
 
 def filter_test_files_by_imports(
@@ -663,7 +685,19 @@ def process_test_files(
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
     num_discovered_replay_tests = 0
-    jedi_project = jedi.Project(path=project_root_path)
+
+    # Set up sys_path for Jedi to resolve imports correctly
+    import sys
+
+    jedi_sys_path = list(sys.path)
+    # Add project root and its parent to sys_path so modules can be imported
+    if str(project_root_path) not in jedi_sys_path:
+        jedi_sys_path.insert(0, str(project_root_path))
+    parent_path = project_root_path.parent
+    if str(parent_path) not in jedi_sys_path:
+        jedi_sys_path.insert(0, str(parent_path))
+
+    jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path)
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
