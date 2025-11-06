@@ -39,3 +39,4 @@ class BubbleSorter:
                     arr[j + 1] = temp
         print("stderr test staticmethod", file=sys.stderr)
         return arr
+        
