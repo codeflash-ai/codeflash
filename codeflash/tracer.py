@@ -64,13 +64,15 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         parsed_args.tracer_timeout = getattr(args, "timeout", None)
         parsed_args.codeflash_config = getattr(args, "config_file_path", None)
         parsed_args.trace_only = getattr(args, "trace_only", False)
-        parsed_args.module = False
+        
+        temp_parsed, unknown_args = parser.parse_known_args()
+        parsed_args.module = temp_parsed.module
+        sys.argv[:] = unknown_args
 
         if getattr(args, "disable", False):
             console.rule("Codeflash: Tracer disabled by --disable option", style="bold red")
             return parser
 
-        unknown_args = []
     else:
         if not sys.argv[1:]:
             parser.print_usage()

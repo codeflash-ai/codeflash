@@ -9,6 +9,9 @@ def main() -> None:
     # Use the version tuple from version.py
     version = __version__
 
+    if ".dev" in version or "+" in version or "post" in version:
+        return
+
     # Use the major and minor version components from the version tuple
     major_minor_version = ".".join(map(str, version.split(".")[:2]))
 
