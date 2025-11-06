@@ -100,7 +100,7 @@ def parse_config_file(
     try:
         tool = data["tool"]
         assert isinstance(tool, dict)
-        config = tool.get("codeflash", {})
+        config = tool["codeflash"]
     except tomlkit.exceptions.NonExistentKey as e:
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
