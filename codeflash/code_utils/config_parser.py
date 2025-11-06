@@ -6,7 +6,6 @@ from typing import Any
 import tomlkit
 
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.cli_cmds.console import logger
 
 PYPROJECT_TOML_CACHE = {}
 ALL_CONFIG_FILES = {}  # map path to closest config file
