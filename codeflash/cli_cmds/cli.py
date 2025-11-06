@@ -249,7 +249,7 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
-    if hasattr(args, "all") or args.file:
+    if hasattr(args, "all") or (hasattr(args, "file") and args.file):
         import git
 
         from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
@@ -265,10 +265,12 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
-        if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
+        no_pr = getattr(args, "no_pr", False)
+        git_remote = getattr(args, "git_remote", None)
+        if not no_pr and not check_and_push_branch(git_repo, git_remote=git_remote):
             exit_with_message("Branch is not pushed...", error_on_exit=True)
         owner, repo = get_repo_owner_and_name(git_repo)
-        if not args.no_pr:
+        if not no_pr:
             require_github_app_or_exit(owner, repo)
     if not hasattr(args, "all"):
         args.all = None
