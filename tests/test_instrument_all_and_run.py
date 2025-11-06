@@ -62,6 +62,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -81,10 +82,14 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -225,7 +230,7 @@ result: [0, 1, 2, 3, 4, 5]
         test_path_perf.unlink(missing_ok=True)
 
 
-def test_class_method_full_instrumentation() -> None:
+def test_method_full_instrumentation() -> None:
     code = """from code_to_optimize.bubble_sort_method import BubbleSorter
 
 
@@ -242,6 +247,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -262,11 +268,15 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     sort_class = BubbleSorter()
-    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sort_class.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
     sort_class = BubbleSorter()
-    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '6', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sort_class.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sort_class.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '6', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -482,6 +492,334 @@ class BubbleSorter:
         assert new_test_results[3].runtime > 0
         assert new_test_results[3].did_pass
         assert not compare_test_results(test_results, new_test_results)
+
+    finally:
+        fto_path.write_text(original_code, "utf-8")
+        test_path.unlink(missing_ok=True)
+        test_path_perf.unlink(missing_ok=True)
+
+
+def test_classmethod_full_instrumentation() -> None:
+    code = """from code_to_optimize.bubble_sort_method import BubbleSorter
+
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    output = BubbleSorter.sorter_classmethod(input)
+    assert output == [0, 1, 2, 3, 4, 5]
+
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = BubbleSorter.sorter_classmethod(input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+
+    expected = (
+        """import gc
+import inspect
+import os
+import sqlite3
+import time
+
+import dill as pickle
+
+from code_to_optimize.bubble_sort_method import BubbleSorter
+
+
+"""
+        + codeflash_wrap_string
+        + """
+def test_sort():
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+    input = [5, 4, 3, 2, 1, 0]
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter_classmethod).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter_classmethod, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter_classmethod', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+    assert output == [0, 1, 2, 3, 4, 5]
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter_classmethod).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter_classmethod, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter_classmethod', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    codeflash_con.close()
+"""
+    )
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    fto = FunctionToOptimize(
+        function_name="sorter_classmethod", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
+    )
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp_test_path = Path(tmpdirname) / "test_classmethod_behavior_results_temp.py"
+        tmp_test_path.write_text(code, encoding="utf-8")
+
+        success, new_test = inject_profiling_into_existing_test(
+            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent, "pytest"
+        )
+    assert success
+    assert new_test.replace('"', "'") == expected.format(
+        module_path=tmp_test_path.stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+    ).replace('"', "'")
+    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+    test_path = tests_root / "test_classmethod_behavior_results_temp.py"
+    test_path_perf = tests_root / "test_classmethod_behavior_results_perf_temp.py"
+    project_root_path = (Path(__file__).parent / "..").resolve()
+
+    try:
+        new_test = expected.format(
+            module_path="code_to_optimize.tests.pytest.test_classmethod_behavior_results_temp",
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
+        )
+
+        with test_path.open("w") as f:
+            f.write(new_test)
+
+        # Add codeflash capture
+        instrument_codeflash_capture(fto, {}, tests_root)
+
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root_path,
+                disable_telemetry=True,
+                tests_root=tests_root,
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=project_root_path,
+            )
+        )
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_type = TestType.EXISTING_UNIT_TEST
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                    benchmarking_file_path=test_path_perf,
+                )
+            ]
+        )
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        assert len(test_results) == 2
+        assert test_results[0].id.function_getting_tested == "BubbleSorter.sorter_classmethod"
+        assert test_results[0].id.iteration_id == "1_0"
+        assert test_results[0].id.test_class_name is None
+        assert test_results[0].id.test_function_name == "test_sort"
+        assert (
+            test_results[0].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_classmethod_behavior_results_temp"
+        )
+        assert test_results[0].runtime > 0
+        assert test_results[0].did_pass
+        assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout : BubbleSorter.sorter_classmethod() called
+"""
+        assert test_results[0].stdout == out_str
+        assert compare_test_results(test_results, test_results)
+
+        assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter_classmethod"
+        assert test_results[1].id.iteration_id == "4_0"
+        assert test_results[1].id.test_class_name is None
+        assert test_results[1].id.test_function_name == "test_sort"
+        assert (
+            test_results[1].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_classmethod_behavior_results_temp"
+        )
+        assert test_results[1].runtime > 0
+        assert test_results[1].did_pass
+        assert test_results[1].stdout == """codeflash stdout : BubbleSorter.sorter_classmethod() called
+"""
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
+
+    finally:
+        fto_path.write_text(original_code, "utf-8")
+        test_path.unlink(missing_ok=True)
+        test_path_perf.unlink(missing_ok=True)
+
+
+def test_staticmethod_full_instrumentation() -> None:
+    code = """from code_to_optimize.bubble_sort_method import BubbleSorter
+
+
+def test_sort():
+    input = [5, 4, 3, 2, 1, 0]
+    output = BubbleSorter.sorter_staticmethod(input)
+    assert output == [0, 1, 2, 3, 4, 5]
+
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    output = BubbleSorter.sorter_staticmethod(input)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]"""
+
+    expected = (
+        """import gc
+import inspect
+import os
+import sqlite3
+import time
+
+import dill as pickle
+
+from code_to_optimize.bubble_sort_method import BubbleSorter
+
+
+"""
+        + codeflash_wrap_string
+        + """
+def test_sort():
+    codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+    codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+    codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+    codeflash_cur = codeflash_con.cursor()
+    codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+    input = [5, 4, 3, 2, 1, 0]
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter_staticmethod).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter_staticmethod, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter_staticmethod', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+    assert output == [0, 1, 2, 3, 4, 5]
+    input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter_staticmethod).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter_staticmethod, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter_staticmethod', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+    assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    codeflash_con.close()
+"""
+    )
+    fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
+    original_code = fto_path.read_text("utf-8")
+    fto = FunctionToOptimize(
+        function_name="sorter_staticmethod", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
+    )
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        tmp_test_path = Path(tmpdirname) / "test_staticmethod_behavior_results_temp.py"
+        tmp_test_path.write_text(code, encoding="utf-8")
+
+        success, new_test = inject_profiling_into_existing_test(
+            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent, "pytest"
+        )
+    assert success
+    assert new_test.replace('"', "'") == expected.format(
+        module_path=tmp_test_path.stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+    ).replace('"', "'")
+    tests_root = (Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/").resolve()
+    test_path = tests_root / "test_staticmethod_behavior_results_temp.py"
+    test_path_perf = tests_root / "test_staticmethod_behavior_results_perf_temp.py"
+    project_root_path = (Path(__file__).parent / "..").resolve()
+
+    try:
+        new_test = expected.format(
+            module_path="code_to_optimize.tests.pytest.test_staticmethod_behavior_results_temp",
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
+        )
+
+        with test_path.open("w") as f:
+            f.write(new_test)
+
+        # Add codeflash capture
+        instrument_codeflash_capture(fto, {}, tests_root)
+
+        opt = Optimizer(
+            Namespace(
+                project_root=project_root_path,
+                disable_telemetry=True,
+                tests_root=tests_root,
+                test_framework="pytest",
+                pytest_cmd="pytest",
+                experiment_id=None,
+                test_project_root=project_root_path,
+            )
+        )
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_type = TestType.EXISTING_UNIT_TEST
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                    benchmarking_file_path=test_path_perf,
+                )
+            ]
+        )
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        assert len(test_results) == 2
+        assert test_results[0].id.function_getting_tested == "BubbleSorter.sorter_staticmethod"
+        assert test_results[0].id.iteration_id == "1_0"
+        assert test_results[0].id.test_class_name is None
+        assert test_results[0].id.test_function_name == "test_sort"
+        assert (
+            test_results[0].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_staticmethod_behavior_results_temp"
+        )
+        assert test_results[0].runtime > 0
+        assert test_results[0].did_pass
+        assert test_results[0].return_value == ([0, 1, 2, 3, 4, 5],)
+        out_str = """codeflash stdout : BubbleSorter.sorter_staticmethod() called
+"""
+        assert test_results[0].stdout == out_str
+        assert compare_test_results(test_results, test_results)
+
+        assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter_staticmethod"
+        assert test_results[1].id.iteration_id == "4_0"
+        assert test_results[1].id.test_class_name is None
+        assert test_results[1].id.test_function_name == "test_sort"
+        assert (
+            test_results[1].id.test_module_path
+            == "code_to_optimize.tests.pytest.test_staticmethod_behavior_results_temp"
+        )
+        assert test_results[1].runtime > 0
+        assert test_results[1].did_pass
+        assert test_results[1].stdout == """codeflash stdout : BubbleSorter.sorter_staticmethod() called
+"""
+
+        results2, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        assert compare_test_results(test_results, results2)
 
     finally:
         fto_path.write_text(original_code, "utf-8")
