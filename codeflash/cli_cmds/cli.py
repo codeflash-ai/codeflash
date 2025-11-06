@@ -249,7 +249,7 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
-    if hasattr(args, "all"):
+    if hasattr(args, "all") or args.file:
         import git
 
         from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
@@ -259,9 +259,10 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         try:
             git_repo = git.Repo(search_parent_directories=True)
         except git.exc.InvalidGitRepositoryError:
+            mode = "--all" if hasattr(args, "all") else "--file"
             logger.exception(
-                "I couldn't find a git repository in the current directory. "
-                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
+                f"I couldn't find a git repository in the current directory. "
+                f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
             )
             apologize_and_exit()
         if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
