@@ -10,10 +10,8 @@ import inquirer
 from codeflash.cli_cmds.console import console, logger
 
 
-def apologize_and_exit(message: str | None = None) -> None:
+def apologize_and_exit() -> None:
     console.rule()
-    if message:
-        console.print(f"\n{message}\n")
     logger.info(
         "💡 If you're having trouble, see https://docs.codeflash.ai/getting-started/local-installation for further help getting started with Codeflash!"
     )

@@ -5,7 +5,6 @@ from typing import Any
 
 import tomlkit
 
-from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.lsp.helpers import is_LSP_enabled
 
 PYPROJECT_TOML_CACHE = {}
@@ -37,16 +36,9 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
             return config_file
         # Search for pyproject.toml in the parent directories
         dir_path = dir_path.parent
-    msg = (
-        "❌ No pyproject.toml found\n\n"
-        f"Searched in: {Path.cwd()} and parent directories\n"
-        "Codeflash requires a pyproject.toml with [tool.codeflash] configuration.\n\n"
-        "💡 To fix this, run: codeflash init\n"
-        "   This will create a pyproject.toml with the required configuration\n\n"
-        "Alternatively, specify a config file: --config-file /path/to/pyproject.toml\n"
-        "Learn more: https://docs.codeflash.ai/configuration"
-    )
-    apologize_and_exit(msg)
+    msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to pyproject.toml with the --config-file argument."
+
+    raise ValueError(msg)
 
 
 def get_all_closest_config_files() -> list[Path]:
@@ -109,21 +101,12 @@ def parse_config_file(
         tool = data["tool"]
         assert isinstance(tool, dict)
         config = tool["codeflash"]
-    except tomlkit.exceptions.NonExistentKey:
+    except tomlkit.exceptions.NonExistentKey as e:
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
             return {}, config_file_path
-
-        msg = (
-            "❌ Missing \[tool.codeflash] section\n\n"
-            f"Found pyproject.toml at: {config_file_path}\n"
-            "But it doesn't contain a \[tool.codeflash] configuration section.\n\n"
-            "💡 To fix this, run: codeflash init\n"
-            "   This will add the required configuration to your pyproject.toml\n\n"
-            "Alternatively, manually add a \[tool.codeflash] section to your pyproject.toml\n"
-            "Learn more: https://docs.codeflash.ai/configuration"
-        )
-        apologize_and_exit(msg)
+        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to create the config file."
+        raise ValueError(msg) from e
     assert isinstance(config, dict)
 
     if config == {} and lsp_mode:
