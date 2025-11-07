@@ -98,8 +98,8 @@ def _apply_deterministic_patches() -> None:
     _original_random = random.random
 
     # Fixed deterministic values
-    fixed_timestamp = 1609459200.0  # 2021-01-01 00:00:00 UTC
-    fixed_datetime = datetime.datetime(2021, 1, 1, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    fixed_timestamp = 1761717605.108106
+    fixed_datetime = datetime.datetime(2021, 1, 1, 2, 5, 10, tzinfo=datetime.timezone.utc)
     fixed_uuid = uuid.UUID("12345678-1234-5678-9abc-123456789012")
 
     # Counter for perf_counter to maintain relative timing

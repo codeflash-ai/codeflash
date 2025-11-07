@@ -167,8 +167,8 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
     console.rule()
 
     if run_tests:
-        bubble_sort_path, bubble_sort_test_path = create_bubble_sort_file_and_test(args)
-        run_end_to_end_test(args, bubble_sort_path, bubble_sort_test_path)
+        file_path = create_find_common_tags_file(args, "find_common_tags.py")
+        run_end_to_end_test(args, file_path)
 
 
 def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[bool, dict[str, Any] | None, str]:  # noqa: PLR0911
@@ -264,7 +264,7 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ]
 
 
-def get_suggestions(section: str) -> tuple(list[str], Optional[str]):
+def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
     valid_subdirs = get_valid_subdirs()
     if section == CommonSections.module_root:
         return [d for d in valid_subdirs if d != "tests"], None
@@ -391,7 +391,7 @@ def collect_setup_info() -> CLISetupInfo:
     tests_root_answer = tests_answers["tests_root"]
 
     if tests_root_answer == create_for_me_option:
-        tests_root = Path(curdir) / default_tests_subdir
+        tests_root = Path(curdir) / (default_tests_subdir or "tests")
         tests_root.mkdir()
         click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
@@ -1207,6 +1207,35 @@ def enter_api_key_and_save_to_rc() -> None:
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
+def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
+    find_common_tags_content = """def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
+    if not articles:
+        return set()
+
+    common_tags = articles[0]["tags"]
+    for article in articles[1:]:
+        common_tags = [tag for tag in common_tags if tag in article["tags"]]
+    return set(common_tags)
+"""
+
+    file_path = Path(args.module_root) / file_name
+    lsp_enabled = is_LSP_enabled()
+    if file_path.exists() and not lsp_enabled:
+        from rich.prompt import Confirm
+
+        overwrite = Confirm.ask(
+            f"🤔 {file_path} already exists. Do you want to overwrite it?", default=True, show_default=False
+        )
+        if not overwrite:
+            apologize_and_exit()
+        console.rule()
+
+    file_path.write_text(find_common_tags_content, encoding="utf8")
+    logger.info(f"Created demo optimization file: {file_path}")
+
+    return file_path
+
+
 def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
     bubble_sort_content = """from typing import Union, List
 def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
@@ -1276,7 +1305,7 @@ def test_sort():
     return str(bubble_sort_path), str(bubble_sort_test_path)
 
 
-def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test_path: str) -> None:
+def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
     try:
         check_formatter_installed(args.formatter_cmds)
     except Exception:
@@ -1285,7 +1314,7 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
         )
         return
 
-    command = ["codeflash", "--file", "bubble_sort.py", "--function", "sorter"]
+    command = ["codeflash", "--file", "find_common_tags.py", "--function", "find_common_tags"]
     if args.no_pr:
         command.append("--no-pr")
     if args.verbose:
@@ -1316,10 +1345,8 @@ def run_end_to_end_test(args: Namespace, bubble_sort_path: str, bubble_sort_test
         console.rule()
         # Delete the bubble_sort.py file after the test
         logger.info("🧹 Cleaning up…")
-        for path in [bubble_sort_path, bubble_sort_test_path]:
-            console.rule()
-            Path(path).unlink(missing_ok=True)
-            logger.info(f"🗑️  Deleted {path}")
+        find_common_tags_path.unlink(missing_ok=True)
+        logger.info(f"🗑️  Deleted {find_common_tags_path}")
 
 
 def ask_for_telemetry() -> bool:
