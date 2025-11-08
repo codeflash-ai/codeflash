@@ -62,7 +62,7 @@ def pytest_split(
     # If we have fewer test files than 4 * num_splits, reduce num_splits
     max_possible_splits = len(test_files) // 4
     if max_possible_splits == 0:
-        return test_files, test_paths
+        return [test_files], test_paths
 
     num_splits = min(num_splits, max_possible_splits)
 
