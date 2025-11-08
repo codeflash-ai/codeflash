@@ -1509,7 +1509,8 @@ class FunctionOptimizer:
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
         opt_review_response = ""
-        if raise_pr or staging_review:
+        # Skip optimization review for async functions for now
+        if (raise_pr or staging_review) and not self.function_to_optimize.is_async:
             data["root_dir"] = git_root_dir()
             try:
                 opt_review_response = self.aiservice_client.get_optimization_review(
@@ -1517,8 +1518,12 @@ class FunctionOptimizer:
                 )
             except Exception as e:
                 logger.debug(f"optimization review response failed, investigate {e}")
-            data["optimization_review"] = opt_review_response
+        # Always set optimization_review in data (empty string for async functions)
+        data["optimization_review"] = opt_review_response
         if raise_pr and not staging_review and opt_review_response != "low":
+            # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
+            if "root_dir" not in data:
+                data["root_dir"] = git_root_dir()
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif staging_review:
