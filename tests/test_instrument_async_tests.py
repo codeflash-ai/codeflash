@@ -249,17 +249,17 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = add_async_decorator_to_function(
+    source_success = add_async_decorator_to_function(
         source_file, func, TestingMode.BEHAVIOR
     )
 
     assert source_success is True
-    assert instrumented_source is not None
+    
+    # Verify the file was modified
+    instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
     assert "from codeflash.code_utils.codeflash_wrap_decorator import" in instrumented_source
     assert "codeflash_behavior_async" in instrumented_source
-
-    source_file.write_text(instrumented_source)
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
         test_file, [CodePosition(8, 18), CodePosition(11, 19)], func, temp_dir, "pytest", mode=TestingMode.BEHAVIOR
@@ -306,19 +306,18 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = add_async_decorator_to_function(
+    source_success = add_async_decorator_to_function(
         source_file, func, TestingMode.PERFORMANCE
     )
 
     assert source_success is True
-    assert instrumented_source is not None
+    
+    # Verify the file was modified
+    instrumented_source = source_file.read_text()
     assert "@codeflash_performance_async" in instrumented_source
     # Check for the import with line continuation formatting
     assert "from codeflash.code_utils.codeflash_wrap_decorator import" in instrumented_source
     assert "codeflash_performance_async" in instrumented_source
-
-    # Write the instrumented source back
-    source_file.write_text(instrumented_source)
 
     # Now test the full pipeline with source module path
     success, instrumented_test_code = inject_profiling_into_existing_test(
@@ -373,20 +372,19 @@ async def test_mixed_functions():
 
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = add_async_decorator_to_function(
+    source_success = add_async_decorator_to_function(
         source_file, async_func, TestingMode.BEHAVIOR
     )
 
     assert source_success
-    assert instrumented_source is not None
+    
+    # Verify the file was modified
+    instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
     assert "from codeflash.code_utils.codeflash_wrap_decorator import" in instrumented_source
     assert "codeflash_behavior_async" in instrumented_source
     # Sync function should remain unchanged
     assert "def sync_function(x: int, y: int) -> int:" in instrumented_source
-
-    # Write instrumented source back
-    source_file.write_text(instrumented_source)
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
         test_file,
@@ -547,15 +545,15 @@ async def test_multiple_calls():
     # First instrument the source module with async decorators
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = add_async_decorator_to_function(
+    source_success = add_async_decorator_to_function(
         source_file, func, TestingMode.BEHAVIOR
     )
 
     assert source_success
-    assert instrumented_source is not None
+    
+    # Verify the file was modified
+    instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
-
-    source_file.write_text(instrumented_source)
 
     import ast
 

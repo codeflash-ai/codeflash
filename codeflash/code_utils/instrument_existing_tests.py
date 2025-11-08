@@ -1271,25 +1271,26 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
 
 def add_async_decorator_to_function(
     source: str | Path, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
-) -> tuple[str, bool] | tuple[bool, str | None]:
+) -> tuple[str, bool] | bool:
     """Add async decorator to an async function definition.
 
     Args:
     ----
         source: Either source code string or path to source file.
+               When Path is provided, the file is modified in-place.
         function: The FunctionToOptimize object representing the target async function.
         mode: The testing mode to determine which decorator to apply.
 
     Returns:
     -------
         For string input: Tuple of (modified_source_code, was_decorator_added).
-        For Path input: Tuple of (was_decorator_added, modified_source_code or None).
+        For Path input: Boolean indicating success (file is written directly).
 
     """
     is_path_input = isinstance(source, Path)
 
     if not function.is_async:
-        return (False, None) if is_path_input else (source if isinstance(source, str) else "", False)
+        return False if is_path_input else (source if isinstance(source, str) else "", False)
 
     try:
         # Read source code if path provided
@@ -1313,12 +1314,20 @@ def add_async_decorator_to_function(
         modified_code = sort_imports(code=module.code, float_to_top=True)
     except Exception as e:
         logger.exception(f"Error adding async decorator to function {function.qualified_name}: {e}")
-        return (False, None) if is_path_input else (source_code, False)
+        return False if is_path_input else (source_code, False)
     else:
-        # Success - return based on whether decorator was added and input type
+        # Success - for Path input, write file and return bool; for string input, return code + bool
+        if is_path_input:
+            if decorator_transformer.added_decorator:
+                with source.open("w", encoding="utf8") as f:
+                    f.write(modified_code)
+                logger.debug(f"Applied async {mode.value} instrumentation to {source}")
+                return True
+            return False
+        # String input: return modified code and whether decorator was added
         if decorator_transformer.added_decorator:
-            return (True, modified_code) if is_path_input else (modified_code, True)
-        return (False, None) if is_path_input else (modified_code, False)
+            return (modified_code, True)
+        return (modified_code, False)
 
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
     instrumented_filename = f"instrumented_{source_path.name}"

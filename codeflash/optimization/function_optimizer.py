@@ -1593,13 +1593,9 @@ class FunctionOptimizer:
         if self.function_to_optimize.is_async:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-            success, instrumented_source = add_async_decorator_to_function(
+            success = add_async_decorator_to_function(
                 self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
             )
-            if success and instrumented_source:
-                with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                    f.write(instrumented_source)
-                logger.debug(f"Applied async instrumentation to {self.function_to_optimize.file_path}")
 
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
@@ -1646,15 +1642,9 @@ class FunctionOptimizer:
                 if self.function_to_optimize.is_async:
                     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = add_async_decorator_to_function(
+                    add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
-                    if success and instrumented_source:
-                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                            f.write(instrumented_source)
-                        logger.debug(
-                            f"Applied async performance instrumentation to {self.function_to_optimize.file_path}"
-                        )
 
                 try:
                     benchmarking_results, _ = self.run_and_parse_tests(
@@ -1779,15 +1769,9 @@ class FunctionOptimizer:
             if self.function_to_optimize.is_async:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                success, instrumented_source = add_async_decorator_to_function(
+                add_async_decorator_to_function(
                     self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
                 )
-                if success and instrumented_source:
-                    with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                        f.write(instrumented_source)
-                    logger.debug(
-                        f"Applied async behavioral instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}"
-                    )
 
             try:
                 instrument_codeflash_capture(
@@ -1830,15 +1814,9 @@ class FunctionOptimizer:
                 if self.function_to_optimize.is_async:
                     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = add_async_decorator_to_function(
+                    add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
-                    if success and instrumented_source:
-                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                            f.write(instrumented_source)
-                        logger.debug(
-                            f"Applied async performance instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}"
-                        )
 
                 try:
                     candidate_benchmarking_results, _ = self.run_and_parse_tests(
