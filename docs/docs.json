@@ -9,8 +9,8 @@
   },
   "favicon": "/favicon.ico",
   "integrations": {
-    "intercom": {
-      "appId": "ljxo1nzr"
+    "posthog": {
+        "apiKey": "phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol"
     }
   },
   "navigation": {
@@ -80,7 +80,7 @@
     "primary": {
       "type": "button",
       "label": "Try Codeflash",
-      "href": "https://www.codeflash.ai"
+      "href": "https://app.codeflash.ai/login"
     }
   },
   "contextual": {

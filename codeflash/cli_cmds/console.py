@@ -80,9 +80,16 @@ def paneled_text(
     console.print(panel)
 
 
-def code_print(code_str: str, file_name: Optional[str] = None, function_name: Optional[str] = None) -> None:
+def code_print(
+    code_str: str,
+    file_name: Optional[str] = None,
+    function_name: Optional[str] = None,
+    lsp_message_id: Optional[str] = None,
+) -> None:
     if is_LSP_enabled():
-        lsp_log(LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name))
+        lsp_log(
+            LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
+        )
         return
     """Print code with syntax highlighting."""
     from rich.syntax import Syntax

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lsprotocol.types import LogMessageParams, MessageType
+from pygls.lsp.server import LanguageServer
 from pygls.protocol import LanguageServerProtocol
-from pygls.server import LanguageServer
+
+from codeflash.either import Result
+from codeflash.models.models import CodeOptimizationContext
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
-    from codeflash.models.models import CodeOptimizationContext
     from codeflash.optimization.optimizer import Optimizer
 
 
@@ -17,11 +18,15 @@ class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
 
 
+InitializationResultT = tuple[bool, CodeOptimizationContext, dict[Path, str]]
+WrappedInitializationResultT = Result[InitializationResultT, str]
+
+
 class CodeflashLanguageServer(LanguageServer):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-        super().__init__(*args, **kwargs)
+    def __init__(self, name: str, version: str, protocol_cls: type[LanguageServerProtocol]) -> None:
+        super().__init__(name, version, protocol_cls=protocol_cls)
+        self.initialized: bool = False
         self.optimizer: Optimizer | None = None
-        self.args_processed_before: bool = False
         self.args = None
         self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
 
@@ -56,12 +61,12 @@ class CodeflashLanguageServer(LanguageServer):
 
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
-        self.lsp.notify("window/logMessage", log_params)
+        self.protocol.notify("window/logMessage", log_params)
 
-    def cleanup_the_optimizer(self) -> None:
+    def cleanup_the_optimizer(self) -> bool:
         self.current_optimization_init_result = None
         if not self.optimizer:
-            return
+            return False
         try:
             self.optimizer.cleanup_temporary_paths()
             # restore args and test cfg
@@ -72,6 +77,8 @@ class CodeflashLanguageServer(LanguageServer):
             self.optimizer.current_function_optimizer = None
         except Exception:
             self.show_message_log("Failed to cleanup optimizer", "Error")
+            return False
+        return True
 
     def shutdown(self) -> None:
         """Gracefully shutdown the server."""

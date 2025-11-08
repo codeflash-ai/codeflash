@@ -4,9 +4,8 @@ import ast
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
-
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -70,7 +69,7 @@ def add_codeflash_capture_to_init(
         ast.fix_missing_locations(modified_tree)
 
     # Convert back to source code
-    return isort.code(code=ast.unparse(modified_tree), float_to_top=True)
+    return sort_imports(code=ast.unparse(modified_tree), float_to_top=True)
 
 
 class InitDecorator(ast.NodeTransformer):

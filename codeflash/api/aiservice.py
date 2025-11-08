@@ -144,7 +144,7 @@ class AiServiceClient:
         logger.info("!lsp|Generating optimized candidates…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -209,7 +209,7 @@ class AiServiceClient:
             console.rule()
             return []
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -255,13 +255,15 @@ class AiServiceClient:
                 "optimized_code_runtime": opt.optimized_code_runtime,
                 "speedup": opt.speedup,
                 "trace_id": opt.trace_id,
+                "function_references": opt.function_references,
+                "python_version": platform.python_version(),
             }
             for opt in request
         ]
         logger.debug(f"Refining {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -308,6 +310,8 @@ class AiServiceClient:
         original_throughput: str | None = None,
         optimized_throughput: str | None = None,
         throughput_improvement: str | None = None,
+        function_references: str | None = None,
+        codeflash_version: str = codeflash_version,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -327,6 +331,8 @@ class AiServiceClient:
         - original_throughput: str | None - throughput for the baseline code (operations per second)
         - optimized_throughput: str | None - throughput for the optimized code (operations per second)
         - throughput_improvement: str | None - throughput improvement percentage
+        - current codeflash version
+        - function_references: str | None - where the function is called in the codebase
 
         Returns
         -------
@@ -349,6 +355,8 @@ class AiServiceClient:
             "original_throughput": original_throughput,
             "optimized_throughput": optimized_throughput,
             "throughput_improvement": throughput_improvement,
+            "function_references": function_references,
+            "codeflash_version": codeflash_version,
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -373,7 +381,12 @@ class AiServiceClient:
         return ""
 
     def generate_ranking(  # noqa: D417
-        self, trace_id: str, diffs: list[str], optimization_ids: list[str], speedups: list[float]
+        self,
+        trace_id: str,
+        diffs: list[str],
+        optimization_ids: list[str],
+        speedups: list[float],
+        function_references: str | None = None,
     ) -> list[int] | None:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -382,6 +395,7 @@ class AiServiceClient:
         - trace_id : unique uuid of function
         - diffs : list of unified diff strings of opt candidates
         - speedups : list of speedups of opt candidates
+        - function_references : where the function is called in the codebase
 
         Returns
         -------
@@ -394,6 +408,7 @@ class AiServiceClient:
             "speedups": speedups,
             "optimization_ids": optimization_ids,
             "python_version": platform.python_version(),
+            "function_references": function_references,
         }
         logger.info("loading|Generating ranking")
         console.rule()
@@ -506,7 +521,7 @@ class AiServiceClient:
             "is_async": function_to_optimize.is_async,
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
@@ -532,7 +547,7 @@ class AiServiceClient:
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
             return None
 
-    def get_optimization_impact(
+    def get_optimization_review(
         self,
         original_code: dict[Path, str],
         new_code: dict[Path, str],
@@ -544,8 +559,9 @@ class AiServiceClient:
         replay_tests: str,
         root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
+        calling_fn_details: str,
     ) -> str:
-        """Compute the optimization impact of current Pull Request.
+        """Compute the optimization review of current Pull Request.
 
         Args:
         original_code: dict -> data structure mapping file paths to function definition for original code
@@ -558,10 +574,11 @@ class AiServiceClient:
         replay_tests: str -> replay test table
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
+        calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
 
         Returns:
         -------
-        - 'high' or 'low' optimization impact
+        - 'high', 'medium' or 'low' optimization review
 
         """
         diff_str = "\n".join(
@@ -577,7 +594,7 @@ class AiServiceClient:
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
-        logger.info("!lsp|Computing Optimization Impact…")
+        logger.info("!lsp|Computing Optimization Review…")
         payload = {
             "code_diff": code_diff,
             "explanation": explanation.raw_explanation_message,
@@ -591,22 +608,25 @@ class AiServiceClient:
             "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
+            "codeflash_version": codeflash_version,
+            "calling_fn_details": calling_fn_details,
+            "python_version": platform.python_version(),
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_impact", payload=payload, timeout=600)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return ""
 
         if response.status_code == 200:
-            return cast("str", response.json()["impact"])
+            return cast("str", response.json()["review"])
         try:
             error = cast("str", response.json()["error"])
         except Exception:
             error = response.text
-        logger.error(f"Error generating impact candidates: {response.status_code} - {error}")
+        logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return ""

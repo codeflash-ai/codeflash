@@ -5,6 +5,8 @@ from typing import Any
 
 import tomlkit
 
+from codeflash.lsp.helpers import is_LSP_enabled
+
 PYPROJECT_TOML_CACHE = {}
 ALL_CONFIG_FILES = {}  # map path to closest config file
 
@@ -93,14 +95,22 @@ def parse_config_file(
         msg = f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
         raise ValueError(msg) from e
 
+    lsp_mode = is_LSP_enabled()
+
     try:
         tool = data["tool"]
         assert isinstance(tool, dict)
         config = tool["codeflash"]
     except tomlkit.exceptions.NonExistentKey as e:
+        if lsp_mode:
+            # don't fail in lsp mode if codeflash config is not found.
+            return {}, config_file_path
         msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to create the config file."
         raise ValueError(msg) from e
     assert isinstance(config, dict)
+
+    if config == {} and lsp_mode:
+        return {}, config_file_path
 
     # default values:
     path_keys = ["module-root", "tests-root", "benchmarks-root"]
@@ -139,12 +149,13 @@ def parse_config_file(
         else:
             config[key] = []
 
-    assert config["test-framework"] in {"pytest", "unittest"}, (
-        "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
-    )
+    if config.get("test-framework"):
+        assert config["test-framework"] in {"pytest", "unittest"}, (
+            "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
+        )
     # see if this is happening during GitHub actions setup
-    if len(config["formatter-cmds"]) > 0 and not override_formatter_check:
-        assert config["formatter-cmds"][0] != "your-formatter $file", (
+    if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
+        assert config.get("formatter-cmds")[0] != "your-formatter $file", (
             "The formatter command is not set correctly in pyproject.toml. Please set the "
             "formatter command in the 'formatter-cmds' key. More info - https://docs.codeflash.ai/configuration"
         )
