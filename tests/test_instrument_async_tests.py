@@ -54,7 +54,7 @@ def temp_dir():
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_decorator_application_behavior_mode():
+def test_async_decorator_application_behavior_mode(temp_dir):
     async_function_code = '''
 import asyncio
 
@@ -78,18 +78,22 @@ async def async_function(x: int, y: int) -> int:
     return x * y
 '''
 
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(async_function_code)
+
     func = FunctionToOptimize(
-        function_name="async_function", file_path=Path("test_async.py"), parents=[], is_async=True
+        function_name="async_function", file_path=test_file, parents=[], is_async=True
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(async_function_code, func, TestingMode.BEHAVIOR)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
     assert decorator_added
+    modified_code = test_file.read_text()
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_decorator_application_performance_mode():
+def test_async_decorator_application_performance_mode(temp_dir):
     async_function_code = '''
 import asyncio
 
@@ -113,18 +117,22 @@ async def async_function(x: int, y: int) -> int:
     return x * y
 '''
 
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(async_function_code)
+
     func = FunctionToOptimize(
-        function_name="async_function", file_path=Path("test_async.py"), parents=[], is_async=True
+        function_name="async_function", file_path=test_file, parents=[], is_async=True
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(async_function_code, func, TestingMode.PERFORMANCE)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.PERFORMANCE)
 
     assert decorator_added
+    modified_code = test_file.read_text()
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_class_method_decorator_application():
+def test_async_class_method_decorator_application(temp_dir):
     async_class_code = '''
 import asyncio
 
@@ -162,21 +170,25 @@ class Calculator:
         return a - b
 '''
 
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(async_class_code)
+
     func = FunctionToOptimize(
         function_name="async_method",
-        file_path=Path("test_async.py"),
+        file_path=test_file,
         parents=[{"name": "Calculator", "type": "ClassDef"}],
         is_async=True,
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(async_class_code, func, TestingMode.BEHAVIOR)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
     assert decorator_added
+    modified_code = test_file.read_text()
     assert modified_code.strip() == expected_decorated_code.strip()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_decorator_no_duplicate_application():
+def test_async_decorator_no_duplicate_application(temp_dir):
     already_decorated_code = '''
 from codeflash.code_utils.codeflash_wrap_decorator import codeflash_behavior_async
 import asyncio
@@ -188,28 +200,17 @@ async def async_function(x: int, y: int) -> int:
     return x * y
 '''
 
-    expected_reformatted_code = '''
-import asyncio
-
-from codeflash.code_utils.codeflash_wrap_decorator import \\
-    codeflash_behavior_async
-
-
-@codeflash_behavior_async
-async def async_function(x: int, y: int) -> int:
-    """Already decorated async function."""
-    await asyncio.sleep(0.01)
-    return x * y
-'''
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(already_decorated_code)
 
     func = FunctionToOptimize(
-        function_name="async_function", file_path=Path("test_async.py"), parents=[], is_async=True
+        function_name="async_function", file_path=test_file, parents=[], is_async=True
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(already_decorated_code, func, TestingMode.BEHAVIOR)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
+    # Should not add duplicate decorator
     assert not decorator_added
-    assert modified_code.strip() == expected_reformatted_code.strip()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
@@ -401,7 +402,7 @@ async def test_mixed_functions():
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_function_qualified_name_handling():
+def test_async_function_qualified_name_handling(temp_dir):
     nested_async_code = '''
 import asyncio
 
@@ -413,14 +414,17 @@ class OuterClass:
             return x * 2
 '''
 
+    test_file = temp_dir / "test_nested.py"
+    test_file.write_text(nested_async_code)
+
     func = FunctionToOptimize(
         function_name="nested_async_method",
-        file_path=Path("test_nested.py"),
+        file_path=test_file,
         parents=[{"name": "OuterClass", "type": "ClassDef"}, {"name": "InnerClass", "type": "ClassDef"}],
         is_async=True,
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(nested_async_code, func, TestingMode.BEHAVIOR)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
     expected_output = (
         """import asyncio
@@ -439,11 +443,13 @@ class OuterClass:
 """
     )
 
+    assert decorator_added
+    modified_code = test_file.read_text()
     assert modified_code.strip() == expected_output.strip()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_async_decorator_with_existing_decorators():
+def test_async_decorator_with_existing_decorators(temp_dir):
     """Test async decorator application when function already has other decorators."""
     decorated_async_code = '''
 import asyncio
@@ -462,13 +468,17 @@ async def async_function(x: int, y: int) -> int:
     return x * y
 '''
 
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(decorated_async_code)
+
     func = FunctionToOptimize(
-        function_name="async_function", file_path=Path("test_async.py"), parents=[], is_async=True
+        function_name="async_function", file_path=test_file, parents=[], is_async=True
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(decorated_async_code, func, TestingMode.BEHAVIOR)
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
     assert decorator_added
+    modified_code = test_file.read_text()
     # Should add codeflash decorator above existing decorators
     assert "@codeflash_behavior_async" in modified_code
     assert "@my_decorator" in modified_code
@@ -479,25 +489,30 @@ async def async_function(x: int, y: int) -> int:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_sync_function_not_affected_by_async_logic():
+def test_sync_function_not_affected_by_async_logic(temp_dir):
     sync_function_code = '''
 def sync_function(x: int, y: int) -> int:
     """Regular sync function."""
     return x + y
 '''
 
+    test_file = temp_dir / "test_sync.py"
+    test_file.write_text(sync_function_code)
+
     sync_func = FunctionToOptimize(
         function_name="sync_function",
-        file_path=Path("test_sync.py"),
+        file_path=test_file,
         parents=[],
         is_async=False,
     )
 
-    modified_code, decorator_added = add_async_decorator_to_function(
-        sync_function_code, sync_func, TestingMode.BEHAVIOR
+    decorator_added = add_async_decorator_to_function(
+        test_file, sync_func, TestingMode.BEHAVIOR
     )
 
     assert not decorator_added
+    # File should not be modified for sync functions
+    modified_code = test_file.read_text()
     assert modified_code == sync_function_code
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
