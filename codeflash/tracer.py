@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import subprocess
 import sys
@@ -64,13 +65,15 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         parsed_args.tracer_timeout = getattr(args, "timeout", None)
         parsed_args.codeflash_config = getattr(args, "config_file_path", None)
         parsed_args.trace_only = getattr(args, "trace_only", False)
-        parsed_args.module = False
+
+        temp_parsed, unknown_args = parser.parse_known_args()
+        parsed_args.module = temp_parsed.module
+        sys.argv[:] = unknown_args
 
         if getattr(args, "disable", False):
             console.rule("Codeflash: Tracer disabled by --disable option", style="bold red")
             return parser
 
-        unknown_args = []
     else:
         if not sys.argv[1:]:
             parser.print_usage()
@@ -127,6 +130,13 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                         else:
                             updated_sys_argv.append(elem)
                     args_dict["command"] = " ".join(updated_sys_argv)
+                    env = os.environ.copy()
+                    pythonpath = env.get("PYTHONPATH", "")
+                    project_root_str = str(project_root)
+                    if pythonpath:
+                        env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+                    else:
+                        env["PYTHONPATH"] = project_root_str
                     processes.append(
                         subprocess.Popen(
                             [
@@ -136,6 +146,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                                 json.dumps(args_dict),
                             ],
                             cwd=Path.cwd(),
+                            env=env,
                         )
                     )
                 for process in processes:
@@ -156,6 +167,15 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 args_dict["output"] = str(parsed_args.outfile)
                 args_dict["command"] = " ".join(sys.argv)
 
+                env = os.environ.copy()
+                # Add project root to PYTHONPATH so imports work correctly
+                pythonpath = env.get("PYTHONPATH", "")
+                project_root_str = str(project_root)
+                if pythonpath:
+                    env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+                else:
+                    env["PYTHONPATH"] = project_root_str
+
                 subprocess.run(
                     [
                         SAFE_SYS_EXECUTABLE,
@@ -164,6 +184,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                         json.dumps(args_dict),
                     ],
                     cwd=Path.cwd(),
+                    env=env,
                     check=False,
                 )
                 try:
