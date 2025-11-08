@@ -1591,9 +1591,9 @@ class FunctionOptimizer:
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
         if self.function_to_optimize.is_async:
-            from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+            from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-            success, instrumented_source = instrument_source_module_with_async_decorators(
+            success, instrumented_source = add_async_decorator_to_function(
                 self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
             )
             if success and instrumented_source:
@@ -1644,11 +1644,9 @@ class FunctionOptimizer:
             console.rule()
             with progress_bar("Running performance benchmarks..."):
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import (
-                        instrument_source_module_with_async_decorators,
-                    )
+                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                    success, instrumented_source = add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
                     if success and instrumented_source:
@@ -1779,11 +1777,9 @@ class FunctionOptimizer:
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
             if self.function_to_optimize.is_async:
-                from codeflash.code_utils.instrument_existing_tests import (
-                    instrument_source_module_with_async_decorators,
-                )
+                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                success, instrumented_source = instrument_source_module_with_async_decorators(
+                success, instrumented_source = add_async_decorator_to_function(
                     self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
                 )
                 if success and instrumented_source:
@@ -1832,11 +1828,9 @@ class FunctionOptimizer:
             if test_framework == "pytest":
                 # For async functions, instrument at definition site for performance benchmarking
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import (
-                        instrument_source_module_with_async_decorators,
-                    )
+                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                    success, instrumented_source = add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
                     if success and instrumented_source:

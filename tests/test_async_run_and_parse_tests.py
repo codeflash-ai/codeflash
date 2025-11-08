@@ -11,7 +11,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodePosition, FunctionParent, TestFile, TestFiles, TestingMode, TestType
 from codeflash.optimization.optimizer import Optimizer
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
-from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators, inject_profiling_into_existing_test
+from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function, inject_profiling_into_existing_test
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_bubble_sort_behavior_results() -> None:
@@ -51,7 +51,7 @@ async def test_async_sort():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         # For async functions, instrument the source module directly with decorators
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.BEHAVIOR
         )
 
@@ -179,7 +179,7 @@ async def test_async_class_sort():
             is_async=True,
         )
 
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.BEHAVIOR
         )
 
@@ -293,7 +293,7 @@ async def test_async_perf():
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
         # Instrument the source module with async performance decorators
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.PERFORMANCE
         )
 
@@ -397,7 +397,7 @@ async def async_error_function(lst):
 
         func = FunctionToOptimize(function_name="async_error_function", parents=[], file_path=Path(fto_path), is_async=True)
 
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.BEHAVIOR
         )
 
@@ -554,7 +554,7 @@ async def test_async_multi():
 
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.BEHAVIOR
         )
 
@@ -670,7 +670,7 @@ async def test_async_edge_cases():
 
         func = FunctionToOptimize(function_name="async_sorter", parents=[], file_path=Path(fto_path), is_async=True)
 
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             fto_path, func, TestingMode.BEHAVIOR
         )
 
@@ -973,7 +973,7 @@ async def test_mixed_sorting():
 
         async_func = FunctionToOptimize(function_name="async_merge_sort", parents=[], file_path=Path(mixed_fto_path), is_async=True)
 
-        source_success, instrumented_source = instrument_source_module_with_async_decorators(
+        source_success, instrumented_source = add_async_decorator_to_function(
             mixed_fto_path, async_func, TestingMode.BEHAVIOR
         )
 

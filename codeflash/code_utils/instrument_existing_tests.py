@@ -685,25 +685,6 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     )
 
 
-def instrument_source_module_with_async_decorators(
-    source_path: Path, function_to_optimize: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
-) -> tuple[bool, str | None]:
-    if not function_to_optimize.is_async:
-        return False, None
-
-    try:
-        with source_path.open(encoding="utf8") as f:
-            source_code = f.read()
-
-        modified_code, decorator_added = add_async_decorator_to_function(source_code, function_to_optimize, mode)
-
-        if decorator_added:
-            return True, modified_code
-
-    except Exception:
-        return False, None
-    else:
-        return False, None
 
 
 def inject_async_profiling_into_existing_test(
@@ -1289,25 +1270,35 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
 
 
 def add_async_decorator_to_function(
-    source_code: str, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
-) -> tuple[str, bool]:
+    source: str | Path, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
+) -> tuple[str, bool] | tuple[bool, str | None]:
     """Add async decorator to an async function definition.
 
     Args:
     ----
-        source_code: The source code to modify.
+        source: Either source code string or path to source file.
         function: The FunctionToOptimize object representing the target async function.
         mode: The testing mode to determine which decorator to apply.
 
     Returns:
     -------
-        Tuple of (modified_source_code, was_decorator_added).
+        For string input: Tuple of (modified_source_code, was_decorator_added).
+        For Path input: Tuple of (was_decorator_added, modified_source_code or None).
 
     """
+    is_path_input = isinstance(source, Path)
+
     if not function.is_async:
-        return source_code, False
+        return (False, None) if is_path_input else (source if isinstance(source, str) else "", False)
 
     try:
+        # Read source code if path provided
+        if is_path_input:
+            with source.open(encoding="utf8") as f:
+                source_code = f.read()
+        else:
+            source_code = source
+
         module = cst.parse_module(source_code)
 
         # Add the decorator to the function
@@ -1319,11 +1310,15 @@ def add_async_decorator_to_function(
             import_transformer = AsyncDecoratorImportAdder(mode)
             module = module.visit(import_transformer)
 
-        return sort_imports(code=module.code, float_to_top=True), decorator_transformer.added_decorator
+        modified_code = sort_imports(code=module.code, float_to_top=True)
     except Exception as e:
         logger.exception(f"Error adding async decorator to function {function.qualified_name}: {e}")
-        return source_code, False
-
+        return (False, None) if is_path_input else (source_code, False)
+    else:
+        # Success - return based on whether decorator was added and input type
+        if decorator_transformer.added_decorator:
+            return (True, modified_code) if is_path_input else (modified_code, True)
+        return (False, None) if is_path_input else (modified_code, False)
 
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
     instrumented_filename = f"instrumented_{source_path.name}"

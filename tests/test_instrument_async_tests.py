@@ -247,9 +247,9 @@ async def test_async_function():
     func = FunctionToOptimize(function_name="async_function", parents=[], file_path=Path("my_module.py"), is_async=True)
 
     # First instrument the source module
-    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = instrument_source_module_with_async_decorators(
+    source_success, instrumented_source = add_async_decorator_to_function(
         source_file, func, TestingMode.BEHAVIOR
     )
 
@@ -304,9 +304,9 @@ async def test_async_function():
     func = FunctionToOptimize(function_name="async_function", parents=[], file_path=Path("my_module.py"), is_async=True)
 
     # First instrument the source module
-    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = instrument_source_module_with_async_decorators(
+    source_success, instrumented_source = add_async_decorator_to_function(
         source_file, func, TestingMode.PERFORMANCE
     )
 
@@ -371,9 +371,9 @@ async def test_mixed_functions():
         function_name="async_function", parents=[], file_path=Path("my_module.py"), is_async=True
     )
 
-    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = instrument_source_module_with_async_decorators(
+    source_success, instrumented_source = add_async_decorator_to_function(
         source_file, async_func, TestingMode.BEHAVIOR
     )
 
@@ -545,9 +545,9 @@ async def test_multiple_calls():
     )
 
     # First instrument the source module with async decorators
-    from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success, instrumented_source = instrument_source_module_with_async_decorators(
+    source_success, instrumented_source = add_async_decorator_to_function(
         source_file, func, TestingMode.BEHAVIOR
     )
 
