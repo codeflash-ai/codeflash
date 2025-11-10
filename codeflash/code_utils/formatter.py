@@ -96,18 +96,19 @@ def get_diff_lines_count(diff_output: str) -> int:
     return len(diff_lines)
 
 
-def format_generated_code(generated_test_source: str, formatter_cmds: Union[list[str], None] = None) -> str:
-    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
-    if formatter_name == "disabled":
-        return re.sub(r"\n{2,}", "\n\n", generated_test_source)
-    # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed)
-    original_temp, test_dir_str, exit_on_failure = None, None, True
-    formatted_temp, formatted_code, changed = apply_formatter_cmds(
-        formatter_cmds, original_temp, test_dir_str, print_status=False, exit_on_failure=exit_on_failure
-    )
-    if not changed:
-        return re.sub(r"\n{2,}", "\n\n", formatted_code)
-    return formatted_code
+def format_generated_code(generated_test_source: str) -> str:
+    return re.sub(r"\n{2,}", "\n\n", generated_test_source)
+    # formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
+    # if formatter_name == "disabled":
+    #     return re.sub(r"\n{2,}", "\n\n", generated_test_source)
+    # # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed)
+    # original_temp, test_dir_str, exit_on_failure = None, None, True
+    # formatted_temp, formatted_code, changed = apply_formatter_cmds(
+    #     formatter_cmds, original_temp, test_dir_str, print_status=False, exit_on_failure=exit_on_failure
+    # )
+    # if not changed:
+    #     return re.sub(r"\n{2,}", "\n\n", formatted_code)
+    # return formatted_code
 
 
 def format_code(
