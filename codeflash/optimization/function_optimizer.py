@@ -104,6 +104,7 @@ from codeflash.verification.verifier import generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
+    from re import Pattern
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.either import Result
@@ -412,6 +413,9 @@ class FunctionOptimizer:
             original_conftest_content,
             function_references,
         ) = test_setup_result.unwrap()
+
+        self.remove_failing_tests()
+        console.rule()
 
         baseline_setup_result = self.setup_and_establish_baseline(
             code_context=code_context,
@@ -1556,6 +1560,58 @@ class FunctionOptimizer:
         self.write_code_and_helpers(
             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
         )
+
+    def remove_failing_tests(self) -> None:
+        from codeflash.code_utils.edit_generated_tests import _compile_function_patterns
+
+        test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
+        behavioral_results, _ = self.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=self.test_files,
+            optimization_iteration=0,
+            testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+            enable_coverage=False,
+        )
+
+        failing_test_names = [
+            result.id.test_function_name
+            for result in behavioral_results
+            if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
+        ]
+
+        if not failing_test_names:
+            logger.info("All generated tests pass ✅")
+
+        function_patterns = _compile_function_patterns(failing_test_names)
+
+        for test_file in self.test_files.test_files:
+            if test_file.test_type != TestType.GENERATED_REGRESSION:
+                continue
+
+            for file_path in [test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path]:
+                if file_path and file_path.exists():
+                    source = file_path.read_text(encoding="utf-8")
+                    source = self.remove_tests_from_source(source, function_patterns)
+                    file_path.write_text(source, encoding="utf-8")
+
+            if test_file.original_source:
+                test_file.original_source = self.remove_tests_from_source(test_file.original_source, function_patterns)
+
+        if failing_test_names:
+            logger.info(f"Removed {len(failing_test_names)} failing generated test(s) ❌")
+
+    def remove_tests_from_source(self, source: str, function_patterns: list[Pattern]) -> str:
+        for pattern in function_patterns:
+            match = pattern.search(source)
+            while match:
+                if "@pytest.mark.parametrize" in match.group(0):
+                    match = pattern.search(source, match.end())
+                    continue
+                start, end = match.span()
+                source = source[:start] + source[end:]
+                match = pattern.search(source, start)
+        return source
 
     def establish_original_code_baseline(
         self,
