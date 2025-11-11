@@ -3,13 +3,18 @@ from __future__ import annotations
 import ast
 from collections import defaultdict
 from functools import lru_cache
+from itertools import chain
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
 from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_global_assignments, add_needed_imports_from_module
+from codeflash.code_utils.code_extractor import (
+    add_global_assignments,
+    add_needed_imports_from_module,
+    find_insertion_index_after_imports,
+)
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
@@ -249,6 +254,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
         ] = {}  # keys are (class_name, function_name)
         self.new_functions: list[cst.FunctionDef] = []
         self.new_class_functions: dict[str, list[cst.FunctionDef]] = defaultdict(list)
+        self.new_classes: list[cst.ClassDef] = []
         self.current_class = None
         self.modified_init_functions: dict[str, cst.FunctionDef] = {}
 
@@ -271,6 +277,11 @@ class OptimFunctionCollector(cst.CSTVisitor):
         self.current_class = node.name.value
 
         parents = (FunctionParent(name=node.name.value, type="ClassDef"),)
+
+        # check if the class is new
+        if (node.name.value, ()) not in self.preexisting_objects:
+            self.new_classes.append(node)
+
         for child_node in node.body.body:
             if (
                 self.preexisting_objects
@@ -290,6 +301,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
     def __init__(
         self,
         modified_functions: Optional[dict[tuple[str | None, str], cst.FunctionDef]] = None,
+        new_classes: Optional[list[cst.ClassDef]] = None,
         new_functions: Optional[list[cst.FunctionDef]] = None,
         new_class_functions: Optional[dict[str, list[cst.FunctionDef]]] = None,
         modified_init_functions: Optional[dict[str, cst.FunctionDef]] = None,
@@ -297,6 +309,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         super().__init__()
         self.modified_functions = modified_functions if modified_functions is not None else {}
         self.new_functions = new_functions if new_functions is not None else []
+        self.new_classes = new_classes if new_classes is not None else []
         self.new_class_functions = new_class_functions if new_class_functions is not None else defaultdict(list)
         self.modified_init_functions: dict[str, cst.FunctionDef] = (
             modified_init_functions if modified_init_functions is not None else {}
@@ -335,19 +348,33 @@ class OptimFunctionReplacer(cst.CSTTransformer):
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         node = updated_node
         max_function_index = None
-        class_index = None
+        max_class_index = None
         for index, _node in enumerate(node.body):
             if isinstance(_node, cst.FunctionDef):
                 max_function_index = index
             if isinstance(_node, cst.ClassDef):
-                class_index = index
+                max_class_index = index
+
+        if self.new_classes:
+            existing_class_names = {_node.name.value for _node in node.body if isinstance(_node, cst.ClassDef)}
+
+            unique_classes = [
+                new_class for new_class in self.new_classes if new_class.name.value not in existing_class_names
+            ]
+            if unique_classes:
+                new_classes_insertion_idx = max_class_index or find_insertion_index_after_imports(node)
+                new_body = list(
+                    chain(node.body[:new_classes_insertion_idx], unique_classes, node.body[new_classes_insertion_idx:])
+                )
+                node = node.with_changes(body=new_body)
+
         if max_function_index is not None:
             node = node.with_changes(
                 body=(*node.body[: max_function_index + 1], *self.new_functions, *node.body[max_function_index + 1 :])
             )
-        elif class_index is not None:
+        elif max_class_index is not None:
             node = node.with_changes(
-                body=(*node.body[: class_index + 1], *self.new_functions, *node.body[class_index + 1 :])
+                body=(*node.body[: max_class_index + 1], *self.new_functions, *node.body[max_class_index + 1 :])
             )
         else:
             node = node.with_changes(body=(*self.new_functions, *node.body))
@@ -373,18 +400,20 @@ def replace_functions_in_file(
         parsed_function_names.append((class_name, function_name))
 
     # Collect functions we want to modify from the optimized code
-    module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
+    optimized_module = cst.metadata.MetadataWrapper(cst.parse_module(optimized_code))
+    original_module = cst.parse_module(source_code)
+
     visitor = OptimFunctionCollector(preexisting_objects, set(parsed_function_names))
-    module.visit(visitor)
+    optimized_module.visit(visitor)
 
     # Replace these functions in the original code
     transformer = OptimFunctionReplacer(
         modified_functions=visitor.modified_functions,
+        new_classes=visitor.new_classes,
         new_functions=visitor.new_functions,
         new_class_functions=visitor.new_class_functions,
         modified_init_functions=visitor.modified_init_functions,
     )
-    original_module = cst.parse_module(source_code)
     modified_tree = original_module.visit(transformer)
     return modified_tree.code
 
