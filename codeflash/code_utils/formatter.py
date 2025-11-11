@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import isort
 
@@ -163,7 +163,7 @@ def format_code(
         return formatted_code
 
 
-def sort_imports(code: str, **kwargs) -> str:  # noqa: ANN003
+def sort_imports(code: str, **kwargs: Any) -> str:  # noqa : ANN401
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
         sorted_code = isort.code(code, **kwargs)
