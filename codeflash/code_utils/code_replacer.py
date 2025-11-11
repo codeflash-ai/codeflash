@@ -278,7 +278,6 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         parents = (FunctionParent(name=node.name.value, type="ClassDef"),)
 
-        # check if the class is new
         if (node.name.value, ()) not in self.preexisting_objects:
             self.new_classes.append(node)
 
