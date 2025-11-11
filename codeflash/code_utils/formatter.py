@@ -163,10 +163,10 @@ def format_code(
         return formatted_code
 
 
-def sort_imports(code: str, *, float_to_top: bool = False) -> str:
+def sort_imports(code: str, **kwargs) -> str:  # noqa: ANN003
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
-        sorted_code = isort.code(code=code, float_to_top=float_to_top)
+        sorted_code = isort.code(code, **kwargs)
     except Exception:  # this will also catch the FileSkipComment exception, use this fn everywhere
         logger.exception("Failed to sort imports with isort.")
         return code  # Fall back to original code if isort fails
