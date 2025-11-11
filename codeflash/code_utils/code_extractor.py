@@ -72,6 +72,33 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         return True
 
 
+def find_insertion_index_after_imports(node: cst.Module) -> int:
+    """Find the position of the last import statement in the top-level of the module."""
+    insert_index = 0
+    for i, stmt in enumerate(node.body):
+        is_top_level_import = isinstance(stmt, cst.SimpleStatementLine) and any(
+            isinstance(child, (cst.Import, cst.ImportFrom)) for child in stmt.body
+        )
+
+        is_conditional_import = isinstance(stmt, cst.If) and all(
+            isinstance(inner, cst.SimpleStatementLine)
+            and all(isinstance(child, (cst.Import, cst.ImportFrom)) for child in inner.body)
+            for inner in stmt.body.body
+        )
+
+        if is_top_level_import or is_conditional_import:
+            insert_index = i + 1
+
+        # Stop scanning once we reach a class or function definition.
+        # Imports are supposed to be at the top of the file, but they can technically appear anywhere, even at the bottom of the file.
+        # Without this check, a stray import later in the file
+        # would incorrectly shift our insertion index below actual code definitions.
+        if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
+            break
+
+    return insert_index
+
+
 class GlobalAssignmentTransformer(cst.CSTTransformer):
     """Transforms global assignments in the original file with those from the new file."""
 
@@ -122,32 +149,6 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         return updated_node
 
-    def _find_insertion_index(self, updated_node: cst.Module) -> int:
-        """Find the position of the last import statement in the top-level of the module."""
-        insert_index = 0
-        for i, stmt in enumerate(updated_node.body):
-            is_top_level_import = isinstance(stmt, cst.SimpleStatementLine) and any(
-                isinstance(child, (cst.Import, cst.ImportFrom)) for child in stmt.body
-            )
-
-            is_conditional_import = isinstance(stmt, cst.If) and all(
-                isinstance(inner, cst.SimpleStatementLine)
-                and all(isinstance(child, (cst.Import, cst.ImportFrom)) for child in inner.body)
-                for inner in stmt.body.body
-            )
-
-            if is_top_level_import or is_conditional_import:
-                insert_index = i + 1
-
-            # Stop scanning once we reach a class or function definition.
-            # Imports are supposed to be at the top of the file, but they can technically appear anywhere, even at the bottom of the file.
-            # Without this check, a stray import later in the file
-            # would incorrectly shift our insertion index below actual code definitions.
-            if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
-                break
-
-        return insert_index
-
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
@@ -161,7 +162,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         if assignments_to_append:
             # after last top-level imports
-            insert_index = self._find_insertion_index(updated_node)
+            insert_index = find_insertion_index_after_imports(updated_node)
 
             assignment_lines = [
                 cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])

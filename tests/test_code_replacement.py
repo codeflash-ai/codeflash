@@ -215,7 +215,7 @@ class NewClass:
         return other_function(self.name)
     def new_function2(value):
         return value
-    """
+"""
 
     original_code = """import libcst as cst
 from typing import Mandatory
@@ -230,18 +230,27 @@ def other_function(st):
 
 print("Salut monde")
 """
-    expected = """from typing import Mandatory
+    expected = """import libcst as cst
+from typing import Mandatory
+
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def new_function(self, value: cst.Name):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
 
 print("Au revoir")
 
 def yet_another_function(values):
     return len(values)
 
-def other_function(st):
-    return(st * 2)
-
 def totally_new_function(value):
     return value
+
+def other_function(st):
+    return(st * 2)
 
 print("Salut monde")
 """
@@ -279,7 +288,7 @@ class NewClass:
         return other_function(self.name)
     def new_function2(value):
         return value
-    """
+"""
 
     original_code = """import libcst as cst
 from typing import Mandatory
@@ -296,16 +305,24 @@ print("Salut monde")
 """
     expected = """from typing import Mandatory
 
+class NewClass:
+    def __init__(self, name):
+        self.name = name
+    def new_function(self, value):
+        return other_function(self.name)
+    def new_function2(value):
+        return value
+
 print("Au revoir")
 
 def yet_another_function(values):
     return len(values) + 2
 
-def other_function(st):
-    return(st * 2)
-
 def totally_new_function(value):
     return value
+
+def other_function(st):
+    return(st * 2)
 
 print("Salut monde")
 """
@@ -3620,3 +3637,109 @@ async def task():
     return "done"
 '''
     assert is_zero_diff(original_code, optimized_code)
+
+
+
+def test_code_replacement_with_new_helper_class() -> None:
+    optim_code = """from __future__ import annotations
+
+import itertools
+import re
+from dataclasses import dataclass
+from typing import Any, Callable, Iterator, Sequence
+
+from bokeh.models import HoverTool, Plot, Tool
+
+
+# Move the Item dataclass to module-level to avoid redefining it on every function call
+@dataclass(frozen=True)
+class _RepeatedToolItem:
+    obj: Tool
+    properties: dict[str, Any]
+
+def _collect_repeated_tools(tool_objs: list[Tool]) -> Iterator[Tool]:
+    key: Callable[[Tool], str] = lambda obj: obj.__class__.__name__
+    # Pre-collect properties for all objects by group to avoid repeated calls
+    for _, group in itertools.groupby(sorted(tool_objs, key=key), key=key):
+        grouped = list(group)
+        n = len(grouped)
+        if n > 1:
+            # Precompute all properties once for this group
+            props = [_RepeatedToolItem(obj, obj.properties_with_values()) for obj in grouped]
+            i = 0
+            while i < len(props) - 1:
+                head = props[i]
+                for j in range(i+1, len(props)):
+                    item = props[j]
+                    if item.properties == head.properties:
+                        yield item.obj
+                i += 1
+"""
+
+    original_code = """from __future__ import annotations
+import itertools
+import re
+from bokeh.models import HoverTool, Plot, Tool
+from dataclasses import dataclass
+from typing import Any, Callable, Iterator, Sequence
+
+def _collect_repeated_tools(tool_objs: list[Tool]) -> Iterator[Tool]:
+    @dataclass(frozen=True)
+    class Item:
+        obj: Tool
+        properties: dict[str, Any]
+
+    key: Callable[[Tool], str] = lambda obj: obj.__class__.__name__
+
+    for _, group in itertools.groupby(sorted(tool_objs, key=key), key=key):
+        rest = [ Item(obj, obj.properties_with_values()) for obj in group ]
+        while len(rest) > 1:
+            head, *rest = rest
+            for item in rest:
+                if item.properties == head.properties:
+                    yield item.obj
+"""
+
+    expected = """from __future__ import annotations
+import itertools
+from bokeh.models import Tool
+from dataclasses import dataclass
+from typing import Any, Callable, Iterator
+
+
+# Move the Item dataclass to module-level to avoid redefining it on every function call
+@dataclass(frozen=True)
+class _RepeatedToolItem:
+    obj: Tool
+    properties: dict[str, Any]
+
+def _collect_repeated_tools(tool_objs: list[Tool]) -> Iterator[Tool]:
+    key: Callable[[Tool], str] = lambda obj: obj.__class__.__name__
+    # Pre-collect properties for all objects by group to avoid repeated calls
+    for _, group in itertools.groupby(sorted(tool_objs, key=key), key=key):
+        grouped = list(group)
+        n = len(grouped)
+        if n > 1:
+            # Precompute all properties once for this group
+            props = [_RepeatedToolItem(obj, obj.properties_with_values()) for obj in grouped]
+            i = 0
+            while i < len(props) - 1:
+                head = props[i]
+                for j in range(i+1, len(props)):
+                    item = props[j]
+                    if item.properties == head.properties:
+                        yield item.obj
+                i += 1
+"""
+
+    function_names: list[str] = ["_collect_repeated_tools"]
+    preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]] = find_preexisting_objects(original_code)
+    new_code: str = replace_functions_and_add_imports(
+        source_code=original_code,
+        function_names=function_names,
+        optimized_code=optim_code,
+        module_abspath=Path(__file__).resolve(),
+        preexisting_objects=preexisting_objects,
+        project_root_path=Path(__file__).resolve().parent.resolve(),
+    )
+    assert new_code == expected

@@ -8,6 +8,7 @@ from pathlib import Path
 import isort
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.optimizer import Optimizer
@@ -115,7 +116,7 @@ def test_single_element_list():
     )
     """
     )
-    instrumented_behavior_test_source = isort.code(
+    instrumented_behavior_test_source = sort_imports(
         instrumented_behavior_test_source, config=isort.Config(float_to_top=True)
     )
 
@@ -257,7 +258,7 @@ def test_single_element_list():
     )
     """
     )
-    instrumented_behavior_test_source = isort.code(
+    instrumented_behavior_test_source = sort_imports(
         instrumented_behavior_test_source, config=isort.Config(float_to_top=True)
     )
 

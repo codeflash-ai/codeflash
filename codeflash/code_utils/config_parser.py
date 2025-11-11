@@ -38,7 +38,7 @@ def find_pyproject_toml(config_file: Path | None = None) -> Path:
         dir_path = dir_path.parent
     msg = f"Could not find pyproject.toml in the current directory {Path.cwd()} or any of the parent directories. Please create it by running `codeflash init`, or pass the path to pyproject.toml with the --config-file argument."
 
-    raise ValueError(msg)
+    raise ValueError(msg) from None
 
 
 def get_all_closest_config_files() -> list[Path]:
@@ -93,7 +93,7 @@ def parse_config_file(
             data = tomlkit.parse(f.read())
     except tomlkit.exceptions.ParseError as e:
         msg = f"Error while parsing the config file {config_file_path}. Please recheck the file for syntax errors. Error: {e}"
-        raise ValueError(msg) from e
+        raise ValueError(msg) from None
 
     lsp_mode = is_LSP_enabled()
 
