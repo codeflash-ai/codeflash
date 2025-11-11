@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import isort
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
@@ -720,7 +719,7 @@ def inject_async_profiling_into_existing_test(
         new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
 
     tree.body = [*new_imports, *tree.body]
-    return True, isort.code(ast.unparse(tree), float_to_top=True)
+    return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
 def inject_profiling_into_existing_test(
@@ -768,7 +767,7 @@ def inject_profiling_into_existing_test(
     additional_functions = [create_wrapper_function(mode)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
-    return True, isort.code(ast.unparse(tree), float_to_top=True)
+    return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
 def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR) -> ast.FunctionDef:
