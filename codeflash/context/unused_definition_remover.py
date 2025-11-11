@@ -490,7 +490,7 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         # Apply the recursive removal transformation
         modified_module, _ = remove_unused_definitions_recursively(module, definitions)
 
-        return modified_module.code if modified_module else ""
+        return modified_module.code if modified_module else ""  # noqa: TRY300
     except Exception as e:
         # If any other error occurs during processing, return the original code
         logger.debug(f"Error processing code to remove unused definitions: {type(e).__name__}: {e}")
