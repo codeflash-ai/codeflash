@@ -1404,7 +1404,7 @@ class FunctionOptimizer:
         map_gen_test_file_to_no_of_tests = Counter()
         for gen_test_result in original_code_baseline.behavior_test_results:
             if (
-                "__unit_test_" in gen_test_result.file_name
+                "__unit_test_" in str(gen_test_result.file_name)
                 and gen_test_result.id.test_function_name not in test_functions_to_remove
             ):
                 map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
@@ -1541,7 +1541,7 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        # If worktree mode, do not revert code and helpers, otherwise we would have an empty diff when writing the patch in the lsp
         if self.args.worktree:
             return
 
