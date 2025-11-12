@@ -96,7 +96,7 @@ def get_diff_lines_count(diff_output: str) -> int:
     return len(diff_lines)
 
 
-def format_generated_code(generated_test_source: str, formatter_cmds: Union[list[str], None]) -> str:
+def format_generated_code(generated_test_source: str, formatter_cmds: list[str]) -> str:
     formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
     if formatter_name == "disabled":
         return re.sub(r"\n{2,}", "\n\n", generated_test_source)
