@@ -55,20 +55,6 @@ poetry add codeflash@latest --group dev
 </Tip>
 </Step>
 
-<Step title="Generate a Codeflash API Key">
-Codeflash uses cloud-hosted AI models and integrations with GitHub. You'll need an API key to authorize your access.
-
-1. Visit the [Codeflash Web App](https://app.codeflash.ai/)
-2. Sign up with your GitHub account (free)
-3. Navigate to the [API Key](https://app.codeflash.ai/app/apikeys) page to generate your API key
-
-<Note>
-**Free Tier Available**
-
-Codeflash offers a **free tier** with a limited number of optimizations. Perfect for trying it out on small projects!
-</Note>
-</Step>
-
 <Step title="Run Automatic Configuration">
 Navigate to your project's root directory (where your `pyproject.toml` file is or should be) and run:
 
@@ -95,10 +81,38 @@ When running `codeflash init`, you will see the following prompts:
 5. Which test framework do you use? (pytest/unittest)
 6. Install GitHub actions for Continuous optimization?
 ```
+
+  After you have answered these questions, the Codeflash configuration will be saved in the `pyproject.toml` file.
 </Step>
+
+<Step title="Generate a Codeflash API Key">
+Codeflash uses cloud-hosted AI models and integrations with GitHub. If you haven't created one already, you'll need to create an API key to authorize your access.
+
+1. Visit the [Codeflash Web App](https://app.codeflash.ai/)
+2. Sign up with your GitHub account (free)
+3. Navigate to the [API Key](https://app.codeflash.ai/app/apikeys) page to generate your API key
+
+<Note>
+**Free Tier Available**
+
+Codeflash offers a **free tier** with a limited number of optimizations. Perfect for trying it out on small projects!
+</Note>
+</Step>
+
+<Step title="Install the Codeflash GitHub App">
+
+{/* TODO: Justify to users Why we need the user to install Github App even in local Installation or local optimization? */}
+Finally, if you have not done so already, Codeflash will ask you to install the GitHub App in your repository.
+The Codeflash GitHub App allows access to your repository to the codeflash-ai bot to open PRs, review code, and provide optimization suggestions.
+
+Please [install the Codeflash GitHub
+app](https://github.com/apps/codeflash-ai/installations/select_target) by choosing the repository you want to install
+Codeflash on.
+</Step>
+
+
 </Steps>
 
-After you have answered these questions, the Codeflash configuration will be saved in the `pyproject.toml` file.
 To understand the configuration options, and set more advanced options, see the [Manual Configuration](/configuration) page.
 
 ### Step 4: Install the Codeflash GitHub App
