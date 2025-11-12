@@ -8,7 +8,7 @@ import random
 import subprocess
 import time
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -1401,6 +1401,13 @@ class FunctionOptimizer:
         generated_tests = remove_functions_from_generated_tests(
             generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
         )
+        map_gen_test_file_to_no_of_tests = Counter()
+        for gen_test_result in original_code_baseline.behavior_test_results:
+            if (
+                "__unit_test_" in gen_test_result.file_name
+                and gen_test_result.id.test_function_name not in test_functions_to_remove
+            ):
+                map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
 
         original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
         optimized_runtime_by_test = (
