@@ -1420,8 +1420,9 @@ class FunctionOptimizer:
 
         generated_tests_str = ""
         for test in generated_tests.generated_tests:
-            generated_tests_str += f"```python\n{test.generated_original_test_source}\n```"
-            generated_tests_str += "\n\n"
+            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+                generated_tests_str += f"```python\n{test.generated_original_test_source}\n```"
+                generated_tests_str += "\n\n"
 
         if concolic_test_str:
             generated_tests_str += f"```python\n{concolic_test_str}\n```\n\n"
