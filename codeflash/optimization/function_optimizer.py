@@ -1413,12 +1413,14 @@ class FunctionOptimizer:
 
         generated_tests_str = ""
         for test in generated_tests.generated_tests:
-            formatted_generated_test = format_generated_code(test.generated_original_test_source)
+            formatted_generated_test = format_generated_code(
+                test.generated_original_test_source, self.args.formatter_cmds
+            )
             generated_tests_str += f"```python\n{formatted_generated_test}\n```"
             generated_tests_str += "\n\n"
 
         if concolic_test_str:
-            formatted_generated_test = format_generated_code(concolic_test_str)
+            formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```python\n{formatted_generated_test}\n```\n\n"
 
         existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
