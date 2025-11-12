@@ -823,7 +823,7 @@ def another_function():
     return 42"""
 
     # Test with None formatter
-    result = format_generated_code(test_code, None)
+    result = format_generated_code(test_code, ["disabled"])
     # Multiple newlines (3+) are reduced to 2
     expected = """import os
 
@@ -859,7 +859,7 @@ def test_format_generated_code_disabled_case_insensitive():
 
 def test_format_generated_code_empty_string():
     """Test format_generated_code with empty string."""
-    result = format_generated_code("", None)
+    result = format_generated_code("", ["disabled"])
     assert result == ""
 
     result = format_generated_code("", ["disabled"])
@@ -1340,7 +1340,7 @@ def func1():
 def func2():
     pass"""
 
-    result = format_generated_code(test_code, None)
+    result = format_generated_code(test_code, ["disabled"])
     # Should have at most two consecutive newlines
     assert "\n\n\n" not in result
     assert "import os\n\n" in result
@@ -1395,7 +1395,7 @@ def test_format_generated_code_unicode():
     message = "Hello, 世界! 🌍"
     return message"""
 
-    result = format_generated_code(test_code, None)
+    result = format_generated_code(test_code, ["disabled"])
     assert "Hello, 世界! 🌍" in result
 
 
