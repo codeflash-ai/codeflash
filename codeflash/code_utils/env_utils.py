@@ -76,7 +76,7 @@ def get_codeflash_api_key() -> str:
     # within the same process, the environment variable could become outdated.
     api_key = shell_api_key or env_api_key if is_LSP_enabled() else env_api_key or shell_api_key
 
-    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
+    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#manual-setup]."  # noqa
     if not api_key:
         msg = (
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
