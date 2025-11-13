@@ -1,376 +1,473 @@
 """Comprehensive unit tests for TestResults.file_to_no_of_tests method."""
 
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
+
 import pytest
 
-from codeflash.models.models import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
 class TestFileToNoOfTests:
-    """Test suite for the file_to_no_of_tests method of TestResults class."""
-
-    _invocation_counter = 0  # Class variable to ensure unique IDs
-
-    def create_test_invocation(
-        self,
-        file_name: str,
-        test_function_name: str = "test_example",
-        test_module_path: str = "test.module",
-        function_getting_tested: str = "example_func",
-        loop_index: int = 1,
-        test_type: TestType = TestType.GENERATED_REGRESSION,
-    ) -> FunctionTestInvocation:
-        """Helper method to create a FunctionTestInvocation."""
-        # Increment counter to ensure unique iteration_id
-        TestFileToNoOfTests._invocation_counter += 1
-        return FunctionTestInvocation(
-            id=InvocationId(
-                test_module_path=test_module_path,
-                test_class_name=None,
-                test_function_name=test_function_name,
-                function_getting_tested=function_getting_tested,
-                iteration_id=str(TestFileToNoOfTests._invocation_counter),
-            ),
-            file_name=Path(file_name),
-            did_pass=True,
-            runtime=1000,
-            test_framework="pytest",
-            test_type=test_type,
-            return_value=None,
-            timed_out=False,
-            loop_index=loop_index,
-        )
-
-    def test_basic_functionality(self):
-        """Test basic counting of test files with __unit_test_ in the name."""
-        test_results = TestResults()
-
-        # Add test invocations with __unit_test_ in the file name
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_0.py"))
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_1.py"))
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_2.py"))
-
-        result = test_results.file_to_no_of_tests([])
-
-        assert isinstance(result, Counter)
-        assert len(result) == 3
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-        assert result[Path("/path/to/test__unit_test_1.py")] == 1
-        assert result[Path("/path/to/test__unit_test_2.py")] == 1
-
-    def test_multiple_tests_same_file(self):
-        """Test counting multiple tests from the same file."""
-        test_results = TestResults()
-
-        # Add multiple test invocations from the same file
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_one"
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_two"
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_three"
-            )
-        )
-
-        result = test_results.file_to_no_of_tests([])
-
-        assert len(result) == 1
-        assert result[Path("/path/to/test__unit_test_0.py")] == 3
-
-    def test_exclude_non_unit_test_files(self):
-        """Test that files without __unit_test_ in the name are excluded."""
-        test_results = TestResults()
-
-        # Add test invocations with and without __unit_test_
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_0.py"))
-        test_results.add(self.create_test_invocation("/path/to/regular_test.py"))
-        test_results.add(self.create_test_invocation("/path/to/test_file.py"))
-        test_results.add(self.create_test_invocation("/path/to/another__unit_test_file.py"))
-
-        result = test_results.file_to_no_of_tests([])
-
-        assert len(result) == 2
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-        assert result[Path("/path/to/another__unit_test_file.py")] == 1
-        assert Path("/path/to/regular_test.py") not in result
-        assert Path("/path/to/test_file.py") not in result
-
-    def test_test_functions_to_remove(self):
-        """Test filtering out specific test functions."""
-        test_results = TestResults()
-
-        # Add test invocations with different function names
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_keep_me"
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_remove_me"
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_1.py",
-                test_function_name="test_also_remove"
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_1.py",
-                test_function_name="test_keep_this"
-            )
-        )
-
-        result = test_results.file_to_no_of_tests(["test_remove_me", "test_also_remove"])
-
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-        assert result[Path("/path/to/test__unit_test_1.py")] == 1
+    """Test suite for TestResults.file_to_no_of_tests method."""
 
     def test_empty_test_results(self):
         """Test with empty test results."""
         test_results = TestResults()
+        counter = test_results.file_to_no_of_tests([])
+        assert counter == Counter()
+        assert len(counter) == 0
 
-        result = test_results.file_to_no_of_tests([])
-
-        assert isinstance(result, Counter)
-        assert len(result) == 0
-
-    def test_all_tests_removed(self):
-        """Test when all tests are in the removal list."""
+    def test_empty_test_functions_to_remove(self):
+        """Test with empty list of test functions to remove."""
         test_results = TestResults()
-
         test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_remove_me"
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name="test_function",
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=Path("/tmp/test_file.py"),
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
             )
         )
+        counter = test_results.file_to_no_of_tests([])
+        assert counter == Counter({Path("/tmp/test_file.py"): 1})
+
+    def test_single_test_not_removed(self):
+        """Test with a single test that should not be removed."""
+        test_results = TestResults()
         test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_1.py",
-                test_function_name="test_also_remove"
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name="test_keep",
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=Path("/tmp/test_file.py"),
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
             )
         )
+        counter = test_results.file_to_no_of_tests(["test_remove"])
+        assert counter == Counter({Path("/tmp/test_file.py"): 1})
 
-        result = test_results.file_to_no_of_tests(["test_remove_me", "test_also_remove"])
-
-        assert len(result) == 0
-
-    def test_case_sensitivity(self):
-        """Test that __unit_test_ matching is case-sensitive."""
+    def test_single_test_removed(self):
+        """Test with a single test that should be removed."""
         test_results = TestResults()
-
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_0.py"))
-        test_results.add(self.create_test_invocation("/path/to/test__UNIT_TEST_1.py"))
-        test_results.add(self.create_test_invocation("/path/to/test__Unit_Test_2.py"))
-
-        result = test_results.file_to_no_of_tests([])
-
-        # Only lowercase __unit_test_ should be counted
-        assert len(result) == 1
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-
-    def test_unit_test_in_middle_of_path(self):
-        """Test that __unit_test_ can appear anywhere in the file path."""
-        test_results = TestResults()
-
-        test_results.add(self.create_test_invocation("/path/__unit_test_/test_file.py"))
-        test_results.add(self.create_test_invocation("/path/to/prefix__unit_test_suffix.py"))
-        test_results.add(self.create_test_invocation("__unit_test_test.py"))
-
-        result = test_results.file_to_no_of_tests([])
-
-        # All files with __unit_test_ anywhere in the path should be counted
-        assert len(result) == 3
-        assert result[Path("/path/__unit_test_/test_file.py")] == 1
-        assert result[Path("/path/to/prefix__unit_test_suffix.py")] == 1
-        assert result[Path("__unit_test_test.py")] == 1
-
-    def test_windows_path_handling(self):
-        """Test handling of Windows-style paths."""
-        test_results = TestResults()
-
-        test_results.add(self.create_test_invocation("C:\\path\\to\\test__unit_test_0.py"))
-        test_results.add(self.create_test_invocation("D:\\another\\path\\test__unit_test_1.py"))
-
-        result = test_results.file_to_no_of_tests([])
-
-        # Should handle Windows paths correctly
-        assert len(result) == 2
-
-    def test_duplicate_entries_same_test(self):
-        """Test handling of duplicate test entries (same file and function name)."""
-        test_results = TestResults()
-
-        # Add the same test multiple times (different loop indices)
         test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_duplicate",
-                loop_index=1
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name="test_remove",
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=Path("/tmp/test_file.py"),
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
             )
         )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_duplicate",
-                loop_index=2
+        counter = test_results.file_to_no_of_tests(["test_remove"])
+        assert counter == Counter()
+
+    def test_multiple_tests_same_file(self):
+        """Test with multiple tests in the same file."""
+        test_results = TestResults()
+        for i in range(5):
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_func_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=Path("/tmp/test_file.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
             )
-        )
+        counter = test_results.file_to_no_of_tests([])
+        assert counter == Counter({Path("/tmp/test_file.py"): 5})
 
-        result = test_results.file_to_no_of_tests([])
-
-        # Should count both instances
-        assert result[Path("/path/to/test__unit_test_0.py")] == 2
+    def test_multiple_tests_different_files(self):
+        """Test with multiple tests in different files."""
+        test_results = TestResults()
+        files = [Path(f"/tmp/test_file_{i}.py") for i in range(3)]
+        for i, file_path in enumerate(files):
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path=f"test.module{i}",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_func_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=file_path,
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
+        counter = test_results.file_to_no_of_tests([])
+        expected = Counter({files[0]: 1, files[1]: 1, files[2]: 1})
+        assert counter == expected
 
     def test_mixed_test_types(self):
-        """Test with different test types."""
+        """Test with different test types - only GENERATED_REGRESSION should be counted."""
         test_results = TestResults()
+        test_types = [
+            TestType.EXISTING_UNIT_TEST,
+            TestType.INSPIRED_REGRESSION,
+            TestType.GENERATED_REGRESSION,
+            TestType.REPLAY_TEST,
+            TestType.CONCOLIC_COVERAGE_TEST,
+            TestType.INIT_STATE_TEST,
+        ]
 
-        # Add tests with different TestType values
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_type=TestType.GENERATED_REGRESSION
+        for i, test_type in enumerate(test_types):
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_func_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=Path(f"/tmp/test_file_{i}.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=test_type,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
             )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_1.py",
-                test_type=TestType.EXISTING_UNIT_TEST
-            )
-        )
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_2.py",
-                test_type=TestType.INSPIRED_REGRESSION
-            )
-        )
 
-        result = test_results.file_to_no_of_tests([])
+        counter = test_results.file_to_no_of_tests([])
+        # Only the GENERATED_REGRESSION test should be counted
+        assert counter == Counter({Path("/tmp/test_file_2.py"): 1})
 
-        # All should be counted regardless of test type
-        assert len(result) == 3
-
-    def test_empty_removal_list(self):
-        """Test with empty removal list."""
+    def test_partial_removal(self):
+        """Test removing some but not all tests from a file."""
         test_results = TestResults()
+        test_names = ["test_keep_1", "test_remove_1", "test_keep_2", "test_remove_2"]
 
-        test_results.add(
-            self.create_test_invocation(
-                "/path/to/test__unit_test_0.py",
-                test_function_name="test_function"
+        for name in test_names:
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module",
+                        test_class_name="TestClass",
+                        test_function_name=name,
+                        function_getting_tested="target_func",
+                        iteration_id=name,
+                    ),
+                    file_name=Path("/tmp/test_file.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
             )
-        )
 
-        result = test_results.file_to_no_of_tests([])
-
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
+        counter = test_results.file_to_no_of_tests(["test_remove_1", "test_remove_2"])
+        assert counter == Counter({Path("/tmp/test_file.py"): 2})  # Only test_keep_1 and test_keep_2
 
     def test_none_test_function_name(self):
-        """Test handling of None test function names."""
+        """Test with None test_function_name."""
         test_results = TestResults()
-
-        # Create an invocation with None test function name
-        TestFileToNoOfTests._invocation_counter += 1
-        invocation = FunctionTestInvocation(
-            id=InvocationId(
-                test_module_path="test.module",
-                test_class_name=None,
-                test_function_name=None,  # None function name
-                function_getting_tested="example_func",
-                iteration_id=str(TestFileToNoOfTests._invocation_counter),
-            ),
-            file_name=Path("/path/to/test__unit_test_0.py"),
-            did_pass=True,
-            runtime=1000,
-            test_framework="pytest",
-            test_type=TestType.GENERATED_REGRESSION,
-            return_value=None,
-            timed_out=False,
-            loop_index=1,
+        test_results.add(
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name=None,
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=Path("/tmp/test_file.py"),
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
+            )
         )
-        test_results.add(invocation)
+        # None should not match any string in test_functions_to_remove
+        counter = test_results.file_to_no_of_tests(["test_remove"])
+        assert counter == Counter({Path("/tmp/test_file.py"): 1})
 
-        # Should not crash and should count the test
-        result = test_results.file_to_no_of_tests([])
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-
-        # Should not be affected by removal list since None won't match any string
-        result = test_results.file_to_no_of_tests(["test_function"])
-        assert result[Path("/path/to/test__unit_test_0.py")] == 1
-
-    def test_complex_removal_scenarios(self):
-        """Test complex scenarios with multiple files and removal patterns."""
+    def test_duplicate_file_paths(self):
+        """Test counting with duplicate file paths across multiple tests."""
         test_results = TestResults()
+        file_path = Path("/tmp/test_file.py")
 
-        # Add various test combinations
+        # Add multiple tests with the same file path
         for i in range(3):
-            for test_name in ["test_keep", "test_remove", "test_another_keep"]:
-                test_results.add(
-                    self.create_test_invocation(
-                        f"/path/to/test__unit_test_{i}.py",
-                        test_function_name=test_name
-                    )
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_func_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=file_path,
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
                 )
+            )
 
-        # Remove only "test_remove"
-        result = test_results.file_to_no_of_tests(["test_remove"])
+        counter = test_results.file_to_no_of_tests([])
+        assert counter == Counter({file_path: 3})
 
-        # Each file should have 2 tests remaining (test_keep and test_another_keep)
-        assert len(result) == 3
+    def test_complex_scenario(self):
+        """Test complex scenario with mixed conditions."""
+        test_results = TestResults()
+
+        # File 1: Mix of test types
+        for i, test_type in enumerate([TestType.GENERATED_REGRESSION, TestType.EXISTING_UNIT_TEST]):
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module1",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_file1_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=Path("/tmp/file1.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=test_type,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
+
+        # File 2: Tests to be removed and kept
+        for name in ["test_keep", "test_remove"]:
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module2",
+                        test_class_name="TestClass",
+                        test_function_name=name,
+                        function_getting_tested="target_func",
+                        iteration_id=name,
+                    ),
+                    file_name=Path("/tmp/file2.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
+
+        # File 3: All GENERATED_REGRESSION tests
         for i in range(3):
-            assert result[Path(f"/path/to/test__unit_test_{i}.py")] == 2
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module3",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_file3_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=Path("/tmp/file3.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
 
-    def test_special_characters_in_path(self):
-        """Test handling of special characters in file paths."""
+        counter = test_results.file_to_no_of_tests(["test_remove"])
+        expected = Counter({
+            Path("/tmp/file1.py"): 1,  # Only 1 GENERATED_REGRESSION test
+            Path("/tmp/file2.py"): 1,  # Only test_keep (test_remove is excluded)
+            Path("/tmp/file3.py"): 3,  # All 3 tests
+        })
+        assert counter == expected
+
+    def test_case_sensitivity(self):
+        """Test that function name matching is case-sensitive."""
         test_results = TestResults()
+        test_results.add(
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name="Test_Function",
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=Path("/tmp/test_file.py"),
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
+            )
+        )
 
-        # Paths with special characters
-        test_results.add(self.create_test_invocation("/path/with spaces/test__unit_test_0.py"))
-        test_results.add(self.create_test_invocation("/path/with-dashes/test__unit_test_1.py"))
-        test_results.add(self.create_test_invocation("/path/with.dots/test__unit_test_2.py"))
+        # Should not remove because case doesn't match
+        counter = test_results.file_to_no_of_tests(["test_function"])
+        assert counter == Counter({Path("/tmp/test_file.py"): 1})
 
-        result = test_results.file_to_no_of_tests([])
+        # Should remove with correct case
+        counter = test_results.file_to_no_of_tests(["Test_Function"])
+        assert counter == Counter()
 
-        assert len(result) == 3
-        assert result[Path("/path/with spaces/test__unit_test_0.py")] == 1
-        assert result[Path("/path/with-dashes/test__unit_test_1.py")] == 1
-        assert result[Path("/path/with.dots/test__unit_test_2.py")] == 1
-
-    def test_return_type_is_counter(self):
-        """Verify that the return type is always a Counter object."""
+    def test_windows_paths(self):
+        """Test with Windows-style paths."""
         test_results = TestResults()
+        windows_path = Path("C:\\Users\\test\\test_file.py")
 
-        # Test with no data
-        result = test_results.file_to_no_of_tests([])
-        assert isinstance(result, Counter)
+        test_results.add(
+            FunctionTestInvocation(
+                id=InvocationId(
+                    test_module_path="test.module",
+                    test_class_name="TestClass",
+                    test_function_name="test_func",
+                    function_getting_tested="target_func",
+                    iteration_id="1",
+                ),
+                file_name=windows_path,
+                did_pass=True,
+                runtime=100,
+                test_framework="pytest",
+                test_type=TestType.GENERATED_REGRESSION,
+                return_value=None,
+                timed_out=False,
+                loop_index=1,
+            )
+        )
 
-        # Test with data
-        test_results.add(self.create_test_invocation("/path/to/test__unit_test_0.py"))
-        result = test_results.file_to_no_of_tests([])
-        assert isinstance(result, Counter)
+        counter = test_results.file_to_no_of_tests([])
+        assert counter == Counter({windows_path: 1})
 
-        # Counter specific operations should work
-        result.update({Path("/another/path"): 5})
-        assert result[Path("/another/path")] == 5
+    def test_relative_and_absolute_paths(self):
+        """Test with both relative and absolute paths."""
+        test_results = TestResults()
+        paths = [
+            Path("/absolute/path/test.py"),
+            Path("relative/path/test.py"),
+            Path("./current/dir/test.py"),
+            Path("../parent/dir/test.py"),
+        ]
+
+        for i, path in enumerate(paths):
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path=f"test.module{i}",
+                        test_class_name="TestClass",
+                        test_function_name=f"test_func_{i}",
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=path,
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
+
+        counter = test_results.file_to_no_of_tests([])
+        expected = Counter({path: 1 for path in paths})
+        assert counter == expected
+
+    def test_large_removal_list(self):
+        """Test with a large list of functions to remove."""
+        test_results = TestResults()
+        num_tests = 100
+        removal_list = [f"test_remove_{i}" for i in range(50)]
+
+        for i in range(num_tests):
+            test_name = f"test_remove_{i}" if i < 50 else f"test_keep_{i}"
+            test_results.add(
+                FunctionTestInvocation(
+                    id=InvocationId(
+                        test_module_path="test.module",
+                        test_class_name="TestClass",
+                        test_function_name=test_name,
+                        function_getting_tested="target_func",
+                        iteration_id=str(i),
+                    ),
+                    file_name=Path("/tmp/test_file.py"),
+                    did_pass=True,
+                    runtime=100,
+                    test_framework="pytest",
+                    test_type=TestType.GENERATED_REGRESSION,
+                    return_value=None,
+                    timed_out=False,
+                    loop_index=1,
+                )
+            )
+
+        counter = test_results.file_to_no_of_tests(removal_list)
+        assert counter == Counter({Path("/tmp/test_file.py"): 50})  # 50 kept, 50 removed

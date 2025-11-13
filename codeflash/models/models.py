@@ -679,7 +679,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         map_gen_test_file_to_no_of_tests = Counter()
         for gen_test_result in self.test_results:
             if (
-                "__unit_test_" in str(gen_test_result.file_name)
+                gen_test_result.test_type == TestType.GENERATED_REGRESSION
                 and gen_test_result.id.test_function_name not in test_functions_to_remove
             ):
                 map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
