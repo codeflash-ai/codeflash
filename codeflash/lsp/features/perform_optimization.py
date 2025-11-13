@@ -108,8 +108,6 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
             "status": "error",
             "message": f"No best optimizations found for function {function_to_optimize_qualified_name}",
         }
-    # generate optimization review here
-
     # generate a patch for the optimization
     relative_file_paths = [code_string.file_path for code_string in code_context.read_writable_code.code_strings]
     speedup = original_code_baseline.runtime / best_optimization.runtime
