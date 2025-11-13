@@ -1402,6 +1402,9 @@ class FunctionOptimizer:
         generated_tests = remove_functions_from_generated_tests(
             generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
         )
+        map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
+            test_functions_to_remove
+        )
 
         original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
         optimized_runtime_by_test = (
@@ -1414,11 +1417,12 @@ class FunctionOptimizer:
 
         generated_tests_str = ""
         for test in generated_tests.generated_tests:
-            formatted_generated_test = format_generated_code(
-                test.generated_original_test_source, self.args.formatter_cmds
-            )
-            generated_tests_str += f"```python\n{formatted_generated_test}\n```"
-            generated_tests_str += "\n\n"
+            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+                formatted_generated_test = format_generated_code(
+                    test.generated_original_test_source, self.args.formatter_cmds
+                )
+                generated_tests_str += f"```python\n{formatted_generated_test}\n```"
+                generated_tests_str += "\n\n"
 
         if concolic_test_str:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
@@ -1540,7 +1544,7 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        # If worktree mode, do not revert code and helpers, otherwise we would have an empty diff when writing the patch in the lsp
         if self.args.worktree:
             return
 

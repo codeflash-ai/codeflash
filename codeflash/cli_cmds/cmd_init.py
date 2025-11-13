@@ -1005,6 +1005,8 @@ def get_formatter_cmds(formatter: str) -> list[str]:
         return ["your-formatter $file"]
     if formatter in {"don't use a formatter", "disabled"}:
         return ["disabled"]
+    if " && " in formatter:
+        return formatter.split(" && ")
     return [formatter]
 
 
