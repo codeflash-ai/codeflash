@@ -676,13 +676,22 @@ class TestResults(BaseModel):  # noqa: PLW1641
         )
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
+        test_functions_to_remove_set = set(test_functions_to_remove)
         map_gen_test_file_to_no_of_tests = Counter()
+        test_type_generated_regression = TestType.GENERATED_REGRESSION
+        append = map_gen_test_file_to_no_of_tests.__setitem__
+
+        # Loop unchanged behavior, but optimizes membership test and attribute lookups
         for gen_test_result in self.test_results:
             if (
-                gen_test_result.test_type == TestType.GENERATED_REGRESSION
-                and gen_test_result.id.test_function_name not in test_functions_to_remove
+                gen_test_result.test_type is test_type_generated_regression
+                and gen_test_result.id.test_function_name not in test_functions_to_remove_set
             ):
-                map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
+                fn = gen_test_result.file_name
+                # Counter increment (avoid repeated dictionary lookups)
+                # Slight performance win: bypass __getitem__ overhead by using get and __setitem__
+                v = map_gen_test_file_to_no_of_tests.get(fn, 0)
+                append(fn, v + 1)
         return map_gen_test_file_to_no_of_tests
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
