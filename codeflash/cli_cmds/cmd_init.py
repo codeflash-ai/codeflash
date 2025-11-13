@@ -22,14 +22,14 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from codeflash.api.cfapi import is_github_app_installed_on_repo
+from codeflash.api.cfapi import is_github_app_installed_on_repo, setup_github_actions
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
-from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
+from codeflash.code_utils.git_utils import get_current_branch, get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
@@ -807,21 +807,110 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         materialized_optimize_yml_content = customize_codeflash_yaml_content(
             optimize_yml_content, config, git_root, benchmark_mode
         )
-        with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-            optimize_yml_file.write(materialized_optimize_yml_content)
-        # Success panel for workflow creation
-        workflow_success_panel = Panel(
-            Text(
-                f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
-                "Your repository is now configured for continuous optimization!",
-                style="green",
-                justify="center",
-            ),
-            title="🎉 Workflow Created!",
-            border_style="bright_green",
-        )
-        console.print(workflow_success_panel)
-        console.print()
+
+        # Get repository information for API call
+        git_remote = config.get("git_remote", "origin")
+        pr_created_via_api = False
+        pr_url = None
+
+        try:
+            owner, repo_name = get_repo_owner_and_name(repo, git_remote)
+        except Exception as e:
+            logger.error(f"[cmd_init.py:install_github_actions] Failed to get repository owner and name: {e}")
+            # Fall back to local file creation
+            workflows_path.mkdir(parents=True, exist_ok=True)
+            with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
+                optimize_yml_file.write(materialized_optimize_yml_content)
+            workflow_success_panel = Panel(
+                Text(
+                    f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
+                    "Your repository is now configured for continuous optimization!",
+                    style="green",
+                    justify="center",
+                ),
+                title="🎉 Workflow Created!",
+                border_style="bright_green",
+            )
+            console.print(workflow_success_panel)
+            console.print()
+        else:
+            # Try to create PR via API
+            try:
+                base_branch = get_current_branch(repo) if repo.active_branch else "main"
+                console.print("Creating PR with GitHub Actions workflow...")
+                logger.info(
+                    f"[cmd_init.py:install_github_actions] Calling setup_github_actions API for {owner}/{repo_name} on branch {base_branch}"
+                )
+
+                response = setup_github_actions(
+                    owner=owner,
+                    repo=repo_name,
+                    base_branch=base_branch,
+                    workflow_content=materialized_optimize_yml_content,
+                )
+
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if response_data.get("success"):
+                        pr_url = response_data.get("pr_url")
+                        if pr_url:
+                            pr_created_via_api = True
+                            workflow_success_panel = Panel(
+                                Text(
+                                    f"✅ PR created: {pr_url}\n\n"
+                                    "Your repository is now configured for continuous optimization!",
+                                    style="green",
+                                    justify="center",
+                                ),
+                                title="🎉 Workflow PR Created!",
+                                border_style="bright_green",
+                            )
+                            console.print(workflow_success_panel)
+                            console.print()
+                            logger.info(
+                                f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}"
+                            )
+                        else:
+                            # File already exists with same content
+                            pr_created_via_api = True  # Mark as handled (no PR needed)
+                            already_exists_panel = Panel(
+                                Text(
+                                    "✅ Workflow file already exists with the same content.\n\n"
+                                    "No changes needed - your repository is already configured!",
+                                    style="green",
+                                    justify="center",
+                                ),
+                                title="✅ Already Configured",
+                                border_style="bright_green",
+                            )
+                            console.print(already_exists_panel)
+                            console.print()
+                    else:
+                        raise Exception(response_data.get("error", "Unknown error"))
+                else:
+                    # API call failed, fall back to local file creation
+                    raise Exception(f"API returned status {response.status_code}")
+
+            except Exception as api_error:
+                # Fall back to local file creation if API call fails
+                logger.warning(
+                    f"[cmd_init.py:install_github_actions] API call failed, falling back to local file creation: {api_error}"
+                )
+                workflows_path.mkdir(parents=True, exist_ok=True)
+                with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
+                    optimize_yml_file.write(materialized_optimize_yml_content)
+                workflow_success_panel = Panel(
+                    Text(
+                        f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
+                        "Your repository is now configured for continuous optimization!",
+                        style="green",
+                        justify="center",
+                    ),
+                    title="🎉 Workflow Created!",
+                    border_style="bright_green",
+                )
+                console.print(workflow_success_panel)
+                console.print()
 
         try:
             existing_api_key = get_codeflash_api_key()
@@ -866,10 +955,25 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         console.print(launch_panel)
         click.pause()
         click.echo()
-        click.echo(
-            f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
-            f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-        )
+        # Show appropriate message based on whether PR was created via API
+        if pr_created_via_api:
+            if pr_url:
+                click.echo(
+                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                    f"Once you merge the PR and add the secret, the workflow will be active.{LF}"
+                )
+            else:
+                # File already exists
+                click.echo(
+                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                    f"Just add the secret and the workflow will be active.{LF}"
+                )
+        else:
+            # Fell back to local file creation
+            click.echo(
+                f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
+                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+            )
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()

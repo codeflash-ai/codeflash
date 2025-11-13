@@ -239,6 +239,31 @@ def create_pr(
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
+def setup_github_actions(
+    owner: str,
+    repo: str,
+    base_branch: str,
+    workflow_content: str,
+    api_key: str | None = None,
+) -> Response:
+    """Setup GitHub Actions workflow by creating a PR with the workflow file.
+
+    :param owner: Repository owner (username or organization)
+    :param repo: Repository name
+    :param base_branch: Base branch to create PR against (e.g., "main", "master")
+    :param workflow_content: Content of the GitHub Actions workflow file (YAML)
+    :param api_key: Optional API key (uses default if not provided)
+    :return: Response object with pr_url and pr_number on success
+    """
+    payload = {
+        "owner": owner,
+        "repo": repo,
+        "baseBranch": base_branch,
+        "workflowContent": workflow_content,
+    }
+    return make_cfapi_request(endpoint="/setup-github-actions", method="POST", payload=payload, api_key=api_key)
+
+
 def create_staging(
     original_code: dict[Path, str],
     new_code: dict[Path, str],
