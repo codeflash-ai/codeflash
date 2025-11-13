@@ -96,6 +96,19 @@ def get_diff_lines_count(diff_output: str) -> int:
     return len(diff_lines)
 
 
+def format_generated_code(generated_test_source: str, formatter_cmds: list[str]) -> str:
+    with tempfile.TemporaryDirectory() as test_dir_str:
+        # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed) return code with 2 or more newlines substituted with 2 newlines
+        original_temp = Path(test_dir_str) / "original_temp.py"
+        original_temp.write_text(generated_test_source, encoding="utf8")
+        _, formatted_code, changed = apply_formatter_cmds(
+            formatter_cmds, original_temp, test_dir_str, print_status=False, exit_on_failure=False
+        )
+        if not changed:
+            return re.sub(r"\n{2,}", "\n\n", formatted_code)
+    return formatted_code
+
+
 def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
@@ -120,7 +133,7 @@ def format_code(
         original_code_lines = len(original_code.split("\n"))
 
         if check_diff and original_code_lines > 50:
-            # we dont' count the formatting diff for the optimized function as it should be well-formatted
+            # we don't count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_code, "")
 
             original_temp = Path(test_dir_str) / "original_temp.py"
