@@ -8,7 +8,7 @@ import random
 import subprocess
 import time
 import uuid
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -1401,13 +1401,9 @@ class FunctionOptimizer:
         generated_tests = remove_functions_from_generated_tests(
             generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
         )
-        map_gen_test_file_to_no_of_tests = Counter()
-        for gen_test_result in original_code_baseline.behavior_test_results:
-            if (
-                "__unit_test_" in str(gen_test_result.file_name)
-                and gen_test_result.id.test_function_name not in test_functions_to_remove
-            ):
-                map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
+        map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
+            test_functions_to_remove
+        )
 
         original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
         optimized_runtime_by_test = (
@@ -1573,7 +1569,8 @@ class FunctionOptimizer:
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        test_framework = self.args.test_framework
+        assert test_framework in {"pytest", "unittest"}
         success = True
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
@@ -1751,7 +1748,8 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        test_framework = self.args.test_framework
+        assert test_framework in {"pytest", "unittest"}
 
         with progress_bar("Testing optimization candidate"):
             test_env = self.get_test_env(
