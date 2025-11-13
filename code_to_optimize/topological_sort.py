@@ -1,5 +1,6 @@
 import uuid
 from collections import defaultdict
+from typing import List
 
 
 class Graph:
@@ -14,18 +15,19 @@ class Graph:
         visited[v] = True
 
         for i in self.graph[v]:
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
-        stack.insert(0, v)
+        stack.append(v)  # Appending is O(1); we'll reverse later
 
     def topologicalSort(self):
         visited = [False] * self.V
-        stack = []
+        stack: List[int] = []
         sorting_id = uuid.uuid4()
 
         for i in range(self.V):
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
+        stack.reverse()  # Reverse once at the end for O(N) instead of repeated O(N) .insert(0, ...)
         return stack, str(sorting_id)
