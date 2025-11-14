@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import TYPE_CHECKING
 
 from rich.tree import Tree
@@ -674,6 +674,16 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return sum(
             [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
         )
+
+    def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
+        map_gen_test_file_to_no_of_tests = Counter()
+        for gen_test_result in self.test_results:
+            if (
+                gen_test_result.test_type == TestType.GENERATED_REGRESSION
+                and gen_test_result.id.test_function_name not in test_functions_to_remove
+            ):
+                map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
+        return map_gen_test_file_to_no_of_tests
 
     def __iter__(self) -> Iterator[FunctionTestInvocation]:
         return iter(self.test_results)

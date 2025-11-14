@@ -14,6 +14,7 @@ from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.cli_cmds.cmd_init import (
     CommonSections,
     VsCodeSetupInfo,
+    config_found,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
     create_find_common_tags_file,
@@ -205,11 +206,25 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     test_framework_suggestions, default_test_framework = get_suggestions(CommonSections.test_framework)
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
+
+    configured_module_root = Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
+    configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
+    configured_test_framework = server.args.test_framework if server.args.test_framework else None
+
+    configured_formatter = ""
+    if isinstance(server.args.formatter_cmds, list):
+        configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
+    elif isinstance(server.args.formatter_cmds, str):
+        configured_formatter = server.args.formatter_cmds.strip()
+
     return {
-        "module_root": {"choices": module_root_suggestions, "default": default_module_root},
-        "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
-        "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
-        "formatter_cmds": {"choices": formatter_suggestions, "default": default_formatter},
+        "module_root": {"choices": module_root_suggestions, "default": configured_module_root or default_module_root},
+        "tests_root": {"choices": tests_root_suggestions, "default": configured_tests_root or default_tests_root},
+        "test_framework": {
+            "choices": test_framework_suggestions,
+            "default": configured_test_framework or default_test_framework,
+        },
+        "formatter_cmds": {"choices": formatter_suggestions, "default": configured_formatter or default_formatter},
     }
 
 
@@ -248,6 +263,10 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "pyprojectPath": pyproject_toml_path,
             "root": root,
         }
+
+    found, message = config_found(pyproject_toml_path)
+    if not found:
+        return {"status": "error", "message": message}
 
     valid, config, reason = is_valid_pyproject_toml(pyproject_toml_path)
     if not valid:

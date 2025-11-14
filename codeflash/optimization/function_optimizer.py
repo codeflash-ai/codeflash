@@ -55,7 +55,7 @@ from codeflash.code_utils.edit_generated_tests import (
     remove_functions_from_generated_tests,
 )
 from codeflash.code_utils.env_utils import get_pr_number
-from codeflash.code_utils.formatter import format_code, sort_imports
+from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
@@ -1416,6 +1416,9 @@ class FunctionOptimizer:
         generated_tests = remove_functions_from_generated_tests(
             generated_tests=generated_tests, test_functions_to_remove=test_functions_to_remove
         )
+        map_gen_test_file_to_no_of_tests = original_code_baseline.behavior_test_results.file_to_no_of_tests(
+            test_functions_to_remove
+        )
 
         original_runtime_by_test = original_code_baseline.benchmarking_test_results.usable_runtime_data_by_test_case()
         optimized_runtime_by_test = (
@@ -1428,11 +1431,16 @@ class FunctionOptimizer:
 
         generated_tests_str = ""
         for test in generated_tests.generated_tests:
-            generated_tests_str += f"```python\n{test.generated_original_test_source}\n```"
-            generated_tests_str += "\n\n"
+            if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
+                formatted_generated_test = format_generated_code(
+                    test.generated_original_test_source, self.args.formatter_cmds
+                )
+                generated_tests_str += f"```python\n{formatted_generated_test}\n```"
+                generated_tests_str += "\n\n"
 
         if concolic_test_str:
-            generated_tests_str += f"```python\n{concolic_test_str}\n```\n\n"
+            formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
+            generated_tests_str += f"```python\n{formatted_generated_test}\n```\n\n"
 
         existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
@@ -1553,7 +1561,7 @@ class FunctionOptimizer:
                 trace_id=self.function_trace_id, is_optimization_found=best_optimization is not None
             )
 
-        # If worktree mode, do not revert code and helpers,, otherwise we would have an empty diff when writing the patch in the lsp
+        # If worktree mode, do not revert code and helpers, otherwise we would have an empty diff when writing the patch in the lsp
         if self.args.worktree:
             return
 
