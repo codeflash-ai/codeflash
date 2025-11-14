@@ -947,13 +947,114 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                                 console.print(warning_panel)
                                 console.print()
                     else:
-                        raise Exception(response_data.get("error", "Unknown error"))
+                        # API returned success=false, extract error details
+                        error_data = response_data
+                        error_msg = error_data.get("error", "Unknown error")
+                        error_message = error_data.get("message", error_msg)
+                        error_help = error_data.get("help", "")
+                        installation_url = error_data.get("installation_url")
+
+                        # Show detailed error panel
+                        error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
+                        if error_help:
+                            error_panel_text += f"\n💡 {error_help}\n"
+                        if installation_url:
+                            error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
+
+                        error_panel = Panel(
+                            Text(error_panel_text, style="red"),
+                            title="❌ Setup Failed",
+                            border_style="red",
+                        )
+                        console.print(error_panel)
+                        console.print()
+
+                        # For GitHub App not installed, don't fall back - show clear instructions
+                        if response.status_code == 404 and installation_url:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] GitHub App not installed on {owner}/{repo_name}"
+                            )
+                            click.echo(
+                                f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
+                                f"Visit: {installation_url}{LF}"
+                            )
+                            return
+
+                        # For permission errors, don't fall back - show clear instructions
+                        if response.status_code == 403:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
+                            )
+                            click.echo(
+                                f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}"
+                            )
+                            return
+
+                        # For other errors, fall back to local file creation
+                        raise Exception(error_message)
                 else:
-                    # API call failed, fall back to local file creation
-                    raise Exception(f"API returned status {response.status_code}")
+                    # API call returned non-200 status, try to parse error response
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("error", "API request failed")
+                        error_message = error_data.get("message", f"API returned status {response.status_code}")
+                        error_help = error_data.get("help", "")
+                        installation_url = error_data.get("installation_url")
+
+                        # Show detailed error panel
+                        error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
+                        if error_help:
+                            error_panel_text += f"\n💡 {error_help}\n"
+                        if installation_url:
+                            error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
+
+                        error_panel = Panel(
+                            Text(error_panel_text, style="red"),
+                            title="❌ Setup Failed",
+                            border_style="red",
+                        )
+                        console.print(error_panel)
+                        console.print()
+
+                        # For GitHub App not installed, don't fall back - show clear instructions
+                        if response.status_code == 404 and installation_url:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] GitHub App not installed on {owner}/{repo_name}"
+                            )
+                            click.echo(
+                                f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
+                                f"Visit: {installation_url}{LF}"
+                            )
+                            return
+
+                        # For permission errors, don't fall back - show clear instructions
+                        if response.status_code == 403:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
+                            )
+                            click.echo(
+                                f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}"
+                            )
+                            return
+
+                        # For authentication errors, don't fall back
+                        if response.status_code == 401:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] Authentication failed for {owner}/{repo_name}"
+                            )
+                            click.echo(
+                                f"Authentication failed. Please check your API key and try again.{LF}"
+                            )
+                            return
+
+                        # For other errors, fall back to local file creation
+                        raise Exception(error_message)
+                    except (ValueError, KeyError):
+                        # Couldn't parse error response, use generic message
+                        raise Exception(f"API returned status {response.status_code}")
 
             except Exception as api_error:
-                # Fall back to local file creation if API call fails
+                # Fall back to local file creation if API call fails (for non-critical errors)
                 logger.warning(
                     f"[cmd_init.py:install_github_actions] API call failed, falling back to local file creation: {api_error}"
                 )
