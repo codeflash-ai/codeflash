@@ -1506,7 +1506,7 @@ class FunctionOptimizer:
         # this will now run regardless of pr, staging review flags
         try:
             opt_review_response = self.aiservice_client.get_optimization_review(
-                **data, calling_fn_details=function_references, project_root_dir=self.project_root
+                **data, calling_fn_details=function_references
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
