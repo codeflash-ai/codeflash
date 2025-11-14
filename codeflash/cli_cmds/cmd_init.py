@@ -812,6 +812,17 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         git_remote = config.get("git_remote", "origin")
         pr_created_via_api = False
         pr_url = None
+        secret_setup_success = False
+        secret_setup_error = None
+
+        # Get API key for secret setup
+        try:
+            api_key = get_codeflash_api_key()
+        except OSError:
+            api_key = None
+            logger.info(
+                "[cmd_init.py:install_github_actions] No API key found, will skip secret setup"
+            )
 
         try:
             owner, repo_name = get_repo_owner_and_name(repo, git_remote)
@@ -847,18 +858,27 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                     repo=repo_name,
                     base_branch=base_branch,
                     workflow_content=materialized_optimize_yml_content,
+                    api_key=api_key,
                 )
 
                 if response.status_code == 200:
                     response_data = response.json()
                     if response_data.get("success"):
                         pr_url = response_data.get("pr_url")
+                        secret_setup_success = response_data.get("secret_setup_success", False)
+                        secret_setup_error = response_data.get("secret_setup_error")
+
                         if pr_url:
                             pr_created_via_api = True
+                            # Build success message with secret status
+                            success_message = f"✅ PR created: {pr_url}\n\n"
+                            if secret_setup_success:
+                                success_message += "✅ Repository secret CODEFLASH_API_KEY configured\n\n"
+                            success_message += "Your repository is now configured for continuous optimization!"
+
                             workflow_success_panel = Panel(
                                 Text(
-                                    f"✅ PR created: {pr_url}\n\n"
-                                    "Your repository is now configured for continuous optimization!",
+                                    success_message,
                                     style="green",
                                     justify="center",
                                 ),
@@ -867,16 +887,40 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             )
                             console.print(workflow_success_panel)
                             console.print()
+
+                            # Show warning if secret setup failed
+                            if not secret_setup_success and api_key:
+                                warning_message = (
+                                    "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
+                                )
+                                if secret_setup_error:
+                                    warning_message += f"Error: {secret_setup_error}\n\n"
+                                warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
+
+                                warning_panel = Panel(
+                                    Text(warning_message, style="yellow"),
+                                    title="⚠️  Manual Secret Setup Required",
+                                    border_style="yellow",
+                                )
+                                console.print(warning_panel)
+                                console.print()
+
                             logger.info(
-                                f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}"
+                                f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}, secret_setup_success={secret_setup_success}"
                             )
                         else:
                             # File already exists with same content
                             pr_created_via_api = True  # Mark as handled (no PR needed)
+                            already_exists_message = (
+                                "✅ Workflow file already exists with the same content.\n\n"
+                            )
+                            if secret_setup_success:
+                                already_exists_message += "✅ Repository secret CODEFLASH_API_KEY configured\n\n"
+                            already_exists_message += "No changes needed - your repository is already configured!"
+
                             already_exists_panel = Panel(
                                 Text(
-                                    "✅ Workflow file already exists with the same content.\n\n"
-                                    "No changes needed - your repository is already configured!",
+                                    already_exists_message,
                                     style="green",
                                     justify="center",
                                 ),
@@ -885,6 +929,23 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             )
                             console.print(already_exists_panel)
                             console.print()
+
+                            # Show warning if secret setup failed
+                            if not secret_setup_success and api_key:
+                                warning_message = (
+                                    "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
+                                )
+                                if secret_setup_error:
+                                    warning_message += f"Error: {secret_setup_error}\n\n"
+                                warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
+
+                                warning_panel = Panel(
+                                    Text(warning_message, style="yellow"),
+                                    title="⚠️  Manual Secret Setup Required",
+                                    border_style="yellow",
+                                )
+                                console.print(warning_panel)
+                                console.print()
                     else:
                         raise Exception(response_data.get("error", "Unknown error"))
                 else:
@@ -912,64 +973,77 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                 console.print(workflow_success_panel)
                 console.print()
 
-        try:
-            existing_api_key = get_codeflash_api_key()
-        except OSError:
-            existing_api_key = None
-
-        # GitHub secrets setup panel
-        secrets_message = (
-            "🔐 Next Step: Add API Key as GitHub Secret\n\n"
-            "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
-            "📋 Steps:\n"
-            "1. Press Enter to open your repo's secrets page\n"
-            "2. Click 'New repository secret'\n"
-            "3. Add your API key with the variable name CODEFLASH_API_KEY"
-        )
-
-        if existing_api_key:
-            secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
-
-        secrets_panel = Panel(
-            Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
-        )
-        console.print(secrets_panel)
-
-        console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
-        console.input()
-
-        click.launch(get_github_secrets_page_url(repo))
-
-        # Post-launch message panel
-        launch_panel = Panel(
-            Text(
-                "🐙 I opened your GitHub secrets page!\n\n"
-                "Note: If you see a 404, you probably don't have access to this repo's secrets. "
-                "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
-                "hard-code your API key into the workflow file.",
-                style="cyan",
-            ),
-            title="🌐 Browser Opened",
-            border_style="bright_cyan",
-        )
-        console.print(launch_panel)
-        click.pause()
-        click.echo()
-        # Show appropriate message based on whether PR was created via API
+        # Show appropriate message based on whether PR was created via API and secret setup status
         if pr_created_via_api:
             if pr_url:
-                click.echo(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                    f"Once you merge the PR and add the secret, the workflow will be active.{LF}"
-                )
+                if secret_setup_success:
+                    click.echo(
+                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                        f"Once you merge the PR, the workflow will be active.{LF}"
+                    )
+                else:
+                    # PR created but secret setup failed or skipped
+                    click.echo(
+                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                        f"Once you merge the PR and add the secret, the workflow will be active.{LF}"
+                    )
             else:
                 # File already exists
-                click.echo(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                    f"Just add the secret and the workflow will be active.{LF}"
-                )
+                if secret_setup_success:
+                    click.echo(
+                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                        f"The workflow is ready to use.{LF}"
+                    )
+                else:
+                    click.echo(
+                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                        f"Just add the secret and the workflow will be active.{LF}"
+                    )
         else:
-            # Fell back to local file creation
+            # Fell back to local file creation - show manual secret setup
+            try:
+                existing_api_key = get_codeflash_api_key()
+            except OSError:
+                existing_api_key = None
+
+            # GitHub secrets setup panel (only shown when falling back to local file creation)
+            secrets_message = (
+                "🔐 Next Step: Add API Key as GitHub Secret\n\n"
+                "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
+                "📋 Steps:\n"
+                "1. Press Enter to open your repo's secrets page\n"
+                "2. Click 'New repository secret'\n"
+                "3. Add your API key with the variable name CODEFLASH_API_KEY"
+            )
+
+            if existing_api_key:
+                secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
+
+            secrets_panel = Panel(
+                Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
+            )
+            console.print(secrets_panel)
+
+            console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
+            console.input()
+
+            click.launch(get_github_secrets_page_url(repo))
+
+            # Post-launch message panel
+            launch_panel = Panel(
+                Text(
+                    "🐙 I opened your GitHub secrets page!\n\n"
+                    "Note: If you see a 404, you probably don't have access to this repo's secrets. "
+                    "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
+                    "hard-code your API key into the workflow file.",
+                    style="cyan",
+                ),
+                title="🌐 Browser Opened",
+                border_style="bright_cyan",
+            )
+            console.print(launch_panel)
+            click.pause()
+            click.echo()
             click.echo(
                 f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
                 f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
