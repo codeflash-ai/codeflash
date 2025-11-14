@@ -14,10 +14,10 @@ class Graph:
         visited[v] = True
 
         for i in self.graph[v]:
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
-        stack.insert(0, v)
+        stack.append(v)
 
     def topologicalSort(self):
         visited = [False] * self.V
@@ -25,7 +25,8 @@ class Graph:
         sorting_id = uuid.uuid4()
 
         for i in range(self.V):
-            if visited[i] == False:
+            if not visited[i]:
                 self.topologicalSortUtil(i, visited, stack)
 
+        stack.reverse()
         return stack, str(sorting_id)
