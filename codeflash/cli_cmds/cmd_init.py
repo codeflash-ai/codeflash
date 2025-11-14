@@ -725,11 +725,97 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
 
-        # Get repository information early for remote check
+        # Check if workflow file already exists locally BEFORE showing prompt
+        if optimize_yaml_path.exists():
+            # Workflow file already exists locally - skip prompt and setup
+            already_exists_message = "✅ GitHub Actions workflow file already exists.\n\n"
+            already_exists_message += "No changes needed - your repository is already configured!"
+
+            already_exists_panel = Panel(
+                Text(already_exists_message, style="green", justify="center"),
+                title="✅ Already Configured",
+                border_style="bright_green",
+            )
+            console.print(already_exists_panel)
+            console.print()
+
+            # Still try to set up secret if API key is available
+            try:
+                api_key = get_codeflash_api_key()
+                git_remote = config.get("git_remote", "origin")
+                owner, repo_name = get_repo_owner_and_name(repo, git_remote)
+                base_branch = get_current_branch(repo) if repo.active_branch else "main"
+
+                # Generate workflow content for secret setup
+                from importlib.resources import files
+
+                optimize_yml_content = (
+                    files("codeflash")
+                    .joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
+                    .read_text(encoding="utf-8")
+                )
+                materialized_optimize_yml_content = customize_codeflash_yaml_content(
+                    optimize_yml_content, config, git_root, False
+                )
+
+                logger.info(
+                    f"[cmd_init.py:install_github_actions] Workflow exists locally, attempting secret setup for {owner}/{repo_name}"
+                )
+                secret_response = setup_github_actions(
+                    owner=owner,
+                    repo=repo_name,
+                    base_branch=base_branch,
+                    workflow_content=materialized_optimize_yml_content,
+                    api_key=api_key,
+                )
+                if secret_response.status_code == 200:
+                    secret_data = secret_response.json()
+                    secret_setup_success = secret_data.get("secret_setup_success", False)
+                    secret_setup_error = secret_data.get("secret_setup_error")
+
+                    if secret_setup_success:
+                        console.print(
+                            Panel(
+                                Text(
+                                    "✅ Repository secret CODEFLASH_API_KEY configured",
+                                    style="green",
+                                    justify="center",
+                                ),
+                                title="✅ Secret Configured",
+                                border_style="bright_green",
+                            )
+                        )
+                        console.print()
+                    elif secret_setup_error:
+                        warning_message = (
+                            "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
+                        )
+                        warning_message += f"Error: {secret_setup_error}\n\n"
+                        warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
+
+                        warning_panel = Panel(
+                            Text(warning_message, style="yellow"),
+                            title="⚠️  Manual Secret Setup Required",
+                            border_style="yellow",
+                        )
+                        console.print(warning_panel)
+                        console.print()
+            except Exception as e:
+                logger.debug(
+                    f"[cmd_init.py:install_github_actions] Could not set up secret (workflow exists locally): {e}"
+                )
+                # Secret setup is optional, so we continue
+
+            logger.info(
+                f"[cmd_init.py:install_github_actions] Workflow file already exists locally, skipping setup"
+            )
+            return
+
+        # Get repository information for API call
         git_remote = config.get("git_remote", "origin")
         base_branch = get_current_branch(repo) if repo.active_branch else "main"
 
-        # Generate workflow content early (needed for comparison)
+        # Generate workflow content
         from importlib.resources import files
 
         benchmark_mode = False
@@ -769,88 +855,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             api_key = None
             logger.info("[cmd_init.py:install_github_actions] No API key found, will skip secret setup")
 
-        # Check if workflow file already exists on remote BEFORE showing prompt
-        try:
-            owner, repo_name = get_repo_owner_and_name(repo, git_remote)
-            logger.info(
-                f"[cmd_init.py:install_github_actions] Checking if workflow file exists for {owner}/{repo_name} on branch {base_branch}"
-            )
-            check_response = check_workflow_file_exists(owner, repo_name, base_branch)
-
-            if check_response.status_code == 200:
-                check_data = check_response.json()
-                if check_data.get("exists"):
-                    existing_content = check_data.get("content", "")
-                    if existing_content == materialized_optimize_yml_content:
-                        # Workflow file already exists with same content - skip prompt and setup
-                        pr_created_via_api = True
-                        already_exists_message = "✅ Workflow file already exists with the same content.\n\n"
-                        already_exists_message += "No changes needed - your repository is already configured!"
-
-                        already_exists_panel = Panel(
-                            Text(already_exists_message, style="green", justify="center"),
-                            title="✅ Already Configured",
-                            border_style="bright_green",
-                        )
-                        console.print(already_exists_panel)
-                        console.print()
-
-                        # Still try to set up secret if API key is available
-                        if api_key:
-                            logger.info(
-                                f"[cmd_init.py:install_github_actions] Workflow exists, attempting secret setup for {owner}/{repo_name}"
-                            )
-                            secret_response = setup_github_actions(
-                                owner=owner,
-                                repo=repo_name,
-                                base_branch=base_branch,
-                                workflow_content=materialized_optimize_yml_content,
-                                api_key=api_key,
-                            )
-                            if secret_response.status_code == 200:
-                                secret_data = secret_response.json()
-                                secret_setup_success = secret_data.get("secret_setup_success", False)
-                                secret_setup_error = secret_data.get("secret_setup_error")
-
-                                if secret_setup_success:
-                                    console.print(
-                                        Panel(
-                                            Text(
-                                                "✅ Repository secret CODEFLASH_API_KEY configured",
-                                                style="green",
-                                                justify="center",
-                                            ),
-                                            title="✅ Secret Configured",
-                                            border_style="bright_green",
-                                        )
-                                    )
-                                    console.print()
-                                elif secret_setup_error:
-                                    warning_message = (
-                                        "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
-                                    )
-                                    warning_message += f"Error: {secret_setup_error}\n\n"
-                                    warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
-
-                                    warning_panel = Panel(
-                                        Text(warning_message, style="yellow"),
-                                        title="⚠️  Manual Secret Setup Required",
-                                        border_style="yellow",
-                                    )
-                                    console.print(warning_panel)
-                                    console.print()
-
-                        logger.info(
-                            f"[cmd_init.py:install_github_actions] Workflow file already exists for {owner}/{repo_name}, skipping setup"
-                        )
-                        return
-        except Exception as e:
-            logger.warning(
-                f"[cmd_init.py:install_github_actions] Could not check remote workflow file, will proceed with prompt: {e}"
-            )
-            # Continue to show prompt if we can't check remote
-
-        # Show prompt only if workflow doesn't exist on remote
+        # Show prompt only if workflow doesn't exist locally
         actions_panel = Panel(
             Text(
                 "🤖 GitHub Actions Setup\n\n"
@@ -864,33 +869,10 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         console.print(actions_panel)
         console.print()
 
-        # Check if the workflow file already exists locally
-        if optimize_yaml_path.exists():
-            overwrite_questions = [
-                inquirer.Confirm(
-                    "confirm_overwrite",
-                    message=f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
-                    default=False,
-                )
-            ]
-
-            overwrite_answers = inquirer.prompt(overwrite_questions, theme=CodeflashTheme())
-            if not overwrite_answers or not overwrite_answers["confirm_overwrite"]:
-                skip_panel = Panel(
-                    Text("⏩️ Skipping workflow creation.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
-                )
-                console.print(skip_panel)
-                ph("cli-github-workflow-skipped")
-                return
-            ph(
-                "cli-github-optimization-confirm-workflow-overwrite",
-                {"confirm_overwrite": overwrite_answers["confirm_overwrite"]},
-            )
-
         creation_questions = [
             inquirer.Confirm(
                 "confirm_creation",
-                message="Set up GitHub Actions for continuous optimization? We'll create a pull request with the workflow file.",
+                message="Set up GitHub Actions for continuous optimization? We'll open a pull request with the workflow file.",
                 default=True,
             )
         ]
