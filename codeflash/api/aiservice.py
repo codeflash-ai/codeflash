@@ -557,7 +557,6 @@ class AiServiceClient:
         function_trace_id: str,
         coverage_message: str,
         replay_tests: str,
-        root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
     ) -> str:
@@ -583,18 +582,13 @@ class AiServiceClient:
         """
         diff_str = "\n".join(
             [
-                unified_diff_strings(
-                    code1=original_code[p],
-                    code2=new_code[p],
-                    fromfile=Path(p).relative_to(root_dir).as_posix(),
-                    tofile=Path(p).relative_to(root_dir).as_posix(),
-                )
+                unified_diff_strings(code1=original_code[p], code2=new_code[p], fromfile=Path(p), tofile=Path(p))
                 for p in original_code
                 if not is_zero_diff(original_code[p], new_code[p])
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
-        logger.info("!lsp|Computing Optimization Review…")
+        logger.info("!lsp|Reviewing Optimization…")
         payload = {
             "code_diff": code_diff,
             "explanation": explanation.raw_explanation_message,
