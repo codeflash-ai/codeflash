@@ -704,7 +704,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
         apologize_and_exit()
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
+def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002, PLR0911
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -820,9 +820,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             api_key = get_codeflash_api_key()
         except OSError:
             api_key = None
-            logger.info(
-                "[cmd_init.py:install_github_actions] No API key found, will skip secret setup"
-            )
+            logger.info("[cmd_init.py:install_github_actions] No API key found, will skip secret setup")
 
         try:
             owner, repo_name = get_repo_owner_and_name(repo, git_remote)
@@ -877,11 +875,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             success_message += "Your repository is now configured for continuous optimization!"
 
                             workflow_success_panel = Panel(
-                                Text(
-                                    success_message,
-                                    style="green",
-                                    justify="center",
-                                ),
+                                Text(success_message, style="green", justify="center"),
                                 title="🎉 Workflow PR Created!",
                                 border_style="bright_green",
                             )
@@ -911,19 +905,13 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         else:
                             # File already exists with same content
                             pr_created_via_api = True  # Mark as handled (no PR needed)
-                            already_exists_message = (
-                                "✅ Workflow file already exists with the same content.\n\n"
-                            )
+                            already_exists_message = "✅ Workflow file already exists with the same content.\n\n"
                             if secret_setup_success:
                                 already_exists_message += "✅ Repository secret CODEFLASH_API_KEY configured\n\n"
                             already_exists_message += "No changes needed - your repository is already configured!"
 
                             already_exists_panel = Panel(
-                                Text(
-                                    already_exists_message,
-                                    style="green",
-                                    justify="center",
-                                ),
+                                Text(already_exists_message, style="green", justify="center"),
                                 title="✅ Already Configured",
                                 border_style="bright_green",
                             )
@@ -962,9 +950,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
 
                         error_panel = Panel(
-                            Text(error_panel_text, style="red"),
-                            title="❌ Setup Failed",
-                            border_style="red",
+                            Text(error_panel_text, style="red"), title="❌ Setup Failed", border_style="red"
                         )
                         console.print(error_panel)
                         console.print()
@@ -985,13 +971,11 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
                             )
-                            click.echo(
-                                f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}"
-                            )
+                            click.echo(f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}")
                             return
 
                         # For other errors, fall back to local file creation
-                        raise Exception(error_message)
+                        raise Exception(error_message)  # noqa: TRY002, TRY301
                 else:
                     # API call returned non-200 status, try to parse error response
                     try:
@@ -1009,9 +993,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
 
                         error_panel = Panel(
-                            Text(error_panel_text, style="red"),
-                            title="❌ Setup Failed",
-                            border_style="red",
+                            Text(error_panel_text, style="red"), title="❌ Setup Failed", border_style="red"
                         )
                         console.print(error_panel)
                         console.print()
@@ -1032,9 +1014,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
                             )
-                            click.echo(
-                                f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}"
-                            )
+                            click.echo(f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}")
                             return
 
                         # For authentication errors, don't fall back
@@ -1042,16 +1022,15 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Authentication failed for {owner}/{repo_name}"
                             )
-                            click.echo(
-                                f"Authentication failed. Please check your API key and try again.{LF}"
-                            )
+                            click.echo(f"Authentication failed. Please check your API key and try again.{LF}")
                             return
 
                         # For other errors, fall back to local file creation
-                        raise Exception(error_message)
-                    except (ValueError, KeyError):
+                        raise Exception(error_message)  # noqa: TRY002
+                    except (ValueError, KeyError) as parse_error:
                         # Couldn't parse error response, use generic message
-                        raise Exception(f"API returned status {response.status_code}")
+                        status_msg = f"API returned status {response.status_code}"
+                        raise Exception(status_msg) from parse_error  # noqa: TRY002
 
             except Exception as api_error:
                 # Fall back to local file creation if API call fails (for non-critical errors)
@@ -1088,18 +1067,17 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
                         f"Once you merge the PR and add the secret, the workflow will be active.{LF}"
                     )
+            # File already exists
+            elif secret_setup_success:
+                click.echo(
+                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                    f"The workflow is ready to use.{LF}"
+                )
             else:
-                # File already exists
-                if secret_setup_success:
-                    click.echo(
-                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                        f"The workflow is ready to use.{LF}"
-                    )
-                else:
-                    click.echo(
-                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                        f"Just add the secret and the workflow will be active.{LF}"
-                    )
+                click.echo(
+                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                    f"Just add the secret and the workflow will be active.{LF}"
+                )
         else:
             # Fell back to local file creation - show manual secret setup
             try:
