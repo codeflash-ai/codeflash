@@ -759,7 +759,9 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         creation_questions = [
             inquirer.Confirm(
-                "confirm_creation", message="Set up GitHub Actions for continuous optimization?", default=True
+                "confirm_creation",
+                message="Set up GitHub Actions for continuous optimization? We'll create a pull request with the workflow file.",
+                default=True,
             )
         ]
 
