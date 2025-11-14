@@ -582,7 +582,9 @@ class AiServiceClient:
         """
         diff_str = "\n".join(
             [
-                unified_diff_strings(code1=original_code[p], code2=new_code[p], fromfile=Path(p), tofile=Path(p))
+                unified_diff_strings(
+                    code1=original_code[p], code2=new_code[p], fromfile=Path(p).as_posix(), tofile=Path(p).as_posix()
+                )
                 for p in original_code
                 if not is_zero_diff(original_code[p], new_code[p])
             ]
