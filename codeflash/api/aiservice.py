@@ -559,6 +559,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
+        project_root_dir: Path,
     ) -> str:
         """Compute the optimization review of current Pull Request.
 
@@ -574,6 +575,7 @@ class AiServiceClient:
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
         calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
+        project_root_dir: Path -> root dir of the project to calculate relative paths
 
         Returns:
         -------
@@ -583,7 +585,10 @@ class AiServiceClient:
         diff_str = "\n".join(
             [
                 unified_diff_strings(
-                    code1=original_code[p], code2=new_code[p], fromfile=Path(p).as_posix(), tofile=Path(p).as_posix()
+                    code1=original_code[p],
+                    code2=new_code[p],
+                    fromfile=Path(p).relative_to(project_root_dir).as_posix(),
+                    tofile=Path(p).relative_to(project_root_dir).as_posix(),
                 )
                 for p in original_code
                 if not is_zero_diff(original_code[p], new_code[p])
