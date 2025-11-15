@@ -15,6 +15,7 @@ def test_mirror_paths_for_worktree_mode(monkeypatch: pytest.MonkeyPatch):
     args = Namespace()
     args.benchmark = False
     args.benchmarks_root = None
+    args.no_pr = True
 
     args.config_file = project_root / "pyproject.toml"
     args.file = project_root / "src" / "app" / "main.py"
@@ -42,6 +43,7 @@ def test_mirror_paths_for_worktree_mode(monkeypatch: pytest.MonkeyPatch):
     args = Namespace()
     args.benchmark = False
     args.benchmarks_root = None
+    args.no_pr = True
 
     args.config_file = repo_root / "pyproject.toml"
     args.file = repo_root / "codeflash/optimization/optimizer.py"
