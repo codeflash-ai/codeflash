@@ -18,9 +18,25 @@ patches_dir = codeflash_cache_dir / "patches"
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
+    username = None
+    email = None
+    with repository.config_reader() as cr:
+        username = cr.remove_option("user", "name")
+        email = cr.remove_option("user", "email")
+    repository.git.config()
+    with repository.config_writer() as cw:
+        if not cw.has_option("user", "name"):
+            cw.set_value("user", "name", "Codeflash Bot")
+        if not cw.has_option("user", "email"):
+            cw.set_value("user", "email", "bot@codeflash.ai")
 
     repository.git.add(".")
     repository.git.commit("-m", commit_message, "--no-verify")
+    with repository.config_writer() as cw:
+        if username:
+            cw.set_value("user", "name", username)
+        if email:
+            cw.set_value("user", "email", email)
 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:
