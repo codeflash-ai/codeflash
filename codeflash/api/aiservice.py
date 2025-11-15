@@ -4,7 +4,6 @@ import json
 import os
 import platform
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
@@ -24,6 +23,8 @@ from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import AIServiceRefinerRequest
@@ -557,7 +558,6 @@ class AiServiceClient:
         function_trace_id: str,
         coverage_message: str,
         replay_tests: str,
-        root_dir: Path,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
     ) -> str:
@@ -583,18 +583,13 @@ class AiServiceClient:
         """
         diff_str = "\n".join(
             [
-                unified_diff_strings(
-                    code1=original_code[p],
-                    code2=new_code[p],
-                    fromfile=Path(p).relative_to(root_dir).as_posix(),
-                    tofile=Path(p).relative_to(root_dir).as_posix(),
-                )
+                unified_diff_strings(code1=original_code[p], code2=new_code[p])
                 for p in original_code
                 if not is_zero_diff(original_code[p], new_code[p])
             ]
         )
         code_diff = f"```diff\n{diff_str}\n```"
-        logger.info("!lsp|Computing Optimization Review…")
+        logger.info("loading|Reviewing Optimization…")
         payload = {
             "code_diff": code_diff,
             "explanation": explanation.raw_explanation_message,

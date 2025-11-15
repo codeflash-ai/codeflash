@@ -134,4 +134,5 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         "patch_file": str(patch_path),
         "task_id": params.task_id,
         "explanation": best_optimization.explanation_v2,
+        "optimizationReview": function_optimizer.optimization_review.capitalize(),
     }
