@@ -33,7 +33,6 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
             email = cr.get("user", "email")
         except configparser.NoSectionError:
             no_email = True
-    repository.git.config()
     with repository.config_writer() as cw:
         if not cw.has_option("user", "name"):
             cw.set_value("user", "name", "Codeflash Bot")
