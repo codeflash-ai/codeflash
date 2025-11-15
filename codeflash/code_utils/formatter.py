@@ -97,6 +97,9 @@ def get_diff_lines_count(diff_output: str) -> int:
 
 
 def format_generated_code(generated_test_source: str, formatter_cmds: list[str]) -> str:
+    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
+    if formatter_name == "disabled":  # nothing to do if no formatter provided
+        return re.sub(r"\n{2,}", "\n\n", generated_test_source)
     with tempfile.TemporaryDirectory() as test_dir_str:
         # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed) return code with 2 or more newlines substituted with 2 newlines
         original_temp = Path(test_dir_str) / "original_temp.py"
