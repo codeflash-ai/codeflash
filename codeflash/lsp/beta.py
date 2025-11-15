@@ -207,6 +207,34 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
 
+    # Provide sensible fallbacks when no subdirectories are found
+    # Only suggest directories that actually exist in the workspace
+    if not module_root_suggestions:
+        cwd = Path.cwd()
+        common_module_dirs = ["src", "lib", "app"]
+        module_root_suggestions = ["."]  # Always include current directory
+
+        # Add common patterns only if they exist
+        for dir_name in common_module_dirs:
+            if (cwd / dir_name).is_dir():
+                module_root_suggestions.append(dir_name)
+
+        default_module_root = "."
+
+    if not tests_root_suggestions:
+        cwd = Path.cwd()
+        common_test_dirs = ["tests", "test", "__tests__"]
+        tests_root_suggestions = []
+
+        # Add common test directories only if they exist
+        for dir_name in common_test_dirs:
+            if (cwd / dir_name).is_dir():
+                tests_root_suggestions.append(dir_name)
+
+        # Always include current directory as fallback
+        tests_root_suggestions.append(".")
+        default_tests_root = tests_root_suggestions[0] if tests_root_suggestions else "."
+
     try:
         configured_module_root = (
             Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
