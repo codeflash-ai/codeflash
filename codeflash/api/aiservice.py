@@ -575,7 +575,6 @@ class AiServiceClient:
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
         calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
-        project_root_dir: Path -> root dir of the project to calculate relative paths
 
         Returns:
         -------
