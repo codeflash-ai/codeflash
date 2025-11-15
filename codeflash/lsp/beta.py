@@ -235,7 +235,6 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
         tests_root_suggestions.append(".")
         default_tests_root = tests_root_suggestions[0] if tests_root_suggestions else "."
 
-
     try:
         configured_module_root = (
             Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
