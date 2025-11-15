@@ -38,7 +38,10 @@ def ignored_submodule_paths(module_root: str) -> list[Path]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
         working_tree_dir = cast("Path", git_repo.working_tree_dir)
-        return [Path(working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+        try:
+            return [Path(working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+        except Exception as e:
+            print(f"Failed to get submodule paths {str(e)}")  # no logger since used in the tracer
     return []
 
 
