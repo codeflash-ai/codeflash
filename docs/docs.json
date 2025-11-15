@@ -25,7 +25,8 @@
           {
             "group": "🚀 Quickstart",
             "pages": [
-              "getting-started/local-installation"
+              "getting-started/local-installation",
+              "claude-code-integration"
             ]
           },
           {
