@@ -1,6 +1,6 @@
 # VS Code Extension & VSIX Installation
 
-Bring Codeflash directly into your editor with the Visual Studio Code extension. The extension surfaces optimization suggestions inline, lets you run targeted fixes, and keeps the CLI workflow close at hand with more visual experience in editor.
+Bring Codeflash directly into your editor with the Visual Studio Code extension. The extension surfaces optimization suggestions inline, and keeps the CLI workflow close at hand with more visual experience in editor.
 
 ## Requirements
 
@@ -28,13 +28,13 @@ Some environments—Cursor, Windows without Marketplace access, or air-gapped ma
 3. Choose the downloaded `codeflash-*.vsix` file and restart the editor.
 
 ## Initial Setup Checklist
-- The complete Setup flow is within extension
+- The complete Setup flow is within extension to initialize codeflash LSP server
 
 ## Everyday Workflow
 
-- **Inline suggestions:** Optimizable functions display a “# optimize” hint above the function definition. And once optimized they will show a comment where you can click it to preview and apply improvements.
-- **Sidebar overview:** Use the Codeflash panel to review queued, in-progress, and completed optimizations.
-- **Targeted runs:** Trigger “Optimize Changed Functions” from the extension to focus on recent edits.
+- **Inline suggestions:** Optimizable functions display a “optimize” hint above the function definition. And once optimized they will show a comment where you can click it to preview and apply improvements.
+- **Sidebar overview:** Use the Codeflash panel to review queued, inprogress, and completed optimizations.
+- **Targeted runs:** Trigger “Optimize Changed Functions” from the extension to focus on recent uncommited edits.
 - **Pair with CLI:** For batch workflows (`codeflash --all`), you can still run the CLI. The extension will pick up the results when you return to the editor.
 
 ## Troubleshooting
