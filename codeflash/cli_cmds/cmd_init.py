@@ -1373,7 +1373,7 @@ def ask_for_telemetry() -> bool:
     from rich.prompt import Confirm
 
     return Confirm.ask(
-        "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g., commands run, errors encountered)?",
+        "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g. errors encountered)?",
         default=True,
         show_default=True,
     )
