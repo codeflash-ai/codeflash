@@ -14,6 +14,7 @@ from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.cli_cmds.cmd_init import (
     CommonSections,
     VsCodeSetupInfo,
+    config_found,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
     create_find_common_tags_file,
@@ -262,6 +263,10 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "pyprojectPath": pyproject_toml_path,
             "root": root,
         }
+
+    found, message = config_found(pyproject_toml_path)
+    if not found:
+        return {"status": "error", "message": message}
 
     valid, config, reason = is_valid_pyproject_toml(pyproject_toml_path)
     if not valid:
