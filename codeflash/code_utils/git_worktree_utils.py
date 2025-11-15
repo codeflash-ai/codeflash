@@ -26,11 +26,11 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
     with repository.config_reader(config_level="repository") as cr:
         try:
             username = cr.get("user", "name")
-        except configparser.NoSectionError:
+        except (configparser.NoSectionError, configparser.NoOptionError):
             no_username = True
         try:
             email = cr.get("user", "email")
-        except configparser.NoSectionError:
+        except (configparser.NoSectionError, configparser.NoOptionError):
             no_email = True
     with repository.config_writer(config_level="repository") as cw:
         if not cw.has_option("user", "name"):
