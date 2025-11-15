@@ -21,8 +21,8 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
     username = None
     email = None
     with repository.config_reader() as cr:
-        username = cr.remove_option("user", "name")
-        email = cr.remove_option("user", "email")
+        username = cr.get("user", "name")
+        email = cr.get("user", "email")
     repository.git.config()
     with repository.config_writer() as cw:
         if not cw.has_option("user", "name"):
