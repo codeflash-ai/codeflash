@@ -23,11 +23,17 @@
             "pages": ["index"]
           },
           {
-
             "group": "🚀 Quickstart",
             "pages": [
               "getting-started/local-installation"
-            ]          },
+            ]
+          },
+          {
+            "group": "🛠 IDE Extensions",
+            "pages": [
+              "editor-plugins/vscode"
+            ]
+          },
           {
             "group": "⚡ Optimizing with Codeflash",
             "pages": [
