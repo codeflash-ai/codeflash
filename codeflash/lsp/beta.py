@@ -239,11 +239,28 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
     configured_test_framework = server.args.test_framework if server.args.test_framework else None
 
+    try:
+        configured_module_root = (
+            Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
+        )
+    except:  # noqa : E722
+        configured_module_root = None
+    try:
+        configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
+    except:  # noqa : E722
+        configured_tests_root = None
+    try:
+        configured_test_framework = server.args.test_framework if server.args.test_framework else None
+    except:  # noqa : E722
+        configured_test_framework = None
     configured_formatter = ""
-    if isinstance(server.args.formatter_cmds, list):
-        configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
-    elif isinstance(server.args.formatter_cmds, str):
-        configured_formatter = server.args.formatter_cmds.strip()
+    try:
+        if isinstance(server.args.formatter_cmds, list):
+            configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
+        elif isinstance(server.args.formatter_cmds, str):
+            configured_formatter = server.args.formatter_cmds.strip()
+    except:  # noqa : E722
+        configured_formatter = "disabled"
 
     return {
         "module_root": {"choices": module_root_suggestions, "default": configured_module_root or default_module_root},
