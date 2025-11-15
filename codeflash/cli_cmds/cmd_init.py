@@ -198,14 +198,14 @@ def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool
         return False, config, "Missing required field: 'module_root'"
 
     if not Path(module_root).is_dir():
-        return False, config, f"'module root' directory does not exist at {module_root}"
+        return False, config, f"Invalid 'module_root': directory does not exist at {module_root}"
 
     tests_root = config.get("tests_root")
     if not tests_root:
         return False, config, "Missing required field: 'tests_root'"
 
     if not Path(tests_root).is_dir():
-        return False, config, f"'tests root' directory does not exist at {tests_root}"
+        return False, config, f"Invalid 'tests_root': directory does not exist at {tests_root}"
 
     return True, config, ""
 
