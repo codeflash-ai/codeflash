@@ -21,15 +21,17 @@ class PrComment:
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     benchmark_details: Optional[list[BenchmarkDetail]] = None
+    original_async_throughput: Optional[int] = None
+    best_async_throughput: Optional[int] = None
 
-    def to_json(self) -> dict[str, Union[dict[str, dict[str, int]], int, str, Optional[list[BenchmarkDetail]]]]:
+    def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
             if test_type.to_name()
         }
 
-        return {
+        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -41,6 +43,12 @@ class PrComment:
             "report_table": report_table,
             "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }
+
+        if self.original_async_throughput is not None and self.best_async_throughput is not None:
+            result["original_async_throughput"] = str(self.original_async_throughput)
+            result["best_async_throughput"] = str(self.best_async_throughput)
+
+        return result
 
 
 class FileDiffContent(BaseModel):

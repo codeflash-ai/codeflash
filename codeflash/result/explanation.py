@@ -30,8 +30,14 @@ class Explanation:
 
     @property
     def perf_improvement_line(self) -> str:
-        runtime_improvement = self.speedup
+        # speedup property already handles choosing between runtime and throughput
+        return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
 
+    @property
+    def speedup(self) -> float:
+        runtime_improvement = (self.original_runtime_ns / self.best_runtime_ns) - 1
+
+        # Use throughput improvement if we have async metrics and throughput is better
         if (
             self.original_async_throughput is not None
             and self.best_async_throughput is not None
@@ -43,15 +49,9 @@ class Explanation:
 
             # Use throughput metrics if throughput improvement is better or runtime got worse
             if throughput_improvement > runtime_improvement or runtime_improvement <= 0:
-                throughput_pct = f"{throughput_improvement * 100:,.0f}%"
-                throughput_x = f"{throughput_improvement + 1:,.2f}x"
-                return f"{throughput_pct} improvement ({throughput_x} faster)."
+                return throughput_improvement
 
-        return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
-
-    @property
-    def speedup(self) -> float:
-        return (self.original_runtime_ns / self.best_runtime_ns) - 1
+        return runtime_improvement
 
     @property
     def speedup_x(self) -> str:
@@ -68,21 +68,6 @@ class Explanation:
         best_runtime_human = humanize_runtime(self.best_runtime_ns)
 
         # Determine if we're showing throughput or runtime improvements
-        runtime_improvement = self.speedup
-        is_using_throughput_metric = False
-
-        if (
-            self.original_async_throughput is not None
-            and self.best_async_throughput is not None
-            and self.original_async_throughput > 0
-        ):
-            throughput_improvement = throughput_gain(
-                original_throughput=self.original_async_throughput, optimized_throughput=self.best_async_throughput
-            )
-
-            if throughput_improvement > runtime_improvement or runtime_improvement <= 0:
-                is_using_throughput_metric = True
-
         benchmark_info = ""
 
         if self.benchmark_details:
@@ -123,7 +108,7 @@ class Explanation:
             console.print(table)
             benchmark_info = cast("StringIO", console.file).getvalue() + "\n"  # Cast for mypy
 
-        if is_using_throughput_metric:
+        if self.original_async_throughput is not None and self.best_async_throughput is not None:
             performance_description = (
                 f"Throughput improved from {self.original_async_throughput} to {self.best_async_throughput} operations/second "
                 f"(runtime: {original_runtime_human} → {best_runtime_human})\n\n"

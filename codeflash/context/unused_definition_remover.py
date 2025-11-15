@@ -469,22 +469,32 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         qualified_function_names: Set of function names to keep. For methods, use format 'classname.methodname'
 
     """
-    module = cst.parse_module(code)
-    # Collect all definitions (top level classes, variables or function)
-    definitions = collect_top_level_definitions(module)
+    try:
+        module = cst.parse_module(code)
+    except Exception as e:
+        logger.debug(f"Failed to parse code with libcst: {type(e).__name__}: {e}")
+        return code
 
-    # Collect dependencies between definitions using the visitor pattern
-    dependency_collector = DependencyCollector(definitions)
-    module.visit(dependency_collector)
+    try:
+        # Collect all definitions (top level classes, variables or function)
+        definitions = collect_top_level_definitions(module)
 
-    # Mark definitions used by specified functions, and their dependencies recursively
-    usage_marker = QualifiedFunctionUsageMarker(definitions, qualified_function_names)
-    usage_marker.mark_used_definitions()
+        # Collect dependencies between definitions using the visitor pattern
+        dependency_collector = DependencyCollector(definitions)
+        module.visit(dependency_collector)
 
-    # Apply the recursive removal transformation
-    modified_module, _ = remove_unused_definitions_recursively(module, definitions)
+        # Mark definitions used by specified functions, and their dependencies recursively
+        usage_marker = QualifiedFunctionUsageMarker(definitions, qualified_function_names)
+        usage_marker.mark_used_definitions()
 
-    return modified_module.code if modified_module else ""
+        # Apply the recursive removal transformation
+        modified_module, _ = remove_unused_definitions_recursively(module, definitions)
+
+        return modified_module.code if modified_module else ""  # noqa: TRY300
+    except Exception as e:
+        # If any other error occurs during processing, return the original code
+        logger.debug(f"Error processing code to remove unused definitions: {type(e).__name__}: {e}")
+        return code
 
 
 def print_definitions(definitions: dict[str, UsageInfo]) -> None:
