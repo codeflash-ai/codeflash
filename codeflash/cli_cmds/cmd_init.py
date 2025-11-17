@@ -172,10 +172,23 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, file_path)
 
 
-def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[bool, dict[str, Any] | None, str]:  # noqa: PLR0911
-    if not pyproject_toml_path.exists():
-        return False, None, f"Configuration file not found: {pyproject_toml_path}"
+def config_found(pyproject_toml_path: Union[str, Path]) -> tuple[bool, str]:
+    pyproject_toml_path = Path(pyproject_toml_path)
 
+    if not pyproject_toml_path.exists():
+        return False, f"Configuration file not found: {pyproject_toml_path}"
+
+    if not pyproject_toml_path.is_file():
+        return False, f"Configuration file is not a file: {pyproject_toml_path}"
+
+    if pyproject_toml_path.suffix != ".toml":
+        return False, f"Configuration file is not a .toml file: {pyproject_toml_path}"
+
+    return True, ""
+
+
+def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool, dict[str, Any] | None, str]:
+    pyproject_toml_path = Path(pyproject_toml_path)
     try:
         config, _ = parse_config_file(pyproject_toml_path)
     except Exception as e:
@@ -206,6 +219,10 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     from rich.prompt import Confirm
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
+
+    found, _ = config_found(pyproject_toml_path)
+    if not found:
+        return True, None
 
     valid, config, _message = is_valid_pyproject_toml(pyproject_toml_path)
     if not valid:
@@ -1407,7 +1424,7 @@ def ask_for_telemetry() -> bool:
     from rich.prompt import Confirm
 
     return Confirm.ask(
-        "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?",
+        "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g. errors encountered)?",
         default=True,
         show_default=True,
     )
