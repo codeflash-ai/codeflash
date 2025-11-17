@@ -31,6 +31,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
+from codeflash.code_utils.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -1149,25 +1150,14 @@ class CFAPIKeyType(click.ParamType):
 
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
-    import threading
-    import socket
-    import http.server
-    import urllib.parse
-    import random
-    import string
-    import base64
-    import hashlib
-    import time
-    import json
-    import webbrowser
-    import requests
+    """Prompt user for API key via OAuth or manual entry"""
 
-    BASE_URL = "https://app.codeflash.ai/"
-
+    # Check for existing API key
     try:
         existing_api_key = get_codeflash_api_key()
     except OSError:
         existing_api_key = None
+
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         api_key_panel = Panel(
@@ -1183,15 +1173,17 @@ def prompt_api_key() -> bool:
         console.print(api_key_panel)
         console.print()
         return False
+
+    # Prompt for authentication method
     auth_choices = [
-        "🔐 Sign in",
-        "🔑 Enter Api key"
+        "🔐 Login in with Codeflash",
+        "🔑 Use Codeflash API key"
     ]
-    name="auth_method"
+
     questions = [
         inquirer.List(
-            name,
-            message="How would you like to sign in?",
+            "auth_method",
+            message="How would you like to authenticate?",
             choices=auth_choices,
             default=auth_choices[0],
             carousel=True,
@@ -1201,133 +1193,37 @@ def prompt_api_key() -> bool:
     answers = inquirer.prompt(questions, theme=CodeflashTheme())
     if not answers:
         apologize_and_exit()
-    method = answers[name]
-    if method == "🔑 Enter Api key":
+
+    method = answers["auth_method"]
+
+    if method == auth_choices[1]:
         enter_api_key_and_save_to_rc()
         ph("cli-new-api-key-entered")
         return True
-    # OAuth PKCE Flow for "🔐 Sign in"
-    # 1. Start a local server on available port
-    class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
-        server_version = "CFHTTP"
-        code = None
-        state = None
-        error = None
-        def do_GET(self):
-            parsed = urllib.parse.urlparse(self.path)
-            if parsed.path != "/callback":
-                self.send_response(404)
-                self.end_headers()
-                return
-            params = urllib.parse.parse_qs(parsed.query)
-            OAuthCallbackHandler.code = params.get("code", [None])[0]
-            OAuthCallbackHandler.state = params.get("state", [None])[0]
-            OAuthCallbackHandler.error = params.get("error", [None])[0]
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            if OAuthCallbackHandler.code:
-                self.wfile.write(b"<html><body><h2>Sign-in successful!</h2>You may close this window.</body></html>")
-            elif OAuthCallbackHandler.error:
-                self.wfile.write(b"<html><body><h2>Sign-in failed.</h2></body></html>")
-            else:
-                self.wfile.write(b"<html><body><h2>Missing code.</h2></body></html>")
 
-        def log_message(self, format, *args):
-            # Silence HTTP logs
-            pass
+    # Perform OAuth sign-in
+    api_key = perform_oauth_signin()
 
-    # Find a free port
-    def get_free_port():
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            return s.getsockname()[1]
-
-    port = get_free_port()
-    redirect_uri = f"http://localhost:{port}/callback"
-    # PKCE code_verifier and code_challenge
-    def random_string(length=64):
-        return ''.join(random.choices(string.ascii_letters + string.digits + "-._~", k=length))
-    code_verifier = random_string(64)
-    code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode()).digest()
-    ).rstrip(b'=').decode()
-    state = random_string(16)
-
-    # Compose auth URL
-    auth_url = (
-        f"{BASE_URL}codeflash/auth?"
-        f"response_type=code"
-        f"&client_id=cf_vscode_app"
-        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
-        f"&code_challenge={code_challenge}"
-        f"&code_challenge_method=sha256"
-        f"&state={state}"
-    )
-
-    # Start HTTP server in thread
-    handler_class = OAuthCallbackHandler
-    httpd = http.server.HTTPServer(("localhost", port), handler_class)
-    server_thread = threading.Thread(target=httpd.handle_request)
-    server_thread.daemon = True
-    server_thread.start()
-    click.echo(f"🌐 Opening browser to sign in to Codeflash…")
-    webbrowser.open(auth_url)
-    click.echo(f"If your browser did not open, visit:\n  {auth_url}")
-    # Wait for callback (with timeout)
-    max_wait = 120  # seconds
-    waited = 0
-    while handler_class.code is None and handler_class.error is None and waited < max_wait:
-        time.sleep(0.5)
-        waited += 0.5
-    httpd.server_close()
-    if handler_class.error:
-        click.echo(f"❌ Sign-in failed: {handler_class.error}")
-        apologize_and_exit()
-    if not handler_class.code or not handler_class.state:
-        click.echo("❌ Did not receive code from sign-in. Please try again.")
-        apologize_and_exit()
-    if handler_class.state != state:
-        click.echo("❌ State mismatch in OAuth callback.")
-        apologize_and_exit()
-    code = handler_class.code
-    console.print(code)
-    # Exchange code for token
-    token_url = f"{BASE_URL}codeflash/auth/oauth/token"
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "code_verifier": code_verifier,
-        "redirect_uri": redirect_uri,
-        "client_id": "cf_vscode_app"
-    }
-    try:
-        resp = requests.post(
-    token_url,
-    headers={"Content-Type": "application/json"},
-    data=json.dumps(data),
-    timeout=10,
-)
-        resp.raise_for_status()
-        token_json = resp.json()
-        api_key = token_json.get("api_key") or token_json.get("access_token")
-        if not api_key:
-            click.echo("❌ Could not retrieve API key from response.")
-            apologize_and_exit()
-        result = save_api_key_to_rc(api_key)
-        if is_successful(result):
-            click.echo(result.unwrap())
-            click.echo("✅ Signed in successfully and API key saved!")
-        else:
-            click.echo(result.failure())
-            click.pause()
-        os.environ["CODEFLASH_API_KEY"] = api_key
-        ph("cli-new-api-key-entered")
-        return True
-    except Exception as e:
-        click.echo(f"❌ Failed to exchange code for API key: {e}")
+    if not api_key:
         apologize_and_exit()
 
+    # Save API key
+    shell_rc_path = get_shell_rc_path()
+    if not shell_rc_path.exists() and os.name == "nt":
+        shell_rc_path.touch()
+        click.echo(f"✅ Created {shell_rc_path}")
+
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+        click.echo("✅ Signed in successfully and API key saved!")
+    else:
+        click.echo(result.failure())
+        click.pause()
+
+    os.environ["CODEFLASH_API_KEY"] = api_key
+    ph("cli-oauth-signin-completed")
+    return True
 
 def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
