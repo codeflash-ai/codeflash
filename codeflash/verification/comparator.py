@@ -289,6 +289,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             return True
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
+        sentry_sdk.capture_exception(RuntimeError(f"Unknown comparator input type: {type(orig)}"))
         return False  # noqa: TRY300
     except RecursionError as e:
         logger.error(f"RecursionError while comparing objects: {e}")
