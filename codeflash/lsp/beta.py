@@ -207,15 +207,56 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
 
-    configured_module_root = Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
-    configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
-    configured_test_framework = server.args.test_framework if server.args.test_framework else None
+    # Provide sensible fallbacks when no subdirectories are found
+    # Only suggest directories that actually exist in the workspace
+    if not module_root_suggestions:
+        cwd = Path.cwd()
+        common_module_dirs = ["src", "lib", "app"]
+        module_root_suggestions = ["."]  # Always include current directory
 
+        # Add common patterns only if they exist
+        for dir_name in common_module_dirs:
+            if (cwd / dir_name).is_dir():
+                module_root_suggestions.append(dir_name)
+
+        default_module_root = "."
+
+    if not tests_root_suggestions:
+        cwd = Path.cwd()
+        common_test_dirs = ["tests", "test", "__tests__"]
+        tests_root_suggestions = []
+
+        # Add common test directories only if they exist
+        for dir_name in common_test_dirs:
+            if (cwd / dir_name).is_dir():
+                tests_root_suggestions.append(dir_name)
+
+        # Always include current directory as fallback
+        tests_root_suggestions.append(".")
+        default_tests_root = tests_root_suggestions[0] if tests_root_suggestions else "."
+
+    try:
+        configured_module_root = (
+            Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
+        )
+    except:  # noqa : E722
+        configured_module_root = None
+    try:
+        configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
+    except:  # noqa : E722
+        configured_tests_root = None
+    try:
+        configured_test_framework = server.args.test_framework if server.args.test_framework else None
+    except:  # noqa : E722
+        configured_test_framework = None
     configured_formatter = ""
-    if isinstance(server.args.formatter_cmds, list):
-        configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
-    elif isinstance(server.args.formatter_cmds, str):
-        configured_formatter = server.args.formatter_cmds.strip()
+    try:
+        if isinstance(server.args.formatter_cmds, list):
+            configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
+        elif isinstance(server.args.formatter_cmds, str):
+            configured_formatter = server.args.formatter_cmds.strip()
+    except:  # noqa : E722
+        configured_formatter = "disabled"
 
     return {
         "module_root": {"choices": module_root_suggestions, "default": configured_module_root or default_module_root},
