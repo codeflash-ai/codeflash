@@ -8,7 +8,7 @@ from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import libcst as cst
@@ -269,8 +269,8 @@ def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[F
 
 def closest_matching_file_function_name(
     qualified_fn_to_find: str, found_fns: dict[Path, list[FunctionToOptimize]]
-) -> Tuple[Path, FunctionToOptimize] | None:
-    """Find closest matching function name using Levenshtein distance.
+) -> tuple[Path, FunctionToOptimize] | None:
+    """Find the closest matching function name using Levenshtein distance.
 
     Args:
         qualified_fn_to_find: Function name to find in format "Class.function" or "function"
@@ -278,6 +278,7 @@ def closest_matching_file_function_name(
 
     Returns:
         Tuple of (file_path, function) for closest match, or None if no matches found
+
     """
     min_distance = 4
     closest_match = None
@@ -301,18 +302,18 @@ def closest_matching_file_function_name(
     return None
 
 
-def levenshtein_distance(s1: str, s2: str):
+def levenshtein_distance(s1: str, s2: str) -> int:
     if len(s1) > len(s2):
         s1, s2 = s2, s1
     distances = range(len(s1) + 1)
     for index2, char2 in enumerate(s2):
-        newDistances = [index2 + 1]
+        new_distances = [index2 + 1]
         for index1, char1 in enumerate(s1):
             if char1 == char2:
-                newDistances.append(distances[index1])
+                new_distances.append(distances[index1])
             else:
-                newDistances.append(1 + min((distances[index1], distances[index1 + 1], newDistances[-1])))
-        distances = newDistances
+                new_distances.append(1 + min((distances[index1], distances[index1 + 1], new_distances[-1])))
+        distances = new_distances
     return distances[-1]
 
 
