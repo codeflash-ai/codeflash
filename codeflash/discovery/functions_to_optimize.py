@@ -405,7 +405,10 @@ def is_git_repo(file_path: str) -> bool:
 def ignored_submodule_paths(module_root: str) -> list[str]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
-        return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+        try:
+            return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+        except Exception as e:
+            logger.warning(f"Error getting submodule paths: {e}")
     return []
 
 
