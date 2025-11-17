@@ -8,7 +8,7 @@ from _ast import AsyncFunctionDef, ClassDef, FunctionDef
 from collections import defaultdict
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import git
 import libcst as cst
@@ -201,7 +201,7 @@ def get_functions_to_optimize(
         elif file is not None:
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
-            functions = find_all_functions_in_file(file)
+            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -224,8 +224,16 @@ def get_functions_to_optimize(
                 if found_function is None:
                     if is_lsp:
                         return functions, 0, None
+                    found = closest_matching_file_function_name(only_get_this_function, functions)
+                    if found is not None:
+                        file, found_function = found
+                        exit_with_message(
+                            f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property.\n"
+                            f"Did you mean {found_function.qualified_name} instead?"
+                        )
+
                     exit_with_message(
-                        f"Function {only_function_name} not found in file {file}\nor the function does not have a 'return' statement or is a property"
+                        f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
                 functions[file] = [found_function]
         else:
@@ -257,6 +265,55 @@ def get_functions_to_optimize(
 def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     return get_functions_within_lines(modified_lines)
+
+
+def closest_matching_file_function_name(
+    qualified_fn_to_find: str, found_fns: dict[Path, list[FunctionToOptimize]]
+) -> Tuple[Path, FunctionToOptimize] | None:
+    """Find closest matching function name using Levenshtein distance.
+
+    Args:
+        qualified_fn_to_find: Function name to find in format "Class.function" or "function"
+        found_fns: Dictionary of file paths to list of functions
+
+    Returns:
+        Tuple of (file_path, function) for closest match, or None if no matches found
+    """
+    min_distance = 4
+    closest_match = None
+    closest_file = None
+
+    qualified_fn_to_find = qualified_fn_to_find.lower()
+
+    for file_path, functions in found_fns.items():
+        for function in functions:
+            # Compare either full qualified name or just function name
+            fn_name = function.qualified_name.lower()
+            dist = levenshtein_distance(qualified_fn_to_find, fn_name)
+
+            if dist < min_distance:
+                min_distance = dist
+                closest_match = function
+                closest_file = file_path
+
+    if closest_match is not None:
+        return closest_file, closest_match
+    return None
+
+
+def levenshtein_distance(s1: str, s2: str):
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+    distances = range(len(s1) + 1)
+    for index2, char2 in enumerate(s2):
+        newDistances = [index2 + 1]
+        for index1, char1 in enumerate(s1):
+            if char1 == char2:
+                newDistances.append(distances[index1])
+            else:
+                newDistances.append(1 + min((distances[index1], distances[index1 + 1], newDistances[-1])))
+        distances = newDistances
+    return distances[-1]
 
 
 def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
