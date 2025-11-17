@@ -22,6 +22,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from codeflash.api.aiservice import AiServiceClient
 from codeflash.api.cfapi import (
     check_workflow_file_exists,
     is_github_app_installed_on_repo,
@@ -754,7 +755,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                     .joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
                     .read_text(encoding="utf-8")
                 )
-                materialized_optimize_yml_content = customize_codeflash_yaml_content(
+                materialized_optimize_yml_content = generate_dynamic_workflow_content(
                     optimize_yml_content, config, git_root, False
                 )
 
@@ -844,7 +845,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
         )
-        materialized_optimize_yml_content = customize_codeflash_yaml_content(
+        materialized_optimize_yml_content = generate_dynamic_workflow_content(
             optimize_yml_content, config, git_root, benchmark_mode
         )
 
@@ -1281,6 +1282,226 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
     return f"""defaults:
       run:
         working-directory: ./{working_dir}"""
+
+
+def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
+    """Collect important repository files and directory structure for workflow generation.
+
+    :param git_root: Root directory of the git repository
+    :return: Dictionary with 'files' (path -> content) and 'directory_structure' (nested dict)
+    """
+    logger.info(f"[cmd_init.py:collect_repo_files_for_workflow] Collecting repo files from {git_root}")
+
+    # Important files to collect with contents
+    important_files = [
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements-dev.txt",
+        "requirements/requirements.txt",
+        "requirements/dev.txt",
+        "Pipfile",
+        "Pipfile.lock",
+        "poetry.lock",
+        "uv.lock",
+        "setup.py",
+        "setup.cfg",
+        "Dockerfile",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "Makefile",
+        "README.md",
+        "README.rst",
+    ]
+
+    # Also collect GitHub workflows
+    workflows_path = git_root / ".github" / "workflows"
+    if workflows_path.exists():
+        for workflow_file in workflows_path.glob("*.yml"):
+            important_files.append(str(workflow_file.relative_to(git_root)))
+        for workflow_file in workflows_path.glob("*.yaml"):
+            important_files.append(str(workflow_file.relative_to(git_root)))
+
+    files_dict: dict[str, str] = {}
+    max_file_size = 8 * 1024  # 8KB limit per file
+
+    for file_path_str in important_files:
+        file_path = git_root / file_path_str
+        if file_path.exists() and file_path.is_file():
+            try:
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
+                # Limit file size
+                if len(content) > max_file_size:
+                    content = content[:max_file_size] + "\n... (truncated)"
+                files_dict[file_path_str] = content
+                logger.debug(f"[cmd_init.py:collect_repo_files_for_workflow] Collected {file_path_str} ({len(content)} chars)")
+            except Exception as e:
+                logger.warning(f"[cmd_init.py:collect_repo_files_for_workflow] Failed to read {file_path_str}: {e}")
+
+    # Collect 2-level directory structure
+    directory_structure: dict[str, Any] = {}
+    try:
+        for item in sorted(git_root.iterdir()):
+            if item.name.startswith(".") and item.name not in [".github", ".git"]:
+                continue  # Skip hidden files/folders except .github
+
+            if item.is_dir():
+                # Level 1: directory
+                dir_dict: dict[str, Any] = {"type": "directory", "contents": {}}
+                try:
+                    # Level 2: contents of directory
+                    for subitem in sorted(item.iterdir()):
+                        if subitem.name.startswith("."):
+                            continue
+                        if subitem.is_dir():
+                            dir_dict["contents"][subitem.name] = {"type": "directory"}
+                        else:
+                            dir_dict["contents"][subitem.name] = {"type": "file"}
+                except PermissionError:
+                    pass  # Skip directories we can't read
+                directory_structure[item.name] = dir_dict
+            elif item.is_file():
+                directory_structure[item.name] = {"type": "file"}
+    except Exception as e:
+        logger.warning(f"[cmd_init.py:collect_repo_files_for_workflow] Error collecting directory structure: {e}")
+
+    logger.info(
+        f"[cmd_init.py:collect_repo_files_for_workflow] Collected {len(files_dict)} files and {len(directory_structure)} top-level items"
+    )
+
+    return {"files": files_dict, "directory_structure": directory_structure}
+
+
+def generate_dynamic_workflow_content(
+    optimize_yml_content: str,
+    config: tuple[dict[str, Any], Path],
+    git_root: Path,
+    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
+) -> str:
+    """Generate workflow content with dynamic steps from AI service, falling back to static template.
+
+    :param optimize_yml_content: Base workflow template content
+    :param config: Codeflash configuration tuple (dict, Path)
+    :param git_root: Root directory of the git repository
+    :param benchmark_mode: Whether to enable benchmark mode
+    :return: Complete workflow YAML content
+    """
+    # First, do the basic replacements that are always needed
+    module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
+    optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
+
+    # Get working directory
+    toml_path = Path.cwd() / "pyproject.toml"
+    try:
+        with toml_path.open(encoding="utf8") as pyproject_file:
+            pyproject_data = tomlkit.parse(pyproject_file.read())
+    except FileNotFoundError:
+        click.echo(
+            f"I couldn't find a pyproject.toml in the current directory.{LF}"
+            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+        )
+        apologize_and_exit()
+
+    working_dir = get_github_action_working_directory(toml_path, git_root)
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
+    # Try to generate dynamic steps using AI service
+    try:
+        logger.info("[cmd_init.py:generate_dynamic_workflow_content] Attempting to generate dynamic workflow steps")
+        repo_data = collect_repo_files_for_workflow(git_root)
+
+        # Prepare codeflash config for AI
+        codeflash_config = {
+            "module_root": config["module_root"],
+            "tests_root": config.get("tests_root", ""),
+            "benchmark_mode": benchmark_mode,
+        }
+
+        aiservice_client = AiServiceClient()
+        dynamic_steps = aiservice_client.generate_workflow_steps(
+            repo_files=repo_data["files"],
+            directory_structure=repo_data["directory_structure"],
+            codeflash_config=codeflash_config,
+        )
+
+        if dynamic_steps:
+            logger.info("[cmd_init.py:generate_dynamic_workflow_content] Successfully generated dynamic workflow steps")
+            # Replace the entire steps section with AI-generated steps
+            # Find the steps section in the template
+            steps_start = optimize_yml_content.find("    steps:")
+            if steps_start != -1:
+                # Find the end of the steps section (next line at same or less indentation)
+                lines = optimize_yml_content.split("\n")
+                steps_start_line = optimize_yml_content[:steps_start].count("\n")
+                steps_end_line = len(lines)
+
+                # Find where steps section ends (next job or end of file)
+                for i in range(steps_start_line + 1, len(lines)):
+                    line = lines[i]
+                    # Stop if we hit a line that's not indented (new job or end of jobs)
+                    if line and not line.startswith(" ") and not line.startswith("\t"):
+                        steps_end_line = i
+                        break
+
+                # Extract steps content from AI response (remove "steps:" prefix if present)
+                steps_content = dynamic_steps
+                if steps_content.startswith("steps:"):
+                    # Remove "steps:" and leading newline
+                    steps_content = steps_content[6:].lstrip("\n")
+
+                # Ensure proper indentation (8 spaces for steps section in YAML)
+                indented_steps = []
+                for line in steps_content.split("\n"):
+                    if line.strip():
+                        # If line doesn't start with enough spaces, add them
+                        if not line.startswith(" "):
+                            indented_steps.append("        " + line)
+                        else:
+                            # Preserve existing indentation but ensure minimum 8 spaces
+                            current_indent = len(line) - len(line.lstrip())
+                            if current_indent < 8:
+                                indented_steps.append(" " * 8 + line.lstrip())
+                            else:
+                                indented_steps.append(line)
+                    else:
+                        indented_steps.append("")
+
+                # Add codeflash command step at the end
+                dep_manager = determine_dependency_manager(pyproject_data)
+                codeflash_cmd = get_codeflash_github_action_command(dep_manager)
+                if benchmark_mode:
+                    codeflash_cmd += " --benchmark"
+
+                # Format codeflash command properly
+                if "|" in codeflash_cmd:
+                    # Multi-line command
+                    cmd_lines = codeflash_cmd.split("\n")
+                    codeflash_step = f"      - name: ⚡️Codeflash Optimization\n        run: {cmd_lines[0].strip()}"
+                    for cmd_line in cmd_lines[1:]:
+                        codeflash_step += f"\n          {cmd_line.strip()}"
+                else:
+                    codeflash_step = f"      - name: ⚡️Codeflash Optimization\n        run: {codeflash_cmd}"
+
+                indented_steps.append(codeflash_step)
+
+                # Reconstruct the workflow
+                new_lines = lines[:steps_start_line] + ["    steps:"] + indented_steps + lines[steps_end_line:]
+                optimize_yml_content = "\n".join(new_lines)
+
+                logger.info("[cmd_init.py:generate_dynamic_workflow_content] Dynamic workflow generation successful")
+                return optimize_yml_content
+            else:
+                logger.warning("[cmd_init.py:generate_dynamic_workflow_content] Could not find steps section in template")
+        else:
+            logger.info("[cmd_init.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static")
+
+    except Exception as e:
+        logger.warning(
+            f"[cmd_init.py:generate_dynamic_workflow_content] Error generating dynamic workflow, falling back to static: {e}"
+        )
+
+    # Fallback to static template
+    logger.info("[cmd_init.py:generate_dynamic_workflow_content] Using static workflow template")
+    return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
 
 
 def customize_codeflash_yaml_content(

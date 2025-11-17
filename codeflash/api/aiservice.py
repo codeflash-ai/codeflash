@@ -631,6 +631,43 @@ class AiServiceClient:
         console.rule()
         return ""
 
+    def generate_workflow_steps(
+        self,
+        repo_files: dict[str, str],
+        directory_structure: dict[str, Any],
+        codeflash_config: dict[str, Any] | None = None,
+    ) -> str | None:
+        """Generate GitHub Actions workflow steps based on repository analysis.
+
+        :param repo_files: Dictionary mapping file paths to their contents
+        :param directory_structure: 2-level nested directory structure
+        :param codeflash_config: Optional codeflash configuration
+        :return: YAML string for workflow steps section, or None on error
+        """
+        payload = {
+            "repo_files": repo_files,
+            "directory_structure": directory_structure,
+            "codeflash_config": codeflash_config,
+        }
+
+        logger.info("Generating workflow steps via AI service...")
+        try:
+            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Error generating workflow steps: {e}")
+            return None
+
+        if response.status_code == 200:
+            return cast("str", response.json().get("workflow_steps"))
+        else:
+            logger.warning(f"Failed to generate workflow steps: {response.status_code}")
+            try:
+                error = cast("str", response.json().get("error", "Unknown error"))
+                logger.debug(f"Error details: {error}")
+            except Exception:
+                pass
+            return None
+
 
 class LocalAiServiceClient(AiServiceClient):
     """Client for interacting with the local AI service."""
