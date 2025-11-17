@@ -314,16 +314,30 @@ def closest_matching_file_function_name(
 def levenshtein_distance(s1: str, s2: str):
     if len(s1) > len(s2):
         s1, s2 = s2, s1
-    distances = range(len(s1) + 1)
-    for index2, char2 in enumerate(s2):
-        newDistances = [index2 + 1]
-        for index1, char1 in enumerate(s1):
+    len1 = len(s1)
+    len2 = len(s2)
+    # Use a preallocated list instead of creating a new list every iteration
+    previous = list(range(len1 + 1))
+    current = [0] * (len1 + 1)
+
+    for index2 in range(len2):
+        char2 = s2[index2]
+        current[0] = index2 + 1
+        for index1 in range(len1):
+            char1 = s1[index1]
             if char1 == char2:
-                newDistances.append(distances[index1])
+                current[index1 + 1] = previous[index1]
             else:
-                newDistances.append(1 + min((distances[index1], distances[index1 + 1], newDistances[-1])))
-        distances = newDistances
-    return distances[-1]
+                # Fast min calculation without tuple construct
+                a = previous[index1]
+                b = previous[index1 + 1]
+                c = current[index1]
+                min_val = min(b, a)
+                min_val = min(c, min_val)
+                current[index1 + 1] = 1 + min_val
+        # Swap references instead of copying
+        previous, current = current, previous
+    return previous[len1]
 
 
 def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
