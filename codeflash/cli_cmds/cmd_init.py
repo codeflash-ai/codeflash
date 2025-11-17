@@ -1167,8 +1167,7 @@ class CFAPIKeyType(click.ParamType):
 
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
-    """Prompt user for API key via OAuth or manual entry"""
-
+    """Prompt user for API key via OAuth or manual entry."""
     # Check for existing API key
     try:
         existing_api_key = get_codeflash_api_key()
@@ -1192,10 +1191,7 @@ def prompt_api_key() -> bool:
         return False
 
     # Prompt for authentication method
-    auth_choices = [
-        "🔐 Login in with Codeflash",
-        "🔑 Use Codeflash API key"
-    ]
+    auth_choices = ["🔐 Login in with Codeflash", "🔑 Use Codeflash API key"]
 
     questions = [
         inquirer.List(
@@ -1241,6 +1237,7 @@ def prompt_api_key() -> bool:
     os.environ["CODEFLASH_API_KEY"] = api_key
     ph("cli-oauth-signin-completed")
     return True
+
 
 def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False

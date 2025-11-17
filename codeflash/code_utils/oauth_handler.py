@@ -1,40 +1,41 @@
-import threading
-import socket
-import http.server
-import urllib.parse
-import random
-import string
+from __future__ import annotations
+
 import base64
 import hashlib
-import time
+import http.server
 import json
+import secrets
+import socket
+import threading
+import time
+import urllib.parse
 import webbrowser
-import requests
-from typing import Optional, Tuple
+
 import click
+import requests
 
 from codeflash.api.cfapi import get_cfapi_base_urls
 
 
 class OAuthHandler:
-    """Handles OAuth PKCE flow for CodeFlash authentication"""
+    """Handle OAuth PKCE flow for CodeFlash authentication."""
 
-    def __init__(self):
-        self.code: Optional[str] = None
-        self.state: Optional[str] = None
-        self.error: Optional[str] = None
-        self.theme: Optional[str] = None
+    def __init__(self) -> None:
+        self.code: str | None = None
+        self.state: str | None = None
+        self.error: str | None = None
+        self.theme: str | None = None
         self.is_complete = False
-        self.token_error: Optional[str] = None
+        self.token_error: str | None = None
 
-    def create_callback_handler(self):
-        """Creates HTTP handler for OAuth callback"""
+    def create_callback_handler(self) -> type[http.server.BaseHTTPRequestHandler]:
+        """Create HTTP handler for OAuth callback."""
         oauth_handler = self
 
         class CallbackHandler(http.server.BaseHTTPRequestHandler):
             server_version = "CFHTTP"
 
-            def do_GET(self):
+            def do_GET(self) -> None:
                 parsed = urllib.parse.urlparse(self.path)
 
                 if parsed.path == "/status":
@@ -45,7 +46,7 @@ class OAuthHandler:
 
                     status = {
                         "success": oauth_handler.token_error is None and oauth_handler.code is not None,
-                        "error": oauth_handler.token_error
+                        "error": oauth_handler.token_error,
                     }
                     self.wfile.write(json.dumps(status).encode())
                     return
@@ -71,19 +72,18 @@ class OAuthHandler:
 
                 oauth_handler.is_complete = True
 
-            def _get_html_response(self):
-                """Returns simple HTML response"""
+            def _get_html_response(self) -> str:
+                """Return simple HTML response."""
                 theme = oauth_handler.theme or "light"
                 if oauth_handler.error:
                     return self._get_error_html(oauth_handler.error, theme)
-                elif oauth_handler.code:
+                if oauth_handler.code:
                     return self._get_loading_html(theme)
-                else:
-                    return self._get_error_html("unauthorized", theme)
+                return self._get_error_html("unauthorized", theme)
 
             @staticmethod
-            def _get_loading_html(theme: str = "light"):
-                """Loading state while exchanging token"""
+            def _get_loading_html(theme: str = "light") -> str:
+                """Return loading state while exchanging token."""
                 theme_class = "dark" if theme == "dark" else ""
                 return f"""
 <!DOCTYPE html>
@@ -142,7 +142,6 @@ class OAuthHandler:
             position: relative;
         }}
 
-        /* Background gradient effect */
         body::before {{
             content: '';
             position: fixed;
@@ -155,7 +154,6 @@ class OAuthHandler:
             z-index: 0;
         }}
 
-        /* Grid pattern */
         body::after {{
             content: '';
             position: fixed;
@@ -380,8 +378,8 @@ class OAuthHandler:
                 """
 
             @staticmethod
-            def _get_error_html(error_message: str, theme: str = "light"):
-                """Error state HTML"""
+            def _get_error_html(error_message: str, theme: str = "light") -> str:
+                """Return error state HTML."""
                 theme_class = "dark" if theme == "dark" else ""
                 return f"""
 <!DOCTYPE html>
@@ -434,7 +432,6 @@ class OAuthHandler:
             position: relative;
         }}}}
 
-        /* Background gradient effect */
         body::before {{{{
             content: '';
             position: fixed;
@@ -447,7 +444,6 @@ class OAuthHandler:
             z-index: 0;
         }}}}
 
-        /* Grid pattern */
         body::after {{{{
             content: '';
             position: fixed;
@@ -582,35 +578,33 @@ class OAuthHandler:
 </html>
                 """
 
-            def log_message(self, format, *args):
-                pass
+            def log_message(self, fmt: str, *args: object) -> None:
+                """Suppress log messages."""
 
         return CallbackHandler
 
     @staticmethod
     def get_free_port() -> int:
-        """Find an available port"""
+        """Find an available port."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("", 0))
             return s.getsockname()[1]
 
     @staticmethod
-    def generate_pkce_pair() -> Tuple[str, str]:
-        """Generate PKCE code verifier and challenge"""
-        code_verifier = ''.join(
-            random.choices(string.ascii_letters + string.digits + "-._~", k=64)
+    def generate_pkce_pair() -> tuple[str, str]:
+        """Generate PKCE code verifier and challenge."""
+        code_verifier = "".join(
+            secrets.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~") for _ in range(64)
         )
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode()).digest()
-        ).rstrip(b'=').decode()
+        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b"=").decode()
         return code_verifier, code_challenge
 
     def start_local_server(self, port: int) -> http.server.HTTPServer:
-        """Start local HTTP server for OAuth callback"""
+        """Start local HTTP server for OAuth callback."""
         handler_class = self.create_callback_handler()
         httpd = http.server.HTTPServer(("localhost", port), handler_class)
 
-        def serve_forever_wrapper():
+        def serve_forever_wrapper() -> None:
             httpd.serve_forever()
 
         server_thread = threading.Thread(target=serve_forever_wrapper)
@@ -619,8 +613,8 @@ class OAuthHandler:
 
         return httpd
 
-    def wait_for_callback(self, httpd: http.server.HTTPServer, timeout: int = 120) -> bool:
-        """Wait for OAuth callback with timeout"""
+    def wait_for_callback(self, httpd: http.server.HTTPServer, timeout: int = 120) -> bool:  # noqa: ARG002
+        """Wait for OAuth callback with timeout."""
         waited = 0
         while not self.is_complete and waited < timeout:
             time.sleep(0.5)
@@ -628,57 +622,50 @@ class OAuthHandler:
 
         return self.is_complete
 
-    def exchange_code_for_token(
-        self,
-        code: str,
-        code_verifier: str,
-        redirect_uri: str
-    ) -> Optional[str]:
-        """Exchange authorization code for API token"""
+    def exchange_code_for_token(self, code: str, code_verifier: str, redirect_uri: str) -> str | None:
+        """Exchange authorization code for API token."""
         token_url = f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth/oauth/token"
         data = {
             "grant_type": "authorization_code",
             "code": code,
             "code_verifier": code_verifier,
             "redirect_uri": redirect_uri,
-            "client_id": "cf_vscode_app"
+            "client_id": "cf_vscode_app",
         }
 
         try:
             resp = requests.post(
-                token_url,
-                headers={"Content-Type": "application/json"},
-                data=json.dumps(data),
-                timeout=10,
+                token_url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=10
             )
             resp.raise_for_status()
             token_json = resp.json()
             api_key = token_json.get("access_token")
 
             if not api_key:
-                self.token_error = "No access token in response"
+                self.token_error = "No access token in response"  # noqa: S105
                 return None
 
-            return api_key
         except requests.exceptions.HTTPError as e:
             error_msg = f"HTTP {e.response.status_code}"
             try:
                 error_data = e.response.json()
                 error_msg = error_data.get("error_description", error_data.get("error", error_msg))
-            except:
+            except Exception:  # noqa: S110
                 pass
-            self.token_error = "Unauthorized"
+            self.token_error = "Unauthorized"  # noqa: S105
             click.echo(f"❌ {self.token_error}")
             return None
-        except Exception as e:
-            self.token_error = "Unauthorized"
+        except Exception:
+            self.token_error = "Unauthorized"  # noqa: S105
             click.echo(f"❌ {self.token_error}")
             return None
+        else:
+            return api_key
 
 
-def perform_oauth_signin() -> Optional[str]:
-    """
-    Perform OAuth PKCE flow and return API key if successful.
+def perform_oauth_signin() -> str | None:
+    """Perform OAuth PKCE flow and return API key if successful.
+
     Returns None if failed.
     """
     oauth = OAuthHandler()
@@ -687,7 +674,7 @@ def perform_oauth_signin() -> Optional[str]:
     port = oauth.get_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
     code_verifier, code_challenge = oauth.generate_pkce_pair()
-    state = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    state = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for _ in range(16))
 
     # Build authorization URL
     auth_url = (
@@ -711,7 +698,7 @@ def perform_oauth_signin() -> Optional[str]:
 
     # Wait for callback
     click.echo("⏳ Waiting for authentication...")
-    success = oauth.wait_for_callback(httpd, timeout=120)
+    success = oauth.wait_for_callback(httpd, timeout=180)
 
     if not success:
         httpd.shutdown()
@@ -720,7 +707,7 @@ def perform_oauth_signin() -> Optional[str]:
 
     if oauth.error:
         httpd.shutdown()
-        click.echo(f"❌ Authentication failed:")
+        click.echo("❌ Authentication failed:")
         return None
 
     if not oauth.code or not oauth.state:
