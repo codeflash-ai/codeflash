@@ -278,18 +278,28 @@ def closest_matching_file_function_name(
 
     Returns:
         Tuple of (file_path, function) for closest match, or None if no matches found
+
     """
     min_distance = 4
     closest_match = None
     closest_file = None
 
-    qualified_fn_to_find = qualified_fn_to_find.lower()
+    # Lowercase once before loop for better performance
+    qualified_fn_to_find_lower = qualified_fn_to_find.lower()
+
+    # Cache levenshtein_distance locally for improved lookup speed
+    _levenshtein = levenshtein_distance
+
+    # Use for-loop without unnecessary assignments in the inner loop
 
     for file_path, functions in found_fns.items():
         for function in functions:
             # Compare either full qualified name or just function name
             fn_name = function.qualified_name.lower()
-            dist = levenshtein_distance(qualified_fn_to_find, fn_name)
+            # If the absolute length difference is already >= min_distance, skip calculation
+            if abs(len(qualified_fn_to_find_lower) - len(fn_name)) >= min_distance:
+                continue
+            dist = _levenshtein(qualified_fn_to_find_lower, fn_name)
 
             if dist < min_distance:
                 min_distance = dist
