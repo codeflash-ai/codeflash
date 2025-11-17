@@ -284,13 +284,19 @@ def closest_matching_file_function_name(
     closest_match = None
     closest_file = None
 
-    qualified_fn_to_find = qualified_fn_to_find.lower()
+    qualified_fn_to_find_lower = qualified_fn_to_find.lower()
+
+    # Cache levenshtein_distance locally for improved lookup speed
+    _levenshtein = levenshtein_distance
 
     for file_path, functions in found_fns.items():
         for function in functions:
             # Compare either full qualified name or just function name
             fn_name = function.qualified_name.lower()
-            dist = levenshtein_distance(qualified_fn_to_find, fn_name)
+            # If the absolute length difference is already >= min_distance, skip calculation
+            if abs(len(qualified_fn_to_find_lower) - len(fn_name)) >= min_distance:
+                continue
+            dist = _levenshtein(qualified_fn_to_find_lower, fn_name)
 
             if dist < min_distance:
                 min_distance = dist
@@ -305,16 +311,30 @@ def closest_matching_file_function_name(
 def levenshtein_distance(s1: str, s2: str) -> int:
     if len(s1) > len(s2):
         s1, s2 = s2, s1
-    distances = range(len(s1) + 1)
-    for index2, char2 in enumerate(s2):
-        new_distances = [index2 + 1]
-        for index1, char1 in enumerate(s1):
+    len1 = len(s1)
+    len2 = len(s2)
+    # Use a preallocated list instead of creating a new list every iteration
+    previous = list(range(len1 + 1))
+    current = [0] * (len1 + 1)
+
+    for index2 in range(len2):
+        char2 = s2[index2]
+        current[0] = index2 + 1
+        for index1 in range(len1):
+            char1 = s1[index1]
             if char1 == char2:
-                new_distances.append(distances[index1])
+                current[index1 + 1] = previous[index1]
             else:
-                new_distances.append(1 + min((distances[index1], distances[index1 + 1], new_distances[-1])))
-        distances = new_distances
-    return distances[-1]
+                # Fast min calculation without tuple construct
+                a = previous[index1]
+                b = previous[index1 + 1]
+                c = current[index1]
+                min_val = min(b, a)
+                min_val = min(c, min_val)
+                current[index1 + 1] = 1 + min_val
+        # Swap references instead of copying
+        previous, current = current, previous
+    return previous[len1]
 
 
 def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
