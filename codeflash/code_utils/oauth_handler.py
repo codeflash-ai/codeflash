@@ -634,9 +634,7 @@ class OAuthHandler:
         }
 
         try:
-            resp = requests.post(
-                token_url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=10
-            )
+            resp = requests.post(token_url, json=data, timeout=10)
             resp.raise_for_status()
             token_json = resp.json()
             api_key = token_json.get("access_token")
