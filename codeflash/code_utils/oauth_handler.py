@@ -630,7 +630,7 @@ class OAuthHandler:
             "code": code,
             "code_verifier": code_verifier,
             "redirect_uri": redirect_uri,
-            "client_id": "cf_vscode_app",
+            "client_id": "cf-cli-app",
         }
 
         try:
@@ -680,7 +680,7 @@ def perform_oauth_signin() -> str | None:
     auth_url = (
         f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth?"
         f"response_type=code"
-        f"&client_id=cf_vscode_app"
+        f"&client_id=cf-cli-app"
         f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
         f"&code_challenge={code_challenge}"
         f"&code_challenge_method=sha256"
