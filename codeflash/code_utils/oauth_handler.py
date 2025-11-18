@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import http.server
 import json
@@ -27,6 +28,8 @@ class OAuthHandler:
         self.theme: str | None = None
         self.is_complete = False
         self.token_error: str | None = None
+        self.manual_code: str | None = None
+        self.lock = threading.Lock()
 
     def create_callback_handler(self) -> type[http.server.BaseHTTPRequestHandler]:
         """Create HTTP handler for OAuth callback."""
@@ -57,10 +60,14 @@ class OAuthHandler:
                     return
 
                 params = urllib.parse.parse_qs(parsed.query)
-                oauth_handler.code = params.get("code", [None])[0]
-                oauth_handler.state = params.get("state", [None])[0]
-                oauth_handler.error = params.get("error", [None])[0]
-                oauth_handler.theme = params.get("theme", ["light"])[0]
+
+                with oauth_handler.lock:
+                    if not oauth_handler.is_complete:
+                        oauth_handler.code = params.get("code", [None])[0]
+                        oauth_handler.state = params.get("state", [None])[0]
+                        oauth_handler.error = params.get("error", [None])[0]
+                        oauth_handler.theme = params.get("theme", ["light"])[0]
+                        oauth_handler.is_complete = True
 
                 # Send HTML response
                 self.send_response(200)
@@ -69,8 +76,6 @@ class OAuthHandler:
 
                 html_content = self._get_html_response()
                 self.wfile.write(html_content.encode())
-
-                oauth_handler.is_complete = True
 
             def _get_html_response(self) -> str:
                 """Return simple HTML response."""
@@ -613,15 +618,6 @@ class OAuthHandler:
 
         return httpd
 
-    def wait_for_callback(self, httpd: http.server.HTTPServer, timeout: int = 120) -> bool:  # noqa: ARG002
-        """Wait for OAuth callback with timeout."""
-        waited = 0
-        while not self.is_complete and waited < timeout:
-            time.sleep(0.5)
-            waited += 0.5
-
-        return self.is_complete
-
     def exchange_code_for_token(self, code: str, code_verifier: str, redirect_uri: str) -> str | None:
         """Exchange authorization code for API token."""
         token_url = f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth/oauth/token"
@@ -648,73 +644,26 @@ class OAuthHandler:
             try:
                 error_data = e.response.json()
                 error_msg = error_data.get("error_description", error_data.get("error", error_msg))
-            except Exception:  # noqa: S110
-                pass
-            self.token_error = "Unauthorized"  # noqa: S105
-            click.echo(f"❌ {self.token_error}")
+            except Exception:
+                self.token_error = "Unauthorized"  # noqa: S105
             return None
         except Exception:
             self.token_error = "Unauthorized"  # noqa: S105
-            click.echo(f"❌ {self.token_error}")
             return None
         else:
             return api_key
 
 
-def _handle_local_oauth_flow(
-    oauth: OAuthHandler,
-    httpd: http.server.HTTPServer,
-    state: str,
-    code_verifier: str,
-    local_redirect_uri: str,
-    local_auth_url: str,
-) -> str | None:
-    """Handle local OAuth flow with browser and server."""
-    click.echo(f"\n📋 If your browser didn't open, visit: {local_auth_url}\n")
-    click.echo("⏳ Waiting for authentication...")
-
-    success = oauth.wait_for_callback(httpd, timeout=180)
-
-    if not success:
-        httpd.shutdown()
-        click.echo("❌ Authentication timed out. Please try again.")
-        return None
-
-    if oauth.error or not oauth.code or not oauth.state or oauth.state != state:
-        httpd.shutdown()
-        click.echo("❌ Unauthorized.")
-        return None
-
-    api_key = oauth.exchange_code_for_token(oauth.code, code_verifier, local_redirect_uri)
-
-    # Wait for browser to poll status
-    time.sleep(3)
-    httpd.shutdown()
-
-    return api_key
-
-
-def _handle_remote_oauth_flow(code_verifier: str, remote_redirect_uri: str, remote_auth_url: str) -> str | None:
-    """Handle remote OAuth flow with manual code entry."""
-    oauth = OAuthHandler()
-    click.echo("⚠️  Browser could not be opened automatically.")
-    click.echo("\n📋 Please visit this URL to authenticate:")
-    click.echo(f"\n{remote_auth_url}\n")
-
-    # Prompt user to paste the code
-    code = click.prompt("Paste the authorization code here", type=str).strip()
-
-    if not code:
-        click.echo("❌ No code provided.")
-        return None
-
-    # Exchange code for token
-    api_key = oauth.exchange_code_for_token(code, code_verifier, remote_redirect_uri)
-
-    if api_key:
-        click.echo("✅ Authentication successful!")
-
-    return api_key
+def _wait_for_manual_code_input(oauth: OAuthHandler) -> None:
+    """Thread function to wait for manual code input."""
+    try:
+        code = input()
+        with oauth.lock:
+            if not oauth.is_complete:
+                oauth.manual_code = code.strip()
+                oauth.is_complete = True
+    except Exception:  # noqa: S110
+        pass
 
 
 def perform_oauth_signin() -> str | None:
@@ -733,37 +682,69 @@ def perform_oauth_signin() -> str | None:
     local_redirect_uri = f"http://localhost:{port}/callback"
     remote_redirect_uri = f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth/callback"
 
-    local_auth_url = (
-        f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth?"
+    base_url = f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth"
+    params = (
         f"response_type=code"
         f"&client_id=cf-cli-app"
-        f"&redirect_uri={urllib.parse.quote(local_redirect_uri)}"
         f"&code_challenge={code_challenge}"
         f"&code_challenge_method=sha256"
         f"&state={state}"
     )
+    local_auth_url = f"{base_url}?{params}&redirect_uri={urllib.parse.quote(local_redirect_uri)}"
+    remote_auth_url = f"{base_url}?{params}&redirect_uri={urllib.parse.quote(remote_redirect_uri)}"
 
-    remote_auth_url = (
-        f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth?"
-        f"response_type=code"
-        f"&client_id=cf-cli-app"
-        f"&redirect_uri={urllib.parse.quote(remote_redirect_uri)}"
-        f"&code_challenge={code_challenge}"
-        f"&code_challenge_method=sha256"
-        f"&state={state}"
-    )
+    # Start local server
+    try:
+        httpd = oauth.start_local_server(port)
+    except Exception:
+        click.echo("❌ Failed to start local server.")
+        return None
 
     # Try to open browser
     click.echo("🌐 Opening browser to sign in to CodeFlash…")
+    with contextlib.suppress(Exception):
+        webbrowser.open(local_auth_url)
 
-    try:
-        # Start local server first
-        httpd = oauth.start_local_server(port)
-        browser_opened = webbrowser.open(local_auth_url)
-    except Exception:
-        browser_opened = False
+    # Show remote URL and start input thread
+    click.echo("\n📋 If browser didn't open, visit this URL:")
+    click.echo(f"\n{remote_auth_url}\n")
+    click.echo("Paste code here if prompted > ", nl=False)
 
-    if browser_opened:
-        return _handle_local_oauth_flow(oauth, httpd, state, code_verifier, local_redirect_uri, local_auth_url)
+    # Start thread to wait for manual input
+    input_thread = threading.Thread(target=_wait_for_manual_code_input, args=(oauth,))
+    input_thread.daemon = True
+    input_thread.start()
+
+    waited = 0
+    while not oauth.is_complete and waited < 180:
+        time.sleep(0.5)
+        waited += 0.5
+
+    if not oauth.is_complete:
+        httpd.shutdown()
+        click.echo("\n❌ Authentication timed out.")
+        return None
+
+    # Check which method completed
+    api_key = None
+
+    if oauth.manual_code:
+        # Manual code was entered
+        api_key = oauth.exchange_code_for_token(oauth.manual_code, code_verifier, remote_redirect_uri)
+    elif oauth.code:
+        # Browser callback received
+        if oauth.error or not oauth.state or oauth.state != state:
+            httpd.shutdown()
+            click.echo("\n❌ Unauthorized.")
+            return None
+
+        api_key = oauth.exchange_code_for_token(oauth.code, code_verifier, local_redirect_uri)
+
+    # Cleanup
+    time.sleep(3)
     httpd.shutdown()
-    return _handle_remote_oauth_flow(code_verifier, remote_redirect_uri, remote_auth_url)
+
+    if not api_key:
+        click.echo("❌ Authentication failed.")
+
+    return api_key
