@@ -650,22 +650,35 @@ class AiServiceClient:
             "codeflash_config": codeflash_config,
         }
 
-        logger.info("Generating workflow steps via AI service...")
+        logger.debug(
+            f"[aiservice.py:generate_workflow_steps] Sending request to AI service with {len(repo_files)} files, "
+            f"{len(directory_structure)} top-level directories"
+        )
+
         try:
             response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Error generating workflow steps: {e}")
+            logger.warning(f"[aiservice.py:generate_workflow_steps] Request exception: {e}")
             return None
 
         if response.status_code == 200:
-            return cast("str", response.json().get("workflow_steps"))
+            response_data = response.json()
+            workflow_steps = cast("str", response_data.get("workflow_steps"))
+            logger.debug(
+                f"[aiservice.py:generate_workflow_steps] Successfully received workflow steps "
+                f"({len(workflow_steps) if workflow_steps else 0} chars)"
+            )
+            return workflow_steps
         else:
-            logger.warning(f"Failed to generate workflow steps: {response.status_code}")
+            logger.warning(
+                f"[aiservice.py:generate_workflow_steps] Failed with status {response.status_code}"
+            )
             try:
-                error = cast("str", response.json().get("error", "Unknown error"))
-                logger.debug(f"Error details: {error}")
+                error_response = response.json()
+                error = cast("str", error_response.get("error", "Unknown error"))
+                logger.debug(f"[aiservice.py:generate_workflow_steps] Error: {error}")
             except Exception:
-                pass
+                logger.debug(f"[aiservice.py:generate_workflow_steps] Could not parse error response")
             return None
 
 

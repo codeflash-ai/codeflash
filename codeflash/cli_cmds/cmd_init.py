@@ -842,13 +842,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
             benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
 
-        optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
-        )
-        materialized_optimize_yml_content = generate_dynamic_workflow_content(
-            optimize_yml_content, config, git_root, benchmark_mode
-        )
-
         # Get API key for secret setup
         try:
             api_key = get_codeflash_api_key()
@@ -890,6 +883,16 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             "cli-github-optimization-confirm-workflow-creation",
             {"confirm_creation": creation_answers["confirm_creation"]},
         )
+
+        # Generate workflow content AFTER user confirmation
+        logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
+        optimize_yml_content = (
+            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
+        )
+        materialized_optimize_yml_content = generate_dynamic_workflow_content(
+            optimize_yml_content, config, git_root, benchmark_mode
+        )
+
         workflows_path.mkdir(parents=True, exist_ok=True)
 
         pr_created_via_api = False
@@ -1290,8 +1293,6 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
     :param git_root: Root directory of the git repository
     :return: Dictionary with 'files' (path -> content) and 'directory_structure' (nested dict)
     """
-    logger.info(f"[cmd_init.py:collect_repo_files_for_workflow] Collecting repo files from {git_root}")
-
     # Important files to collect with contents
     important_files = [
         "pyproject.toml",
@@ -1333,7 +1334,6 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
                 if len(content) > max_file_size:
                     content = content[:max_file_size] + "\n... (truncated)"
                 files_dict[file_path_str] = content
-                logger.debug(f"[cmd_init.py:collect_repo_files_for_workflow] Collected {file_path_str} ({len(content)} chars)")
             except Exception as e:
                 logger.warning(f"[cmd_init.py:collect_repo_files_for_workflow] Failed to read {file_path_str}: {e}")
 
@@ -1363,10 +1363,6 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
                 directory_structure[item.name] = {"type": "file"}
     except Exception as e:
         logger.warning(f"[cmd_init.py:collect_repo_files_for_workflow] Error collecting directory structure: {e}")
-
-    logger.info(
-        f"[cmd_init.py:collect_repo_files_for_workflow] Collected {len(files_dict)} files and {len(directory_structure)} top-level items"
-    )
 
     return {"files": files_dict, "directory_structure": directory_structure}
 
@@ -1406,7 +1402,6 @@ def generate_dynamic_workflow_content(
 
     # Try to generate dynamic steps using AI service
     try:
-        logger.info("[cmd_init.py:generate_dynamic_workflow_content] Attempting to generate dynamic workflow steps")
         repo_data = collect_repo_files_for_workflow(git_root)
 
         # Prepare codeflash config for AI
@@ -1424,7 +1419,6 @@ def generate_dynamic_workflow_content(
         )
 
         if dynamic_steps:
-            logger.info("[cmd_init.py:generate_dynamic_workflow_content] Successfully generated dynamic workflow steps")
             # Replace the entire steps section with AI-generated steps
             # Find the steps section in the template
             steps_start = optimize_yml_content.find("    steps:")
@@ -1487,12 +1481,11 @@ def generate_dynamic_workflow_content(
                 new_lines = lines[:steps_start_line] + ["    steps:"] + indented_steps + lines[steps_end_line:]
                 optimize_yml_content = "\n".join(new_lines)
 
-                logger.info("[cmd_init.py:generate_dynamic_workflow_content] Dynamic workflow generation successful")
                 return optimize_yml_content
             else:
                 logger.warning("[cmd_init.py:generate_dynamic_workflow_content] Could not find steps section in template")
         else:
-            logger.info("[cmd_init.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static")
+            logger.debug("[cmd_init.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static")
 
     except Exception as e:
         logger.warning(
@@ -1500,7 +1493,6 @@ def generate_dynamic_workflow_content(
         )
 
     # Fallback to static template
-    logger.info("[cmd_init.py:generate_dynamic_workflow_content] Using static workflow template")
     return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
 
 
