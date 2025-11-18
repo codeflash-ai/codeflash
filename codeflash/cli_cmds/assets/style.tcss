@@ -1,0 +1,138 @@
+/* Main stylesheet for CodeFlash TUI */
+
+Screen {
+    align: center middle;
+}
+
+.center_container {
+    width: 90;
+    height: auto;
+    border: solid $primary;
+    padding: 2 4;
+}
+
+.logo {
+    color: $accent;
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.title {
+    text-align: center;
+    text-style: bold;
+    color: $success;
+    margin-bottom: 1;
+}
+
+.screen_title {
+    text-align: center;
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+    text-style: bold underline;
+}
+
+.description {
+    color: $text;
+    margin-bottom: 2;
+}
+
+.label {
+    margin-bottom: 1;
+    color: $text;
+    text-style: bold;
+}
+
+Input {
+    margin-bottom: 2;
+}
+
+.button_row {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+Button {
+    margin: 0 1;
+}
+
+RadioSet {
+    margin-bottom: 2;
+    padding: 1;
+    border: solid $primary;
+}
+
+Select {
+    margin-bottom: 2;
+}
+
+Checkbox {
+    margin-bottom: 2;
+}
+
+.hidden {
+    display: none;
+}
+
+.info_section {
+    color: $text;
+    margin-bottom: 1;
+}
+
+.action_section {
+    margin-top: 1;
+    margin-bottom: 1;
+    padding: 1 0;
+    border-top: solid $primary-darken-2;
+    align: center middle;
+}
+
+Vertical {
+    width: 100%;
+    height: auto;
+}
+
+.status_text {
+    text-align: center;
+    margin: 1 0;
+    text-style: bold;
+}
+
+.subtitle {
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 2;
+}
+
+.config_section, .commands_section {
+    margin-bottom: 2;
+    padding: 1 2;
+    border: solid $primary-darken-1;
+    background: $surface;
+}
+
+.warning_section {
+    margin-bottom: 2;
+    padding: 1 2;
+    border: solid $warning;
+    background: $surface;
+}
+
+.section_header {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+.section_content {
+    color: $text;
+    padding-left: 2;
+}
+
+.warning_text {
+    color: $warning;
+    text-style: bold;
+    width: 100%;
+}

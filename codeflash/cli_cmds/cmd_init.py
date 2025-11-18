@@ -82,20 +82,18 @@ class DependencyManager(Enum):
 
 def init_codeflash() -> None:
     try:
-        welcome_panel = Panel(
-            Text(
-                "⚡️ Welcome to Codeflash!\n\nThis setup will take just a few minutes.",
-                style="bold cyan",
-                justify="center",
-            ),
-            title="🚀 Codeflash Setup",
-            border_style="bright_cyan",
-            padding=(1, 2),
-        )
-        console.print(welcome_panel)
-        console.print()
+        from codeflash.cli_cmds.screens import CodeflashInit
 
-        did_add_new_key = prompt_api_key()
+        # Launch the Textual TUI
+        app = CodeflashInit()
+        app.run()
+
+        # If configuration was saved successfully, exit with success
+        if app.config_saved:
+            sys.exit(0)
+        
+        # If user quit without completing, exit without error
+        sys.exit(0)
 
         should_modify, config = should_modify_pyproject_toml()
 
@@ -131,7 +129,7 @@ def init_codeflash() -> None:
 
         completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
 
-        if did_add_new_key:
+        if False:
             completion_message += (
                 "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
             )
@@ -146,7 +144,7 @@ def init_codeflash() -> None:
         )
         console.print(completion_panel)
 
-        ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
+        ph("cli-installation-successful", {"did_add_new_key": False})
         sys.exit(0)
     except KeyboardInterrupt:
         apologize_and_exit()
