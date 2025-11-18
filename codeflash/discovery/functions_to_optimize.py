@@ -201,7 +201,7 @@ def get_functions_to_optimize(
         elif file is not None:
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
-            functions = find_all_functions_in_file(file)
+            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -224,8 +224,16 @@ def get_functions_to_optimize(
                 if found_function is None:
                     if is_lsp:
                         return functions, 0, None
+                    found = closest_matching_file_function_name(only_get_this_function, functions)
+                    if found is not None:
+                        file, found_function = found
+                        exit_with_message(
+                            f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property.\n"
+                            f"Did you mean {found_function.qualified_name} instead?"
+                        )
+
                     exit_with_message(
-                        f"Function {only_function_name} not found in file {file}\nor the function does not have a 'return' statement or is a property"
+                        f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
                 functions[file] = [found_function]
         else:
@@ -257,6 +265,76 @@ def get_functions_to_optimize(
 def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     return get_functions_within_lines(modified_lines)
+
+
+def closest_matching_file_function_name(
+    qualified_fn_to_find: str, found_fns: dict[Path, list[FunctionToOptimize]]
+) -> tuple[Path, FunctionToOptimize] | None:
+    """Find the closest matching function name using Levenshtein distance.
+
+    Args:
+        qualified_fn_to_find: Function name to find in format "Class.function" or "function"
+        found_fns: Dictionary of file paths to list of functions
+
+    Returns:
+        Tuple of (file_path, function) for closest match, or None if no matches found
+
+    """
+    min_distance = 4
+    closest_match = None
+    closest_file = None
+
+    qualified_fn_to_find_lower = qualified_fn_to_find.lower()
+
+    # Cache levenshtein_distance locally for improved lookup speed
+    _levenshtein = levenshtein_distance
+
+    for file_path, functions in found_fns.items():
+        for function in functions:
+            # Compare either full qualified name or just function name
+            fn_name = function.qualified_name.lower()
+            # If the absolute length difference is already >= min_distance, skip calculation
+            if abs(len(qualified_fn_to_find_lower) - len(fn_name)) >= min_distance:
+                continue
+            dist = _levenshtein(qualified_fn_to_find_lower, fn_name)
+
+            if dist < min_distance:
+                min_distance = dist
+                closest_match = function
+                closest_file = file_path
+
+    if closest_match is not None:
+        return closest_file, closest_match
+    return None
+
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+    len1 = len(s1)
+    len2 = len(s2)
+    # Use a preallocated list instead of creating a new list every iteration
+    previous = list(range(len1 + 1))
+    current = [0] * (len1 + 1)
+
+    for index2 in range(len2):
+        char2 = s2[index2]
+        current[0] = index2 + 1
+        for index1 in range(len1):
+            char1 = s1[index1]
+            if char1 == char2:
+                current[index1 + 1] = previous[index1]
+            else:
+                # Fast min calculation without tuple construct
+                a = previous[index1]
+                b = previous[index1 + 1]
+                c = current[index1]
+                min_val = min(b, a)
+                min_val = min(c, min_val)
+                current[index1 + 1] = 1 + min_val
+        # Swap references instead of copying
+        previous, current = current, previous
+    return previous[len1]
 
 
 def get_functions_inside_a_commit(commit_hash: str) -> dict[str, list[FunctionToOptimize]]:
