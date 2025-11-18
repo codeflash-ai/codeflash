@@ -663,6 +663,62 @@ class OAuthHandler:
             return api_key
 
 
+def _handle_local_oauth_flow(
+    oauth: OAuthHandler,
+    httpd: http.server.HTTPServer,
+    state: str,
+    code_verifier: str,
+    local_redirect_uri: str,
+    local_auth_url: str,
+) -> str | None:
+    """Handle local OAuth flow with browser and server."""
+    click.echo(f"\n📋 If your browser didn't open, visit: {local_auth_url}\n")
+    click.echo("⏳ Waiting for authentication...")
+
+    success = oauth.wait_for_callback(httpd, timeout=180)
+
+    if not success:
+        httpd.shutdown()
+        click.echo("❌ Authentication timed out. Please try again.")
+        return None
+
+    if oauth.error or not oauth.code or not oauth.state or oauth.state != state:
+        httpd.shutdown()
+        click.echo("❌ Unauthorized.")
+        return None
+
+    api_key = oauth.exchange_code_for_token(oauth.code, code_verifier, local_redirect_uri)
+
+    # Wait for browser to poll status
+    time.sleep(3)
+    httpd.shutdown()
+
+    return api_key
+
+
+def _handle_remote_oauth_flow(code_verifier: str, remote_redirect_uri: str, remote_auth_url: str) -> str | None:
+    """Handle remote OAuth flow with manual code entry."""
+    oauth = OAuthHandler()
+    click.echo("⚠️  Browser could not be opened automatically.")
+    click.echo("\n📋 Please visit this URL to authenticate:")
+    click.echo(f"\n{remote_auth_url}\n")
+
+    # Prompt user to paste the code
+    code = click.prompt("Paste the authorization code here", type=str).strip()
+
+    if not code:
+        click.echo("❌ No code provided.")
+        return None
+
+    # Exchange code for token
+    api_key = oauth.exchange_code_for_token(code, code_verifier, remote_redirect_uri)
+
+    if api_key:
+        click.echo("✅ Authentication successful!")
+
+    return api_key
+
+
 def perform_oauth_signin() -> str | None:
     """Perform OAuth PKCE flow and return API key if successful.
 
@@ -672,60 +728,44 @@ def perform_oauth_signin() -> str | None:
 
     # Setup PKCE
     port = oauth.get_free_port()
-    redirect_uri = f"http://localhost:{port}/callback"
     code_verifier, code_challenge = oauth.generate_pkce_pair()
     state = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789") for _ in range(16))
 
-    # Build authorization URL
-    auth_url = (
+    # Build authorization URLs for both local and remote
+    local_redirect_uri = f"http://localhost:{port}/callback"
+    remote_redirect_uri = f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth/callback"
+
+    local_auth_url = (
         f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth?"
         f"response_type=code"
         f"&client_id=cf-cli-app"
-        f"&redirect_uri={urllib.parse.quote(redirect_uri)}"
+        f"&redirect_uri={urllib.parse.quote(local_redirect_uri)}"
         f"&code_challenge={code_challenge}"
         f"&code_challenge_method=sha256"
         f"&state={state}"
     )
 
-    # Start local server
-    httpd = oauth.start_local_server(port)
+    remote_auth_url = (
+        f"{get_cfapi_base_urls().cfwebapp_base_url}/codeflash/auth?"
+        f"response_type=code"
+        f"&client_id=cf-cli-app"
+        f"&redirect_uri={urllib.parse.quote(remote_redirect_uri)}"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=sha256"
+        f"&state={state}"
+    )
 
-    # Open browser
+    # Try to open browser
     click.echo("🌐 Opening browser to sign in to CodeFlash…")
-    webbrowser.open(auth_url)
 
-    click.echo(f"\n📋 If your browser didn't open, visit: {auth_url}\n")
+    try:
+        # Start local server first
+        httpd = oauth.start_local_server(port)
+        browser_opened = webbrowser.open(local_auth_url)
+    except Exception:
+        browser_opened = False
 
-    # Wait for callback
-    click.echo("⏳ Waiting for authentication...")
-    success = oauth.wait_for_callback(httpd, timeout=180)
-
-    if not success:
-        httpd.shutdown()
-        click.echo("❌ Authentication timed out. Please try again.")
-        return None
-
-    if oauth.error:
-        httpd.shutdown()
-        click.echo("❌ Authentication failed:")
-        return None
-
-    if not oauth.code or not oauth.state:
-        httpd.shutdown()
-        click.echo("❌ Unauthorized.")
-        return None
-
-    if oauth.state != state:
-        httpd.shutdown()
-        click.echo("❌ Unauthorized.")
-        return None
-
-    api_key = oauth.exchange_code_for_token(oauth.code, code_verifier, redirect_uri)
-
-    # Wait for browser to poll status
-    time.sleep(3)
-
-    # Shutdown server
+    if browser_opened:
+        return _handle_local_oauth_flow(oauth, httpd, state, code_verifier, local_redirect_uri, local_auth_url)
     httpd.shutdown()
-
-    return api_key
+    return _handle_remote_oauth_flow(code_verifier, remote_redirect_uri, remote_auth_url)
