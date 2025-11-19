@@ -1,5 +1,13 @@
 /* Main stylesheet for CodeFlash TUI */
 
+$codeflash-primary: #2563EB;
+$codeflash-primary-light: #3B82F6;
+$codeflash-primary-dark: #1D4ED8;
+$codeflash-accent: #FFC143;
+$codeflash-text-dark: #373A3D;
+$codeflash-surface-light: #F8FAFC;
+$codeflash-surface-dark: #1E293B;
+
 Screen {
     align: center middle;
 }
@@ -7,12 +15,13 @@ Screen {
 .center_container {
     width: 90;
     height: auto;
-    border: solid $primary;
     padding: 2 4;
+    align: center middle;
+    content-align: center middle;
 }
 
 .logo {
-    color: $accent;
+    color: $codeflash-accent;
     text-align: center;
     text-style: bold;
     margin-bottom: 1;
@@ -21,14 +30,14 @@ Screen {
 .title {
     text-align: center;
     text-style: bold;
-    color: $success;
+    color: $codeflash-primary;
     margin-bottom: 1;
 }
 
 .screen_title {
     text-align: center;
     text-style: bold;
-    color: $accent;
+    color: $codeflash-primary-light;
     margin-bottom: 1;
     text-style: bold underline;
 }
@@ -36,6 +45,7 @@ Screen {
 .description {
     color: $text;
     margin-bottom: 2;
+    text-align: center;
 }
 
 .label {
@@ -46,6 +56,7 @@ Screen {
 
 Input {
     margin-bottom: 2;
+    width: 100%;
 }
 
 .button_row {
@@ -60,16 +71,31 @@ Button {
 
 RadioSet {
     margin-bottom: 2;
-    padding: 1;
-    border: solid $primary;
+    padding: 0;
+    border: none;
+    width: 100%;
+    align: center middle;
+    content-align: center middle;
+    layout: vertical;
+}
+
+RadioButton {
+    width: auto;
+    min-width: 0;
+    max-width: 30;
+    margin: 0;
+    align: center middle;
 }
 
 Select {
     margin-bottom: 2;
+    width: 100%;
 }
 
 Checkbox {
     margin-bottom: 2;
+    width: 100%;
+    align: center middle;
 }
 
 .hidden {
@@ -85,8 +111,17 @@ Checkbox {
     margin-top: 1;
     margin-bottom: 1;
     padding: 1 0;
-    border-top: solid $primary-darken-2;
     align: center middle;
+}
+
+.action_section Button {
+    width: 100%;
+    content-align: center middle;
+}
+
+.action_section Checkbox {
+    width: 100%;
+    content-align: center middle;
 }
 
 Vertical {
@@ -109,20 +144,18 @@ Vertical {
 .config_section, .commands_section {
     margin-bottom: 2;
     padding: 1 2;
-    border: solid $primary-darken-1;
-    background: $surface;
+    background: $codeflash-surface-dark;
 }
 
 .warning_section {
     margin-bottom: 2;
     padding: 1 2;
-    border: solid $warning;
     background: $surface;
 }
 
 .section_header {
     text-style: bold;
-    color: $accent;
+    color: $codeflash-accent;
     margin-bottom: 1;
 }
 
@@ -135,4 +168,40 @@ Vertical {
     color: $warning;
     text-style: bold;
     width: 100%;
+}
+
+/* Directory tree selector styles */
+.path-controls {
+    height: 3;
+    margin: 0 0 1 0;
+    width: 100%;
+}
+
+.path-controls Input {
+    width: 1fr;
+    margin: 0;
+}
+
+.path-controls Button {
+    width: auto;
+    min-width: 6;
+    margin: 0;
+    padding: 0 1;
+}
+
+DirectoryTree {
+    width: 100%;
+    height: 15;
+    margin-bottom: 2;
+}
+
+.centered_single_button {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    margin-bottom: 2;
+}
+
+.centered_single_button Button {
+    width: auto;
 }

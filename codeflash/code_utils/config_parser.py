@@ -105,7 +105,7 @@ def parse_config_file(
         if lsp_mode:
             # don't fail in lsp mode if codeflash config is not found.
             return {}, config_file_path
-        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}. Please run 'codeflash init' to add Codeflash config in the pyproject.toml config file."
+        msg = f"Could not find the 'codeflash' block in the config file {config_file_path}."
         raise ValueError(msg) from e
     assert isinstance(config, dict)
 

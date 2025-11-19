@@ -308,16 +308,6 @@ __version__ = "{version}"
 #path = "codeflash/update_license_version.py"
 
 
-[tool.codeflash]
-# All paths are relative to this pyproject.toml's directory.
-module-root = "codeflash"
-tests-root = "tests"
-benchmarks-root = "tests/benchmarks"
-test-framework = "pytest"
-formatter-cmds = [
-    "uvx ruff check --exit-zero --fix $file",
-    "uvx ruff format $file",
-]
 
 [tool.pytest.ini_options]
 filterwarnings = [

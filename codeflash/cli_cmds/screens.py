@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
@@ -12,13 +15,20 @@ from textual import on
 from textual.app import App
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Checkbox, Footer, Header, Input, RadioButton, RadioSet, Select, Static
-
-from codeflash.cli_cmds.cmd_init import (
-    detect_test_framework_from_config_files,
-    detect_test_framework_from_test_files,
-    get_valid_subdirs,
+from textual.widgets import (
+    Button,
+    Checkbox,
+    DirectoryTree,
+    Footer,
+    Header,
+    Input,
+    RadioButton,
+    RadioSet,
+    Select,
+    Static,
 )
+
+from codeflash.cli_cmds.cmd_init import detect_test_framework_from_config_files, detect_test_framework_from_test_files
 from codeflash.cli_cmds.validators import APIKeyValidator
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
@@ -29,12 +39,12 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 CODEFLASH_LOGO: str = (
-    r"                   _          ___  _               _     "
-    r"                  | |        / __)| |             | |    "
-    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  "
-    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ "
-    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |"
-    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|"
+    r"                   _          ___  _               _     " "\n"
+    r"                  | |        / __)| |             | |    " "\n"
+    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " "\n"
+    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ " "\n"
+    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |" "\n"
+    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|" "\n"
     f"{('v' + version).rjust(66)}"
 )
 
@@ -170,42 +180,99 @@ class BaseConfigScreen(Screen):
             self.app.pop_screen()
 
 
+class CustomDirectoryTree(DirectoryTree):
+    """Directory tree that filters out hidden files and common cache directories."""
+
+    def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
+        exclude_patterns = (".", "__pycache__", "node_modules", ".git")
+        return [path for path in paths if not path.name.startswith(exclude_patterns)]
+
+
 class DirectorySelectorWidget(Container):
-    def __init__(self, select_id: str, input_id: str, **kwargs) -> None:  # noqa: ANN003
+    """Directory selector using DirectoryTree for visual navigation."""
+
+    def __init__(self, tree_id: str, path_input_id: str, start_path: Path | None = None, **kwargs) -> None:  # noqa: ANN003
         super().__init__(**kwargs)
-        self.select_id = select_id
-        self.input_id = input_id
+        self.tree_id = tree_id
+        self.path_input_id = path_input_id
+        self.start_path = start_path or Path.cwd()
+        self.selected_dir: Path | None = None
 
     def compose(self) -> ComposeResult:
-        yield Select([("Loading...", "")], prompt="Select directory", id=self.select_id, allow_blank=False)
-        yield Input(placeholder="Enter custom path", id=self.input_id, classes="hidden")
+        with Horizontal(classes="path-controls"):
+            yield Input(
+                value=str(self.start_path),
+                placeholder="Enter directory path",
+                id=self.path_input_id,
+            )
+            yield Button("⬆️", variant="default", id="btn_up", tooltip="Up One Level")
+            yield Button("🏠", variant="default", id="btn_home", tooltip="Home")
+            yield Button("📁", variant="default", id="btn_cwd", tooltip="Current Dir")
 
-    def set_options(self, options: list[tuple[str, str]]) -> None:
-        select = self.query_one(f"#{self.select_id}", Select)
-        select.set_options(options)
+        yield CustomDirectoryTree(path=self.start_path, id=self.tree_id)
 
     def get_selected_path(self) -> str | None:
-        select = self.query_one(f"#{self.select_id}", Select)
-        custom_input = self.query_one(f"#{self.input_id}", Input)
+        """Get the currently selected directory path as a string relative to cwd."""
+        if self.selected_dir:
+            try:
+                return str(self.selected_dir.relative_to(Path.cwd()))
+            except ValueError:
+                return str(self.selected_dir)
+        return None
 
-        if select.value == Select.BLANK:
-            return None
+    @on(Button.Pressed, "#btn_up")
+    def handle_up_button(self) -> None:
+        """Navigate up one directory level."""
+        tree = self.query_one(f"#{self.tree_id}", CustomDirectoryTree)
+        current_path = tree.path
+        if current_path and current_path.parent != current_path:
+            self._set_directory(current_path.parent)
 
-        if select.value == "custom":
-            return custom_input.value.strip() or None
+    @on(Button.Pressed, "#btn_home")
+    def handle_home_button(self) -> None:
+        """Navigate to home directory."""
+        self._set_directory(Path.home())
 
-        return select.value
+    @on(Button.Pressed, "#btn_cwd")
+    def handle_cwd_button(self) -> None:
+        """Navigate to current working directory."""
+        self._set_directory(Path.cwd())
 
-    @on(Select.Changed)
-    def select_changed(self, event: Select.Changed) -> None:
-        if event.select.id != self.select_id:
+    @on(Input.Changed)
+    def handle_path_input_change(self, event: Input.Changed) -> None:
+        """Update tree when path is manually entered."""
+        if event.input.id != self.path_input_id:
             return
 
-        custom_input = self.query_one(f"#{self.input_id}", Input)
-        if event.value == "custom":
-            custom_input.remove_class("hidden")
-        else:
-            custom_input.add_class("hidden")
+        try:
+            path = Path(event.value)
+            if path.exists() and path.is_dir():
+                self._set_directory(path)
+        except (OSError, ValueError):
+            pass
+
+    @on(DirectoryTree.DirectorySelected)
+    def handle_directory_selection(self, event: DirectoryTree.DirectorySelected) -> None:
+        """Update selected directory when user clicks on a directory."""
+        if event.control.id != self.tree_id:
+            return
+
+        self.selected_dir = event.path
+        path_input = self.query_one(f"#{self.path_input_id}", Input)
+        try:
+            relative_path = event.path.relative_to(Path.cwd())
+            path_input.value = str(relative_path)
+        except ValueError:
+            path_input.value = str(event.path)
+
+    def _set_directory(self, path: Path) -> None:
+        """Set the directory tree to a new path."""
+        if path.exists() and path.is_dir():
+            tree = self.query_one(f"#{self.tree_id}", CustomDirectoryTree)
+            tree.path = path
+            path_input = self.query_one(f"#{self.path_input_id}", Input)
+            path_input.value = str(path)
+            self.selected_dir = path
 
 
 class WelcomeScreen(Screen):
@@ -391,10 +458,10 @@ class TestFrameworkScreen(BaseConfigScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Container(
-            Static("Test Framework Configuration", classes="screen_title"),
+            Static("Test Framework", classes="screen_title"),
             Static("", id="framework_desc", classes="description"),
             RadioSet(
-                RadioButton("pytest (recommended)", id="pytest", value=True),
+                RadioButton("pytest", id="pytest", value=True),
                 RadioButton("unittest", id="unittest"),
                 id="framework_radio",
             ),
@@ -439,27 +506,33 @@ class TestFrameworkScreen(BaseConfigScreen):
 
 
 class TestDiscoveryScreen(BaseConfigScreen):
-    def on_mount(self) -> None:
-        valid_subdirs = get_valid_subdirs()
-        module_root = getattr(self.app, "module_path", None)
-
-        test_subdirs = [d for d in valid_subdirs if d != module_root]
-        options = [(d, d) for d in test_subdirs]
-
-        if "tests" not in valid_subdirs:
-            options.append(("Create new tests/ directory", "create"))
-
-        options.append(("Custom path...", "custom"))
-
-        selector = self.query_one(DirectorySelectorWidget)
-        selector.set_options(options)
+    def __init__(self) -> None:
+        super().__init__()
+        self.tests_dir_exists = (Path.cwd() / "tests").exists()
 
     def compose(self) -> ComposeResult:
+        # Auto-detect tests directory
+        suggested_path = Path.cwd()
+        tests_dir = Path.cwd() / "tests"
+        if tests_dir.exists() and tests_dir.is_dir():
+            suggested_path = tests_dir
+
         yield Header()
         yield Container(
             Static("Test Directory Discovery", classes="screen_title"),
-            Static("Where are your test files located?\n\nAvailable test directories:", classes="description"),
-            DirectorySelectorWidget("test_select", "custom_path"),
+            Static(
+                "Where are your test files located?\n\nNavigate to your test directory using the tree below:",
+                classes="description",
+            ),
+            DirectorySelectorWidget("test_tree", "test_path_input", start_path=suggested_path),
+            Horizontal(
+                Button(
+                    "📁 Create tests/ directory",
+                    variant="success",
+                    id="create_tests_btn",
+                ),
+                classes="centered_single_button" + (" hidden" if self.tests_dir_exists else ""),
+            ),
             Horizontal(
                 Button("Continue", variant="primary", id="continue_btn"),
                 Button("Back", variant="default", id="back_btn"),
@@ -469,32 +542,44 @@ class TestDiscoveryScreen(BaseConfigScreen):
         )
         yield Footer()
 
+    @on(Button.Pressed, "#create_tests_btn")
+    def create_tests_directory(self) -> None:
+        """Create the tests directory and update the tree."""
+        tests_dir = Path.cwd() / "tests"
+        try:
+            tests_dir.mkdir(exist_ok=True)
+            self.notify("✅ Created tests/ directory", severity="information", timeout=3)
+            
+            # Hide the create button
+            create_btn = self.query_one("#create_tests_btn", Button)
+            create_btn.add_class("hidden")
+            
+            # Update the directory tree to show the new directory
+            selector = self.query_one(DirectorySelectorWidget)
+            selector._set_directory(tests_dir)
+            selector.selected_dir = tests_dir
+            
+            self.tests_dir_exists = True
+        except Exception as e:
+            self.notify(f"Failed to create tests/ directory: {e}", severity="error", timeout=5)
+
     def get_next_screen(self) -> Screen | None:
         selector = self.query_one(DirectorySelectorWidget)
-        test_select = self.query_one("#test_select", Select)
         test_path = selector.get_selected_path()
 
         if not test_path:
-            self.notify("Please select or enter a test directory", severity="error")
+            self.notify("Please select a test directory", severity="error")
             return None
 
-        if test_select.value == "create":
-            test_path = "tests"
-            tests_dir = Path.cwd() / test_path
-            try:
-                tests_dir.mkdir(exist_ok=True)
-                self.notify(f"✅ Created directory: {test_path}", timeout=3)
-            except Exception as e:
-                self.notify(f"Failed to create directory: {e}", severity="error", timeout=5)
-                return None
-        else:
-            path = Path.cwd() / test_path
-            if not path.exists():
-                self.notify(f"Test directory does not exist: {test_path}", severity="error", timeout=5)
-                return None
-            if not path.is_dir():
-                self.notify(f"Path is not a directory: {test_path}", severity="error", timeout=5)
-                return None
+        path = Path.cwd() / test_path
+        if not path.exists():
+            # Offer to create the directory
+            self.notify(f"Directory does not exist: {test_path}. Please select an existing directory.", severity="error", timeout=5)
+            return None
+
+        if not path.is_dir():
+            self.notify(f"Path is not a directory: {test_path}", severity="error", timeout=5)
+            return None
 
         module_path = getattr(self.app, "module_path", "")
         if module_path and Path(test_path).resolve() == Path(module_path).resolve():
@@ -510,25 +595,15 @@ class TestDiscoveryScreen(BaseConfigScreen):
 
 
 class ModuleDiscoveryScreen(BaseConfigScreen):
-    def on_mount(self) -> None:
-        valid_subdirs = [d for d in get_valid_subdirs() if d != "tests"]
-
-        curdir = Path.cwd()
-        options = [
-            *[(d, d) for d in valid_subdirs],
-            (f"current directory ({curdir.name})", "."),
-            ("Custom path...", "custom"),
-        ]
-
-        selector = self.query_one(DirectorySelectorWidget)
-        selector.set_options(options)
-
     def compose(self) -> ComposeResult:
         yield Header()
         yield Container(
             Static("Module Discovery", classes="screen_title"),
-            Static("Which Python module would you like to optimize?\n\nAvailable directories:", classes="description"),
-            DirectorySelectorWidget("module_select", "custom_path"),
+            Static(
+                "Which Python module would you like to optimize?\n\nNavigate to your module directory using the tree below:",
+                classes="description",
+            ),
+            DirectorySelectorWidget("module_tree", "module_path_input", start_path=Path.cwd()),
             Horizontal(
                 Button("Continue", variant="primary", id="continue_btn"),
                 Button("Back", variant="default", id="back_btn"),
@@ -543,7 +618,16 @@ class ModuleDiscoveryScreen(BaseConfigScreen):
         module_path = selector.get_selected_path()
 
         if not module_path:
-            self.notify("Please select or enter a module path", severity="error")
+            self.notify("Please select a module directory", severity="error")
+            return None
+
+        path = Path.cwd() / module_path
+        if not path.exists():
+            self.notify(f"Directory does not exist: {module_path}", severity="error", timeout=5)
+            return None
+
+        if not path.is_dir():
+            self.notify(f"Path is not a directory: {module_path}", severity="error", timeout=5)
             return None
 
         self.app.module_path = module_path
@@ -751,10 +835,7 @@ class ConfigCheckScreen(BaseConfigScreen):
         yield Container(
             Static("Configuration Check", classes="screen_title"),
             Static("", id="config_status", classes="description"),
-            Container(
-                Checkbox("✓ I want to reconfigure", id="reconfigure_check", classes="hidden"),
-                id="reconfigure_container",
-            ),
+            Checkbox("✓ I want to reconfigure", id="reconfigure_check", classes="hidden"),
             Horizontal(
                 Button("Continue", variant="primary", id="continue_btn"),
                 Button("Back", variant="default", id="back_btn"),
@@ -1043,7 +1124,7 @@ class GitHubActionsScreen(BaseConfigScreen):
             # Write workflow file
             workflow_file = workflows_dir / "codeflash.yaml"
             workflow_file.write_text(workflow_content, encoding="utf-8")
-            return True
+            return True  # noqa: TRY300
         except PermissionError:
             self.notify(
                 "Permission denied: Unable to create workflow file. Please check directory permissions.",
@@ -1158,17 +1239,13 @@ class GitHubActionsStandaloneScreen(BaseConfigScreen):
 
         # Check if workflow already exists
         if workflow_file.exists():
-            self.notify(
-                "Workflow file already exists. It will be overwritten.",
-                severity="warning",
-                timeout=3,
-            )
+            self.notify("Workflow file already exists. It will be overwritten.", severity="warning", timeout=3)
 
         try:
             workflows_dir.mkdir(parents=True, exist_ok=True)
 
             # Read workflow template
-            workflow_template = files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
+            workflow_template = Path(files("codeflash") / "cli_cmds" / "workflows" / "codeflash-optimize.yaml")
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
             # Build config dict
@@ -1179,10 +1256,7 @@ class GitHubActionsStandaloneScreen(BaseConfigScreen):
 
             # Customize workflow content
             workflow_content = customize_codeflash_yaml_content(
-                workflow_content,
-                config,
-                git_root,
-                benchmark_mode=False,
+                workflow_content, config, git_root, benchmark_mode=False
             )
 
             # Write workflow file
@@ -1208,7 +1282,7 @@ class GitHubActionsStandaloneScreen(BaseConfigScreen):
                 )
 
             ph("tui-github-workflow-created")
-            return True
+            return True  # noqa: TRY300
 
         except PermissionError:
             self.notify(
