@@ -67,6 +67,7 @@ class DependencyManager(Enum):
 def init_codeflash() -> None:
     try:
         from codeflash.cli_cmds.screens import CodeflashInit
+
         app = CodeflashInit()
         app.run()
         if app.config_saved:
@@ -133,8 +134,6 @@ def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool
     return True, config, ""
 
 
-
-
 # common sections between normal mode and lsp mode
 class CommonSections(Enum):
     module_root = "module_root"
@@ -184,8 +183,6 @@ def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
     raise ValueError(msg)
 
 
-
-
 def detect_test_framework_from_config_files(curdir: Path) -> Optional[str]:
     test_framework = None
     pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
@@ -232,8 +229,6 @@ def detect_test_framework_from_test_files(tests_root: Path) -> Optional[str]:
     return test_framework
 
 
-
-
 def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
     """Create an empty pyproject.toml with a minimal [tool.codeflash] section.
 
@@ -251,6 +246,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
     """
     try:
         from codeflash.cli_cmds.screens import GitHubActionsOnlyApp
+
         app = GitHubActionsOnlyApp()
         app.run()
     except KeyboardInterrupt:
@@ -453,10 +449,6 @@ def configure_pyproject_toml(
     return True
 
 
-
-
-
-
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
     find_common_tags_content = """def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     if not articles:
@@ -597,5 +589,3 @@ def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
         logger.info("🧹 Cleaning up…")
         find_common_tags_path.unlink(missing_ok=True)
         logger.info(f"🗑️  Deleted {find_common_tags_path}")
-
-
