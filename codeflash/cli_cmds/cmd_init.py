@@ -10,21 +10,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 import click
-import git
 import tomlkit
-from git import Repo
 from pydantic.dataclasses import dataclass
-from rich.panel import Panel
-from rich.text import Text
 
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
-from codeflash.code_utils.github_utils import get_github_secrets_page_url
+from codeflash.code_utils.env_utils import check_formatter_installed
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
 
 if TYPE_CHECKING:
@@ -250,172 +244,15 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
     pyproject_toml_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
+def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002, ARG001
+    """Launch TUI for GitHub Actions setup.
+
+    This command allows users to add/update GitHub Actions workflow after initial setup.
+    """
     try:
-        config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
-
-        ph("cli-github-actions-install-started")
-        try:
-            repo = Repo(config["module_root"], search_parent_directories=True)
-        except git.InvalidGitRepositoryError:
-            click.echo(
-                "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
-            )
-            return
-
-        git_root = Path(repo.git.rev_parse("--show-toplevel"))
-        workflows_path = git_root / ".github" / "workflows"
-        optimize_yaml_path = workflows_path / "codeflash.yaml"
-
-        actions_panel = Panel(
-            Text(
-                "🤖 GitHub Actions Setup\n\n"
-                "GitHub Actions will automatically optimize your code in every pull request. "
-                "This is the recommended way to use Codeflash for continuous optimization.",
-                style="blue",
-            ),
-            title="🤖 Continuous Optimization",
-            border_style="bright_blue",
-        )
-        console.print(actions_panel)
-        console.print()
-
-        # Check if the workflow file already exists
-        if optimize_yaml_path.exists():
-            from rich.prompt import Confirm
-
-            confirm_overwrite = Confirm.ask(
-                f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
-                default=False,
-                console=console,
-            )
-            if not confirm_overwrite:
-                skip_panel = Panel(
-                    Text("⏩️ Skipping workflow creation.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
-                )
-                console.print(skip_panel)
-                ph("cli-github-workflow-skipped")
-                return
-            ph(
-                "cli-github-optimization-confirm-workflow-overwrite",
-                {"confirm_overwrite": confirm_overwrite},
-            )
-
-        from rich.prompt import Confirm
-
-        confirm_creation = Confirm.ask(
-            "Set up GitHub Actions for continuous optimization?",
-            default=True,
-            console=console,
-        )
-        if not confirm_creation:
-            skip_panel = Panel(
-                Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
-            )
-            console.print(skip_panel)
-            ph("cli-github-workflow-skipped")
-            return
-        ph(
-            "cli-github-optimization-confirm-workflow-creation",
-            {"confirm_creation": confirm_creation},
-        )
-        workflows_path.mkdir(parents=True, exist_ok=True)
-        from importlib.resources import files
-
-        benchmark_mode = False
-        benchmarks_root = config.get("benchmarks_root", "").strip()
-        if benchmarks_root and benchmarks_root != "":
-            benchmark_panel = Panel(
-                Text(
-                    "📊 Benchmark Mode Available\n\n"
-                    "I noticed you've configured a benchmarks_root in your config. "
-                    "Benchmark mode will show the performance impact of Codeflash's optimizations on your benchmarks.",
-                    style="cyan",
-                ),
-                title="📊 Benchmark Mode",
-                border_style="bright_cyan",
-            )
-            console.print(benchmark_panel)
-            console.print()
-
-            from rich.prompt import Confirm
-
-            benchmark_mode = Confirm.ask(
-                "Run GitHub Actions in benchmark mode?",
-                default=True,
-                console=console,
-            )
-
-        optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
-        )
-        materialized_optimize_yml_content = customize_codeflash_yaml_content(
-            optimize_yml_content, config, git_root, benchmark_mode
-        )
-        with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-            optimize_yml_file.write(materialized_optimize_yml_content)
-        # Success panel for workflow creation
-        workflow_success_panel = Panel(
-            Text(
-                f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
-                "Your repository is now configured for continuous optimization!",
-                style="green",
-                justify="center",
-            ),
-            title="🎉 Workflow Created!",
-            border_style="bright_green",
-        )
-        console.print(workflow_success_panel)
-        console.print()
-
-        try:
-            existing_api_key = get_codeflash_api_key()
-        except OSError:
-            existing_api_key = None
-
-        # GitHub secrets setup panel
-        secrets_message = (
-            "🔐 Next Step: Add API Key as GitHub Secret\n\n"
-            "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
-            "📋 Steps:\n"
-            "1. Press Enter to open your repo's secrets page\n"
-            "2. Click 'New repository secret'\n"
-            "3. Add your API key with the variable name CODEFLASH_API_KEY"
-        )
-
-        if existing_api_key:
-            secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
-
-        secrets_panel = Panel(
-            Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
-        )
-        console.print(secrets_panel)
-
-        console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
-        console.input()
-
-        click.launch(get_github_secrets_page_url(repo))
-
-        # Post-launch message panel
-        launch_panel = Panel(
-            Text(
-                "🐙 I opened your GitHub secrets page!\n\n"
-                "Note: If you see a 404, you probably don't have access to this repo's secrets. "
-                "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
-                "hard-code your API key into the workflow file.",
-                style="cyan",
-            ),
-            title="🌐 Browser Opened",
-            border_style="bright_cyan",
-        )
-        console.print(launch_panel)
-        click.pause()
-        click.echo()
-        click.echo(
-            f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
-            f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-        )
-        ph("cli-github-workflow-created")
+        from codeflash.cli_cmds.screens import GitHubActionsOnlyApp
+        app = GitHubActionsOnlyApp()
+        app.run()
     except KeyboardInterrupt:
         apologize_and_exit()
 

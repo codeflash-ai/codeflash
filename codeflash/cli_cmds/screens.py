@@ -1073,3 +1073,167 @@ class GitHubActionsScreen(BaseConfigScreen):
             self.notify("Skipping GitHub Actions workflow", severity="information", timeout=2)
 
         return VSCodeExtensionScreen()
+
+
+class GitHubActionsOnlyApp(App):
+    """Lightweight TUI for `codeflash init-actions` command.
+
+    This allows users to add/update GitHub Actions workflow after initial setup.
+    """
+
+    CSS_PATH = "assets/style.tcss"
+    TITLE = "GitHub Actions Setup"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.module_path: str = ""
+        self.test_path: str = ""
+        self.workflow_installed: bool = False
+
+    def on_mount(self) -> None:
+        """Load config and start with GitHub Actions screen."""
+        from codeflash.code_utils.config_parser import parse_config_file
+
+        ph("tui-github-actions-install-started")
+        try:
+            config, _ = parse_config_file()
+            self.module_path = config.get("module_root", "src")
+            self.test_path = config.get("tests_root", "tests")
+            self.push_screen(GitHubActionsStandaloneScreen())
+        except Exception:
+            self.notify(
+                "Could not load CodeFlash configuration. Please run 'codeflash init' first.",
+                severity="error",
+                timeout=5,
+            )
+            ph("tui-github-actions-config-not-found")
+            self.exit()
+
+
+class GitHubActionsStandaloneScreen(BaseConfigScreen):
+    """Standalone screen for GitHub Actions setup."""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Static("GitHub Actions Workflow Setup", classes="screen_title"),
+            Static(
+                "Add or update the CodeFlash GitHub Actions workflow for continuous optimization.\n\n"
+                "This workflow will automatically optimize new code in every pull request.",
+                classes="description",
+            ),
+            Static(
+                "[b]Workflow Features:[/b]\n"
+                "  • Triggers on every push to your repository\n"
+                "  • Analyzes code for performance improvements\n"
+                "  • Automatically creates PRs with optimizations\n\n"
+                "[b dim]Note:[/b dim] The workflow file will be added/updated at .github/workflows/codeflash.yaml",
+                classes="info_section",
+            ),
+            Horizontal(
+                Button("Install Workflow", variant="primary", id="install_btn"),
+                Button("Cancel", variant="default", id="cancel_btn"),
+                classes="button_row",
+            ),
+            classes="center_container",
+        )
+        yield Footer()
+
+    def install_workflow(self) -> bool:
+        from importlib.resources import files
+
+        from codeflash.cli_cmds.cmd_init import customize_codeflash_yaml_content
+        from codeflash.code_utils.env_utils import get_codeflash_api_key
+        from codeflash.code_utils.github_utils import get_github_secrets_page_url
+
+        try:
+            repo = Repo(Path.cwd(), search_parent_directories=True)
+            git_root = Path(repo.git.rev_parse("--show-toplevel"))
+        except (InvalidGitRepositoryError, AttributeError):
+            self.notify("Not in a git repository. GitHub Actions requires git.", severity="error", timeout=5)
+            return False
+
+        workflows_dir = git_root / ".github" / "workflows"
+        workflow_file = workflows_dir / "codeflash.yaml"
+
+        # Check if workflow already exists
+        if workflow_file.exists():
+            self.notify(
+                "Workflow file already exists. It will be overwritten.",
+                severity="warning",
+                timeout=3,
+            )
+
+        try:
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+
+            # Read workflow template
+            workflow_template = files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
+            workflow_content = workflow_template.read_text(encoding="utf-8")
+
+            # Build config dict
+            config = {
+                "module_root": getattr(self.app, "module_path", "src"),
+                "tests_root": getattr(self.app, "test_path", "tests"),
+            }
+
+            # Customize workflow content
+            workflow_content = customize_codeflash_yaml_content(
+                workflow_content,
+                config,
+                git_root,
+                benchmark_mode=False,
+            )
+
+            # Write workflow file
+            workflow_file.write_text(workflow_content, encoding="utf-8")
+
+            # Show success message with API key reminder
+            try:
+                api_key = get_codeflash_api_key()
+                secrets_url = get_github_secrets_page_url(repo)
+                self.notify(
+                    f"✅ Workflow installed at {workflow_file}\n\n"
+                    f"Next: Add CODEFLASH_API_KEY to GitHub secrets: {secrets_url}\n"
+                    f"Your API key: {api_key}",
+                    severity="information",
+                    timeout=10,
+                )
+            except OSError:
+                self.notify(
+                    f"✅ Workflow installed at {workflow_file}\n\n"
+                    "Next: Add CODEFLASH_API_KEY to your GitHub repository secrets.",
+                    severity="information",
+                    timeout=8,
+                )
+
+            ph("tui-github-workflow-created")
+            return True
+
+        except PermissionError:
+            self.notify(
+                "Permission denied: Unable to create workflow file. Check directory permissions.",
+                severity="error",
+                timeout=5,
+            )
+            return False
+        except Exception as e:
+            self.notify(f"Failed to install workflow: {e!s}", severity="error", timeout=5)
+            return False
+
+    @on(Button.Pressed, "#install_btn")
+    def install_pressed(self) -> None:
+        if self.install_workflow():
+            self.app.workflow_installed = True
+            # Exit after successful installation
+            self.app.exit()
+        else:
+            ph("tui-github-workflow-installation-failed")
+
+    @on(Button.Pressed, "#cancel_btn")
+    def cancel_pressed(self) -> None:
+        ph("tui-github-workflow-skipped")
+        self.app.exit()
+
+    def get_previous_screen(self) -> bool:
+        return False  # No back button in standalone mode
