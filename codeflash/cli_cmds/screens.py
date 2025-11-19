@@ -51,6 +51,7 @@ class CodeflashInit(App):
         self.benchmarks_path: str = ""  # Optional: benchmarks directory
         self.test_framework: str = "pytest"
         self.formatter: str = "ruff"
+        self.enable_telemetry: bool = True  # Default to enabled
         self.git_remote: str = ""
         self.github_app_installed: bool = False
         self.github_actions: bool = False
@@ -95,6 +96,10 @@ class CodeflashInit(App):
 
         codeflash_section["test-framework"] = self.test_framework
         codeflash_section["ignore-paths"] = []
+
+        # Add disable-telemetry if user opted out
+        if not self.enable_telemetry:
+            codeflash_section["disable-telemetry"] = True
 
         # Add formatter commands
         from codeflash.cli_cmds.cmd_init import get_formatter_cmds
@@ -426,6 +431,7 @@ class TestFrameworkScreen(BaseConfigScreen):
         framework_radio = self.query_one("#framework_radio", RadioSet)
         framework = "pytest" if framework_radio.pressed_button.id == "pytest" else "unittest"
         self.app.test_framework = framework
+        ph("cli-test-framework-provided", {"test_framework": framework})
         return FormatterScreen()
 
 
@@ -496,6 +502,7 @@ class TestDiscoveryScreen(BaseConfigScreen):
             )
 
         self.app.test_path = test_path
+        ph("cli-tests-root-provided")
         return TestFrameworkScreen()
 
 
@@ -537,6 +544,7 @@ class ModuleDiscoveryScreen(BaseConfigScreen):
             return None
 
         self.app.module_path = module_path
+        ph("cli-project-root-provided")
         return TestDiscoveryScreen()
 
 
@@ -759,6 +767,20 @@ class ConfigCheckScreen(BaseConfigScreen):
         status_widget = self.query_one("#config_status", Static)
         reconfigure_check = self.query_one("#reconfigure_check", Checkbox)
 
+        # Check if current directory is writable
+        if not os.access(Path.cwd(), os.W_OK):
+            status_widget.update(
+                "❌  Current directory is not writable\n\n"
+                "Please check your folder permissions and try again.\n"
+                "You need write permissions to create/modify pyproject.toml."
+            )
+            self.notify(
+                "Current directory is not writable. Please check permissions.",
+                severity="error",
+                timeout=10,
+            )
+            return
+
         pyproject_path = Path.cwd() / "pyproject.toml"
 
         # Check if pyproject.toml exists
@@ -913,6 +935,44 @@ class FormatterScreen(BaseConfigScreen):
         formatter_radio = self.query_one("#formatter_radio", RadioSet)
         formatter = formatter_radio.pressed_button.id
         self.app.formatter = formatter
+        return TelemetryScreen()
+
+
+class TelemetryScreen(BaseConfigScreen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Static("Telemetry Configuration", classes="screen_title"),
+            Static(
+                "Help us improve CodeFlash by sharing anonymous usage data.\n\n"
+                "This includes:\n"
+                "  • Errors encountered during optimization\n"
+                "  • Performance metrics and success rates\n"
+                "  • Feature usage statistics\n\n"
+                "We never collect:\n"
+                "  • Your source code\n"
+                "  • File names or paths\n"
+                "  • Personal information\n\n"
+                "You can change this setting anytime in pyproject.toml",
+                classes="description",
+            ),
+            RadioSet(
+                RadioButton("✓ Enable telemetry (recommended)", id="enable", value=True),
+                RadioButton("✗ Disable telemetry", id="disable"),
+                id="telemetry_radio",
+            ),
+            Horizontal(
+                Button("Continue", variant="primary", id="continue_btn"),
+                Button("Back", variant="default", id="back_btn"),
+                classes="button_row",
+            ),
+            classes="center_container",
+        )
+        yield Footer()
+
+    def get_next_screen(self) -> Screen | None:
+        telemetry_radio = self.query_one("#telemetry_radio", RadioSet)
+        self.app.enable_telemetry = telemetry_radio.pressed_button.id == "enable"
         return GitConfigScreen()
 
 
