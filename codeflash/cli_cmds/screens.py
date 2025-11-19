@@ -14,8 +14,6 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Checkbox, Footer, Header, Input, RadioButton, RadioSet, Select, Static
 
-if TYPE_CHECKING:
-    from textual.app import ComposeResult
 from codeflash.cli_cmds.cmd_init import (
     detect_test_framework_from_config_files,
     detect_test_framework_from_test_files,
@@ -26,6 +24,9 @@ from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 CODEFLASH_LOGO: str = (
     r"                   _          ___  _               _     "
@@ -774,11 +775,7 @@ class ConfigCheckScreen(BaseConfigScreen):
                 "Please check your folder permissions and try again.\n"
                 "You need write permissions to create/modify pyproject.toml."
             )
-            self.notify(
-                "Current directory is not writable. Please check permissions.",
-                severity="error",
-                timeout=10,
-            )
+            self.notify("Current directory is not writable. Please check permissions.", severity="error", timeout=10)
             return
 
         pyproject_path = Path.cwd() / "pyproject.toml"
