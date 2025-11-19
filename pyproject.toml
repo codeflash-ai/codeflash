@@ -312,9 +312,12 @@ __version__ = "{version}"
 # All paths are relative to this pyproject.toml's directory.
 module-root = "codeflash"
 tests-root = "tests"
+benchmarks-root = "tests/benchmarks"
 test-framework = "pytest"
-ignore-paths = []
-formatter-cmds = ["ruff check --exit-zero --fix $file", "ruff format $file"]
+formatter-cmds = [
+    "uvx ruff check --exit-zero --fix $file",
+    "uvx ruff format $file",
+]
 
 [tool.pytest.ini_options]
 filterwarnings = [
