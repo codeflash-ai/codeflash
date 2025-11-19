@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from textual import on
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Checkbox, Footer, Header, Input, RadioButton, RadioSet, Select, Static
 
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 from codeflash.cli_cmds.cmd_init import (
     detect_test_framework_from_config_files,
     detect_test_framework_from_test_files,
@@ -59,7 +61,7 @@ class CodeflashInit(App):
         """Start with the welcome screen."""
         self.push_screen(WelcomeScreen())
 
-    def save_configuration(self) -> bool:
+    def save_configuration(self) -> bool:  # noqa: PLR0911
         """Save all configuration to pyproject.toml and API key to shell rc."""
         if self.config_saved:
             return True
@@ -802,11 +804,9 @@ class ConfigCheckScreen(BaseConfigScreen):
 
     def get_next_screen(self) -> Screen | None:
         if self.has_valid_config and not self.should_continue:
-            # User doesn't want to reconfigure, exit the app
             self.notify("Using existing configuration.", severity="information", timeout=2)
             return None
 
-        # Continue with configuration flow
         return ModuleDiscoveryScreen()
 
 
@@ -942,66 +942,11 @@ class GitHubActionsScreen(BaseConfigScreen):
         )
         yield Footer()
 
-    def get_dependency_manager_setup(self) -> str:
-        py_version = sys.version_info
-        python_version = f"'{py_version.major}.{py_version.minor}'"
-
-        if (Path.cwd() / "uv.lock").exists():
-            return """name: 🐍 Setup UV
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true"""
-
-        # Default to setup-python
-        return f"""name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: {python_version}"""
-
-    def get_install_dependencies_command(self) -> str:
-        """Get command to install dependencies based on project setup."""
-        # Check for UV
-        if (Path.cwd() / "uv.lock").exists():
-            return "uv sync"
-
-        # Check for Poetry
-        if (Path.cwd() / "poetry.lock").exists():
-            return """pip install poetry
-          poetry install"""
-
-        # Check for requirements.txt
-        if (Path.cwd() / "requirements.txt").exists():
-            return """pip install -r requirements.txt
-          pip install codeflash"""
-
-        # Default to installing just codeflash
-        return "pip install codeflash"
-
-    def get_codeflash_command(self) -> str:
-        """Get codeflash optimize command based on dependency manager."""
-        # Check for UV
-        if (Path.cwd() / "uv.lock").exists():
-            return "uv run codeflash optimize"
-
-        # Check for Poetry
-        if (Path.cwd() / "poetry.lock").exists():
-            return "poetry run codeflash optimize"
-
-        # Default
-        return "codeflash optimize"
-
-    def get_working_directory(self, git_root: Path) -> str:
-        """Get working directory for GitHub Actions if not in git root."""
-        toml_path = Path.cwd() / "pyproject.toml"
-        if toml_path.parent == git_root:
-            return ""
-        working_dir = str(toml_path.parent.relative_to(git_root))
-        return f"""defaults:
-      run:
-        working-directory: ./{working_dir}"""
-
     def install_workflow(self) -> bool:
-        """Install GitHub Actions workflow file using template."""
+        from importlib.resources import files
+
+        from codeflash.cli_cmds.cmd_init import customize_codeflash_yaml_content
+
         try:
             # Check if git is available
             if Repo is None or git is None:
@@ -1018,36 +963,28 @@ class GitHubActionsScreen(BaseConfigScreen):
             workflows_dir = git_root / ".github" / "workflows"
             workflows_dir.mkdir(parents=True, exist_ok=True)
 
-            from importlib.resources import files
-
+            # Read workflow template
             workflow_template = files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
-            # Get module path from app
-            module_path = getattr(self.app, "module_path", "src")
-            module_full_path = (
-                str(Path(module_path).relative_to(git_root.relative_to(Path.cwd())) / "**")
-                if git_root != Path.cwd()
-                else f"{module_path}/**"
-            )
+            # Build config dict to match the format expected by customize_codeflash_yaml_content
+            config = {
+                "module_root": getattr(self.app, "module_path", "src"),
+                "tests_root": getattr(self.app, "test_path", "tests"),
+            }
 
-            # Customize template
-            workflow_content = workflow_content.replace("{{ codeflash_module_path }}", module_full_path)
-            workflow_content = workflow_content.replace("{{ working_directory }}", self.get_working_directory(git_root))
-            workflow_content = workflow_content.replace(
-                "{{ setup_python_dependency_manager }}", self.get_dependency_manager_setup()
+            # Use the existing customization function from cmd_init
+            workflow_content = customize_codeflash_yaml_content(
+                workflow_content,
+                config,
+                git_root,
+                benchmark_mode=False,  # Could be made configurable later
             )
-            workflow_content = workflow_content.replace(
-                "{{ install_dependencies_command }}", self.get_install_dependencies_command()
-            )
-            workflow_content = workflow_content.replace("{{ codeflash_command }}", self.get_codeflash_command())
 
             # Write workflow file
             workflow_file = workflows_dir / "codeflash.yaml"
             workflow_file.write_text(workflow_content, encoding="utf-8")
-
             return True
-
         except PermissionError:
             self.notify(
                 "Permission denied: Unable to create workflow file. Please check directory permissions.",
