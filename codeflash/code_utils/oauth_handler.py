@@ -655,7 +655,10 @@ def _is_graphical_browser() -> bool:
         browser_name = getattr(browser, "name", "").lower()
 
         # Check if it's a known text browser
-        return all(text_browser not in browser_name for text_browser in text_browsers)
+        for text_browser in text_browsers:
+            if text_browser in browser_name:
+                return False
+        return True
     except Exception:
         return True
 
