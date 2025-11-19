@@ -241,33 +241,13 @@ def detect_test_framework_from_test_files(tests_root: Path) -> Optional[str]:
 
 
 def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
-    ph("cli-create-pyproject-toml")
-    lsp_mode = is_LSP_enabled()
-    # Define a minimal pyproject.toml content
+    """Create an empty pyproject.toml with a minimal [tool.codeflash] section.
+
+    Used by LSP mode when config file doesn't exist.
+    """
     new_pyproject_toml = tomlkit.document()
     new_pyproject_toml["tool"] = {"codeflash": {}}
-    try:
-        pyproject_toml_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")
-
-        # Check if the pyproject.toml file was created
-        if pyproject_toml_path.exists() and not lsp_mode:
-            success_panel = Panel(
-                Text(
-                    f"✅ Created a pyproject.toml file at {pyproject_toml_path}\n\n"
-                    "Your project is now ready for Codeflash configuration!",
-                    style="green",
-                    justify="center",
-                ),
-                title="🎉 Success!",
-                border_style="bright_green",
-            )
-            console.print(success_panel)
-            console.print("\n📍 Press any key to continue...")
-            console.input()
-        ph("cli-created-pyproject-toml")
-    except OSError:
-        click.echo("❌ Failed to create pyproject.toml. Please check your disk permissions and available space.")
-        apologize_and_exit()
+    pyproject_toml_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")
 
 
 def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
