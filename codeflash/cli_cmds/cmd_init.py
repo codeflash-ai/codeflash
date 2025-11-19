@@ -23,8 +23,6 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
-from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
-from codeflash.either import is_successful
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as version
@@ -640,80 +638,6 @@ def configure_pyproject_toml(
 
 
 
-class CFAPIKeyType(click.ParamType):
-    name = "cfapi-key"
-
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
-        value = value.strip()
-        if not value.startswith("cf-") and value != "":
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
-        return value
-
-
-# Returns True if the user entered a new API key, False if they used an existing one
-def prompt_api_key() -> bool:
-    try:
-        existing_api_key = get_codeflash_api_key()
-    except OSError:
-        existing_api_key = None
-    if existing_api_key:
-        display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        api_key_panel = Panel(
-            Text(
-                f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n\n"
-                "✅ You're all set with API authentication!",
-                style="green",
-                justify="center",
-            ),
-            title="🔑 API Key Found",
-            border_style="bright_green",
-        )
-        console.print(api_key_panel)
-        console.print()
-        return False
-
-    enter_api_key_and_save_to_rc()
-    ph("cli-new-api-key-entered")
-    return True
-
-
-def enter_api_key_and_save_to_rc() -> None:
-    browser_launched = False
-    api_key = ""
-    while api_key == "":
-        api_key = click.prompt(
-            f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
-            hide_input=False,
-            default="",
-            type=CFAPIKeyType(),
-            show_default=False,
-        ).strip()
-        if api_key:
-            break
-        if not browser_launched:
-            click.echo(
-                f"Opening your Codeflash API key page. Grab a key from there!{LF}"
-                "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
-            )
-            click.launch("https://app.codeflash.ai/app/apikeys")
-            browser_launched = True  # This does not work on remote consoles
-    shell_rc_path = get_shell_rc_path()
-    if not shell_rc_path.exists() and os.name == "nt":
-        # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
-        shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
-    result = save_api_key_to_rc(api_key)
-    if is_successful(result):
-        click.echo(result.unwrap())
-    else:
-        click.echo(result.failure())
-        click.pause()
-
-    os.environ["CODEFLASH_API_KEY"] = api_key
 
 
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
