@@ -639,19 +639,25 @@ class OAuthHandler:
                 self.token_error = "No access token in response"  # noqa: S105
                 return None
 
-        except requests.exceptions.HTTPError as e:
-            error_msg = f"HTTP {e.response.status_code}"
-            try:
-                error_data = e.response.json()
-                error_msg = error_data.get("error_description", error_data.get("error", error_msg))
-            except Exception:
-                self.token_error = "Unauthorized"  # noqa: S105
-            return None
-        except Exception:
+        except requests.exceptions.HTTPError:
             self.token_error = "Unauthorized"  # noqa: S105
             return None
         else:
             return api_key
+
+
+def _is_graphical_browser() -> bool:
+    text_browsers = {"lynx", "links", "w3m", "elinks", "links2"}
+
+    try:
+        # Get the default browser
+        browser = webbrowser.get()
+        browser_name = getattr(browser, "name", "").lower()
+
+        # Check if it's a known text browser
+        return all(text_browser not in browser_name for text_browser in text_browsers)
+    except Exception:
+        return True
 
 
 def _wait_for_manual_code_input(oauth: OAuthHandler) -> None:
@@ -700,10 +706,11 @@ def perform_oauth_signin() -> str | None:
         click.echo("❌ Failed to start local server.")
         return None
 
-    # Try to open browser
-    click.echo("🌐 Opening browser to sign in to CodeFlash…")
-    with contextlib.suppress(Exception):
-        webbrowser.open(local_auth_url)
+    if _is_graphical_browser():
+        # Try to open browser
+        click.echo("🌐 Opening browser to sign in to CodeFlash…")
+        with contextlib.suppress(Exception):
+            webbrowser.open(local_auth_url)
 
     # Show remote URL and start input thread
     click.echo("\n📋 If browser didn't open, visit this URL:")
