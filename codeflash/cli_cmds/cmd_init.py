@@ -295,7 +295,7 @@ def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
     return "codeflash"
 
 
-def get_dependency_installation_commands(dep_manager: DependencyManager) -> tuple[str, str]:
+def get_dependency_installation_commands(dep_manager: DependencyManager) -> str:
     """Generate commands to install the dependency manager and project dependencies."""
     if dep_manager == DependencyManager.POETRY:
         return """|
