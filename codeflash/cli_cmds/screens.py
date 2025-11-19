@@ -71,10 +71,12 @@ class CodeflashInit(App):
         # Create pyproject.toml if it doesn't exist
         pyproject_path = Path.cwd() / "pyproject.toml"
         if not pyproject_path.exists():
+            ph("tui-create-pyproject-toml")
             new_pyproject_toml = tomlkit.document()
             new_pyproject_toml["tool"] = {"codeflash": {}}
             try:
                 pyproject_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")
+                ph("tui-created-pyproject-toml")
             except OSError:
                 return False
 
@@ -143,7 +145,7 @@ class CodeflashInit(App):
             os.environ["CODEFLASH_API_KEY"] = self.api_key
 
         self.config_saved = True
-        ph("cli-installation-successful", {"did_add_new_key": bool(self.api_key)})
+        ph("tui-installation-successful", {"did_add_new_key": bool(self.api_key)})
         return True
 
 
@@ -432,7 +434,7 @@ class TestFrameworkScreen(BaseConfigScreen):
         framework_radio = self.query_one("#framework_radio", RadioSet)
         framework = "pytest" if framework_radio.pressed_button.id == "pytest" else "unittest"
         self.app.test_framework = framework
-        ph("cli-test-framework-provided", {"test_framework": framework})
+        ph("tui-test-framework-provided", {"test_framework": framework})
         return FormatterScreen()
 
 
@@ -503,7 +505,7 @@ class TestDiscoveryScreen(BaseConfigScreen):
             )
 
         self.app.test_path = test_path
-        ph("cli-tests-root-provided")
+        ph("tui-tests-root-provided")
         return TestFrameworkScreen()
 
 
@@ -545,7 +547,7 @@ class ModuleDiscoveryScreen(BaseConfigScreen):
             return None
 
         self.app.module_path = module_path
-        ph("cli-project-root-provided")
+        ph("tui-project-root-provided")
         return TestDiscoveryScreen()
 
 
