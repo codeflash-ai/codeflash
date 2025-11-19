@@ -17,15 +17,12 @@ import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
 from pydantic.dataclasses import dataclass
-from rich.console import Group
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from codeflash.api.cfapi import is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
-from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
@@ -83,69 +80,10 @@ class DependencyManager(Enum):
 def init_codeflash() -> None:
     try:
         from codeflash.cli_cmds.screens import CodeflashInit
-
-        # Launch the Textual TUI
         app = CodeflashInit()
         app.run()
-
-        # If configuration was saved successfully, exit with success
         if app.config_saved:
             sys.exit(0)
-        
-        # If user quit without completing, exit without error
-        sys.exit(0)
-
-        should_modify, config = should_modify_pyproject_toml()
-
-        git_remote = config.get("git_remote", "origin") if config else "origin"
-
-        if should_modify:
-            setup_info: CLISetupInfo = collect_setup_info()
-            git_remote = setup_info.git_remote
-            configured = configure_pyproject_toml(setup_info)
-            if not configured:
-                apologize_and_exit()
-
-        install_github_app(git_remote)
-
-        install_github_actions(override_formatter_check=True)
-
-        install_vscode_extension()
-
-        module_string = ""
-        if "setup_info" in locals():
-            module_string = f" you selected ({setup_info.module_root})"
-
-        usage_table = Table(show_header=False, show_lines=False, border_style="dim")
-        usage_table.add_column("Command", style="cyan")
-        usage_table.add_column("Description", style="white")
-
-        usage_table.add_row(
-            "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
-        )
-        usage_table.add_row("codeflash optimize <myscript.py>", "Trace and find the best optimizations for a script")
-        usage_table.add_row("codeflash --all", "Optimize all functions in all files")
-        usage_table.add_row("codeflash --help", "See all available options")
-
-        completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
-
-        if False:
-            completion_message += (
-                "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
-            )
-            reload_cmd = f"call {get_shell_rc_path()}" if os.name == "nt" else f"source {get_shell_rc_path()}"
-            completion_message += f"\nOr run: {reload_cmd}"
-
-        completion_panel = Panel(
-            Group(Text(completion_message, style="bold green"), Text(""), usage_table),
-            title="🎉 Setup Complete!",
-            border_style="bright_green",
-            padding=(1, 2),
-        )
-        console.print(completion_panel)
-
-        ph("cli-installation-successful", {"did_add_new_key": False})
-        sys.exit(0)
     except KeyboardInterrupt:
         apologize_and_exit()
 
