@@ -36,27 +36,6 @@ CODEFLASH_LOGO: str = (
 )
 
 
-class BaseConfigScreen(Screen):
-    def get_next_screen(self) -> Screen | None:
-        return None
-
-    def get_previous_screen(self) -> bool:
-        return True
-
-    @on(Button.Pressed, "#continue_btn")
-    def continue_pressed(self) -> None:
-        next_screen = self.get_next_screen()
-        if next_screen:
-            self.app.push_screen(next_screen)
-        else:
-            self.app.exit()
-
-    @on(Button.Pressed, "#back_btn")
-    def back_pressed(self) -> None:
-        if self.get_previous_screen():
-            self.app.pop_screen()
-
-
 class CodeflashInit(App):
     CSS_PATH = "assets/style.tcss"
     TITLE = "Codeflash Configuration Setup"
@@ -158,6 +137,27 @@ class CodeflashInit(App):
         self.config_saved = True
         ph("cli-installation-successful", {"did_add_new_key": bool(self.api_key)})
         return True
+
+
+class BaseConfigScreen(Screen):
+    def get_next_screen(self) -> Screen | None:
+        return None
+
+    def get_previous_screen(self) -> bool:
+        return True
+
+    @on(Button.Pressed, "#continue_btn")
+    def continue_pressed(self) -> None:
+        next_screen = self.get_next_screen()
+        if next_screen:
+            self.app.push_screen(next_screen)
+        else:
+            self.app.exit()
+
+    @on(Button.Pressed, "#back_btn")
+    def back_pressed(self) -> None:
+        if self.get_previous_screen():
+            self.app.pop_screen()
 
 
 class DirectorySelectorWidget(Container):
