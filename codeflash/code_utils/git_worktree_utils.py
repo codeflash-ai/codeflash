@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import configparser
 import subprocess
 import tempfile
 import time
@@ -18,7 +19,20 @@ patches_dir = codeflash_cache_dir / "patches"
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
-    with repository.config_writer() as cw:
+    username = None
+    no_username = False
+    email = None
+    no_email = False
+    with repository.config_reader(config_level="repository") as cr:
+        try:
+            username = cr.get("user", "name")
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            no_username = True
+        try:
+            email = cr.get("user", "email")
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            no_email = True
+    with repository.config_writer(config_level="repository") as cw:
         if not cw.has_option("user", "name"):
             cw.set_value("user", "name", "Codeflash Bot")
         if not cw.has_option("user", "email"):
@@ -26,6 +40,15 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
 
     repository.git.add(".")
     repository.git.commit("-m", commit_message, "--no-verify")
+    with repository.config_writer(config_level="repository") as cw:
+        if username:
+            cw.set_value("user", "name", username)
+        elif no_username:
+            cw.remove_option("user", "name")
+        if email:
+            cw.set_value("user", "email", email)
+        elif no_email:
+            cw.remove_option("user", "email")
 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:

@@ -608,26 +608,32 @@ class FunctionOptimizer:
                         original_async_throughput=original_code_baseline.async_throughput,
                         best_throughput_until_now=None,
                     ) and quantity_of_tests_critic(candidate_result):
-                        tree.add("This candidate is faster than the original code. 🚀")  # TODO: Change this description
-                        tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
-                        tree.add(
-                            f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
-                            f"(measured over {candidate_result.max_loop_count} "
-                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                        )
-                        tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                        tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
-                        if (
+                        # For async functions, prioritize throughput metrics over runtime
+                        is_async = (
                             original_code_baseline.async_throughput is not None
                             and candidate_result.async_throughput is not None
-                        ):
+                        )
+
+                        if is_async:
                             throughput_gain_value = throughput_gain(
                                 original_throughput=original_code_baseline.async_throughput,
                                 optimized_throughput=candidate_result.async_throughput,
                             )
+                            tree.add("This candidate has better async throughput than the original code. 🚀")
                             tree.add(f"Original async throughput: {original_code_baseline.async_throughput} executions")
                             tree.add(f"Optimized async throughput: {candidate_result.async_throughput} executions")
                             tree.add(f"Throughput improvement: {throughput_gain_value * 100:.1f}%")
+                            tree.add(f"Throughput ratio: {throughput_gain_value + 1:.3f}X")
+                        else:
+                            tree.add("This candidate is faster than the original code. 🚀")
+                            tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
+                            tree.add(
+                                f"Best summed runtime: {humanize_runtime(candidate_result.best_test_runtime)} "
+                                f"(measured over {candidate_result.max_loop_count} "
+                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                            tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
                         line_profile_test_results = self.line_profiler_step(
                             code_context=code_context,
                             original_helper_code=original_helper_code,
@@ -682,22 +688,31 @@ class FunctionOptimizer:
                                 )
                             )
                     else:
-                        tree.add(
-                            f"Summed runtime: {humanize_runtime(best_test_runtime)} "
-                            f"(measured over {candidate_result.max_loop_count} "
-                            f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
-                        )
-                        tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
-                        tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
-                        if (
+                        # For async functions, prioritize throughput metrics over runtime even for slow candidates
+                        is_async = (
                             original_code_baseline.async_throughput is not None
                             and candidate_result.async_throughput is not None
-                        ):
+                        )
+
+                        if is_async:
                             throughput_gain_value = throughput_gain(
                                 original_throughput=original_code_baseline.async_throughput,
                                 optimized_throughput=candidate_result.async_throughput,
                             )
-                            tree.add(f"Throughput gain: {throughput_gain_value * 100:.1f}%")
+                            tree.add(f"Async throughput: {candidate_result.async_throughput} executions")
+                            tree.add(f"Throughput change: {throughput_gain_value * 100:.1f}%")
+                            tree.add(
+                                f"(Runtime for reference: {humanize_runtime(best_test_runtime)} over "
+                                f"{candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                        else:
+                            tree.add(
+                                f"Summed runtime: {humanize_runtime(best_test_runtime)} "
+                                f"(measured over {candidate_result.max_loop_count} "
+                                f"loop{'s' if candidate_result.max_loop_count > 1 else ''})"
+                            )
+                            tree.add(f"Speedup percentage: {perf_gain * 100:.1f}%")
+                            tree.add(f"Speedup ratio: {perf_gain + 1:.3f}X")
 
                     if is_LSP_enabled():
                         lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
@@ -1515,6 +1530,9 @@ class FunctionOptimizer:
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
         if raise_pr and not staging_review and opt_review_response != "low":
+            # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
+            if "root_dir" not in data:
+                data["root_dir"] = git_root_dir()
             data["git_remote"] = self.args.git_remote
             check_create_pr(**data)
         elif staging_review:
@@ -1582,15 +1600,11 @@ class FunctionOptimizer:
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
         if self.function_to_optimize.is_async:
-            from codeflash.code_utils.instrument_existing_tests import instrument_source_module_with_async_decorators
+            from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-            success, instrumented_source = instrument_source_module_with_async_decorators(
+            success = add_async_decorator_to_function(
                 self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
             )
-            if success and instrumented_source:
-                with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                    f.write(instrumented_source)
-                logger.debug(f"Applied async instrumentation to {self.function_to_optimize.file_path}")
 
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
@@ -1635,19 +1649,11 @@ class FunctionOptimizer:
             console.rule()
             with progress_bar("Running performance benchmarks..."):
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import (
-                        instrument_source_module_with_async_decorators,
-                    )
+                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                    add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
-                    if success and instrumented_source:
-                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                            f.write(instrumented_source)
-                        logger.debug(
-                            f"Applied async performance instrumentation to {self.function_to_optimize.file_path}"
-                        )
 
                 try:
                     benchmarking_results, _ = self.run_and_parse_tests(
@@ -1770,19 +1776,11 @@ class FunctionOptimizer:
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
             if self.function_to_optimize.is_async:
-                from codeflash.code_utils.instrument_existing_tests import (
-                    instrument_source_module_with_async_decorators,
-                )
+                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                success, instrumented_source = instrument_source_module_with_async_decorators(
+                add_async_decorator_to_function(
                     self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
                 )
-                if success and instrumented_source:
-                    with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                        f.write(instrumented_source)
-                    logger.debug(
-                        f"Applied async behavioral instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}"
-                    )
 
             try:
                 instrument_codeflash_capture(
@@ -1823,19 +1821,11 @@ class FunctionOptimizer:
             if test_framework == "pytest":
                 # For async functions, instrument at definition site for performance benchmarking
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import (
-                        instrument_source_module_with_async_decorators,
-                    )
+                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    success, instrumented_source = instrument_source_module_with_async_decorators(
+                    add_async_decorator_to_function(
                         self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                     )
-                    if success and instrumented_source:
-                        with self.function_to_optimize.file_path.open("w", encoding="utf8") as f:
-                            f.write(instrumented_source)
-                        logger.debug(
-                            f"Applied async performance instrumentation to {self.function_to_optimize.file_path} for candidate {optimization_candidate_index}"
-                        )
 
                 try:
                     candidate_benchmarking_results, _ = self.run_and_parse_tests(
