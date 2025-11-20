@@ -40,12 +40,12 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 CODEFLASH_LOGO: str = (
-    r"                   _          ___  _               _     " "\n"
-    r"                  | |        / __)| |             | |    " "\n"
-    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " "\n"
-    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ " "\n"
-    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |" "\n"
-    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|" "\n"
+    r"                   _          ___  _               _     " "\n"  # noqa: ISC001
+    r"                  | |        / __)| |             | |    " "\n"  # noqa: ISC001
+    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " "\n"  # noqa: ISC001
+    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ " "\n"  # noqa: ISC001
+    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |" "\n"  # noqa: ISC001
+    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|" "\n"  # noqa: ISC001
     f"{('v' + version).rjust(66)}"
 )
 
@@ -207,11 +207,7 @@ class DirectorySelectorWidget(Container):
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="path-controls"):
-            yield Input(
-                value=str(self.start_path),
-                placeholder="Enter directory path",
-                id=self.path_input_id,
-            )
+            yield Input(value=str(self.start_path), placeholder="Enter directory path", id=self.path_input_id)
             yield Button("⬆️", variant="default", id="btn_up", tooltip="Up One Level")
             yield Button("🏠", variant="default", id="btn_home", tooltip="Home")
             yield Button("📁", variant="default", id="btn_cwd", tooltip="Current Dir")
@@ -533,11 +529,7 @@ class TestDiscoveryScreen(BaseConfigScreen):
             ),
             DirectorySelectorWidget("test_tree", "test_path_input", start_path=suggested_path),
             Horizontal(
-                Button(
-                    "📁 Create tests/ directory",
-                    variant="success",
-                    id="create_tests_btn",
-                ),
+                Button("📁 Create tests/ directory", variant="success", id="create_tests_btn"),
                 classes="centered_single_button" + (" hidden" if self.tests_dir_exists else ""),
             ),
             Horizontal(
@@ -556,16 +548,16 @@ class TestDiscoveryScreen(BaseConfigScreen):
         try:
             tests_dir.mkdir(exist_ok=True)
             self.notify("✅ Created tests/ directory", severity="information", timeout=3)
-            
+
             # Hide the create button
             create_btn = self.query_one("#create_tests_btn", Button)
             create_btn.add_class("hidden")
-            
+
             # Update the directory tree to show the new directory
             selector = self.query_one(DirectorySelectorWidget)
             selector._set_directory(tests_dir)
             selector.selected_dir = tests_dir
-            
+
             self.tests_dir_exists = True
         except Exception as e:
             self.notify(f"Failed to create tests/ directory: {e}", severity="error", timeout=5)
@@ -581,7 +573,11 @@ class TestDiscoveryScreen(BaseConfigScreen):
         path = Path.cwd() / test_path
         if not path.exists():
             # Offer to create the directory
-            self.notify(f"Directory does not exist: {test_path}. Please select an existing directory.", severity="error", timeout=5)
+            self.notify(
+                f"Directory does not exist: {test_path}. Please select an existing directory.",
+                severity="error",
+                timeout=5,
+            )
             return None
 
         if not path.is_dir():
@@ -704,11 +700,17 @@ class GitHubAppScreen(BaseConfigScreen):
 
         self.app.github_app_installed = True
         self.notify("✓ GitHub App configured successfully!", severity="information", timeout=2)
+        if not self.app.save_configuration():
+            self.notify("Failed to save configuration. GitHub Actions setup may fail.", severity="warning", timeout=5)
+
         return GitHubActionsScreen()
 
     @on(Button.Pressed, "#skip_btn")
     def skip_pressed(self) -> None:
         self.app.github_app_installed = False
+        if not self.app.save_configuration():
+            self.notify("Failed to save configuration. GitHub Actions setup may fail.", severity="warning", timeout=5)
+
         self.app.push_screen(GitHubActionsScreen())
 
 
@@ -1146,11 +1148,12 @@ class GitHubActionsScreen(BaseConfigScreen):
         yield Footer()
 
     def get_next_screen(self) -> Screen | None:
-        from codeflash.api.cfapi import setup_github_actions
-        from codeflash.code_utils.env_utils import get_codeflash_api_key
-        from codeflash.code_utils.git_utils import get_repo_owner_and_name, get_current_branch
         from importlib.resources import files
+
+        from codeflash.api.cfapi import setup_github_actions
         from codeflash.cli_cmds.cmd_init import customize_codeflash_yaml_content
+        from codeflash.code_utils.env_utils import get_codeflash_api_key
+        from codeflash.code_utils.git_utils import get_current_branch, get_repo_owner_and_name
 
         # If workflow already exists, just continue
         if self.workflow_exists:
@@ -1162,7 +1165,7 @@ class GitHubActionsScreen(BaseConfigScreen):
         self.app.github_actions = actions_check.value
 
         if not actions_check.value:
-            self.notify("Skipping GitHub Actions workflow", severity="information", timeout=2)
+            self.notify("Skipping GitHub Actions workflow", severity="information", timeout=5)
             return VSCodeExtensionScreen()
 
         # Get benchmark mode preference if available
@@ -1191,20 +1194,26 @@ class GitHubActionsScreen(BaseConfigScreen):
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
             # customize_codeflash_yaml_content expects config as a tuple: (dict, Path)
-            config = (
-                {
-                    "module_root": getattr(self.app, "module_path", "src"),
-                    "tests_root": getattr(self.app, "test_path", "tests"),
-                },
-                Path.cwd() / "pyproject.toml"
-            )
+            try:
+                config = (
+                    {
+                        "module_root": getattr(self.app, "module_path", "src"),
+                        "tests_root": getattr(self.app, "test_path", "tests"),
+                    },
+                    Path.cwd() / "pyproject.toml",
+                )
 
-            workflow_content = customize_codeflash_yaml_content(
-                workflow_content,
-                config,
-                git_root,
-                benchmark_mode=benchmark_mode,
-            )
+                workflow_content = customize_codeflash_yaml_content(
+                    workflow_content, config, git_root, benchmark_mode=benchmark_mode
+                )
+            except FileNotFoundError as e:
+                self.notify(
+                    f"Configuration file not found. {e!s}\n\nPlease ensure pyproject.toml exists in your project.",
+                    severity="error",
+                    timeout=5,
+                )
+                self.app.github_actions = False
+                return VSCodeExtensionScreen()
 
             # Get repository information
             try:
@@ -1218,7 +1227,11 @@ class GitHubActionsScreen(BaseConfigScreen):
                 workflow_file = workflows_dir / "codeflash.yaml"
                 workflow_file.write_text(workflow_content, encoding="utf-8")
                 self.app.github_actions_pr_created = False
-                self.notify("✓ GitHub Actions workflow created locally at .github/workflows/codeflash.yaml", severity="information", timeout=4)
+                self.notify(
+                    "✓ GitHub Actions workflow created locally at .github/workflows/codeflash.yaml",
+                    severity="information",
+                    timeout=5,
+                )
                 return VSCodeExtensionScreen()
 
             # Get API key for secret setup (optional)
@@ -1229,7 +1242,7 @@ class GitHubActionsScreen(BaseConfigScreen):
                 logger.debug("No API key available for secret setup")
 
             # Call CF API to create PR with workflow
-            self.notify("Setting up GitHub Actions workflow...", severity="information", timeout=2)
+            self.notify("Setting up GitHub Actions workflow...", severity="information", timeout=5)
             response = setup_github_actions(owner, repo_name, base_branch, workflow_content, api_key)
 
             if response.status_code == 200:
@@ -1247,25 +1260,25 @@ class GitHubActionsScreen(BaseConfigScreen):
                             self.app.github_actions_secret_error = secret_error
 
                         if pr_url:
-                            self.notify(f"✓ PR created: {pr_url}", severity="information", timeout=4)
+                            self.notify(f"✓ PR created: {pr_url}", severity="information", timeout=5)
                             if not secret_success and secret_error:
                                 self.notify(f"⚠️ Secret setup warning: {secret_error}", severity="warning", timeout=5)
                         else:
-                            self.notify("✓ GitHub Actions workflow configured", severity="information", timeout=3)
+                            self.notify("✓ GitHub Actions workflow configured", severity="information", timeout=5)
                     else:
                         error_msg = response_data.get("error", "Unknown error")
                         logger.warning(f"API response indicated failure: {error_msg}")
-                        self.notify(f"Could not create PR: {error_msg}", severity="warning", timeout=4)
+                        self.notify(f"Could not create PR: {error_msg}", severity="warning", timeout=5)
                 except Exception as e:
                     logger.error(f"Failed to parse API response: {e}")
-                    self.notify("API response was invalid", severity="warning", timeout=3)
+                    self.notify("API response was invalid", severity="warning", timeout=5)
             else:
                 logger.warning(f"API call failed with status {response.status_code}")
-                self.notify(f"API error: Status {response.status_code}", severity="warning", timeout=3)
+                self.notify(f"API error: Status {response.status_code}", severity="warning", timeout=5)
 
         except Exception as e:
             logger.error(f"Error setting up GitHub Actions: {e}")
-            self.notify(f"Error: {str(e)}", severity="error", timeout=5)
+            self.notify(f"Error: {e!s}", severity="error", timeout=5)
             self.app.github_actions = False
 
         return VSCodeExtensionScreen()
@@ -1363,11 +1376,11 @@ class GitHubActionsStandaloneScreen(BaseConfigScreen):
             workflow_template = Path(files("codeflash") / "cli_cmds" / "workflows" / "codeflash-optimize.yaml")
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
-            # Build config dict
-            config = {
+            config_dict = {
                 "module_root": getattr(self.app, "module_path", "src"),
                 "tests_root": getattr(self.app, "test_path", "tests"),
             }
+            config = (config_dict, Path.cwd() / "pyproject.toml")
 
             # Customize workflow content
             workflow_content = customize_codeflash_yaml_content(

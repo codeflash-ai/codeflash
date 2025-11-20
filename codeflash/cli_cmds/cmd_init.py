@@ -322,12 +322,20 @@ def get_dependency_manager_installation_string(dep_manager: DependencyManager) -
 
 
 def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
-    if toml_path.parent == git_root:
+    toml_parent = toml_path.parent.resolve()
+    git_root = git_root.resolve()
+
+    if toml_parent == git_root:
         return ""
-    working_dir = str(toml_path.parent.relative_to(git_root))
-    return f"""defaults:
+
+    try:
+        working_dir = str(toml_parent.relative_to(git_root))
+        return f"""defaults:
       run:
         working-directory: ./{working_dir}"""
+    except ValueError:
+        # If toml_path is not under git_root, don't set working directory
+        return ""
 
 
 def customize_codeflash_yaml_content(
@@ -336,31 +344,49 @@ def customize_codeflash_yaml_content(
     git_root: Path,
     benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
-    module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
+    config_dict = config[0] if isinstance(config, tuple) else config
+
+    module_root = Path(config_dict["module_root"])
+
+    if not module_root.is_absolute():
+        module_root = Path.cwd() / module_root
+
+    module_root = module_root.resolve()
+    git_root = git_root.resolve()
+
+    try:
+        module_rel_path = module_root.relative_to(git_root)
+        module_path = str(module_rel_path / "**")
+    except ValueError:
+        # module_root is not under git_root, use just the name
+        module_path = f"{module_root.name}/**"
+
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
 
-    # Get dependency installation commands
-    toml_path = Path.cwd() / "pyproject.toml"
+    toml_path = config[1] if isinstance(config, tuple) and len(config) > 1 else Path.cwd() / "pyproject.toml"
+    toml_path = Path(toml_path).resolve()  # Ensure it's an absolute path
+
     try:
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
-    except FileNotFoundError:
-        click.echo(
-            f"I couldn't find a pyproject.toml in the current directory.{LF}"
-            f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
+    except FileNotFoundError as e:
+        error_msg = (
+            f"I couldn't find a pyproject.toml at {toml_path}.{LF}"
+            f"Please make sure pyproject.toml exists in your project directory."
         )
-        apologize_and_exit()
+        raise FileNotFoundError(error_msg) from e
 
     working_dir = get_github_action_working_directory(toml_path, git_root)
     optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
     dep_manager = determine_dependency_manager(pyproject_data)
 
     python_depmanager_installation = get_dependency_manager_installation_string(dep_manager)
     optimize_yml_content = optimize_yml_content.replace(
         "{{ setup_python_dependency_manager }}", python_depmanager_installation
     )
-    install_deps_cmd = get_dependency_installation_commands(dep_manager)
 
+    install_deps_cmd = get_dependency_installation_commands(dep_manager)
     optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
 
     # Add codeflash command
@@ -368,6 +394,7 @@ def customize_codeflash_yaml_content(
 
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
+
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
 
