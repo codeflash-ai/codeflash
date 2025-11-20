@@ -1083,7 +1083,7 @@ def configure_pyproject_toml(
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"✅ Added Codeflash configuration to {toml_path}")
+    click.echo(f"Added Codeflash configuration to {toml_path}")
     click.echo()
     return True
 
