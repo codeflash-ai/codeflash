@@ -246,6 +246,7 @@ class FunctionOptimizer:
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
+        self.optimization_review = ""
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -1517,17 +1518,17 @@ class FunctionOptimizer:
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
         opt_review_response = ""
-        # Skip optimization review for async functions for now
-        if (raise_pr or staging_review) and not self.function_to_optimize.is_async:
-            data["root_dir"] = git_root_dir()
-            try:
-                opt_review_response = self.aiservice_client.get_optimization_review(
-                    **data, calling_fn_details=function_references
-                )
-            except Exception as e:
-                logger.debug(f"optimization review response failed, investigate {e}")
-        # Always set optimization_review in data (empty string for async functions)
+        # this will now run regardless of pr, staging review flags
+        try:
+            opt_review_response = self.aiservice_client.get_optimization_review(
+                **data, calling_fn_details=function_references
+            )
+        except Exception as e:
+            logger.debug(f"optimization review response failed, investigate {e}")
         data["optimization_review"] = opt_review_response
+        self.optimization_review = opt_review_response
+        if raise_pr or staging_review:
+            data["root_dir"] = git_root_dir()
         if raise_pr and not staging_review and opt_review_response != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
