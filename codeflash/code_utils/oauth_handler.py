@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+from functools import lru_cache
 
 import click
 import requests
@@ -648,6 +649,7 @@ class OAuthHandler:
             return api_key
 
 
+@lru_cache(maxsize=1)
 def get_browser_name_fallback() -> str | None:
     try:
         controller = webbrowser.get()
@@ -658,34 +660,42 @@ def get_browser_name_fallback() -> str | None:
 
 
 def should_attempt_browser_launch() -> bool:
-    # A list of browser names that indicate we should not attempt to open a
-    # web browser for the user.
-    browser_blocklist = ["www-browser", "lynx", "links", "w3m", "elinks", "links2"]
-    browser_env = os.environ.get("BROWSER") or get_browser_name_fallback()
+    # Move constants to module scope for performance
+    browser_blocklist = {"www-browser", "lynx", "links", "w3m", "elinks", "links2"}
+
+    environ = os.environ  # local ref for speed
+
+    # Use local variable for platform comparison (avoid repeated attribute lookups)
+    sys_platform = sys.platform
+
+    # Try to avoid calling expensive get_browser_name_fallback if unnecessary
+    browser_env = environ.get("BROWSER")
+    if not browser_env:
+        browser_env = get_browser_name_fallback()
+
     if browser_env and browser_env in browser_blocklist:
         return False
 
     # Common environment variables used in CI/CD or other non-interactive shells.
-    if os.environ.get("CI") or os.environ.get("DEBIAN_FRONTEND") == "noninteractive":
+    if environ.get("CI") or environ.get("DEBIAN_FRONTEND") == "noninteractive":
         return False
 
     # The presence of SSH_CONNECTION indicates a remote session.
-    # We should not attempt to launch a browser unless a display is explicitly available
-    # (checked below for Linux).
-    is_ssh = bool(os.environ.get("SSH_CONNECTION"))
+    is_ssh = bool(environ.get("SSH_CONNECTION"))
 
     # On Linux, the presence of a display server is a strong indicator of a GUI.
-    if sys.platform == "linux":
-        # These are environment variables that can indicate a running compositor on
-        # Linux.
-        display_variables = ["DISPLAY", "WAYLAND_DISPLAY", "MIR_SOCKET"]
-        has_display = any(os.environ.get(v) for v in display_variables)
-        if not has_display:
+    if sys_platform == "linux":
+        # Inline variable, avoid list creation each call
+        # Check each variable, short-circuit on first match
+        for v in ("DISPLAY", "WAYLAND_DISPLAY", "MIR_SOCKET"):
+            if environ.get(v):
+                break
+        else:
             return False
 
     # If in an SSH session on a non-Linux OS (e.g., macOS), don't launch browser.
     # The Linux case is handled above (it's allowed if DISPLAY is set).
-    if is_ssh and sys.platform != "linux":
+    if is_ssh and sys_platform != "linux":
         return False
 
     # For non-Linux OSes, we generally assume a GUI is available
