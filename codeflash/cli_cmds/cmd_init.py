@@ -31,7 +31,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
-from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
+from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
@@ -135,7 +135,13 @@ def init_codeflash() -> None:
             completion_message += (
                 "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
             )
-            reload_cmd = f"call {get_shell_rc_path()}" if os.name == "nt" else f"source {get_shell_rc_path()}"
+            if os.name == "nt":
+                if is_powershell():
+                    reload_cmd = f". {get_shell_rc_path()}"
+                else:
+                    reload_cmd = f"call {get_shell_rc_path()}"
+            else:
+                reload_cmd = f"source {get_shell_rc_path()}"
             completion_message += f"\nOr run: {reload_cmd}"
 
         completion_panel = Panel(
@@ -1213,7 +1219,8 @@ def enter_api_key_and_save_to_rc() -> None:
             browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
-        # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
+        # On Windows, create the appropriate file (PowerShell .ps1 or CMD .bat) in the user's home directory
+        shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
         shell_rc_path.touch()
         click.echo(f"✅ Created {shell_rc_path}")
     get_user_id(api_key=api_key)  # Used to verify whether the API key is valid.
