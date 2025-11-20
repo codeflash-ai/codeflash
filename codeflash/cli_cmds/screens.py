@@ -29,6 +29,7 @@ from textual.widgets import (
 )
 
 from codeflash.cli_cmds.cmd_init import detect_test_framework_from_config_files, detect_test_framework_from_test_files
+from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.validators import APIKeyValidator
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
 from codeflash.either import is_successful
@@ -68,6 +69,12 @@ class CodeflashInit(App):
         self.github_actions: bool = False
         self.vscode_extension: bool = False
         self.config_saved: bool = False
+        # GitHub Actions PR creation tracking
+        self.github_actions_pr_created: bool = False
+        self.github_actions_pr_url: str = ""
+        self.github_actions_secret_configured: bool = False
+        self.github_actions_secret_error: str = ""
+        self.github_actions_benchmark_mode: bool = False
 
     def on_mount(self) -> None:
         """Start with the welcome screen."""
@@ -955,9 +962,14 @@ class CompletionScreen(BaseConfigScreen):
         formatter = getattr(self.app, "formatter", "ruff")
         github_app = getattr(self.app, "github_app_installed", False)
         github_actions = getattr(self.app, "github_actions", False)
+        github_actions_pr_created = getattr(self.app, "github_actions_pr_created", False)
+        github_actions_pr_url = getattr(self.app, "github_actions_pr_url", "")
 
         github_status = "✓ Installed" if github_app else "✗ Not installed"
-        actions_status = "✓ Enabled" if github_actions else "✗ Disabled"
+        if github_actions_pr_created and github_actions_pr_url:
+            actions_status = f"✓ Enabled\n  PR: {github_actions_pr_url}"
+        else:
+            actions_status = "✓ Enabled" if github_actions else "✗ Disabled"
 
         config_lines = [f"Module Path      : {module_path}", f"Test Path        : {test_path}"]
 
@@ -1056,102 +1068,205 @@ class TelemetryScreen(BaseConfigScreen):
         return GitConfigScreen()
 
 
+
 class GitHubActionsScreen(BaseConfigScreen):
+    def __init__(self) -> None:
+        super().__init__()
+        self.workflow_exists = False
+        self.benchmark_mode_available = False
+
+    def on_mount(self) -> None:
+        """Check for existing workflow and benchmark mode."""
+        try:
+            repo = Repo(Path.cwd(), search_parent_directories=True)
+            git_root = Path(repo.git.rev_parse("--show-toplevel"))
+            workflow_path = git_root / ".github" / "workflows" / "codeflash.yaml"
+            self.workflow_exists = workflow_path.exists()
+
+            # Check if benchmarks directory exists
+            benchmarks_path = getattr(self.app, "benchmarks_path", "")
+            self.benchmark_mode_available = bool(benchmarks_path) and Path(benchmarks_path).exists()
+        except Exception:
+            self.workflow_exists = False
+            self.benchmark_mode_available = False
+
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Container(
-            Static("GitHub Actions Setup", classes="screen_title"),
-            Static("Enable continuous optimization with automated CI/CD workflows.", classes="description"),
-            Static(
-                "[b]Workflow Features:[/b]\n"
-                "  • Triggers on every push to your repository\n"
-                "  • Analyzes code for performance improvements\n"
-                "  • Automatically creates PRs with optimizations\n\n"
-                "[b dim]Note:[/b dim] The workflow file will be added to .github/workflows/",
-                classes="info_section",
-            ),
-            Vertical(
-                Checkbox("✓ Install GitHub Actions workflow", id="actions_check", value=True), classes="action_section"
-            ),
-            Horizontal(
-                Button("Continue", variant="primary", id="continue_btn"),
-                Button("Back", variant="default", id="back_btn"),
-                classes="button_row",
-            ),
-            classes="center_container",
-        )
+        if self.workflow_exists:
+            # Show existing workflow message
+            yield Container(
+                Static("GitHub Actions Setup", classes="screen_title"),
+                Static("GitHub Actions workflow already configured.", classes="description"),
+                Static(
+                    "[b]Current Status:[/b]\\n"
+                    "  ✅ Workflow exists at .github/workflows/codeflash.yaml\\n\\n"
+                    "[b dim]Next Step:[/b dim] Make sure CODEFLASH_API_KEY is configured\\n"
+                    "in your GitHub repository settings.",
+                    classes="info_section",
+                ),
+                Horizontal(
+                    Button("Continue", variant="primary", id="continue_btn"),
+                    Button("Back", variant="default", id="back_btn"),
+                    classes="button_row",
+                ),
+                classes="center_container",
+            )
+        else:
+            # Show workflow setup options
+            yield Container(
+                Static("GitHub Actions Setup", classes="screen_title"),
+                Static("Enable continuous optimization with automated CI/CD workflows.", classes="description"),
+                Static(
+                    "[b]Workflow Features:[/b]\\n"
+                    "  • Triggers on every push to your repository\\n"
+                    "  • Analyzes code for performance improvements\\n"
+                    "  • Automatically creates PRs with optimizations\\n\\n"
+                    "[b dim]Note:[/b dim] The workflow file will be added to .github/workflows/",
+                    classes="info_section",
+                ),
+                Vertical(
+                    Checkbox("✓ Install GitHub Actions workflow", id="actions_check", value=True),
+                    classes="action_section",
+                ),
+                classes="center_container",
+            )
+            if self.benchmark_mode_available:
+                yield Container(
+                    Checkbox("✓ Enable benchmark mode (performance reports)", id="benchmark_check", value=False),
+                    classes="action_section",
+                )
+            yield Container(
+                Horizontal(
+                    Button("Continue", variant="primary", id="continue_btn"),
+                    Button("Back", variant="default", id="back_btn"),
+                    classes="button_row",
+                ),
+                classes="center_container",
+            )
         yield Footer()
 
-    def install_workflow(self) -> bool:
+    def get_next_screen(self) -> Screen | None:
+        from codeflash.api.cfapi import setup_github_actions
+        from codeflash.code_utils.env_utils import get_codeflash_api_key
+        from codeflash.code_utils.git_utils import get_repo_owner_and_name, get_current_branch
         from importlib.resources import files
-
         from codeflash.cli_cmds.cmd_init import customize_codeflash_yaml_content
 
-        try:
-            # Check if git is available
-            if Repo is None or git is None:
-                self.notify("GitPython not available. Install with: pip install gitpython", severity="error", timeout=5)
-                return False
+        # If workflow already exists, just continue
+        if self.workflow_exists:
+            self.app.github_actions = True
+            return VSCodeExtensionScreen()
 
+        # Check if user wants to install workflow
+        actions_check = self.query_one("#actions_check", Checkbox)
+        self.app.github_actions = actions_check.value
+
+        if not actions_check.value:
+            self.notify("Skipping GitHub Actions workflow", severity="information", timeout=2)
+            return VSCodeExtensionScreen()
+
+        # Get benchmark mode preference if available
+        benchmark_mode = False
+        if self.benchmark_mode_available:
+            try:
+                benchmark_check = self.query_one("#benchmark_check", Checkbox)
+                benchmark_mode = benchmark_check.value
+                self.app.github_actions_benchmark_mode = benchmark_mode
+            except Exception:
+                pass
+
+        # Prepare workflow content
+        try:
+            # Get git information
             try:
                 repo = Repo(Path.cwd(), search_parent_directories=True)
                 git_root = Path(repo.git.rev_parse("--show-toplevel"))
             except git.InvalidGitRepositoryError:
                 self.notify("Not in a git repository. GitHub Actions requires git.", severity="error", timeout=5)
-                return False
+                self.app.github_actions = False
+                return VSCodeExtensionScreen()
 
-            workflows_dir = git_root / ".github" / "workflows"
-            workflows_dir.mkdir(parents=True, exist_ok=True)
-
-            # Read workflow template
+            # Load and customize workflow template
             workflow_template = files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
-            # Build config dict to match the format expected by customize_codeflash_yaml_content
-            config = {
-                "module_root": getattr(self.app, "module_path", "src"),
-                "tests_root": getattr(self.app, "test_path", "tests"),
-            }
+            # customize_codeflash_yaml_content expects config as a tuple: (dict, Path)
+            config = (
+                {
+                    "module_root": getattr(self.app, "module_path", "src"),
+                    "tests_root": getattr(self.app, "test_path", "tests"),
+                },
+                Path.cwd() / "pyproject.toml"
+            )
 
-            # Use the existing customization function from cmd_init
             workflow_content = customize_codeflash_yaml_content(
                 workflow_content,
                 config,
                 git_root,
-                benchmark_mode=False,  # Could be made configurable later
+                benchmark_mode=benchmark_mode,
             )
 
-            # Write workflow file
-            workflow_file = workflows_dir / "codeflash.yaml"
-            workflow_file.write_text(workflow_content, encoding="utf-8")
-            return True  # noqa: TRY300
-        except PermissionError:
-            self.notify(
-                "Permission denied: Unable to create workflow file. Please check directory permissions.",
-                severity="error",
-                timeout=5,
-            )
-            return False
-        except Exception as e:
-            self.notify(f"Failed to install workflow: {e!s}", severity="error", timeout=5)
-            return False
+            # Get repository information
+            try:
+                owner, repo_name = get_repo_owner_and_name()
+                base_branch = get_current_branch()
+            except Exception as e:
+                logger.warning(f"Could not get git remote info: {e}. Falling back to local workflow creation.")
+                # Fallback: write workflow locally
+                workflows_dir = git_root / ".github" / "workflows"
+                workflows_dir.mkdir(parents=True, exist_ok=True)
+                workflow_file = workflows_dir / "codeflash.yaml"
+                workflow_file.write_text(workflow_content, encoding="utf-8")
+                self.app.github_actions_pr_created = False
+                self.notify("✓ GitHub Actions workflow created locally at .github/workflows/codeflash.yaml", severity="information", timeout=4)
+                return VSCodeExtensionScreen()
 
-    def get_next_screen(self) -> Screen | None:
-        actions_check = self.query_one("#actions_check", Checkbox)
-        self.app.github_actions = actions_check.value
+            # Get API key for secret setup (optional)
+            api_key = None
+            try:
+                api_key = get_codeflash_api_key()
+            except Exception:
+                logger.debug("No API key available for secret setup")
 
-        if actions_check.value:
-            if self.install_workflow():
-                self.notify(
-                    "✓ GitHub Actions workflow installed to .github/workflows/codeflash.yml\n"
-                    "Remember to add CODEFLASH_API_KEY to your GitHub repository secrets!",
-                    severity="information",
-                    timeout=6,
-                )
+            # Call CF API to create PR with workflow
+            self.notify("Setting up GitHub Actions workflow...", severity="information", timeout=2)
+            response = setup_github_actions(owner, repo_name, base_branch, workflow_content, api_key)
+
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                    if response_data.get("success"):
+                        pr_url = response_data.get("pr_url", "")
+                        secret_success = response_data.get("secret_setup_success", False)
+                        secret_error = response_data.get("secret_setup_error", "")
+
+                        self.app.github_actions_pr_created = bool(pr_url)
+                        self.app.github_actions_pr_url = pr_url
+                        self.app.github_actions_secret_configured = secret_success
+                        if secret_error:
+                            self.app.github_actions_secret_error = secret_error
+
+                        if pr_url:
+                            self.notify(f"✓ PR created: {pr_url}", severity="information", timeout=4)
+                            if not secret_success and secret_error:
+                                self.notify(f"⚠️ Secret setup warning: {secret_error}", severity="warning", timeout=5)
+                        else:
+                            self.notify("✓ GitHub Actions workflow configured", severity="information", timeout=3)
+                    else:
+                        error_msg = response_data.get("error", "Unknown error")
+                        logger.warning(f"API response indicated failure: {error_msg}")
+                        self.notify(f"Could not create PR: {error_msg}", severity="warning", timeout=4)
+                except Exception as e:
+                    logger.error(f"Failed to parse API response: {e}")
+                    self.notify("API response was invalid", severity="warning", timeout=3)
             else:
-                self.app.github_actions = False
-        else:
-            self.notify("Skipping GitHub Actions workflow", severity="information", timeout=2)
+                logger.warning(f"API call failed with status {response.status_code}")
+                self.notify(f"API error: Status {response.status_code}", severity="warning", timeout=3)
+
+        except Exception as e:
+            logger.error(f"Error setting up GitHub Actions: {e}")
+            self.notify(f"Error: {str(e)}", severity="error", timeout=5)
+            self.app.github_actions = False
 
         return VSCodeExtensionScreen()
 
