@@ -786,6 +786,6 @@ def perform_oauth_signin() -> str | None:
     httpd.shutdown()
 
     if not api_key:
-        click.echo("❌ Authentication failed.")
-
+        click.echo("\n❌ Authentication failed.")
+    click.echo("\n")
     return api_key
