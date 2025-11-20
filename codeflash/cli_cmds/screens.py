@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
-from textual import on
+from textual import on, work
 from textual.app import App
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
@@ -40,12 +40,18 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 CODEFLASH_LOGO: str = (
-    r"                   _          ___  _               _     " "\n"  # noqa: ISC001
-    r"                  | |        / __)| |             | |    " "\n"  # noqa: ISC001
-    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  " "\n"  # noqa: ISC001
-    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ " "\n"  # noqa: ISC001
-    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |" "\n"  # noqa: ISC001
-    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|" "\n"  # noqa: ISC001
+    r"                   _          ___  _               _     "
+    "\n"
+    r"                  | |        / __)| |             | |    "
+    "\n"
+    r"  ____   ___    _ | |  ____ | |__ | |  ____   ___ | | _  "
+    "\n"
+    r" / ___) / _ \  / || | / _  )|  __)| | / _  | /___)| || \ "
+    "\n"
+    r"( (___ | |_| |( (_| |( (/ / | |   | |( ( | ||___ || | | |"
+    "\n"
+    r" \____) \___/  \____| \____)|_|   |_| \_||_|(___/ |_| |_|"
+    "\n"
     f"{('v' + version).rjust(66)}"
 )
 
@@ -282,6 +288,9 @@ class WelcomeScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self.existing_api_key: str | None = None
+        self.validating_api_key: bool = False
+        self.current_api_key: str | None = None  # Track the key being validated
+        self.last_validation_failed: bool = False  # Track if last validation failed
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -292,6 +301,7 @@ class WelcomeScreen(Screen):
             Static("", id="api_key_label", classes="label"),
             Input(placeholder="cf_xxxxxxxxxxxxxxxxxxxxxxxx", id="api_key_input", validators=[APIKeyValidator()]),
             Horizontal(
+                Button("Verify API Key", variant="success", id="verify_btn", classes="hidden"),
                 Button("Continue", variant="primary", id="continue_btn"),
                 Button("Quit", variant="default", id="quit_btn"),
                 classes="button_row",
@@ -311,18 +321,19 @@ class WelcomeScreen(Screen):
         try:
             self.existing_api_key = get_codeflash_api_key()
             if self.existing_api_key:
-                # API key exists - show confirmation message
+                # API key exists - show confirmation message and validate it
                 display_key = f"{self.existing_api_key[:3]}****{self.existing_api_key[-4:]}"
                 description.update(
                     "CodeFlash automatically optimizes your Python code for better performance.\n\n"
-                    f"✅ Found existing API key: {display_key}\n\n"
-                    "You're all set! Click Continue to proceed with configuration."
+                    f"🔍 Found existing API key: {display_key}\n"
+                    "Validating..."
                 )
                 # Hide API key input
                 label.update("")
                 api_key_input.display = False
-                # Store in app
-                self.app.api_key = self.existing_api_key
+                # Validate the existing API key asynchronously
+                self.current_api_key = self.existing_api_key
+                self.validate_api_key_async(self.existing_api_key)
                 return
         except OSError:
             # No existing API key found
@@ -338,12 +349,16 @@ class WelcomeScreen(Screen):
 
     @on(Button.Pressed, "#continue_btn")
     def continue_pressed(self) -> None:
-        # If we already have an API key from environment, just continue
-        if self.existing_api_key:
+        # If validation is in progress, ignore button press
+        if self.validating_api_key:
+            return
+
+        # If we have an existing validated key, proceed
+        if self.existing_api_key and self.app.api_key:
             self.app.push_screen(ConfigCheckScreen())
             return
 
-        # Otherwise validate the input
+        # Validate new API key input
         api_key_input = self.query_one("#api_key_input", Input)
         api_key = api_key_input.value.strip()
 
@@ -353,8 +368,127 @@ class WelcomeScreen(Screen):
             self.notify("; ".join(error_msgs) if error_msgs else "Invalid API key", severity="error", timeout=5)
             return
 
-        self.app.api_key = api_key
-        self.app.push_screen(ConfigCheckScreen())
+        self.validating_api_key = True
+        self.current_api_key = api_key
+        continue_btn = self.query_one("#continue_btn", Button)
+        continue_btn.label = "Validating..."
+        continue_btn.disabled = True
+
+        self.validate_api_key_async(api_key)
+
+    @work(exclusive=True, thread=True)
+    def validate_api_key_async(self, api_key: str) -> bool:
+        from codeflash.api.cfapi import get_user_id_minimal
+
+        return get_user_id_minimal(api_key)
+
+    def on_worker_state_changed(self, event) -> None:  # noqa: ANN001
+        """Handle worker state changes for API key validation."""
+        if event.worker.name == "validate_api_key_async" and event.worker.is_finished:
+            self.validating_api_key = False
+            api_key = self.current_api_key
+
+            if event.worker.result and api_key:
+                # Validation successful
+                self.app.api_key = api_key
+                self.last_validation_failed = False
+
+                # Hide verify button on success
+                verify_btn = self.query_one("#verify_btn", Button)
+                verify_btn.add_class("hidden")
+
+                # Update UI based on whether this was an existing key or new input
+                if self.existing_api_key:
+                    description = self.query_one("#description", Static)
+                    display_key = f"{api_key[:3]}****{api_key[-4:]}"
+                    description.update(
+                        "CodeFlash automatically optimizes your Python code for better performance.\n\n"
+                        f"✅ Validated API key: {display_key}\n\n"
+                        "You're all set! Click Continue to proceed with configuration."
+                    )
+                else:
+                    continue_btn = self.query_one("#continue_btn", Button)
+                    continue_btn.label = "Continue"
+                    continue_btn.disabled = False
+                    continue_btn.display = True
+                    self.notify("✅ API key verified successfully!", severity="information", timeout=3)
+
+                # If this was an existing key, proceed automatically after a brief moment
+                # Otherwise wait for user to click Continue
+                if self.existing_api_key:
+                    self.set_timer(0.5, lambda: self.app.push_screen(ConfigCheckScreen()))
+            # Validation failed
+            elif self.existing_api_key:
+                # Show input field so user can enter a new key
+                self.last_validation_failed = True
+                description = self.query_one("#description", Static)
+                label = self.query_one("#api_key_label", Static)
+                api_key_input = self.query_one("#api_key_input", Input)
+                verify_btn = self.query_one("#verify_btn", Button)
+
+                display_key = f"{api_key[:3]}****{api_key[-4:]}" if api_key else "[hidden]"
+                description.update(
+                    "CodeFlash automatically optimizes your Python code for better performance.\n\n"
+                    f"❌ Invalid API key found: {display_key}\n\n"
+                    "Please enter a valid API key below:"
+                )
+                label.update("Enter your CodeFlash API Key:")
+                continue_btn = self.query_one("#continue_btn", Button)
+                continue_btn.display = False
+                api_key_input.display = True
+                api_key_input.focus()
+
+                # Show verify button, reset its state
+                verify_btn.label = "Verify API Key"
+                verify_btn.disabled = False
+                verify_btn.remove_class("hidden")
+
+                self.existing_api_key = None  # Clear invalid existing key
+                self.notify("Invalid API key - authentication failed", severity="error", timeout=5)
+            else:
+                self.last_validation_failed = True
+                verify_btn = self.query_one("#verify_btn", Button)
+                continue_btn = self.query_one("#continue_btn", Button)
+
+                # Hide continue button, show verify button
+                continue_btn.display = False
+                verify_btn.label = "Verify API Key"
+                verify_btn.disabled = False
+                verify_btn.remove_class("hidden")
+
+                self.notify("Invalid API key - authentication failed", severity="error", timeout=5)
+
+    @on(Button.Pressed, "#verify_btn")
+    def verify_api_key_pressed(self) -> None:
+        """Manually verify API key when user clicks the Verify button."""
+        if self.validating_api_key:
+            return
+
+        api_key_input = self.query_one("#api_key_input", Input)
+        api_key = api_key_input.value.strip()
+
+        if not api_key:
+            self.notify("Please enter an API key", severity="error", timeout=3)
+            return
+
+        # Check basic format validation first
+        validation_result = api_key_input.validate(api_key)
+        if not validation_result.is_valid:
+            error_msgs = validation_result.failure_descriptions
+            self.notify("; ".join(error_msgs) if error_msgs else "Invalid API key format", severity="error", timeout=5)
+            return
+
+        # Start validation
+        self.validating_api_key = True
+        self.last_validation_failed = False
+        self.current_api_key = api_key
+
+        # Update verify button state
+        verify_btn = self.query_one("#verify_btn", Button)
+        verify_btn.label = "Verifying..."
+        verify_btn.disabled = True
+
+        self.validate_api_key_async(api_key)
 
     @on(Button.Pressed, "#quit_btn")
     def quit_pressed(self) -> None:
@@ -1068,7 +1202,6 @@ class TelemetryScreen(BaseConfigScreen):
         telemetry_radio = self.query_one("#telemetry_radio", RadioSet)
         self.app.enable_telemetry = telemetry_radio.pressed_button.id == "enable"
         return GitConfigScreen()
-
 
 
 class GitHubActionsScreen(BaseConfigScreen):

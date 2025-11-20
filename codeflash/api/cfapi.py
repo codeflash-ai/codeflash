@@ -96,6 +96,17 @@ def make_cfapi_request(
             )
         return response
 
+@lru_cache(maxsize=1)
+def get_user_id_minimal(api_key: str) -> bool:
+    response = make_cfapi_request(
+        endpoint="/cli-get-user",
+        method="GET",
+        extra_headers={"cli_version": __version__},
+        api_key=api_key,
+        suppress_errors=True,
+    )
+    return response.status_code == 200
+
 
 @lru_cache(maxsize=1)
 def get_user_id(api_key: Optional[str] = None) -> Optional[str]:  # noqa: PLR0911
