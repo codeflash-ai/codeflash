@@ -1044,7 +1044,7 @@ class HelperClass:
         ending_line=None,
     )
 
-    # In this scenario, the read-writable code context is too long because the __init_ function is reftencing the global x variable not the class attribute (x), so we abort.
+    # In this scenario, the read-writable code context becomes too large because the __init__ function is referencing the global x variable instead of the class attribute self.x, so we abort.
     with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
         code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
