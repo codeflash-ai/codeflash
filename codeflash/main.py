@@ -31,7 +31,9 @@ def main() -> None:
             pyproject_config, _ = parse_config_file(args.config_file)
             disable_telemetry = pyproject_config.get("disable_telemetry", False)
         init_sentry(not disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(not disable_telemetry)
+        # Skip PostHog initialization for init commands since they collect API key in the TUI
+        if not args.command.startswith("init"):
+            posthog_cf.initialize_posthog(not disable_telemetry)
         args.func()
     elif args.verify_setup:
         args = process_pyproject_config(args)

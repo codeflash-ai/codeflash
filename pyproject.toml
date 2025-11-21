@@ -44,6 +44,7 @@ dependencies = [
     "pygls>=2.0.0,<3.0.0",
     "codeflash-benchmark",
     "filelock",
+    "textual>=6.6.0",
 ]
 
 [project.urls]
@@ -81,6 +82,7 @@ dev = [
     "types-unidiff>=0.7.0.20240505,<0.8",
     "uv>=0.6.2",
     "pre-commit>=4.2.0,<5",
+    "textual-dev>=1.8.0",
 ]
 asyncio = [
     "pytest-asyncio>=1.2.0",
@@ -324,6 +326,7 @@ filterwarnings = [
 markers = [
     "ci_skip: mark test to skip in CI environment",
 ]
+
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
