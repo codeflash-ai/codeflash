@@ -459,6 +459,9 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
     hashing_context = code_ctx.hashing_code_context
     expected_read_write_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
+_P = ParamSpec("_P")
+_KEY_T = TypeVar("_KEY_T")
+_STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
 
     def __init__(self) -> None: ...
@@ -516,6 +519,10 @@ class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
             logging.warning("Failed to encode cache data: %s", e)
         # If encoding fails, we should still return the result.
         return result
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+_CacheBackendT = TypeVar("_CacheBackendT", bound=CacheBackend)
 
 
 class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
@@ -752,7 +759,7 @@ def test_example_class_token_limit_1(tmp_path: Path) -> None:
     )
     code = f"""
 class MyClass:
-    \"\"\"A class with a helper method. 
+    \"\"\"A class with a helper method.
 {docstring_filler}\"\"\"
     def __init__(self):
         self.x = 1
@@ -910,7 +917,17 @@ class HelperClass:
         return self.x
 ```
 """
-    expected_read_only_context = ""
+    expected_read_only_context = f'''```python:{file_path.relative_to(opt.args.project_root)}
+class MyClass:
+    """A class with a helper method. """
+
+class HelperClass:
+    """A helper class for MyClass."""
+    def __repr__(self):
+        """Return a string representation of the HelperClass."""
+        return "HelperClass" + str(self.x)
+```
+'''
     expected_hashing_context = f"""
 ```python:{file_path.relative_to(opt.args.project_root)}
 class MyClass:
@@ -987,6 +1004,59 @@ def test_example_class_token_limit_4(tmp_path: Path) -> None:
 class MyClass:
     \"\"\"A class with a helper method. \"\"\"
     def __init__(self):
+        global x
+        x = 1
+    def target_method(self):
+        \"\"\"Docstring for target method\"\"\"
+        y = HelperClass().helper_method()
+x = '{string_filler}'
+
+class HelperClass:
+    \"\"\"A helper class for MyClass.\"\"\"
+    def __init__(self):
+        \"\"\"Initialize the HelperClass.\"\"\"
+        self.x = 1
+    def __repr__(self):
+        \"\"\"Return a string representation of the HelperClass.\"\"\"
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+"""
+    # Create a temporary Python file using pytest's tmp_path fixture
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
+        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    # In this scenario, the read-writable code context becomes too large because the __init__ function is referencing the global x variable instead of the class attribute self.x, so we abort.
+    with pytest.raises(ValueError, match="Read-writable code has exceeded token limit, cannot proceed"):
+        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+
+
+def test_example_class_token_limit_5(tmp_path: Path) -> None:
+    string_filler = " ".join(
+        ["This is a long string that will be used to fill up the token limit." for _ in range(1000)]
+    )
+    code = f"""
+class MyClass:
+    \"\"\"A class with a helper method. \"\"\"
+    def __init__(self):
         self.x = 1
     def target_method(self):
         \"\"\"Docstring for target method\"\"\"
@@ -1026,9 +1096,44 @@ class HelperClass:
         ending_line=None,
     )
 
-    # In this scenario, the testgen code context is too long, so we abort.
-    with pytest.raises(ValueError, match="Testgen code context has exceeded token limit, cannot proceed"):
-        code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+
+    # the global x variable shouldn't be included in any context type
+    assert code_ctx.read_writable_code.flat == '''# file: test_code.py
+class MyClass:
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        """Docstring for target method"""
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    def __init__(self):
+        """Initialize the HelperClass."""
+        self.x = 1
+    def helper_method(self):
+        return self.x
+'''
+    assert code_ctx.testgen_context.flat == '''# file: test_code.py
+class MyClass:
+    """A class with a helper method. """
+    def __init__(self):
+        self.x = 1
+    def target_method(self):
+        """Docstring for target method"""
+        y = HelperClass().helper_method()
+
+class HelperClass:
+    """A helper class for MyClass."""
+    def __init__(self):
+        """Initialize the HelperClass."""
+        self.x = 1
+    def __repr__(self):
+        """Return a string representation of the HelperClass."""
+        return "HelperClass" + str(self.x)
+    def helper_method(self):
+        return self.x
+'''
 
 
 def test_repo_helper() -> None:
@@ -2070,8 +2175,17 @@ def get_system_details():
         relative_path = file_path.relative_to(project_root)
         expected_read_write_context = f"""
 ```python:utility_module.py
-# Function that will be used in the main code
+DEFAULT_PRECISION = "medium"
 
+# Try-except block with variable definitions
+try:
+    # Used variable in try block
+    CALCULATION_BACKEND = "numpy"
+except ImportError:
+    # Used variable in except block
+    CALCULATION_BACKEND = "python"
+
+# Function that will be used in the main code
 def select_precision(precision, fallback_precision):
     if precision is None:
         return fallback_precision or DEFAULT_PRECISION
@@ -2466,12 +2580,12 @@ def test_circular_deps():
         project_root_path= Path(path_to_root),
     )
     assert "import ApiClient" not in new_code, "Error: Circular dependency found"
-    
-    assert "import urllib.parse" in new_code, "Make sure imports for optimization global assignments exist" 
+
+    assert "import urllib.parse" in new_code, "Make sure imports for optimization global assignments exist"
 def test_global_assignment_collector_with_async_function():
     """Test GlobalAssignmentCollector correctly identifies global assignments outside async functions."""
     import libcst as cst
-    
+
     source_code = """
 # Global assignment
 GLOBAL_VAR = "global_value"
@@ -2486,21 +2600,21 @@ async def async_function():
 # Another global assignment
 ANOTHER_GLOBAL = "another_global"
 """
-    
+
     tree = cst.parse_module(source_code)
     collector = GlobalAssignmentCollector()
     tree.visit(collector)
-    
+
     # Should collect global assignments but not the ones inside async function
     assert len(collector.assignments) == 3
     assert "GLOBAL_VAR" in collector.assignments
     assert "OTHER_GLOBAL" in collector.assignments
     assert "ANOTHER_GLOBAL" in collector.assignments
-    
+
     # Should not collect assignments from inside async function
     assert "local_var" not in collector.assignments
     assert "INNER_ASSIGNMENT" not in collector.assignments
-    
+
     # Verify assignment order
     expected_order = ["GLOBAL_VAR", "OTHER_GLOBAL", "ANOTHER_GLOBAL"]
     assert collector.assignment_order == expected_order
@@ -2509,7 +2623,7 @@ ANOTHER_GLOBAL = "another_global"
 def test_global_assignment_collector_nested_async_functions():
     """Test GlobalAssignmentCollector handles nested async functions correctly."""
     import libcst as cst
-    
+
     source_code = """
 # Global assignment
 CONFIG = {"key": "value"}
@@ -2517,38 +2631,38 @@ CONFIG = {"key": "value"}
 def sync_function():
     # Inside sync function - should not be collected
     sync_local = "sync"
-    
+
     async def nested_async():
         # Inside nested async function - should not be collected
         nested_var = "nested"
         return nested_var
-    
+
     return sync_local
 
 async def async_function():
     # Inside async function - should not be collected
     async_local = "async"
-    
+
     def nested_sync():
         # Inside nested function - should not be collected
         deeply_nested = "deep"
         return deeply_nested
-    
+
     return async_local
 
 # Another global assignment
 FINAL_GLOBAL = "final"
 """
-    
+
     tree = cst.parse_module(source_code)
     collector = GlobalAssignmentCollector()
     tree.visit(collector)
-    
+
     # Should only collect global-level assignments
     assert len(collector.assignments) == 2
     assert "CONFIG" in collector.assignments
     assert "FINAL_GLOBAL" in collector.assignments
-    
+
     # Should not collect any assignments from inside functions
     assert "sync_local" not in collector.assignments
     assert "nested_var" not in collector.assignments
@@ -2559,20 +2673,20 @@ FINAL_GLOBAL = "final"
 def test_global_assignment_collector_mixed_async_sync_with_classes():
     """Test GlobalAssignmentCollector with async functions, sync functions, and classes."""
     import libcst as cst
-    
+
     source_code = """
 # Global assignments
 GLOBAL_CONSTANT = "constant"
 
 class TestClass:
-    # Class-level assignment - should not be collected  
+    # Class-level assignment - should not be collected
     class_var = "class_value"
-    
+
     def sync_method(self):
         # Method assignment - should not be collected
         method_var = "method"
         return method_var
-    
+
     async def async_method(self):
         # Async method assignment - should not be collected
         async_method_var = "async_method"
@@ -2592,24 +2706,24 @@ async def async_function():
 ANOTHER_CONSTANT = 100
 FINAL_ASSIGNMENT = {"data": "value"}
 """
-    
+
     tree = cst.parse_module(source_code)
     collector = GlobalAssignmentCollector()
     tree.visit(collector)
-    
+
     # Should only collect global-level assignments
     assert len(collector.assignments) == 3
-    assert "GLOBAL_CONSTANT" in collector.assignments  
+    assert "GLOBAL_CONSTANT" in collector.assignments
     assert "ANOTHER_CONSTANT" in collector.assignments
     assert "FINAL_ASSIGNMENT" in collector.assignments
-    
+
     # Should not collect assignments from inside any scoped blocks
     assert "class_var" not in collector.assignments
     assert "method_var" not in collector.assignments
     assert "async_method_var" not in collector.assignments
     assert "func_var" not in collector.assignments
     assert "async_func_var" not in collector.assignments
-    
+
     # Verify correct order
     expected_order = ["GLOBAL_CONSTANT", "ANOTHER_CONSTANT", "FINAL_ASSIGNMENT"]
     assert collector.assignment_order == expected_order
