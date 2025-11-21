@@ -349,16 +349,13 @@ class WelcomeScreen(Screen):
 
     @on(Button.Pressed, "#continue_btn")
     def continue_pressed(self) -> None:
-        # If validation is in progress, ignore button press
         if self.validating_api_key:
             return
 
-        # If we have an existing validated key, proceed
-        if self.existing_api_key and self.app.api_key:
+        if self.app.api_key:
             self.app.push_screen(ConfigCheckScreen())
             return
 
-        # Validate new API key input
         api_key_input = self.query_one("#api_key_input", Input)
         api_key = api_key_input.value.strip()
 
@@ -389,7 +386,6 @@ class WelcomeScreen(Screen):
             api_key = self.current_api_key
 
             if event.worker.result and api_key:
-                # Validation successful
                 self.app.api_key = api_key
                 self.last_validation_failed = False
 
@@ -397,7 +393,7 @@ class WelcomeScreen(Screen):
                 verify_btn = self.query_one("#verify_btn", Button)
                 verify_btn.add_class("hidden")
 
-                # Update UI based on whether this was an existing key or new input
+                continue_btn = self.query_one("#continue_btn", Button)
                 if self.existing_api_key:
                     description = self.query_one("#description", Static)
                     display_key = f"{api_key[:3]}****{api_key[-4:]}"
@@ -406,17 +402,12 @@ class WelcomeScreen(Screen):
                         f"✅ Validated API key: {display_key}\n\n"
                         "You're all set! Click Continue to proceed with configuration."
                     )
+                    self.set_timer(0.5, lambda: self.app.push_screen(ConfigCheckScreen()))
                 else:
-                    continue_btn = self.query_one("#continue_btn", Button)
                     continue_btn.label = "Continue"
                     continue_btn.disabled = False
                     continue_btn.display = True
                     self.notify("✅ API key verified successfully!", severity="information", timeout=3)
-
-                # If this was an existing key, proceed automatically after a brief moment
-                # Otherwise wait for user to click Continue
-                if self.existing_api_key:
-                    self.set_timer(0.5, lambda: self.app.push_screen(ConfigCheckScreen()))
             # Validation failed
             elif self.existing_api_key:
                 # Show input field so user can enter a new key
