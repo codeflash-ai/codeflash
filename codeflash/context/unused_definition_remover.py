@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 import libcst as cst
 
@@ -121,6 +121,8 @@ def get_section_names(node: cst.CSTNode) -> list[str]:
 
 class DependencyCollector(cst.CSTVisitor):
     """Collects dependencies between definitions using the visitor pattern with depth tracking."""
+
+    METADATA_DEPENDENCIES = (cst.metadata.ParentNodeProvider,)
 
     def __init__(self, definitions: dict[str, UsageInfo]) -> None:
         super().__init__()
@@ -259,8 +261,12 @@ class DependencyCollector(cst.CSTVisitor):
         if self.processing_variable and name in self.current_variable_names:
             return
 
-        # Check if name is a top-level definition we're tracking
         if name in self.definitions and name != self.current_top_level_name:
+            # skip if we are refrencing a class attribute and not a top-level definition
+            if self.class_depth > 0:
+                parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+                if parent is not None and isinstance(parent, cst.Attribute):
+                    return
             self.definitions[self.current_top_level_name].dependencies.add(name)
 
 
@@ -293,13 +299,19 @@ class QualifiedFunctionUsageMarker:
 
     def mark_used_definitions(self) -> None:
         """Find all qualified functions and mark them and their dependencies as used."""
-        # First identify all specified functions (including expanded ones)
-        functions_to_mark = [name for name in self.expanded_qualified_functions if name in self.definitions]
+        # Avoid list comprehension for set intersection
+        expanded_names = self.expanded_qualified_functions
+        defs = self.definitions
+        functions_to_mark = (
+            expanded_names & defs.keys()
+            if isinstance(expanded_names, set)
+            else [name for name in expanded_names if name in defs]
+        )
 
         # For each specified function, mark it and all its dependencies as used
         for func_name in functions_to_mark:
-            self.definitions[func_name].used_by_qualified_function = True
-            for dep in self.definitions[func_name].dependencies:
+            defs[func_name].used_by_qualified_function = True
+            for dep in defs[func_name].dependencies:
                 self.mark_as_used_recursively(dep)
 
     def mark_as_used_recursively(self, name: str) -> None:
@@ -457,7 +469,28 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
     return node, False
 
 
-def remove_unused_definitions_by_function_names(code: str, qualified_function_names: set[str]) -> str:
+def collect_top_level_defs_with_usages(
+    code: Union[str, cst.Module], qualified_function_names: set[str]
+) -> dict[str, UsageInfo]:
+    """Collect all top level definitions (classes, variables or functions) and their usages."""
+    module = code if isinstance(code, cst.Module) else cst.parse_module(code)
+    # Collect all definitions (top level classes, variables or function)
+    definitions = collect_top_level_definitions(module)
+
+    # Collect dependencies between definitions using the visitor pattern
+    wrapper = cst.MetadataWrapper(module)
+    dependency_collector = DependencyCollector(definitions)
+    wrapper.visit(dependency_collector)
+
+    # Mark definitions used by specified functions, and their dependencies recursively
+    usage_marker = QualifiedFunctionUsageMarker(definitions, qualified_function_names)
+    usage_marker.mark_used_definitions()
+    return definitions
+
+
+def remove_unused_definitions_by_function_names(
+    code: str, qualified_function_names: set[str]
+) -> tuple[str, dict[str, UsageInfo]]:
     """Analyze a file and remove top level definitions not used by specified functions.
 
     Top level definitions, in this context, are only classes, variables or functions.
@@ -476,19 +509,10 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         return code
 
     try:
-        # Collect all definitions (top level classes, variables or function)
-        definitions = collect_top_level_definitions(module)
-
-        # Collect dependencies between definitions using the visitor pattern
-        dependency_collector = DependencyCollector(definitions)
-        module.visit(dependency_collector)
-
-        # Mark definitions used by specified functions, and their dependencies recursively
-        usage_marker = QualifiedFunctionUsageMarker(definitions, qualified_function_names)
-        usage_marker.mark_used_definitions()
+        defs_with_usages = collect_top_level_defs_with_usages(module, qualified_function_names)
 
         # Apply the recursive removal transformation
-        modified_module, _ = remove_unused_definitions_recursively(module, definitions)
+        modified_module, _ = remove_unused_definitions_recursively(module, defs_with_usages)
 
         return modified_module.code if modified_module else ""  # noqa: TRY300
     except Exception as e:
