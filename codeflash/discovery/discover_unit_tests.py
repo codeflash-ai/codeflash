@@ -868,6 +868,58 @@ def process_test_files(
                     continue
                 try:
                     if not definition or definition[0].type != "function":
+                        # Fallback: Try to match against functions_to_optimize when Jedi can't resolve
+                        # This handles cases where Jedi fails with pytest fixtures
+                        if functions_to_optimize and name.name:
+                            for func_to_opt in functions_to_optimize:
+                                # Check if this unresolved name matches a function we're looking for
+                                if func_to_opt.function_name == name.name:
+                                    # Check if the test file imports the class/module containing this function
+                                    qualified_name_with_modules = func_to_opt.qualified_name_with_modules_from_root(
+                                        project_root_path
+                                    )
+
+                                    # Only add if this test actually tests the function we're optimizing
+                                    for test_func in test_functions_by_name[scope]:
+                                        if test_func.parameters is not None:
+                                            if test_framework == "pytest":
+                                                scope_test_function = (
+                                                    f"{test_func.function_name}[{test_func.parameters}]"
+                                                )
+                                            else:  # unittest
+                                                scope_test_function = (
+                                                    f"{test_func.function_name}_{test_func.parameters}"
+                                                )
+                                        else:
+                                            scope_test_function = test_func.function_name
+
+                                        function_to_test_map[qualified_name_with_modules].add(
+                                            FunctionCalledInTest(
+                                                tests_in_file=TestsInFile(
+                                                    test_file=test_file,
+                                                    test_class=test_func.test_class,
+                                                    test_function=scope_test_function,
+                                                    test_type=test_func.test_type,
+                                                ),
+                                                position=CodePosition(line_no=name.line, col_no=name.column),
+                                            )
+                                        )
+                                        tests_cache.insert_test(
+                                            file_path=str(test_file),
+                                            file_hash=file_hash,
+                                            qualified_name_with_modules_from_root=qualified_name_with_modules,
+                                            function_name=scope,
+                                            test_class=test_func.test_class or "",
+                                            test_function=scope_test_function,
+                                            test_type=test_func.test_type,
+                                            line_number=name.line,
+                                            col_number=name.column,
+                                        )
+
+                                        if test_func.test_type == TestType.REPLAY_TEST:
+                                            num_discovered_replay_tests += 1
+
+                                        num_discovered_tests += 1
                         continue
                     definition_obj = definition[0]
                     definition_path = str(definition_obj.module_path)
