@@ -404,6 +404,13 @@ class WelcomeScreen(Screen):
                     )
                     self.set_timer(0.5, lambda: self.app.push_screen(ConfigCheckScreen()))
                 else:
+                    result = save_api_key_to_rc(api_key)
+                    if is_successful(result):
+                        logger.debug(f"Saved new API key to shell config: {result.unwrap()}")
+                        os.environ["CODEFLASH_API_KEY"] = api_key
+                    else:
+                        logger.warning(f"Failed to save API key to shell config: {result.unwrap_err()}")
+
                     continue_btn.label = "Continue"
                     continue_btn.disabled = False
                     continue_btn.display = True
