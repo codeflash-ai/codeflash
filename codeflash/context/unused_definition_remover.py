@@ -488,9 +488,7 @@ def collect_top_level_defs_with_usages(
     return definitions
 
 
-def remove_unused_definitions_by_function_names(
-    code: str, qualified_function_names: set[str]
-) -> tuple[str, dict[str, UsageInfo]]:
+def remove_unused_definitions_by_function_names(code: str, qualified_function_names: set[str]) -> str:
     """Analyze a file and remove top level definitions not used by specified functions.
 
     Top level definitions, in this context, are only classes, variables or functions.
