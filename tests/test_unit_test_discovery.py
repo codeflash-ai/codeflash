@@ -745,7 +745,7 @@ from topological_sort import Graph
 import pytest
 
 @pytest.fixture
-def g(self):
+def g():
     return Graph(6) 
 
 def test_topological_sort(g):
@@ -766,7 +766,7 @@ def test_topological_sort(g):
         discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
 
         # Verify the unittest was discovered
-        assert len(discovered_tests) == 1
+        assert len(discovered_tests) == 2
         assert "topological_sort.Graph.topologicalSort" in discovered_tests
         assert len(discovered_tests["topological_sort.Graph.topologicalSort"]) == 1
         tpsort_test = next(iter(discovered_tests["topological_sort.Graph.topologicalSort"]))
@@ -1402,7 +1402,7 @@ from code_to_optimize.topological_sort import Graph
 import pytest
 
 @pytest.fixture
-def g(self):
+def g():
     return Graph(6) 
 
 def test_topological_sort(g):
