@@ -729,6 +729,9 @@ class Graph:
     def __init__(self, vertices: int):
         self.vertices=vertices
 
+    def dummy_fn(self):
+        return 1
+
     def topologicalSort(self):
         return self.vertices
 
@@ -746,6 +749,7 @@ def g(self):
     return Graph(6) 
 
 def test_topological_sort(g):
+    assert g.dummy_fn() == 1
     assert g.topologicalSort() == 6
 """
         test_file_path.write_text(test_file_content)
