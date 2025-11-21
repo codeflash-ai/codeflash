@@ -22,7 +22,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from codeflash.api.cfapi import is_github_app_installed_on_repo
+from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -1216,6 +1216,7 @@ def enter_api_key_and_save_to_rc() -> None:
         # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
         shell_rc_path.touch()
         click.echo(f"✅ Created {shell_rc_path}")
+    get_user_id(api_key=api_key)  # Used to verify whether the API key is valid.
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
         click.echo(result.unwrap())
@@ -1227,13 +1228,16 @@ def enter_api_key_and_save_to_rc() -> None:
 
 
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
-    find_common_tags_content = """def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
+    find_common_tags_content = """from __future__ import annotations
+
+
+def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     if not articles:
         return set()
 
-    common_tags = articles[0]["tags"]
+    common_tags = articles[0].get("tags", [])
     for article in articles[1:]:
-        common_tags = [tag for tag in common_tags if tag in article["tags"]]
+        common_tags = [tag for tag in common_tags if tag in article.get("tags", [])]
     return set(common_tags)
 """
 
