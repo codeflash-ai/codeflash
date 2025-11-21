@@ -8,7 +8,7 @@ from codeflash.discovery.discover_unit_tests import (
     filter_test_files_by_imports,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import TestsInFile, TestType
+from codeflash.models.models import TestsInFile, TestType, FunctionParent
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -714,6 +714,61 @@ class TestCalculator(unittest.TestCase):
         assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add_with_parameters"
 
+def test_unittest_discovery_with_pytest_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "topological_sort.py"
+        code_file_content = """
+import uuid
+from collections import defaultdict
+
+
+class Graph:
+    def __init__(self, vertices: int):
+        self.vertices=vertices
+
+    def topologicalSort(self):
+        return self.vertices
+
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with parameterized tests
+        test_file_path = path_obj_tmpdirname / "test_topological_sort.py"
+        test_file_content = """
+from topological_sort import Graph
+import pytest
+
+@pytest.fixture
+def g(self):
+    return Graph(6) 
+
+def test_topological_sort(g):
+    assert g.topologicalSort() == 6
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+        fto = FunctionToOptimize(function_name="topologicalSort", file_path=code_file_path, parents=[FunctionParent(name="Graph", type="ClassDef")])
+        # Discover tests
+        discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 1
+        assert "topological_sort.Graph.topologicalSort" in discovered_tests
+        assert len(discovered_tests["topological_sort.Graph.topologicalSort"]) == 1
+        tpsort_test = next(iter(discovered_tests["topological_sort.Graph.topologicalSort"]))
+        assert tpsort_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
+        assert tpsort_test.tests_in_file.test_function == "test_topological_sort"
+
 
 def test_unittest_discovery_with_pytest_parameterized():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1319,6 +1374,34 @@ from code_to_optimize.topological_sort import Graph
 
 def test_topological_sort():
     g = Graph(6)
+    g.addEdge(5, 2)
+    g.addEdge(5, 0)
+    g.addEdge(4, 0)
+    g.addEdge(4, 1)
+    g.addEdge(2, 3)
+    g.addEdge(3, 1)
+
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+def test_analyze_imports_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+import pytest
+
+@pytest.fixture
+def g(self):
+    return Graph(6) 
+
+def test_topological_sort(g):
     g.addEdge(5, 2)
     g.addEdge(5, 0)
     g.addEdge(4, 0)
