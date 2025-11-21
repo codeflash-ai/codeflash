@@ -96,6 +96,7 @@ def make_cfapi_request(
             )
         return response
 
+
 @lru_cache(maxsize=1)
 def get_user_id_minimal(api_key: str) -> bool:
     response = make_cfapi_request(

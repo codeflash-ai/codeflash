@@ -330,12 +330,13 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 
     try:
         working_dir = str(toml_parent.relative_to(git_root))
-        return f"""defaults:
-      run:
-        working-directory: ./{working_dir}"""
     except ValueError:
         # If toml_path is not under git_root, don't set working directory
         return ""
+    else:
+        return f"""defaults:
+      run:
+        working-directory: ./{working_dir}"""
 
 
 def customize_codeflash_yaml_content(

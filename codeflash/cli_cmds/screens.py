@@ -687,7 +687,7 @@ class TestDiscoveryScreen(BaseConfigScreen):
 
             # Update the directory tree to show the new directory
             selector = self.query_one(DirectorySelectorWidget)
-            selector._set_directory(tests_dir)
+            selector._set_directory(tests_dir)  # noqa: SLF001
             selector.selected_dir = tests_dir
 
             self.tests_dir_exists = True
@@ -1306,7 +1306,7 @@ class GitHubActionsScreen(BaseConfigScreen):
                 benchmark_check = self.query_one("#benchmark_check", Checkbox)
                 benchmark_mode = benchmark_check.value
                 self.app.github_actions_benchmark_mode = benchmark_mode
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         # Prepare workflow content
