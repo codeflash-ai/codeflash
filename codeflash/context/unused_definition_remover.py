@@ -447,10 +447,13 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
             new_children = []
             section_found_used = False
 
+            append_child = new_children.append  # Local for speed
+            # Minimize attribute lookup in loop
+            rr = remove_unused_definitions_recursively
             for child in original_content:
-                filtered, used = remove_unused_definitions_recursively(child, definitions)
+                filtered, used = rr(child, definitions)
                 if filtered:
-                    new_children.append(filtered)
+                    append_child(filtered)
                 section_found_used |= used
 
             if new_children or section_found_used:
@@ -478,6 +481,12 @@ def collect_top_level_defs_with_usages(
     definitions = collect_top_level_definitions(module)
 
     # Collect dependencies between definitions using the visitor pattern
+
+    # DependencyCollector uses CST visitor, very expensive! Use only if qualified_function_names is not empty
+    if not qualified_function_names:
+        return definitions
+
+    # Only instantiate and visit if needed
     wrapper = cst.MetadataWrapper(module)
     dependency_collector = DependencyCollector(definitions)
     wrapper.visit(dependency_collector)
@@ -510,7 +519,8 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         defs_with_usages = collect_top_level_defs_with_usages(module, qualified_function_names)
 
         # Apply the recursive removal transformation
-        modified_module, _ = remove_unused_definitions_recursively(module, defs_with_usages)
+        result = remove_unused_definitions_recursively(module, defs_with_usages)
+        modified_module = result[0]
 
         return modified_module.code if modified_module else ""  # noqa: TRY300
     except Exception as e:
