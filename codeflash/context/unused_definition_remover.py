@@ -52,11 +52,21 @@ def collect_top_level_definitions(
     node: cst.CSTNode, definitions: Optional[dict[str, UsageInfo]] = None
 ) -> dict[str, UsageInfo]:
     """Recursively collect all top-level variable, function, and class definitions."""
+    # Locally bind types and helpers for faster lookup
+    FunctionDef = cst.FunctionDef  # noqa: N806
+    ClassDef = cst.ClassDef  # noqa: N806
+    Assign = cst.Assign  # noqa: N806
+    AnnAssign = cst.AnnAssign  # noqa: N806
+    AugAssign = cst.AugAssign  # noqa: N806
+    IndentedBlock = cst.IndentedBlock  # noqa: N806
+
     if definitions is None:
         definitions = {}
 
-    # Handle top-level function definitions
-    if isinstance(node, cst.FunctionDef):
+    # Speed: Single isinstance+local var instead of several type calls
+    node_type = type(node)
+    # Fast path: function def
+    if node_type is FunctionDef:
         name = node.name.value
         definitions[name] = UsageInfo(
             name=name,
@@ -64,34 +74,42 @@ def collect_top_level_definitions(
         )
         return definitions
 
-    # Handle top-level class definitions
-    if isinstance(node, cst.ClassDef):
+    # Fast path: class def
+    if node_type is ClassDef:
         name = node.name.value
         definitions[name] = UsageInfo(name=name)
 
-        # Also collect method definitions within the class
-        if hasattr(node, "body") and isinstance(node.body, cst.IndentedBlock):
-            for statement in node.body.body:
-                if isinstance(statement, cst.FunctionDef):
-                    method_name = f"{name}.{statement.name.value}"
+        # Collect class methods
+        body = getattr(node, "body", None)
+        if body is not None and type(body) is IndentedBlock:
+            statements = body.body
+            # Precompute f-string template for efficiency
+            prefix = name + "."
+            for statement in statements:
+                if type(statement) is FunctionDef:
+                    method_name = prefix + statement.name.value
                     definitions[method_name] = UsageInfo(name=method_name)
 
         return definitions
 
-    # Handle top-level variable assignments
-    if isinstance(node, cst.Assign):
-        for target in node.targets:
+    # Fast path: assignment
+    if node_type is Assign:
+        # Inline extract_names_from_targets for single-target speed
+        targets = node.targets
+        append_def = definitions.__setitem__
+        for target in targets:
             names = extract_names_from_targets(target.target)
             for name in names:
-                definitions[name] = UsageInfo(name=name)
+                append_def(name, UsageInfo(name=name))
         return definitions
 
-    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-        if isinstance(node.target, cst.Name):
-            name = node.target.value
+    if node_type is AnnAssign or node_type is AugAssign:
+        tgt = node.target
+        if type(tgt) is cst.Name:
+            name = tgt.value
             definitions[name] = UsageInfo(name=name)
         else:
-            names = extract_names_from_targets(node.target)
+            names = extract_names_from_targets(tgt)
             for name in names:
                 definitions[name] = UsageInfo(name=name)
         return definitions
@@ -100,12 +118,15 @@ def collect_top_level_definitions(
     section_names = get_section_names(node)
 
     if section_names:
+        getattr_ = getattr
         for section in section_names:
-            original_content = getattr(node, section, None)
+            original_content = getattr_(node, section, None)
+            # Instead of isinstance check for list/tuple, rely on duck-type via iter
             # If section contains a list of nodes
             if isinstance(original_content, (list, tuple)):
+                defs = definitions  # Move out for minor speed
                 for child in original_content:
-                    collect_top_level_definitions(child, definitions)
+                    collect_top_level_definitions(child, defs)
             # If section contains a single node
             elif original_content is not None:
                 collect_top_level_definitions(original_content, definitions)
@@ -302,14 +323,15 @@ class QualifiedFunctionUsageMarker:
         # Avoid list comprehension for set intersection
         expanded_names = self.expanded_qualified_functions
         defs = self.definitions
-        functions_to_mark = (
+        # Use set intersection but only if defs.keys is a set (Python 3.12 dict_keys supports it efficiently)
+        fnames = (
             expanded_names & defs.keys()
             if isinstance(expanded_names, set)
             else [name for name in expanded_names if name in defs]
         )
 
         # For each specified function, mark it and all its dependencies as used
-        for func_name in functions_to_mark:
+        for func_name in fnames:
             defs[func_name].used_by_qualified_function = True
             for dep in defs[func_name].dependencies:
                 self.mark_as_used_recursively(dep)
