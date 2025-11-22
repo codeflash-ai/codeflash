@@ -846,124 +846,6 @@ class GitHubAppScreen(BaseConfigScreen):
         self.app.push_screen(GitHubActionsScreen())
 
 
-class GitConfigScreen(BaseConfigScreen):
-    def __init__(self) -> None:
-        super().__init__()
-        self.git_remotes: list[str] = []
-        self.selected_remote: str = ""
-
-    def on_mount(self) -> None:
-        """Detect git configuration when screen is mounted."""
-        status_widget = self.query_one("#git_status", Static)
-
-        try:
-            module_root = getattr(self.app, "module_path", ".")
-            repo = Repo(Path.cwd() / module_root, search_parent_directories=True)
-
-            # Get git remotes
-            self.git_remotes = [remote.name for remote in repo.remotes]
-
-            if not self.git_remotes:
-                status_widget.update(
-                    "⚠️  No git remotes found.\n\n"
-                    "You can still use CodeFlash locally, but you'll need to set up a remote\n"
-                    "repository to use GitHub features like pull requests."
-                )
-                self.selected_remote = ""
-                return
-
-            # Get current branch
-            current_branch = repo.active_branch.name
-
-            # Get remote URL for display
-            if self.git_remotes:
-                try:
-                    remote_url = repo.remote(name=self.git_remotes[0]).url
-                    # Clean up URL for display
-                    display_url = remote_url.removesuffix(".git")
-                    if "@" in display_url:
-                        # SSH URL like git@github.com:user/repo
-                        display_url = display_url.split("@")[1].replace(":", "/")
-                    elif "://" in display_url:
-                        # HTTPS URL
-                        display_url = display_url.split("://")[1]
-                except Exception:
-                    display_url = "<remote>"
-            else:
-                display_url = "<no remote>"
-
-            if len(self.git_remotes) > 1:
-                # Multiple remotes - show select widget
-                status_widget.update(
-                    f"✅ Git repository detected\n\n"
-                    f"Repository: {display_url}\n"
-                    f"Branch: {current_branch}\n\n"
-                    f"Multiple remotes found. Please select which remote\n"
-                    f"CodeFlash should use for creating pull requests:"
-                )
-
-                # Show the select widget
-                remote_select = self.query_one("#remote_select", Select)
-                remote_select.remove_class("hidden")
-                options = [(name, name) for name in self.git_remotes]
-                remote_select.set_options(options)
-                self.selected_remote = "origin" if "origin" in self.git_remotes else self.git_remotes[0]
-            else:
-                # Single remote - auto-select
-                self.selected_remote = self.git_remotes[0]
-                status_widget.update(
-                    f"✅ Git repository detected\n\n"
-                    f"Repository: {display_url}\n"
-                    f"Branch: {current_branch}\n"
-                    f"Remote: {self.selected_remote}\n\n"
-                    f"This will be used for GitHub integration."
-                )
-
-        except InvalidGitRepositoryError:
-            status_widget.update(
-                "⚠️  No git repository found.\n\n"
-                "You can still use CodeFlash locally, but you'll need to initialize\n"
-                "a git repository to use GitHub features like pull requests."
-            )
-            self.selected_remote = ""
-        except Exception as e:
-            status_widget.update(
-                f"❌ Error detecting git configuration:\n\n{e}\n\nYou can continue with local optimization."
-            )
-            self.selected_remote = ""
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Container(
-            Static("Git Configuration", classes="screen_title"),
-            Static("Detecting git remote information...", id="git_status", classes="description"),
-            Select(
-                [("Loading...", "")],
-                prompt="Select git remote",
-                id="remote_select",
-                classes="hidden",
-                allow_blank=False,
-            ),
-            Horizontal(
-                Button("Continue", variant="primary", id="continue_btn"),
-                Button("Back", variant="default", id="back_btn"),
-                classes="button_row",
-            ),
-            classes="center_container",
-        )
-        yield Footer()
-
-    @on(Select.Changed, "#remote_select")
-    def remote_changed(self, event: Select.Changed) -> None:
-        """Update selected remote when user changes selection."""
-        if event.value != Select.BLANK:
-            self.selected_remote = event.value
-
-    def get_next_screen(self) -> Screen | None:
-        self.app.git_remote = self.selected_remote
-        return GitHubAppScreen()
-
-
 class ConfigCheckScreen(BaseConfigScreen):
     def __init__(self) -> None:
         super().__init__()
@@ -1200,7 +1082,19 @@ class TelemetryScreen(BaseConfigScreen):
     def get_next_screen(self) -> Screen | None:
         telemetry_radio = self.query_one("#telemetry_radio", RadioSet)
         self.app.enable_telemetry = telemetry_radio.pressed_button.id == "enable"
-        return GitConfigScreen()
+        try:
+            module_root = getattr(self.app, "module_path", ".")
+            repo = Repo(Path.cwd() / module_root, search_parent_directories=True)
+            git_remotes = [remote.name for remote in repo.remotes]
+            if git_remotes:
+                # Default to 'origin' if available, otherwise use first remote
+                self.app.git_remote = "origin" if "origin" in git_remotes else git_remotes[0]
+            else:
+                self.app.git_remote = ""
+        except (InvalidGitRepositoryError, Exception):
+            self.app.git_remote = ""
+
+        return GitHubAppScreen()
 
 
 class GitHubActionsScreen(BaseConfigScreen):
