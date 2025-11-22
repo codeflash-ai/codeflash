@@ -409,7 +409,7 @@ class WelcomeScreen(Screen):
                         logger.debug(f"Saved new API key to shell config: {result.unwrap()}")
                         os.environ["CODEFLASH_API_KEY"] = api_key
                     else:
-                        logger.warning(f"Failed to save API key to shell config: {result.unwrap_err()}")
+                        logger.warning(f"Failed to save API key to shell config: {result.unwrap()}")
 
                     continue_btn.label = "Continue"
                     continue_btn.disabled = False
@@ -1020,6 +1020,7 @@ class ConfigCheckScreen(BaseConfigScreen):
 
         if valid:
             # Valid config exists - ask if they want to reconfigure
+            assert config is not None, "config should not be None when valid is True"
             self.has_valid_config = True
             self.existing_config = config
             status_widget.update(
@@ -1321,7 +1322,7 @@ class GitHubActionsScreen(BaseConfigScreen):
                 return VSCodeExtensionScreen()
 
             # Load and customize workflow template
-            workflow_template = files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
+            workflow_template = Path(files("codeflash") / "cli_cmds" / "workflows" / "codeflash-optimize.yaml")
             workflow_content = workflow_template.read_text(encoding="utf-8")
 
             # customize_codeflash_yaml_content expects config as a tuple: (dict, Path)
