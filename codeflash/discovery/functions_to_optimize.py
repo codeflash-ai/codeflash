@@ -240,12 +240,7 @@ def get_functions_to_optimize(
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
-            functions,
-            test_cfg.tests_root,
-            ignore_paths,
-            project_root,
-            module_root,
-            previous_checkpoint_functions,
+            functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
 
         logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
