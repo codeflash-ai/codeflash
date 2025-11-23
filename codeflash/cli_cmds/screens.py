@@ -1026,7 +1026,7 @@ class FormatterScreen(BaseConfigScreen):
                 classes="description",
             ),
             RadioSet(
-                RadioButton("ruff (recommended)", id="ruff", value=True),
+                RadioButton("ruff", id="ruff", value=True),
                 RadioButton("black", id="black"),
                 RadioButton("disabled", id="disabled"),
                 id="formatter_radio",
