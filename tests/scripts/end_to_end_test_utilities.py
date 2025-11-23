@@ -27,7 +27,6 @@ class TestConfig:
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
-    enable_async: bool = False
     use_worktree: bool = False
 
 
@@ -136,8 +135,6 @@ def build_command(
         )
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
-    if config.enable_async:
-        base_command.append("--async")
     if config.use_worktree:
         base_command.append("--worktree")
     return base_command
