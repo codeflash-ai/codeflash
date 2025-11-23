@@ -335,6 +335,8 @@ dependencies = [
     { name = "pygls" },
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "pytest-asyncio", version = "1.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "pytest-asyncio", version = "1.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pytest-timeout" },
     { name = "rich" },
     { name = "sentry-sdk" },
@@ -344,17 +346,7 @@ dependencies = [
     { name = "unittest-xml-reporting" },
 ]
 
-[package.optional-dependencies]
-asyncio = [
-    { name = "pytest-asyncio", version = "1.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "pytest-asyncio", version = "1.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-]
-
 [package.dev-dependencies]
-asyncio = [
-    { name = "pytest-asyncio", version = "1.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "pytest-asyncio", version = "1.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-]
 dev = [
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "ipython", version = "8.37.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
@@ -365,8 +357,6 @@ dev = [
     { name = "pandas-stubs", version = "2.2.2.240909", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pre-commit", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pre-commit", version = "4.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
-    { name = "pytest-asyncio", version = "1.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
-    { name = "pytest-asyncio", version = "1.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "ruff" },
     { name = "types-cffi" },
     { name = "types-colorama" },
@@ -428,7 +418,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=1.10.1" },
     { name = "pygls", specifier = ">=2.0.0,<3.0.0" },
     { name = "pytest", specifier = ">=7.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'asyncio'", specifier = ">=1.2.0" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "pytest-timeout", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.8.1" },
     { name = "sentry-sdk", specifier = ">=1.40.6,<3.0.0" },
@@ -437,17 +427,14 @@ requires-dist = [
     { name = "unidiff", specifier = ">=0.7.4" },
     { name = "unittest-xml-reporting", specifier = ">=3.2.0" },
 ]
-provides-extras = ["asyncio"]
 
 [package.metadata.requires-dev]
-asyncio = [{ name = "pytest-asyncio", specifier = ">=1.2.0" }]
 dev = [
     { name = "ipython", specifier = ">=8.12.0" },
     { name = "lxml-stubs", specifier = ">=0.5.1" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pandas-stubs", specifier = ">=2.2.2.240807,<2.2.3.241009" },
     { name = "pre-commit", specifier = ">=4.2.0,<5" },
-    { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "ruff", specifier = ">=0.7.0" },
     { name = "types-cffi", specifier = ">=1.16.0.20240331" },
     { name = "types-colorama", specifier = ">=0.4.15.20240311" },
@@ -841,7 +828,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
 wheels = [

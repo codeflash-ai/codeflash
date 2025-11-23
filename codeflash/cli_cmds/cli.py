@@ -1,4 +1,3 @@
-import importlib.util
 import logging
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
@@ -104,7 +103,7 @@ def parse_args() -> Namespace:
         "--async",
         default=False,
         action="store_true",
-        help="Enable optimization of async functions. By default, async functions are excluded from optimization.",
+        help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
     )
 
     args, unknown_args = parser.parse_known_args()
@@ -155,13 +154,11 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         if env_utils.is_ci():
             args.no_pr = True
 
-    if getattr(args, "async", False) and importlib.util.find_spec("pytest_asyncio") is None:
+    if getattr(args, "async", False):
         logger.warning(
-            "Warning: The --async flag requires pytest-asyncio to be installed.\n"
-            "Please install it using:\n"
-            '  pip install "codeflash[asyncio]"'
+            "The --async flag is deprecated and will be removed in a future version. "
+            "Async function optimization is now enabled by default."
         )
-        raise SystemExit(1)
 
     return args
 
