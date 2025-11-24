@@ -15,7 +15,7 @@ class TestShellUtils(unittest.TestCase):
         api_key = "cf-12345"
         result = save_api_key_to_rc(api_key)
         self.assertTrue(isinstance(result, Success))
-        mock_file.assert_called_with("/fake/path/.bashrc", encoding="utf8")
+        mock_file.assert_called_with("/fake/path/.bashrc", "r+", encoding="utf8")
         handle = mock_file()
         handle.write.assert_called_once()
         handle.truncate.assert_called_once()
