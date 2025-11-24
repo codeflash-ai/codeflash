@@ -179,8 +179,6 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
-    *,
-    enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
@@ -242,13 +240,7 @@ def get_functions_to_optimize(
             ph("cli-optimizing-git-diff")
             functions = get_functions_within_git_diff(uncommitted_changes=False)
         filtered_modified_functions, functions_count = filter_functions(
-            functions,
-            test_cfg.tests_root,
-            ignore_paths,
-            project_root,
-            module_root,
-            previous_checkpoint_functions,
-            enable_async=enable_async,
+            functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
 
         logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
@@ -658,7 +650,6 @@ def filter_functions(
     previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
     *,
     disable_logs: bool = False,
-    enable_async: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
     filtered_modified_functions: dict[str, list[FunctionToOptimize]] = {}
     blocklist_funcs = get_blocklisted_functions()
@@ -678,7 +669,6 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    async_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
 
@@ -734,15 +724,6 @@ def filter_functions(
                 functions_tmp.append(function)
             _functions = functions_tmp
 
-        if not enable_async:
-            functions_tmp = []
-            for function in _functions:
-                if function.is_async:
-                    async_functions_removed_count += 1
-                    continue
-                functions_tmp.append(function)
-            _functions = functions_tmp
-
         filtered_modified_functions[file_path] = _functions
         functions_count += len(_functions)
 
@@ -756,7 +737,6 @@ def filter_functions(
             "Files from ignored submodules": (submodule_ignored_paths_count, "bright_black"),
             "Blocklisted functions removed": (blocklist_funcs_removed_count, "bright_red"),
             "Functions skipped from checkpoint": (previous_checkpoint_functions_removed_count, "green"),
-            "Async functions removed": (async_functions_removed_count, "bright_magenta"),
         }
         tree = Tree(Text("Ignored functions and files", style="bold"))
         for label, (count, color) in log_info.items():

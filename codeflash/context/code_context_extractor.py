@@ -12,7 +12,11 @@ import libcst as cst
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
-from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
+from codeflash.context.unused_definition_remover import (
+    collect_top_level_defs_with_usages,
+    extract_names_from_targets,
+    remove_unused_definitions_by_function_names,
+)
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 from codeflash.models.models import (
     CodeContextType,
@@ -28,6 +32,8 @@ if TYPE_CHECKING:
 
     from jedi.api.classes import Name
     from libcst import CSTNode
+
+    from codeflash.context.unused_definition_remover import UsageInfo
 
 
 def get_code_optimization_context(
@@ -498,8 +504,10 @@ def parse_code_and_prune_cst(
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
     module = cst.parse_module(code)
+    defs_with_usages = collect_top_level_defs_with_usages(module, target_functions | helpers_of_helper_functions)
+
     if code_context_type == CodeContextType.READ_WRITABLE:
-        filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions)
+        filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions, defs_with_usages)
     elif code_context_type == CodeContextType.READ_ONLY:
         filtered_node, found_target = prune_cst_for_read_only_code(
             module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
@@ -524,7 +532,7 @@ def parse_code_and_prune_cst(
 
 
 def prune_cst_for_read_writable_code(  # noqa: PLR0911
-    node: cst.CSTNode, target_functions: set[str], prefix: str = ""
+    node: cst.CSTNode, target_functions: set[str], defs_with_usages: dict[str, UsageInfo], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
 
@@ -569,6 +577,21 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
 
         return node.with_changes(body=cst.IndentedBlock(body=new_body)), found_target
 
+    if isinstance(node, cst.Assign):
+        for target in node.targets:
+            names = extract_names_from_targets(target.target)
+            for name in names:
+                if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
+                    return node, True
+        return None, False
+
+    if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
+        names = extract_names_from_targets(node.target)
+        for name in names:
+            if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
+                return node, True
+        return None, False
+
     # For other nodes, we preserve them only if they contain target functions in their children.
     section_names = get_section_names(node)
     if not section_names:
@@ -583,7 +606,9 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
             new_children = []
             section_found_target = False
             for child in original_content:
-                filtered, found_target = prune_cst_for_read_writable_code(child, target_functions, prefix)
+                filtered, found_target = prune_cst_for_read_writable_code(
+                    child, target_functions, defs_with_usages, prefix
+                )
                 if filtered:
                     new_children.append(filtered)
                 section_found_target |= found_target
@@ -592,7 +617,9 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
                 found_any_target = True
                 updates[section] = new_children
         elif original_content is not None:
-            filtered, found_target = prune_cst_for_read_writable_code(original_content, target_functions, prefix)
+            filtered, found_target = prune_cst_for_read_writable_code(
+                original_content, target_functions, defs_with_usages, prefix
+            )
             if found_target:
                 found_any_target = True
                 if filtered:
@@ -600,7 +627,6 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
 
     if not found_any_target:
         return None, False
-
     return (node.with_changes(**updates) if updates else node), True
 
 

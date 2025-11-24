@@ -134,7 +134,6 @@ class Optimizer:
             project_root=self.args.project_root,
             module_root=self.args.module_root,
             previous_checkpoint_functions=self.args.previous_checkpoint_functions,
-            enable_async=getattr(self.args, "async", False),
         )
 
     def create_function_optimizer(

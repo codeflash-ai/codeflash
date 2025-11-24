@@ -244,7 +244,6 @@ class MixedClass:
         ignore_paths=[],
         project_root=file_path.parent,
         module_root=file_path.parent,
-        enable_async=True,
     )
     
     assert functions_count == 4
@@ -259,7 +258,8 @@ class MixedClass:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
-def test_no_async_functions_finding(temp_dir):
+def test_async_functions_always_included(temp_dir):
+    """Test that async functions are always included now (no longer filtered out)."""
     mixed_code = """
 async def async_func_one():
     return await operation_one()
@@ -297,16 +297,17 @@ class MixedClass:
         ignore_paths=[],
         project_root=file_path.parent,
         module_root=file_path.parent,
-        enable_async=False,
     )
     
-    assert functions_count == 2
+    # Now async functions are always included, so we expect 4 functions (not 2)
+    assert functions_count == 4
     
     function_names = [fn.function_name for fn in functions[file_path]]
     assert "sync_func_one" in function_names
     assert "sync_method" in function_names
-    assert "async_func_one" not in function_names
-    assert "async_method" not in function_names
+    # Async functions are now included by default
+    assert "async_func_one" in function_names
+    assert "async_method" in function_names
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")

@@ -31,6 +31,7 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
+from codeflash.code_utils.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -1172,10 +1173,13 @@ class CFAPIKeyType(click.ParamType):
 
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
+    """Prompt user for API key via OAuth or manual entry."""
+    # Check for existing API key
     try:
         existing_api_key = get_codeflash_api_key()
     except OSError:
         existing_api_key = None
+
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         api_key_panel = Panel(
@@ -1192,8 +1196,52 @@ def prompt_api_key() -> bool:
         console.print()
         return False
 
-    enter_api_key_and_save_to_rc()
-    ph("cli-new-api-key-entered")
+    # Prompt for authentication method
+    auth_choices = ["🔐 Login in with Codeflash", "🔑 Use Codeflash API key"]
+
+    questions = [
+        inquirer.List(
+            "auth_method",
+            message="How would you like to authenticate?",
+            choices=auth_choices,
+            default=auth_choices[0],
+            carousel=True,
+        )
+    ]
+
+    answers = inquirer.prompt(questions, theme=CodeflashTheme())
+    if not answers:
+        apologize_and_exit()
+
+    method = answers["auth_method"]
+
+    if method == auth_choices[1]:
+        enter_api_key_and_save_to_rc()
+        ph("cli-new-api-key-entered")
+        return True
+
+    # Perform OAuth sign-in
+    api_key = perform_oauth_signin()
+
+    if not api_key:
+        apologize_and_exit()
+
+    # Save API key
+    shell_rc_path = get_shell_rc_path()
+    if not shell_rc_path.exists() and os.name == "nt":
+        shell_rc_path.touch()
+        click.echo(f"✅ Created {shell_rc_path}")
+
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+        click.echo("✅ Signed in successfully and API key saved!")
+    else:
+        click.echo(result.failure())
+        click.pause()
+
+    os.environ["CODEFLASH_API_KEY"] = api_key
+    ph("cli-oauth-signin-completed")
     return True
 
 
@@ -1235,13 +1283,16 @@ def enter_api_key_and_save_to_rc() -> None:
 
 
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
-    find_common_tags_content = """def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
+    find_common_tags_content = """from __future__ import annotations
+
+
+def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     if not articles:
         return set()
 
-    common_tags = articles[0]["tags"]
+    common_tags = articles[0].get("tags", [])
     for article in articles[1:]:
-        common_tags = [tag for tag in common_tags if tag in article["tags"]]
+        common_tags = [tag for tag in common_tags if tag in article.get("tags", [])]
     return set(common_tags)
 """
 
