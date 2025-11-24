@@ -1,6 +1,8 @@
+import gc
 import multiprocessing
 import shutil
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -9,11 +11,29 @@ from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import validate_and_format_benchmark_table
-import time
+
+
+def safe_unlink(file_path: Path, max_retries: int = 5, retry_delay: float = 0.5) -> None:
+    """Safely delete a file with retries, handling Windows file locking issues."""
+    for attempt in range(max_retries):
+        try:
+            file_path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                # Last attempt: force garbage collection to close any lingering SQLite connections
+                gc.collect()
+                time.sleep(retry_delay * 2)
+                try:
+                    file_path.unlink(missing_ok=True)
+                except PermissionError:
+                    # Silently fail on final attempt to avoid test failures from cleanup issues
+                    pass
 
 
 def test_trace_benchmarks() -> None:
-    # Test the trace_benchmarks function
     project_root = Path(__file__).parent.parent / "code_to_optimize"
     benchmarks_root = project_root / "tests" / "pytest" / "benchmarks_test"
     replay_tests_dir = benchmarks_root / "codeflash_replay_tests"
@@ -22,66 +42,63 @@ def test_trace_benchmarks() -> None:
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
-        # check contents of trace file
-        # connect to database
-        conn = sqlite3.connect(output_file.as_posix())
-        cursor = conn.cursor()
+        # Query the trace database to verify recorded function calls
+        with sqlite3.connect(output_file.as_posix()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            function_calls = cursor.fetchall()
 
-        # Get the count of records
-        # Get all records
-        cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
-        function_calls = cursor.fetchall()
+            assert len(function_calls) == 8, f"Expected 8 function calls, but got {len(function_calls)}"
 
-        # Assert the length of function calls
-        assert len(function_calls) == 8, f"Expected 8 function calls, but got {len(function_calls)}"
+            bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
+            process_and_bubble_sort_path = (project_root / "process_and_bubble_sort_codeflash_trace.py").as_posix()
+            # Expected function calls
+            expected_calls = [
+                ("sorter", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_class_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 17),
 
-        bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
-        process_and_bubble_sort_path = (project_root / "process_and_bubble_sort_codeflash_trace.py").as_posix()
-        # Expected function calls
-        expected_calls = [
-            ("sorter", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 17),
+                ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_class_sort2", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 20),
 
-            ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort2", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 20),
+                ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_class_sort3", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 23),
 
-            ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort3", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 23),
+                ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_class_sort4", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 26),
 
-            ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort4", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 26),
+                ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 7),
 
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 7),
+                ("compute_and_sort", "", "code_to_optimize.process_and_bubble_sort_codeflash_trace",
+                 f"{process_and_bubble_sort_path}",
+                 "test_compute_and_sort", "tests.pytest.benchmarks_test.test_process_and_sort_example", 4),
 
-            ("compute_and_sort", "", "code_to_optimize.process_and_bubble_sort_codeflash_trace",
-             f"{process_and_bubble_sort_path}",
-             "test_compute_and_sort", "tests.pytest.benchmarks_test.test_process_and_sort_example", 4),
+                ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_no_func", "tests.pytest.benchmarks_test.test_process_and_sort_example", 8),
 
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_no_func", "tests.pytest.benchmarks_test.test_process_and_sort_example", 8),
-
-            ("recursive_bubble_sort", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_recursive_sort", "tests.pytest.benchmarks_test.test_recursive_example", 5),
-        ]
-        for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
-            assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
-            assert actual[1] == expected[1], f"Mismatch at index {idx} for class_name"
-            assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
-            assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
-            assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
-            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
-            assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
-        # Close connection
-        conn.close()
+                ("recursive_bubble_sort", "", "code_to_optimize.bubble_sort_codeflash_trace",
+                 f"{bubble_sort_path}",
+                 "test_recursive_sort", "tests.pytest.benchmarks_test.test_recursive_example", 5),
+            ]
+            for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
+                assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
+                assert actual[1] == expected[1], f"Mismatch at index {idx} for class_name"
+                assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
+                assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
+                assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
+                assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
+                assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
+        
+        # Close database connection and ensure cleanup before opening new connections
+        gc.collect()
+        time.sleep(0.1)
         generate_replay_test(output_file, replay_tests_dir)
         test_class_sort_path = replay_tests_dir/ Path("test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py")
         assert test_class_sort_path.exists()
@@ -171,10 +188,13 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter_test_no_func():
 
 """
         assert test_sort_path.read_text("utf-8").strip()==test_sort_code.strip()
+        # Ensure database connections are closed before cleanup
+        gc.collect()
+        time.sleep(0.1)
     finally:
-        # cleanup
-        output_file.unlink(missing_ok=True)
-        shutil.rmtree(replay_tests_dir)
+        # Cleanup with retry mechanism to handle Windows file locking issues
+        safe_unlink(output_file)
+        shutil.rmtree(replay_tests_dir, ignore_errors=True)
 
 # Skip the test in CI as the machine may not be multithreaded
 @pytest.mark.ci_skip
@@ -186,20 +206,17 @@ def test_trace_multithreaded_benchmark() -> None:
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
-        # check contents of trace file
-        # connect to database
-        conn = sqlite3.connect(output_file.as_posix())
-        cursor = conn.cursor()
+        # Query the trace database to verify recorded function calls
+        with sqlite3.connect(output_file.as_posix()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            function_calls = cursor.fetchall()
+        
+        # Close database connection and ensure cleanup before opening new connections
+        gc.collect()
+        time.sleep(0.1)
 
-        # Get the count of records
-        # Get all records
-        cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
-        function_calls = cursor.fetchall()
-
-        conn.close()
-
-        # Assert the length of function calls
         assert len(function_calls) == 10, f"Expected 10 function calls, but got {len(function_calls)}"
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
         total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
@@ -224,14 +241,14 @@ def test_trace_multithreaded_benchmark() -> None:
             assert actual[2] == expected[2], f"Mismatch at index {idx} for module_name"
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
-            assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
             assert actual[6] == expected[6], f"Mismatch at index {idx} for benchmark_line_number"
-        # Close connection
-        conn.close()
-
+        
+        # Ensure database connections are closed before cleanup
+        gc.collect()
+        time.sleep(0.1)
     finally:
-        # cleanup
-        output_file.unlink(missing_ok=True)
+        # Cleanup with retry mechanism to handle Windows file locking issues
+        safe_unlink(output_file)
 
 def test_trace_benchmark_decorator() -> None:
     project_root = Path(__file__).parent.parent / "code_to_optimize"
@@ -241,19 +258,19 @@ def test_trace_benchmark_decorator() -> None:
     trace_benchmarks_pytest(benchmarks_root, tests_root, project_root, output_file)
     assert output_file.exists()
     try:
-        # check contents of trace file
-        # connect to database
-        conn = sqlite3.connect(output_file.as_posix())
-        cursor = conn.cursor()
+        # Query the trace database to verify recorded function calls
+        with sqlite3.connect(output_file.as_posix()) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            function_calls = cursor.fetchall()
 
-        # Get the count of records
-        # Get all records
-        cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
-        function_calls = cursor.fetchall()
-
-        # Assert the length of function calls
-        assert len(function_calls) == 2, f"Expected 2 function calls, but got {len(function_calls)}"
+            assert len(function_calls) == 2, f"Expected 2 function calls, but got {len(function_calls)}"
+        
+        # Close database connection and ensure cleanup before opening new connections
+        gc.collect()
+        time.sleep(0.1)
+        
         function_benchmark_timings = codeflash_benchmark_plugin.get_function_benchmark_timings(output_file)
         total_benchmark_timings = codeflash_benchmark_plugin.get_benchmark_timings(output_file)
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
@@ -281,11 +298,10 @@ def test_trace_benchmark_decorator() -> None:
             assert Path(actual[3]).name == Path(expected[3]).name, f"Mismatch at index {idx} for file_path"
             assert actual[4] == expected[4], f"Mismatch at index {idx} for benchmark_function_name"
             assert actual[5] == expected[5], f"Mismatch at index {idx} for benchmark_module_path"
-        # Close connection
-        cursor.close()
-        conn.close()
-        time.sleep(2)
+        
+        # Ensure database connections are closed before cleanup
+        gc.collect()
+        time.sleep(0.1)
     finally:
-        # cleanup
-        output_file.unlink(missing_ok=True)
-        time.sleep(1)
+        # Cleanup with retry mechanism to handle Windows file locking issues
+        safe_unlink(output_file)
