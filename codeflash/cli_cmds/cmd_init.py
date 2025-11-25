@@ -1112,10 +1112,10 @@ def install_github_app(git_remote: str) -> None:
             click.prompt(
                 f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
                 f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to open the page to let you install the app…{LF}",
+                f"Please Press ENTER to open the page to let you install the app…{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
             click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
