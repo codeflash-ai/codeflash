@@ -137,10 +137,7 @@ def init_codeflash() -> None:
                 "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
             )
             if os.name == "nt":
-                if is_powershell():
-                    reload_cmd = f". {get_shell_rc_path()}"
-                else:
-                    reload_cmd = f"call {get_shell_rc_path()}"
+                reload_cmd = f". {get_shell_rc_path()}" if is_powershell() else f"call {get_shell_rc_path()}"
             else:
                 reload_cmd = f"source {get_shell_rc_path()}"
             completion_message += f"\nOr run: {reload_cmd}"

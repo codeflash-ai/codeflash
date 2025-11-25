@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -38,9 +39,9 @@ def is_powershell() -> bool:
     if os.name != "nt":
         return False
 
-    # Primary check: PSModulePath is set by PowerShell
+    # Primary check: PSMODULEPATH is set by PowerShell
     # This is the most reliable indicator as PowerShell always sets this
-    ps_module_path = os.environ.get("PSModulePath")
+    ps_module_path = os.environ.get("PSMODULEPATH")
     if ps_module_path:
         logger.debug("shell_utils.py:is_powershell - Detected PowerShell via PSModulePath")
         return True
@@ -54,14 +55,11 @@ def is_powershell() -> bool:
     # Tertiary check: Windows Terminal often uses PowerShell by default
     # But we only use this if other indicators are ambiguous
     term_program = os.environ.get("TERM_PROGRAM", "").lower()
-    if "windows" in term_program and "terminal" in term_program:
-        # Check if we can find evidence of CMD (cmd.exe in COMSPEC)
-        # If not, assume PowerShell for Windows Terminal
-        if "cmd.exe" not in comspec:
-            logger.debug(
-                f"shell_utils.py:is_powershell - Detected PowerShell via Windows Terminal (COMSPEC: {comspec})"
-            )
-            return True
+    # Check if we can find evidence of CMD (cmd.exe in COMSPEC)
+    # If not, assume PowerShell for Windows Terminal
+    if "windows" in term_program and "terminal" in term_program and "cmd.exe" not in comspec:
+        logger.debug(f"shell_utils.py:is_powershell - Detected PowerShell via Windows Terminal (COMSPEC: {comspec})")
+        return True
 
     logger.debug(f"shell_utils.py:is_powershell - Not PowerShell (COMSPEC: {comspec}, TERM_PROGRAM: {term_program})")
     return False
@@ -76,10 +74,7 @@ def read_api_key_from_shell_config() -> Optional[str]:
 
     # Determine the correct pattern to use based on the file extension and platform
     if os.name == "nt":  # Windows
-        if shell_rc_path.suffix == ".ps1":
-            pattern = POWERSHELL_RC_EXPORT_PATTERN
-        else:
-            pattern = CMD_RC_EXPORT_PATTERN
+        pattern = POWERSHELL_RC_EXPORT_PATTERN if shell_rc_path.suffix == ".ps1" else CMD_RC_EXPORT_PATTERN
     else:  # Unix-like
         pattern = UNIX_RC_EXPORT_PATTERN
 
@@ -150,12 +145,10 @@ def save_api_key_to_rc(api_key: str) -> Result[str, str]:
 
     try:
         # Create directory if it doesn't exist (ignore errors - file operation will fail if needed)
-        try:
+        # Directory creation failed, but we'll still try to open the file
+        # The file operation itself will raise the appropriate exception if there are permission issues
+        with contextlib.suppress(OSError, PermissionError):
             shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
-        except (OSError, PermissionError):
-            # Directory creation failed, but we'll still try to open the file
-            # The file operation itself will raise the appropriate exception if there are permission issues
-            pass
 
         # Convert Path to string using as_posix() for cross-platform path compatibility
         shell_rc_path_str = shell_rc_path.as_posix() if isinstance(shell_rc_path, Path) else str(shell_rc_path)
