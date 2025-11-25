@@ -1120,10 +1120,10 @@ def install_github_app(git_remote: str) -> None:
             )
             click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
             click.prompt(
-                f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
+                f"Please, Press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
 
@@ -1139,10 +1139,10 @@ def install_github_app(git_remote: str) -> None:
                 click.prompt(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                     f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                    f"Press Enter to continue once you've finished installing the github app…{LF}",
+                    f"Press ENTER to continue once you've finished installing the github app…{LF}",
                     default="",
                     type=click.STRING,
-                    prompt_suffix="",
+                    prompt_suffix=">>> ",
                     show_default=False,
                 )
                 count -= 1
