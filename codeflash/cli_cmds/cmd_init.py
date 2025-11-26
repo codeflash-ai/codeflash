@@ -1118,18 +1118,18 @@ def install_github_app(git_remote: str) -> None:
             click.prompt(
                 f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
                 f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to open the page to let you install the app…{LF}",
+                f"Please, press ENTER to open the app installation page{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
             click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
             click.prompt(
-                f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
+                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
 
@@ -1145,10 +1145,10 @@ def install_github_app(git_remote: str) -> None:
                 click.prompt(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                     f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                    f"Press Enter to continue once you've finished installing the github app…{LF}",
+                    f"Please, press ENTER to continue once you've finished installing the github app…{LF}",
                     default="",
                     type=click.STRING,
-                    prompt_suffix="",
+                    prompt_suffix=">>> ",
                     show_default=False,
                 )
                 count -= 1
