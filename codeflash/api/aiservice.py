@@ -669,17 +669,14 @@ class AiServiceClient:
                 f"({len(workflow_steps) if workflow_steps else 0} chars)"
             )
             return workflow_steps
-        else:
-            logger.warning(
-                f"[aiservice.py:generate_workflow_steps] Failed with status {response.status_code}"
-            )
-            try:
-                error_response = response.json()
-                error = cast("str", error_response.get("error", "Unknown error"))
-                logger.debug(f"[aiservice.py:generate_workflow_steps] Error: {error}")
-            except Exception:
-                logger.debug(f"[aiservice.py:generate_workflow_steps] Could not parse error response")
-            return None
+        logger.warning(f"[aiservice.py:generate_workflow_steps] Failed with status {response.status_code}")
+        try:
+            error_response = response.json()
+            error = cast("str", error_response.get("error", "Unknown error"))
+            logger.debug(f"[aiservice.py:generate_workflow_steps] Error: {error}")
+        except Exception:
+            logger.debug("[aiservice.py:generate_workflow_steps] Could not parse error response")
+        return None
 
 
 class LocalAiServiceClient(AiServiceClient):

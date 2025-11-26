@@ -23,11 +23,7 @@ from rich.table import Table
 from rich.text import Text
 
 from codeflash.api.aiservice import AiServiceClient
-from codeflash.api.cfapi import (
-    check_workflow_file_exists,
-    is_github_app_installed_on_repo,
-    setup_github_actions,
-)
+from codeflash.api.cfapi import is_github_app_installed_on_repo, setup_github_actions
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -778,9 +774,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         console.print(
                             Panel(
                                 Text(
-                                    "✅ Repository secret CODEFLASH_API_KEY configured",
-                                    style="green",
-                                    justify="center",
+                                    "✅ Repository secret CODEFLASH_API_KEY configured", style="green", justify="center"
                                 ),
                                 title="✅ Secret Configured",
                                 border_style="bright_green",
@@ -788,9 +782,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         )
                         console.print()
                     elif secret_setup_error:
-                        warning_message = (
-                            "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
-                        )
+                        warning_message = "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
                         warning_message += f"Error: {secret_setup_error}\n\n"
                         warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
 
@@ -807,9 +799,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                 )
                 # Secret setup is optional, so we continue
 
-            logger.info(
-                f"[cmd_init.py:install_github_actions] Workflow file already exists locally, skipping setup"
-            )
+            logger.info("[cmd_init.py:install_github_actions] Workflow file already exists locally, skipping setup")
             return
 
         # Get repository information for API call
@@ -1482,10 +1472,11 @@ def generate_dynamic_workflow_content(
                 optimize_yml_content = "\n".join(new_lines)
 
                 return optimize_yml_content
-            else:
-                logger.warning("[cmd_init.py:generate_dynamic_workflow_content] Could not find steps section in template")
+            logger.warning("[cmd_init.py:generate_dynamic_workflow_content] Could not find steps section in template")
         else:
-            logger.debug("[cmd_init.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static")
+            logger.debug(
+                "[cmd_init.py:generate_dynamic_workflow_content] AI service returned no steps, falling back to static"
+            )
 
     except Exception as e:
         logger.warning(
