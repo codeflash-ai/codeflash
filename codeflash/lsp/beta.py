@@ -491,6 +491,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
 async def start_demo_optimization(params: DemoOptimizationParams) -> dict[str, str]:
     try:
         _init()
+        cancel_event = threading.Event()
         # start by creating the worktree so that the demo file is not created in user workspace
         server.optimizer.worktree_mode()
         file_path = create_find_common_tags_file(server.args, params.functionName + ".py")
@@ -509,6 +510,9 @@ async def start_demo_optimization(params: DemoOptimizationParams) -> dict[str, s
         return await perform_function_optimization(
             FunctionOptimizationParams(functionName=params.functionName, task_id=None)
         )
+    except asyncio.CancelledError:
+        cancel_event.set()
+        return get_cancelled_reponse()
     finally:
         server.cleanup_the_optimizer()
 

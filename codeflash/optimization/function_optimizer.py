@@ -846,7 +846,7 @@ class FunctionOptimizer:
             md_lines = [
                 "### ⚡️ Optimization Summary",
                 f"Function: `{self.function_to_optimize.qualified_name}`",
-                f"File: `{explanation.file_path}`",
+                f"File: {explanation.file_path}",
                 f"Performance: {explanation.perf_improvement_line}",
                 "",
                 "#### Explanation\n",
