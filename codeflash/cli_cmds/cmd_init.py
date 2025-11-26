@@ -429,7 +429,10 @@ def collect_setup_info() -> CLISetupInfo:
 
         custom_tests_questions = [
             inquirer.Path(
-                "custom_tests_path", message="Enter the path to your tests directory", path_type=inquirer.Path.DIRECTORY
+                "custom_tests_path",
+                message="Enter the path to your tests directory",
+                path_type=inquirer.Path.DIRECTORY,
+                exists=True,
             )
         ]
 
