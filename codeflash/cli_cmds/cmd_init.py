@@ -1120,7 +1120,7 @@ def install_github_app(git_remote: str) -> None:
             )
             click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
             click.prompt(
-                f"Please, Press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
+                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
                 default="",
                 type=click.STRING,
                 prompt_suffix=">>> ",
