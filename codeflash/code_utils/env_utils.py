@@ -59,17 +59,26 @@ def get_codeflash_api_key() -> str:
     # Check environment variable first
     env_api_key = os.environ.get("CODEFLASH_API_KEY")
     shell_api_key = read_api_key_from_shell_config()
-
+    logger.debug(
+        f"env_utils.py:get_codeflash_api_key - env_api_key: {'***' + env_api_key[-4:] if env_api_key else None}, shell_api_key: {'***' + shell_api_key[-4:] if shell_api_key else None}"
+    )
     # If we have an env var but it's not in shell config, save it for persistence
     if env_api_key and not shell_api_key:
         try:
             from codeflash.either import is_successful
 
+            logger.debug("env_utils.py:get_codeflash_api_key - Saving API key from environment to shell config")
             result = save_api_key_to_rc(env_api_key)
             if is_successful(result):
-                logger.debug(f"Automatically saved API key from environment to shell config: {result.unwrap()}")
+                logger.debug(
+                    f"env_utils.py:get_codeflash_api_key - Automatically saved API key from environment to shell config: {result.unwrap()}"
+                )
+            else:
+                logger.debug(f"env_utils.py:get_codeflash_api_key - Failed to save API key: {result.failure()}")
         except Exception as e:
-            logger.debug(f"Failed to automatically save API key to shell config: {e}")
+            logger.debug(
+                f"env_utils.py:get_codeflash_api_key - Failed to automatically save API key to shell config: {e}"
+            )
 
     # Prefer the shell configuration over environment variables for lsp,
     # as the API key may change in the RC file during lsp runtime. Since the LSP client (extension) can restart
