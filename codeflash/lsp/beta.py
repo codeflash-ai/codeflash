@@ -184,11 +184,35 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
         # the client provided a config path but it doesn't exist
         create_empty_pyproject_toml(cfg_file)
 
+    # Handle both dict and object access for config
+    def get_config_value(key: str, default: str = "") -> str:
+        if isinstance(cfg, dict):
+            return cfg.get(key, default)
+        return getattr(cfg, key, default)
+
+    tests_root = get_config_value("tests_root", "")
+    # Validate tests_root directory exists if provided
+    if tests_root:
+        # Resolve path relative to config file directory or current working directory
+        if cfg_file:
+            base_dir = cfg_file.parent
+        else:
+            base_dir = Path.cwd()
+        tests_root_path = (base_dir / tests_root).resolve()
+        if not tests_root_path.exists() or not tests_root_path.is_dir():
+            return {
+                "status": "error",
+                "message": f"Invalid 'tests_root': directory does not exist at {tests_root_path}",
+                "field_errors": {
+                    "tests_root": f"Directory does not exist at {tests_root_path}",
+                },
+            }
+
     setup_info = VsCodeSetupInfo(
-        module_root=getattr(cfg, "module_root", ""),
-        tests_root=getattr(cfg, "tests_root", ""),
-        test_framework=getattr(cfg, "test_framework", "pytest"),
-        formatter=get_formatter_cmds(getattr(cfg, "formatter_cmds", "disabled")),
+        module_root=get_config_value("module_root", ""),
+        tests_root=tests_root,
+        test_framework=get_config_value("test_framework", "pytest"),
+        formatter=get_formatter_cmds(get_config_value("formatter_cmds", "disabled")),
     )
 
     devnull_writer = open(os.devnull, "w")  # noqa
