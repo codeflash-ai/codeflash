@@ -1,0 +1,252 @@
+---
+title: "Claude Code Integration"
+description: "Use Codeflash as a Claude Code subagent for seamless AI-powered code optimization"
+---
+
+# Claude Code Integration
+
+Codeflash integrates natively with Claude Code through **specialized subagents** - dedicated AI assistants that provide comprehensive Python performance optimization capabilities directly within your development workflow.
+
+## 🚀 Quick Setup
+
+### 1. Install Codeflash
+
+```bash
+# Install codeflash (includes Claude Code integration)
+pip install codeflash
+```
+
+### 2. Integrate with Claude Code
+
+```bash
+# Automatically set up native subagents
+codeflash integrate claude
+```
+
+### 3. Restart Claude Code
+
+After setup, restart Claude Code to load the new MCP server.
+
+## ✨ Three Specialized Subagents
+
+Codeflash provides **three dedicated subagents**, each with specialized expertise:
+
+### 🚀 **@codeflash-optimizer** - AI-Powered Optimization
+The primary optimization specialist that implements performance improvements:
+
+```
+"@codeflash-optimizer optimize the bubble_sort function"
+"@codeflash-optimizer trace my script and optimize bottlenecks"
+"@codeflash-optimizer set up GitHub Actions for continuous optimization"
+```
+
+**Capabilities:**
+- Function and file-level optimization (2-55x speedups)
+- End-to-end script tracing and optimization
+- Algorithm improvements and efficiency gains
+- Project setup and CI/CD integration
+
+### 🔍 **@codeflash-profiler** - Performance Analysis
+Expert in identifying bottlenecks and analyzing performance patterns:
+
+```
+"@codeflash-profiler analyze why my script is slow"
+"@codeflash-profiler profile this function and find bottlenecks"
+"@codeflash-profiler benchmark my code and show performance metrics"
+```
+
+**Capabilities:**
+- Execution tracing and hotspot identification
+- Performance benchmarking and statistical analysis
+- Memory usage analysis and optimization recommendations
+- Scalability assessment and bottleneck prioritization
+
+### 👁️ **@codeflash-reviewer** - Performance Code Reviews
+Specialized in reviewing code for performance issues during development:
+
+```
+"@codeflash-reviewer review this code for performance issues"
+"@codeflash-reviewer check my pull request for optimization opportunities"
+"@codeflash-reviewer analyze the algorithmic complexity of this function"
+```
+
+**Capabilities:**
+- Algorithmic efficiency analysis (time/space complexity)
+- Performance anti-pattern detection
+- Library usage optimization recommendations
+- Code review integration with performance focus
+
+## 🔧 Available MCP Tools
+
+The integration provides these tools that Claude Code can use:
+
+| Tool | Description |
+|------|-------------|
+| `optimize_function` | Optimize a specific function by name |
+| `optimize_file` | Optimize all functions in a file |
+| `trace_and_optimize` | Trace script execution and optimize |
+| `optimize_from_replay_tests` | Use test files to guide optimization |
+| `optimize_all_functions` | Optimize entire project (use with caution) |
+| `initialize_project` | Set up codeflash in a project |
+| `setup_github_actions` | Configure CI/CD optimization |
+| `verify_installation` | Test that codeflash works correctly |
+| `run_benchmarks` | Execute performance benchmarks |
+| `get_codeflash_status` | Check current project setup |
+| `get_optimization_help` | Get usage help and best practices |
+
+## 📋 Usage Examples
+
+### Basic Optimization
+```
+Human: I have a slow sorting function in my project. Can you help optimize it?
+
+Claude: I'll help you optimize your sorting function using codeflash. Let me first check what functions are available in your project and then optimize the sorting function.
+
+[Claude uses codeflash tools to find and optimize the function]
+```
+
+### End-to-End Script Optimization
+```  
+Human: My data processing script takes too long. Can you trace it and find optimizations?
+
+Claude: I'll use codeflash to trace your script execution and identify optimization opportunities based on real usage patterns.
+
+[Claude uses trace_and_optimize tool]
+```
+
+### Project Setup
+```
+Human: I want to set up codeflash in my new Python project
+
+Claude: I'll help you initialize codeflash in your project and set up the optimal configuration.
+
+[Claude uses initialize_project and setup tools]
+```
+
+## ⚙️ Configuration
+
+### Manual Setup
+
+If automatic setup doesn't work, you can manually add codeflash to your Claude Code configuration:
+
+1. **Find your Claude Code config file:**
+   - macOS: `~/.claude/config.json` or `~/Library/Application Support/Claude Code/config.json`
+   - Linux: `~/.config/claude/config.json`
+   - Windows: `%APPDATA%/Claude Code/config.json`
+
+2. **Add the MCP server configuration:**
+
+```json
+{
+  "mcpServers": {
+    "codeflash": {
+      "command": "codeflash-mcp",
+      "args": [],
+      "env": {},
+      "disabled": false
+    }
+  }
+}
+```
+
+### Verification
+
+Check if the integration is working:
+
+```bash
+# Check integration status
+codeflash setup status
+
+# Test in Claude Code
+# Ask: "Show me codeflash help" or "What codeflash tools are available?"
+```
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+#### "codeflash-mcp command not found"
+```bash
+# Reinstall with MCP dependencies
+pip uninstall codeflash
+pip install codeflash[mcp]
+```
+
+#### "MCP server failed to start"
+```bash
+# Check if dependencies are installed
+python -c "import mcp, fastmcp; print('MCP dependencies OK')"
+
+# Test the MCP server directly
+codeflash-mcp
+```
+
+#### "Claude Code doesn't recognize codeflash"
+1. Ensure Claude Code is restarted after setup
+2. Check config file exists and is valid JSON
+3. Verify MCP server path is correct
+
+### Debug Commands
+
+```bash
+# Show detailed integration status
+codeflash setup status
+
+# Remove and reconfigure
+codeflash setup claude-code --remove
+codeflash setup claude-code --force
+
+# Test MCP server manually
+python -m codeflash.mcp.server
+```
+
+## 🎯 Best Practices
+
+### Optimization Workflow
+1. **Start Small**: Begin with single function optimization
+2. **Use Tracing**: For end-to-end scripts, use trace-based optimization  
+3. **Review Changes**: Always review optimizations before merging
+4. **Benchmark**: Use benchmarking to measure improvements
+5. **Iterative**: Optimize iteratively rather than all at once
+
+### Claude Code Tips
+- Be specific about which functions/files to optimize
+- Ask for explanations of optimizations made
+- Request benchmarking to validate improvements
+- Use natural language - Claude Code understands context
+
+### Performance Considerations
+- Large project optimization can take significant time
+- Use `--no-pr` flag for local-only testing
+- Set up GitHub Actions for continuous optimization
+
+## 🚀 Advanced Usage
+
+### Custom Workflows
+```
+"Create a codeflash optimization workflow for my data pipeline project that:
+1. Traces the main processing script
+2. Optimizes the top 5 slowest functions  
+3. Runs benchmarks to verify improvements
+4. Creates a PR with the optimizations"
+```
+
+### Integration with CI/CD
+```
+"Help me set up automated codeflash optimization in my GitHub Actions workflow"
+```
+
+### Performance Analysis
+```
+"Analyze my Python project's performance bottlenecks and suggest which functions to optimize first"
+```
+
+## 📚 Learn More
+
+- [Codeflash Documentation](/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [Claude Code Documentation](https://docs.anthropic.com/en/docs/claude-code)
+
+---
+
+*Codeflash Claude Code integration brings AI-powered code optimization directly into your development workflow, making performance improvements as easy as asking for them.*
