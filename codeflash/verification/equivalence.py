@@ -38,19 +38,25 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     original_recursion_limit = sys.getrecursionlimit()
     if original_recursion_limit < INCREASED_RECURSION_LIMIT:
         sys.setrecursionlimit(INCREASED_RECURSION_LIMIT)  # Increase recursion limit to avoid RecursionError
-    test_ids_superset = original_results.get_all_unique_invocation_loop_ids().union(
-        set(candidate_results.get_all_unique_invocation_loop_ids())
-    )
+    test_ids_superset = original_results.get_all_unique_invocation_loop_ids()
+    test_ids_superset = test_ids_superset.union(candidate_results.get_all_unique_invocation_loop_ids())
+
     test_diffs: list[TestDiff] = []
     did_all_timeout: bool = True
+    # Cache candidate failures dict lookup outside loop
+    candidate_test_failures = candidate_results.test_failures
+    # Loop with cached function calls
+    get_cdd_result = candidate_results.get_by_unique_invocation_loop_id
+    get_orig_result = original_results.get_by_unique_invocation_loop_id
+
     for test_id in test_ids_superset:
-        original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
-        cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
-        candidate_test_failures = candidate_results.test_failures
+        original_test_result = get_orig_result(test_id)
+        cdd_test_result = get_cdd_result(test_id)
+        # This is just caching the pytest error extraction branch to single lookup
         # original_test_failures = original_results.test_failures
         cdd_pytest_error = (
             candidate_test_failures.get(original_test_result.id.test_function_name, "")
-            if candidate_test_failures
+            if candidate_test_failures and original_test_result is not None
             else ""
         )
         # original_pytest_error = (
@@ -59,9 +65,9 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
 
         if cdd_test_result is not None and original_test_result is None:
             continue
-        # If helper function instance_state verification is not present, that's ok. continue
         if (
-            original_test_result.verification_type
+            original_test_result
+            and original_test_result.verification_type
             and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
             and cdd_test_result is None
         ):
@@ -71,12 +77,13 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
             continue
-        superset_obj = False
-        if original_test_result.verification_type and (
+        superset_obj = (
             original_test_result.verification_type
             in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
-        ):
-            superset_obj = True
+            if original_test_result.verification_type
+            else False
+        )
+
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             test_diffs.append(
@@ -101,8 +108,12 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             except Exception as e:
                 logger.error(e)
             break
-        if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
-            original_test_result.stdout, cdd_test_result.stdout
+
+        # Fast fail: check stdout
+        if (
+            original_test_result.stdout
+            and cdd_test_result.stdout
+            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
         ):
             test_diffs.append(
                 TestDiff(
@@ -115,12 +126,17 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             )
             break
 
-        if original_test_result.test_type in {
-            TestType.EXISTING_UNIT_TEST,
-            TestType.CONCOLIC_COVERAGE_TEST,
-            TestType.GENERATED_REGRESSION,
-            TestType.REPLAY_TEST,
-        } and (cdd_test_result.did_pass != original_test_result.did_pass):
+        # TestType mismatch
+        if (
+            original_test_result.test_type
+            in {
+                TestType.EXISTING_UNIT_TEST,
+                TestType.CONCOLIC_COVERAGE_TEST,
+                TestType.GENERATED_REGRESSION,
+                TestType.REPLAY_TEST,
+            }
+            and cdd_test_result.did_pass != original_test_result.did_pass
+        ):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.DID_PASS,
