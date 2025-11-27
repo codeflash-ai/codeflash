@@ -306,25 +306,43 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     len1 = len(s1)
     len2 = len(s2)
     # Use a preallocated list instead of creating a new list every iteration
+
+    # Early exit for empty string cases
+    if len1 == 0:
+        return len2
+    if len2 == 0:
+        return len1
+
+    # Convert strings to lists for fast indexed access
+    s1_list = list(s1)
+    s2_list = list(s2)
+
+    # Preallocate and reuse arrays; avoid creating new ones every iteration
     previous = list(range(len1 + 1))
     current = [0] * (len1 + 1)
 
     for index2 in range(len2):
-        char2 = s2[index2]
+        char2 = s2_list[index2]
         current[0] = index2 + 1
+
+        # Remove redundant intermediate assignments for better cache locality
+        prev = previous
+        curr = current
+        s1_chars = s1_list
+        # Use local variables for frequently accessed values
         for index1 in range(len1):
-            char1 = s1[index1]
-            if char1 == char2:
-                current[index1 + 1] = previous[index1]
+            # Unrolling char1 assignment and equality check
+            if s1_chars[index1] == char2:
+                curr[index1 + 1] = prev[index1]
             else:
-                # Fast min calculation without tuple construct
-                a = previous[index1]
-                b = previous[index1 + 1]
-                c = current[index1]
-                min_val = min(b, a)
-                min_val = min(c, min_val)
-                current[index1 + 1] = 1 + min_val
-        # Swap references instead of copying
+                x = prev[index1]
+                y = prev[index1 + 1]
+                z = curr[index1]
+                min_xy = min(x, y)
+                min_xyz = min(z, min_xy)
+                curr[index1 + 1] = 1 + min_xyz
+
+        # Swap references rather than copying data
         previous, current = current, previous
     return previous[len1]
 

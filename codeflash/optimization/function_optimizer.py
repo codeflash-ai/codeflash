@@ -1752,6 +1752,11 @@ class FunctionOptimizer:
             )
         )
 
+    def get_results_not_matched_error(self) -> Failure:
+        logger.info("h4|Test results did not match the test results of the original code ❌")
+        console.rule()
+        return Failure("Test results did not match the test results of the original code.")
+
     def run_optimized_candidate(
         self,
         *,
@@ -1808,13 +1813,25 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
+            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+            if match:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                logger.info("h4|Test results did not match the test results of the original code ❌")
-                console.rule()
-                return Failure("Test results did not match the test results of the original code.")
+                result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
+                if result_unmatched_perc > 0.5:
+                    # if the test unmatched percentage is greater than 50%, we can't fix it
+                    return self.get_results_not_matched_error()
+
+                # with the parsed test results diff ask the llm to fix the candidate to match the test results of the original code, and run again
+                # self.run_optimized_candidate(
+                #     optimization_candidate_index=optimization_candidate_index,
+                #     baseline_results=baseline_results,
+                #     original_helper_code=original_helper_code,
+                #     file_path_to_helper_classes=file_path_to_helper_classes,
+                # )
+                print(f"should try to fix it, diffs: {diffs}")
+                return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 

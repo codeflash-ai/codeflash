@@ -512,6 +512,43 @@ def merge_test_results(
     return merged_test_results
 
 
+def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> TestResults:
+    stdout_lines = stdout.splitlines()
+    start_line = -1
+    end_line = -1
+    for i, line in enumerate(stdout_lines):
+        if start_line != -1 and end_line != -1:
+            break
+        if "FAILURES" in line:
+            start_line = i
+        elif "short test summary info" in line:
+            end_line = i
+    if start_line == -1 or end_line == -1:
+        return test_results
+
+    complete_failure_output_lines = stdout_lines[start_line:end_line]  # exclude last summary line
+
+    test_case_to_failure: dict[str, str] = {}
+
+    current_test_case: str | None = None
+    current_failure_lines: list[str] = []
+
+    for line in complete_failure_output_lines:
+        if line.startswith("_______"):
+            if current_test_case:
+                test_case_to_failure[current_test_case] = "".join(current_failure_lines)
+            current_test_case = line.strip("_ ").strip()
+            current_failure_lines = []
+        elif current_test_case:
+            current_failure_lines.append(line + "\n")
+
+    if current_test_case:
+        test_case_to_failure[current_test_case] = "".join(current_failure_lines)
+
+    test_results.test_failures = test_case_to_failure
+    return test_results
+
+
 def parse_test_results(
     test_xml_path: Path,
     test_files: TestFiles,
@@ -572,4 +609,9 @@ def parse_test_results(
             function_name=function_name,
         )
         coverage.log_coverage()
+    try:
+        parse_test_failures_from_stdout(results, run_result.stdout)
+    except Exception as e:
+        logger.exception(e)
+
     return results, coverage if all_args else None

@@ -1177,3 +1177,236 @@ class MyClass:
         fto_file_path.unlink(missing_ok=True)
         helper_path_1.unlink(missing_ok=True)
         helper_path_2.unlink(missing_ok=True)
+
+def test_instrument_codeflash_capture_and_run_tests_2() -> None:
+    # End to end run that instruments code and runs tests. Made to be similar to code used in the optimizer.py
+    test_code = """import math    
+import pytest
+from typing import List, Tuple, Optional
+from code_to_optimize.tests.pytest.fto_file import calculate_portfolio_metrics
+
+def test_calculate_portfolio_metrics():
+    # Test case 1: Basic portfolio
+    investments = [
+        ('Stocks', 0.6, 0.12),
+        ('Bonds', 0.3, 0.04),
+        ('Cash', 0.1, 0.01)
+    ]
+    
+    result = calculate_portfolio_metrics(investments)
+    
+    # Check weighted return calculation
+    expected_return = 0.6*0.12 + 0.3*0.04 + 0.1*0.01
+    assert abs(result['weighted_return'] - expected_return) < 1e-10
+    
+    # Check volatility calculation
+    expected_vol = math.sqrt((0.6*0.12)**2 + (0.3*0.04)**2 + (0.1*0.01)**2)
+    assert abs(result['volatility'] - expected_vol) < 1e-10
+    
+    # Check Sharpe ratio
+    expected_sharpe = (expected_return - 0.02) / expected_vol
+    assert abs(result['sharpe_ratio'] - expected_sharpe) < 1e-10
+    
+    # Check best/worst performers
+    assert result['best_performing'][0] == 'Stocks'
+    assert result['worst_performing'][0] == 'Cash'
+    assert result['total_assets'] == 3
+
+def test_empty_investments():
+    with pytest.raises(ValueError, match="Investments list cannot be empty"):
+        calculate_portfolio_metrics([])
+
+def test_weights_not_sum_to_one():
+    investments = [('Stock', 0.5, 0.1), ('Bond', 0.4, 0.05)]
+    with pytest.raises(ValueError, match="Portfolio weights must sum to 1.0"):
+        calculate_portfolio_metrics(investments)
+
+def test_zero_volatility():
+    investments = [('Cash', 1.0, 0.0)]
+    result = calculate_portfolio_metrics(investments, risk_free_rate=0.0)
+    assert result['sharpe_ratio'] == 0.0
+    assert result['volatility'] == 0.0
+"""
+
+    original_code = """import math
+from typing import List, Tuple, Optional
+
+def calculate_portfolio_metrics(
+    investments: List[Tuple[str, float, float]], 
+    risk_free_rate: float = 0.02
+) -> dict:
+    if not investments:
+        raise ValueError("Investments list cannot be empty")
+    
+    if abs(sum(weight for _, weight, _ in investments) - 1.0) > 1e-10:
+        raise ValueError("Portfolio weights must sum to 1.0")
+    
+    # Calculate weighted return
+    weighted_return = sum(weight * ret for _, weight, ret in investments)
+    
+    # Calculate portfolio volatility (simplified)
+    volatility = math.sqrt(sum((weight * ret) ** 2 for _, weight, ret in investments))
+    
+    # Calculate Sharpe ratio
+    if volatility == 0:
+        sharpe_ratio = 0.0
+    else:
+        sharpe_ratio = (weighted_return - risk_free_rate) / volatility
+    
+    # Find best and worst performing assets
+    best_asset = max(investments, key=lambda x: x[2])
+    worst_asset = min(investments, key=lambda x: x[2])
+    
+    return {
+        'weighted_return': round(weighted_return, 6),
+        'volatility': round(volatility, 6),
+        'sharpe_ratio': round(sharpe_ratio, 6),
+        'best_performing': (best_asset[0], round(best_asset[2], 6)),
+        'worst_performing': (worst_asset[0], round(worst_asset[2], 6)),
+        'total_assets': len(investments)
+    }
+"""
+    test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
+    test_file_name = "test_multiple_helpers.py"
+
+    fto_file_name = "fto_file.py"
+
+    test_path = test_dir / test_file_name
+    test_path_perf = test_dir / "test_multiple_helpers_perf.py"
+    fto_file_path = test_dir / fto_file_name
+
+    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = (Path(__file__).parent / "..").resolve()
+
+    try:
+        with fto_file_path.open("w") as f:
+            f.write(original_code)
+        with test_path.open("w") as f:
+            f.write(test_code)
+
+        fto = FunctionToOptimize("calculate_portfolio_metrics", fto_file_path, parents=[])
+        file_path_to_helper_class = {
+        }
+        instrument_codeflash_capture(fto, file_path_to_helper_class, tests_root)
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+
+        test_type = TestType.EXISTING_UNIT_TEST
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                    benchmarking_file_path=test_path_perf,
+                )
+            ]
+        )
+        # Code in optimizer.py
+        # Instrument codeflash capture
+        candidate_fto_code = Path(fto.file_path).read_text("utf-8")
+        candidate_helper_code = {}
+        for file_path in file_path_to_helper_class:
+            candidate_helper_code[file_path] = Path(file_path).read_text("utf-8")
+        file_path_to_helper_classes = {
+        }
+        instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
+
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # Remove instrumentation
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+
+        # Now, let's say we optimize the code and make changes.
+        new_fto_code = """import math
+from typing import List, Tuple, Optional
+
+def calculate_portfolio_metrics(
+    investments: List[Tuple[str, float, float]], 
+    risk_free_rate: float = 0.02
+) -> dict:
+    if not investments:
+        raise ValueError("Investments list cannot be empty")
+
+    total_weight = sum(w for _, w, _ in investments)
+    if total_weight != 1.0:  # Should use tolerance check
+        raise ValueError("Portfolio weights must sum to 1.0")
+
+    weighted_return = 1.0
+    for _, weight, ret in investments:
+        weighted_return *= (1 + ret) ** weight
+    weighted_return = weighted_return - 1.0  # Convert back from geometric
+
+    returns = [r for _, _, r in investments]
+    mean_return = sum(returns) / len(returns)
+    volatility = math.sqrt(sum((r - mean_return) ** 2 for r in returns) / len(returns))
+
+    # BUG 4: Sharpe ratio calculation is correct but uses wrong inputs
+    if volatility == 0:
+        sharpe_ratio = 0.0
+    else:
+        sharpe_ratio = (weighted_return - risk_free_rate) / volatility
+
+    def risk_adjusted_return(return_val, weight):
+        return (return_val - risk_free_rate) / (weight * return_val) if weight * return_val != 0 else return_val
+    
+    best_asset = max(investments, key=lambda x: risk_adjusted_return(x[2], x[1]))
+    worst_asset = min(investments, key=lambda x: risk_adjusted_return(x[2], x[1]))
+
+    return {
+        "weighted_return": round(weighted_return, 6),
+        "volatility": 2, 
+        "sharpe_ratio": round(sharpe_ratio, 6),
+        "best_performing": (best_asset[0], round(best_asset[2], 6)),
+        "worst_performing": (worst_asset[0], round(worst_asset[2], 6)),
+        "total_assets": len(investments),
+    }
+"""
+        with fto_file_path.open("w") as f:
+            f.write(new_fto_code)
+        # Instrument codeflash capture
+        candidate_fto_code = Path(fto.file_path).read_text("utf-8")
+        candidate_helper_code = {}
+        for file_path in file_path_to_helper_class:
+            candidate_helper_code[file_path] = Path(file_path).read_text("utf-8")
+        file_path_to_helper_classes = {
+            # Path(helper_path_1): {"HelperClass1"},
+            # Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
+        }
+        instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
+        modified_test_results, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        # Remove instrumentation
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        matched, diffs = compare_test_results(test_results, modified_test_results)
+        print(diffs)
+
+        assert not matched
+
+    finally:
+        test_path.unlink(missing_ok=True)
+        fto_file_path.unlink(missing_ok=True)

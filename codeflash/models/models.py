@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING
 
+import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
@@ -505,6 +506,31 @@ class InvocationId:
             f"{self.function_getting_tested}:{self.iteration_id}"
         )
 
+    def find_func_in_class(self, class_node: cst.ClassDef, func_name: str) -> Optional[cst.FunctionDef]:
+        for stmt in class_node.body.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == func_name:
+                return stmt
+        return None
+
+    def get_src_code(self, test_path: Path) -> Optional[str]:
+        test_src = test_path.read_text(encoding="utf-8")
+        module_node = cst.parse_module(test_src)
+
+        if self.test_class_name:
+            for stmt in module_node.body:
+                if isinstance(stmt, cst.ClassDef) and stmt.name.value == self.test_class_name:
+                    func_node = self.find_func_in_class(stmt, self.test_function_name)
+                    if func_node:
+                        return module_node.code_for_node(func_node).strip()
+            # class not found
+            return None
+
+        # Otherwise, look for a top level function
+        for stmt in module_node.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == self.test_function_name:
+                return module_node.code_for_node(stmt).strip()
+        return None
+
     @staticmethod
     def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
         components = string_id.split(":")
@@ -549,7 +575,10 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+
     perf_stdout: Optional[str] = None
+    # mapping between test function name and stdout failure message
+    test_failures: Optional[dict[str, str]] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
