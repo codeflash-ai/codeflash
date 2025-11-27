@@ -513,6 +513,8 @@ class InvocationId:
         return None
 
     def get_src_code(self, test_path: Path) -> Optional[str]:
+        if not test_path.exists():
+            return None
         test_src = test_path.read_text(encoding="utf-8")
         module_node = cst.parse_module(test_src)
 

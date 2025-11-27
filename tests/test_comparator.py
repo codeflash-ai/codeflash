@@ -1176,7 +1176,8 @@ def test_compare_results_fn():
         )
     )
 
-    assert compare_test_results(original_results, new_results_1)
+    match, _ = compare_test_results(original_results, new_results_1)
+    assert match
 
     new_results_2 = TestResults()
     new_results_2.add(
@@ -1199,7 +1200,8 @@ def test_compare_results_fn():
         )
     )
 
-    assert not compare_test_results(original_results, new_results_2)
+    match, _ = compare_test_results(original_results, new_results_2)
+    assert not match
 
     new_results_3 = TestResults()
     new_results_3.add(
@@ -1241,7 +1243,8 @@ def test_compare_results_fn():
         )
     )
 
-    assert compare_test_results(original_results, new_results_3)
+    match, _ = compare_test_results(original_results, new_results_3)
+    assert match
 
     new_results_4 = TestResults()
     new_results_4.add(
@@ -1264,7 +1267,8 @@ def test_compare_results_fn():
         )
     )
 
-    assert not compare_test_results(original_results, new_results_4)
+    match, _ = compare_test_results(original_results, new_results_4)
+    assert not match
 
     new_results_5_baseline = TestResults()
     new_results_5_baseline.add(
@@ -1308,7 +1312,8 @@ def test_compare_results_fn():
         )
     )
 
-    assert  not compare_test_results(new_results_5_baseline, new_results_5_opt)
+    match, _ = compare_test_results(new_results_5_baseline, new_results_5_opt)
+    assert not match
 
     new_results_6_baseline = TestResults()
     new_results_6_baseline.add(
@@ -1352,9 +1357,11 @@ def test_compare_results_fn():
         )
     )
 
-    assert  not compare_test_results(new_results_6_baseline, new_results_6_opt)
+    match, _ = compare_test_results(new_results_6_baseline, new_results_6_opt)
+    assert not match
 
-    assert not compare_test_results(TestResults(), TestResults())
+    match, _ = compare_test_results(TestResults(), TestResults())
+    assert not match
 
 
 def test_exceptions():

@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 import sys
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.models.models import TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
+
+if TYPE_CHECKING:
+    from codeflash.models.models import TestResults
 
 INCREASED_RECURSION_LIMIT = 5000
 
@@ -19,10 +25,10 @@ class TestDiffScope(Enum):
 @dataclass
 class TestDiff:
     scope: TestDiffScope
-    test_src_code: str
     pytest_error: str
     original_value: any
     candidate_value: any
+    test_src_code: Optional[str] = None
 
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:

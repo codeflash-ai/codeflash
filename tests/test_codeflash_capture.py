@@ -502,7 +502,8 @@ class MyClass:
             pytest_max_loops=1,
             testing_time=0.1,
         )
-        assert compare_test_results(test_results, test_results2)
+        match, _ = compare_test_results(test_results, test_results2)
+        assert match
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -626,7 +627,8 @@ class MyClass(ParentClass):
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -754,7 +756,8 @@ class MyClass:
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, test_results2)
+        match, _ = compare_test_results(test_results, test_results2)
+        assert match
     finally:
         test_path.unlink(missing_ok=True)
         sample_code_path.unlink(missing_ok=True)
@@ -902,7 +905,8 @@ class AnotherHelperClass:
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
 
     finally:
         test_path.unlink(missing_ok=True)
@@ -1132,7 +1136,8 @@ class MyClass:
         )
         # Remove instrumentation
         FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
-        assert not compare_test_results(test_results, mutated_test_results)
+        match, _ = compare_test_results(test_results, mutated_test_results)
+        assert not match
 
         # This fto code stopped using a helper class. it should still pass
         no_helper1_fto_code = """
@@ -1170,7 +1175,8 @@ class MyClass:
         )
         # Remove instrumentation
         FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
-        assert compare_test_results(test_results, no_helper1_test_results)
+        match, _ = compare_test_results(test_results, no_helper1_test_results)
+        assert match
 
     finally:
         test_path.unlink(missing_ok=True)
