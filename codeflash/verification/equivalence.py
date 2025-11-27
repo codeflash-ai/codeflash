@@ -40,7 +40,17 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     for test_id in test_ids_superset:
         original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
-        candidate_pytest_error = candidate_results.test_failures.get(original_test_result.id.test_function_name)
+        candidate_test_failures = candidate_results.test_failures
+        # original_test_failures = original_results.test_failures
+        cdd_pytest_error = (
+            candidate_test_failures.get(original_test_result.id.test_function_name, "")
+            if candidate_test_failures
+            else ""
+        )
+        # original_pytest_error = (
+        #     original_test_failures.get(original_test_result.id.test_function_name, "") if original_test_failures else ""
+        # )
+
         if cdd_test_result is not None and original_test_result is None:
             continue
         # If helper function instance_state verification is not present, that's ok. continue
@@ -69,7 +79,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     test_src_code=test_src_code,
                     original_value=original_test_result.return_value,
                     candidate_value=cdd_test_result.return_value,
-                    pytest_error=candidate_pytest_error,
+                    pytest_error=cdd_pytest_error,
                 )
             )
 
@@ -94,7 +104,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     test_src_code=test_src_code,
                     original_value=original_test_result.stdout,
                     candidate_value=cdd_test_result.stdout,
-                    pytest_error=candidate_pytest_error,
+                    pytest_error=cdd_pytest_error,
                 )
             )
             break
@@ -111,7 +121,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     test_src_code=test_src_code,
                     original_value=original_test_result.did_pass,
                     candidate_value=cdd_test_result.did_pass,
-                    pytest_error=candidate_pytest_error,
+                    pytest_error=cdd_pytest_error,
                 )
             )
             break
