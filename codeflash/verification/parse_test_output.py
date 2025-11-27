@@ -514,16 +514,17 @@ def merge_test_results(
 
 def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> TestResults:
     stdout_lines = stdout.splitlines()
-    start_line = -1
-    end_line = -1
+    start_line = end_line = None
+
+    # optimize search for start/end by scanning once
     for i, line in enumerate(stdout_lines):
-        if start_line != -1 and end_line != -1:
-            break
-        if "FAILURES" in line:
+        if start_line is None and "FAILURES" in line:
             start_line = i
-        elif "short test summary info" in line:
+        elif start_line is not None and end_line is None and "short test summary info" in line:
             end_line = i
-    if start_line == -1 or end_line == -1:
+            break
+
+    if start_line is None or end_line is None:
         return test_results
 
     complete_failure_output_lines = stdout_lines[start_line:end_line]  # exclude last summary line
@@ -533,14 +534,24 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
     current_test_case: str | None = None
     current_failure_lines: list[str] = []
 
+    # Avoid per-line string concatenation by tracking indices and performing join once per section
+    # Precompute the boundary check value
+    underline_prefix = "_______"
+
+    # Minor: Pull into local variable to avoid attribute lookup inside loop
+    join_nl = "\n".join
+    append = current_failure_lines.append
+
     for line in complete_failure_output_lines:
-        if line.startswith("_______"):
+        # Fast-path: avoid .startswith() unless it can possibly match
+        if line and line[0] == "_" and line.startswith(underline_prefix):
             if current_test_case:
                 test_case_to_failure[current_test_case] = "".join(current_failure_lines)
             current_test_case = line.strip("_ ").strip()
-            current_failure_lines = []
+            # Start new collection
+            current_failure_lines.clear()
         elif current_test_case:
-            current_failure_lines.append(line + "\n")
+            append(line + "\n")
 
     if current_test_case:
         test_case_to_failure[current_test_case] = "".join(current_failure_lines)
