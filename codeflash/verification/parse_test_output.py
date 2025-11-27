@@ -516,7 +516,6 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
     stdout_lines = stdout.splitlines()
     start_line = end_line = None
 
-    # optimize search for start/end by scanning once
     for i, line in enumerate(stdout_lines):
         if start_line is None and "FAILURES" in line:
             start_line = i
@@ -534,24 +533,16 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
     current_test_case: str | None = None
     current_failure_lines: list[str] = []
 
-    # Avoid per-line string concatenation by tracking indices and performing join once per section
-    # Precompute the boundary check value
     underline_prefix = "_______"
 
-    # Minor: Pull into local variable to avoid attribute lookup inside loop
-    join_nl = "\n".join
-    append = current_failure_lines.append
-
     for line in complete_failure_output_lines:
-        # Fast-path: avoid .startswith() unless it can possibly match
         if line and line[0] == "_" and line.startswith(underline_prefix):
             if current_test_case:
                 test_case_to_failure[current_test_case] = "".join(current_failure_lines)
             current_test_case = line.strip("_ ").strip()
-            # Start new collection
             current_failure_lines.clear()
         elif current_test_case:
-            append(line + "\n")
+            current_failure_lines.append(line + "\n")
 
     if current_test_case:
         test_case_to_failure[current_test_case] = "".join(current_failure_lines)
