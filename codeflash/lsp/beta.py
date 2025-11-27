@@ -203,9 +203,7 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
             return {
                 "status": "error",
                 "message": f"Invalid 'tests_root': directory does not exist at {tests_root_path}",
-                "field_errors": {
-                    "tests_root": f"Directory does not exist at {tests_root_path}",
-                },
+                "field_errors": {"tests_root": f"Directory does not exist at {tests_root_path}"},
             }
 
     setup_info = VsCodeSetupInfo(
