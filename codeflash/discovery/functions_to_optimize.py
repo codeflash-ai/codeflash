@@ -671,28 +671,32 @@ def filter_functions(
     previous_checkpoint_functions_removed_count: int = 0
     tests_root_str = str(tests_root)
     module_root_str = str(module_root)
+    # Normalize paths for case-insensitive comparison on Windows
+    tests_root_normalized = os.path.normcase(tests_root_str)
+    module_root_normalized = os.path.normcase(module_root_str)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         file_path = str(file_path_path)
-        if file_path.startswith(tests_root_str + os.sep):
+        file_path_normalized = os.path.normcase(file_path)
+        if file_path_normalized.startswith(tests_root_normalized + os.sep):
             test_functions_removed_count += len(_functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
+            file_path_normalized.startswith(os.path.normcase(str(ignore_path)) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
+            file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep) for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
         if path_belongs_to_site_packages(Path(file_path)):
             site_packages_removed_count += len(_functions)
             continue
-        if not file_path.startswith(module_root_str + os.sep):
+        if not file_path_normalized.startswith(module_root_normalized + os.sep):
             non_modules_removed_count += len(_functions)
             continue
         try:
