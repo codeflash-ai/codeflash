@@ -669,34 +669,72 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    tests_root_str = str(tests_root)
-    module_root_str = str(module_root)
-    # Normalize paths for case-insensitive comparison on Windows
-    tests_root_normalized = os.path.normcase(tests_root_str)
-    module_root_normalized = os.path.normcase(module_root_str)
+    
+    def _resolve_path(path: Path | str) -> Path:
+        # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
+        return Path(path).resolve(strict=False)
+
+    # Resolve all root paths to absolute paths for consistent comparison
+    tests_root_resolved = _resolve_path(tests_root)
+    module_root_resolved = _resolve_path(module_root)
+
+    # Resolve ignore paths and submodule paths
+    ignore_paths_resolved = [_resolve_path(p) for p in ignore_paths]
+    submodule_paths_resolved = [_resolve_path(p) for p in submodule_paths]
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
+        # Resolve file path to absolute path
+        try:
+            file_path_resolved = file_path_path.resolve()
+        except (OSError, RuntimeError):
+            file_path_resolved = file_path_path.absolute() if not file_path_path.is_absolute() else file_path_path
+        
         file_path = str(file_path_path)
-        file_path_normalized = os.path.normcase(file_path)
-        if file_path_normalized.startswith(tests_root_normalized + os.sep):
+        
+        # Check if file is in tests root using resolved paths
+        try:
+            file_path_resolved.relative_to(tests_root_resolved)
             test_functions_removed_count += len(_functions)
             continue
-        if file_path in ignore_paths or any(
-            file_path_normalized.startswith(os.path.normcase(str(ignore_path)) + os.sep) for ignore_path in ignore_paths
-        ):
+        except ValueError:
+            pass  # File is not in tests root, continue checking
+        
+        # Check if file is in ignore paths using resolved paths
+        is_ignored = False
+        for ignore_path_resolved in ignore_paths_resolved:
+            try:
+                file_path_resolved.relative_to(ignore_path_resolved)
+                is_ignored = True
+                break
+            except ValueError:
+                pass
+        if is_ignored:
             ignore_paths_removed_count += 1
             continue
-        if file_path in submodule_paths or any(
-            file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep) for submodule_path in submodule_paths
-        ):
+        
+        # Check if file is in submodule paths using resolved paths
+        is_in_submodule = False
+        for submodule_path_resolved in submodule_paths_resolved:
+            try:
+                file_path_resolved.relative_to(submodule_path_resolved)
+                is_in_submodule = True
+                break
+            except ValueError:
+                pass
+        if is_in_submodule:
             submodule_ignored_paths_count += 1
             continue
-        if path_belongs_to_site_packages(Path(file_path)):
+        
+        if path_belongs_to_site_packages(file_path_resolved):
             site_packages_removed_count += len(_functions)
             continue
-        if not file_path_normalized.startswith(module_root_normalized + os.sep):
+        
+        # Check if file is in module root using resolved paths
+        try:
+            file_path_resolved.relative_to(module_root_resolved)
+        except ValueError:
             non_modules_removed_count += len(_functions)
             continue
         try:
