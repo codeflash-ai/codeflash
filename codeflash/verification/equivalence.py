@@ -25,12 +25,14 @@ class TestDiffScope(Enum):
 @dataclass
 class TestDiff:
     scope: TestDiffScope
-    pytest_error: str
     original_value: any
     candidate_value: any
     original_pass: bool
     candidate_pass: bool
+
     test_src_code: Optional[str] = None
+    candidate_pytest_error: Optional[str] = None
+    original_pytest_error: Optional[str] = None
 
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
@@ -49,15 +51,15 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
         candidate_test_failures = candidate_results.test_failures
-        # original_test_failures = original_results.test_failures
+        original_test_failures = original_results.test_failures
         cdd_pytest_error = (
             candidate_test_failures.get(original_test_result.id.test_function_name, "")
             if candidate_test_failures
             else ""
         )
-        # original_pytest_error = (
-        #     original_test_failures.get(original_test_result.id.test_function_name, "") if original_test_failures else ""
-        # )
+        original_pytest_error = (
+            original_test_failures.get(original_test_result.id.test_function_name, "") if original_test_failures else ""
+        )
 
         if cdd_test_result is not None and original_test_result is None:
             continue
@@ -79,22 +81,26 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
         ):
             superset_obj = True
+
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
+        test_diff = TestDiff(
+            scope=TestDiffScope.RETURN_VALUE,
+            original_value=original_test_result.return_value,
+            candidate_value=cdd_test_result.return_value,
+            test_src_code=test_src_code,
+            candidate_pytest_error=cdd_pytest_error,
+            original_pass=original_test_result.did_pass,
+            candidate_pass=cdd_test_result.did_pass,
+            original_pytest_error=original_pytest_error,
+        )
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
-            test_diffs.append(
-                TestDiff(
-                    scope=TestDiffScope.RETURN_VALUE,
-                    test_src_code=test_src_code,
-                    original_value=original_test_result.return_value,
-                    candidate_value=cdd_test_result.return_value,
-                    pytest_error=cdd_pytest_error,
-                    original_pass=original_test_result.did_pass,
-                    candidate_pass=cdd_test_result.did_pass,
-                )
-            )
+            test_diff.scope = TestDiffScope.RETURN_VALUE
+            test_diff.original_value = original_test_result.return_value
+            test_diff.candidate_value = cdd_test_result.return_value
+            test_diffs.append(test_diff)
 
             try:
-                print(
+                logger.debug(
                     f"File Name: {original_test_result.file_name}\n"
                     f"Test Type: {original_test_result.test_type}\n"
                     f"Verification Type: {original_test_result.verification_type}\n"
@@ -108,17 +114,10 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
         ):
-            test_diffs.append(
-                TestDiff(
-                    scope=TestDiffScope.STDOUT,
-                    test_src_code=test_src_code,
-                    original_value=original_test_result.stdout,
-                    candidate_value=cdd_test_result.stdout,
-                    pytest_error=cdd_pytest_error,
-                    original_pass=original_test_result.did_pass,
-                    candidate_pass=cdd_test_result.did_pass,
-                )
-            )
+            test_diff.scope = TestDiffScope.STDOUT
+            test_diff.original_value = original_test_result.stdout
+            test_diff.candidate_value = cdd_test_result.stdout
+            test_diffs.append(test_diff)
             break
 
         if original_test_result.test_type in {
@@ -127,17 +126,10 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             TestType.GENERATED_REGRESSION,
             TestType.REPLAY_TEST,
         } and (cdd_test_result.did_pass != original_test_result.did_pass):
-            test_diffs.append(
-                TestDiff(
-                    scope=TestDiffScope.DID_PASS,
-                    test_src_code=test_src_code,
-                    original_value=original_test_result.did_pass,
-                    candidate_value=cdd_test_result.did_pass,
-                    pytest_error=cdd_pytest_error,
-                    original_pass=original_test_result.did_pass,
-                    candidate_pass=cdd_test_result.did_pass,
-                )
-            )
+            test_diff.scope = TestDiffScope.DID_PASS
+            test_diff.original_value = original_test_result.did_pass
+            test_diff.candidate_value = cdd_test_result.did_pass
+            test_diffs.append(test_diff)
             break
     sys.setrecursionlimit(original_recursion_limit)
     if did_all_timeout:
