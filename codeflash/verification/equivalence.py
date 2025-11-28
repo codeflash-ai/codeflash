@@ -18,8 +18,8 @@ INCREASED_RECURSION_LIMIT = 5000
 class TestDiffScope(Enum):
     RETURN_VALUE = "return_value"
     STDOUT = "stdout"
-    TIMED_OUT = "timed_out"
     DID_PASS = "did_pass"  # noqa: S105
+    TIMED_OUT = "timed_out"
 
 
 @dataclass
@@ -28,6 +28,8 @@ class TestDiff:
     pytest_error: str
     original_value: any
     candidate_value: any
+    original_pass: bool
+    candidate_pass: bool
     test_src_code: Optional[str] = None
 
 
@@ -86,6 +88,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     original_value=original_test_result.return_value,
                     candidate_value=cdd_test_result.return_value,
                     pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
                 )
             )
 
@@ -111,6 +115,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     original_value=original_test_result.stdout,
                     candidate_value=cdd_test_result.stdout,
                     pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
                 )
             )
             break
@@ -128,6 +134,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     original_value=original_test_result.did_pass,
                     candidate_value=cdd_test_result.did_pass,
                     pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
                 )
             )
             break

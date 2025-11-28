@@ -1823,6 +1823,7 @@ class FunctionOptimizer:
                     # if the test unmatched percentage is greater than 50%, we can't fix it
                     return self.get_results_not_matched_error()
 
+                print(f"should try to fix it, diffs: {diffs}")
                 # with the parsed test results diff ask the llm to fix the candidate to match the test results of the original code, and run again
                 # self.run_optimized_candidate(
                 #     optimization_candidate_index=optimization_candidate_index,
@@ -1830,7 +1831,6 @@ class FunctionOptimizer:
                 #     original_helper_code=original_helper_code,
                 #     file_path_to_helper_classes=file_path_to_helper_classes,
                 # )
-                print(f"should try to fix it, diffs: {diffs}")
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
