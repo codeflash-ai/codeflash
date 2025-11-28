@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import os
 import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
@@ -669,7 +668,7 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    
+
     def _resolve_path(path: Path | str) -> Path:
         # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
         return Path(path).resolve(strict=False)
@@ -690,9 +689,9 @@ def filter_functions(
             file_path_resolved = file_path_path.resolve()
         except (OSError, RuntimeError):
             file_path_resolved = file_path_path.absolute() if not file_path_path.is_absolute() else file_path_path
-        
+
         file_path = str(file_path_path)
-        
+
         # Check if file is in tests root using resolved paths
         try:
             file_path_resolved.relative_to(tests_root_resolved)
@@ -700,7 +699,7 @@ def filter_functions(
             continue
         except ValueError:
             pass  # File is not in tests root, continue checking
-        
+
         # Check if file is in ignore paths using resolved paths
         is_ignored = False
         for ignore_path_resolved in ignore_paths_resolved:
@@ -713,7 +712,7 @@ def filter_functions(
         if is_ignored:
             ignore_paths_removed_count += 1
             continue
-        
+
         # Check if file is in submodule paths using resolved paths
         is_in_submodule = False
         for submodule_path_resolved in submodule_paths_resolved:
@@ -726,11 +725,11 @@ def filter_functions(
         if is_in_submodule:
             submodule_ignored_paths_count += 1
             continue
-        
+
         if path_belongs_to_site_packages(file_path_resolved):
             site_packages_removed_count += len(_functions)
             continue
-        
+
         # Check if file is in module root using resolved paths
         try:
             file_path_resolved.relative_to(module_root_resolved)

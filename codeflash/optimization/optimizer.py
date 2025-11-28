@@ -492,20 +492,20 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
     except (OSError, RuntimeError):
         # If resolve fails (e.g., path doesn't exist or is malformed), try absolute()
         path_resolved = path.absolute() if not path.is_absolute() else path
-    
+
     try:
         src_root_resolved = src_root.resolve()
     except (OSError, RuntimeError):
         src_root_resolved = src_root.absolute() if not src_root.is_absolute() else src_root
-    
+
     # Normalize paths using os.path.normpath and normcase for cross-platform compatibility
     path_str = os.path.normpath(str(path_resolved))
     src_root_str = os.path.normpath(str(src_root_resolved))
-    
+
     # Convert to lowercase for case-insensitive comparison on Windows
     path_normalized = os.path.normcase(path_str)
     src_root_normalized = os.path.normcase(src_root_str)
-    
+
     # Try using Path.relative_to with resolved paths first
     try:
         relative_path = path_resolved.relative_to(src_root_resolved)
@@ -526,7 +526,7 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
                 f"Path {path_resolved} (normalized: {path_normalized}) is not relative to "
                 f"{src_root_resolved} (normalized: {src_root_normalized})"
             )
-    
+
     return dest_root / relative_path
 
 
