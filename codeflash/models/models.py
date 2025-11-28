@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -13,6 +14,7 @@ from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 import enum
 import re
 import sys
@@ -23,11 +25,13 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr, ValidationError
+from pydantic import (AfterValidator, BaseModel, ConfigDict, PrivateAttr,
+                      ValidationError)
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import module_name_from_file_path, validate_python_code
+from codeflash.code_utils.code_utils import (module_name_from_file_path,
+                                             validate_python_code)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
@@ -513,23 +517,22 @@ class InvocationId:
         return None
 
     def get_src_code(self, test_path: Path) -> Optional[str]:
-        if not test_path.exists():
+        module_node = self._parse_module_by_path(str(test_path))
+        if module_node is None:
             return None
-        test_src = test_path.read_text(encoding="utf-8")
-        module_node = cst.parse_module(test_src)
 
-        if self.test_class_name:
-            for stmt in module_node.body:
-                if isinstance(stmt, cst.ClassDef) and stmt.name.value == self.test_class_name:
-                    func_node = self.find_func_in_class(stmt, self.test_function_name)
-                    if func_node:
-                        return module_node.code_for_node(func_node).strip()
-            # class not found
-            return None
+        test_func_name = self.test_function_name
+        test_class_name = self.test_class_name
+        found_func = None
 
         # Otherwise, look for a top level function
         for stmt in module_node.body:
-            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == self.test_function_name:
+            if test_class_name is not None and isinstance(stmt, cst.ClassDef) and stmt.name.value == test_class_name:
+                found_func = self.find_func_in_class(stmt, test_func_name)
+                if found_func:
+                    return module_node.code_for_node(found_func).strip()
+                return None  # Class found but function not found
+            if test_class_name is None and isinstance(stmt, cst.FunctionDef) and stmt.name.value == test_func_name:
                 return module_node.code_for_node(stmt).strip()
         return None
 
@@ -551,6 +554,17 @@ class InvocationId:
             function_getting_tested=components[2],
             iteration_id=iteration_id if iteration_id else components[3],
         )
+
+    # All attribute definitions are preserved
+
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _parse_module_by_path(test_path_str: str) -> Optional[cst.Module]:
+        path = Path(test_path_str)
+        if not path.exists():
+            return None
+        test_src = path.read_text(encoding="utf-8")
+        return cst.parse_module(test_src)
 
 
 @dataclass(frozen=True)
@@ -631,7 +645,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return {test_result.id for test_result in self.test_results}
 
     def get_all_unique_invocation_loop_ids(self) -> set[str]:
-        return {test_result.unique_invocation_loop_id for test_result in self.test_results}
+        # generator expression for memory efficiency
+        return set(tr.unique_invocation_loop_id for tr in self.test_results)
 
     def number_of_loops(self) -> int:
         if not self.test_results:
