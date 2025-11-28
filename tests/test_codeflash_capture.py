@@ -1392,10 +1392,7 @@ def calculate_portfolio_metrics(
         candidate_helper_code = {}
         for file_path in file_path_to_helper_class:
             candidate_helper_code[file_path] = Path(file_path).read_text("utf-8")
-        file_path_to_helper_classes = {
-            # Path(helper_path_1): {"HelperClass1"},
-            # Path(helper_path_2): {"HelperClass2", "AnotherHelperClass"},
-        }
+        file_path_to_helper_classes = {}
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
         modified_test_results, coverage_data = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
@@ -1413,6 +1410,70 @@ def calculate_portfolio_metrics(
 
         assert not matched
 
+        new_fixed_code = """import math
+from typing import List, Tuple, Optional
+
+def calculate_portfolio_metrics(
+    investments: List[Tuple[str, float, float]], 
+    risk_free_rate: float = 0.02
+) -> dict:
+    if not investments:
+        raise ValueError("Investments list cannot be empty")
+
+    # Tolerant weight check (matches original)
+    total_weight = sum(weight for _, weight, _ in investments)
+    if abs(total_weight - 1.0) > 1e-10:
+        raise ValueError("Portfolio weights must sum to 1.0")
+
+    # Same weighted return as original
+    weighted_return = sum(weight * ret for _, weight, ret in investments)
+
+    # Same volatility formula as original
+    volatility = math.sqrt(sum((weight * ret) ** 2 for _, weight, ret in investments))
+
+    # Same Sharpe ratio logic
+    if volatility == 0:
+        sharpe_ratio = 0.0
+    else:
+        sharpe_ratio = (weighted_return - risk_free_rate) / volatility
+
+    # Same best/worst logic (based on return only)
+    best_asset = max(investments, key=lambda x: x[2])
+    worst_asset = min(investments, key=lambda x: x[2])
+
+    return {
+        "weighted_return": round(weighted_return, 6),
+        "volatility": round(volatility, 6),
+        "sharpe_ratio": round(sharpe_ratio, 6),
+        "best_performing": (best_asset[0], round(best_asset[2], 6)),
+        "worst_performing": (worst_asset[0], round(worst_asset[2], 6)),
+        "total_assets": len(investments),
+    }
+"""
+        with fto_file_path.open("w") as f:
+            f.write(new_fixed_code)
+        candidate_fto_code = Path(fto.file_path).read_text("utf-8")
+        candidate_helper_code = {}
+        for file_path in file_path_to_helper_class:
+            candidate_helper_code[file_path] = Path(file_path).read_text("utf-8")
+        file_path_to_helper_classes = {}
+        instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
+        modified_test_results_2, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+        # Remove instrumentation
+        FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
+        matched, diffs = compare_test_results(test_results, modified_test_results_2)
+        # now the test should match and no diffs should be found
+        assert len(diffs) == 0
+        assert matched
+        
     finally:
         test_path.unlink(missing_ok=True)
         fto_file_path.unlink(missing_ok=True)
