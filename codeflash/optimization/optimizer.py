@@ -509,7 +509,7 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
     # Try using Path.relative_to with resolved paths first
     try:
         relative_path = path_resolved.relative_to(src_root_resolved)
-    except ValueError:
+    except ValueError as err:
         # If relative_to fails, manually extract the relative path using normalized strings
         if path_normalized.startswith(src_root_normalized):
             # Extract relative path manually
@@ -522,10 +522,11 @@ def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
                 relative_str = path_normalized[len(src_root_normalized) :].lstrip(os.sep)
                 relative_path = Path(relative_str)
         else:
-            raise ValueError(
+            error_msg = (
                 f"Path {path_resolved} (normalized: {path_normalized}) is not relative to "
                 f"{src_root_resolved} (normalized: {src_root_normalized})"
             )
+            raise ValueError(error_msg) from err
 
     return dest_root / relative_path
 
