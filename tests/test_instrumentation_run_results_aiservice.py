@@ -221,10 +221,10 @@ class BubbleSorter:
             testing_time=0.1,
         )
         # assert test_results_mutated_attr[0].return_value[1]["self"].x == 1 TODO: add self as input to function
-        assert compare_test_results(
+        match, _ = compare_test_results(
             test_results, test_results_mutated_attr
         )  # Without codeflash capture, the init state was not verified, and the results are verified as correct even with the attribute mutated
-
+        assert match
         assert test_results_mutated_attr[0].stdout == "codeflash stdout : BubbleSorter.sorter() called\n"
     finally:
         fto_path.write_text(original_code, "utf-8")
@@ -403,9 +403,10 @@ class BubbleSorter:
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
         assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
         assert test_results_mutated_attr[0].stdout == ""
-        assert not compare_test_results(
+        match,_ = compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
+        assert not match
         # Replace with optimized code that did not mutate existing instance attribute, but added a new one
         optimized_code_new_attr = """
 import sys
@@ -457,9 +458,10 @@ class BubbleSorter:
         assert test_results_new_attr[0].stdout == ""
         # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
         # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
-        assert compare_test_results(
+        match,_ = compare_test_results(
             test_results, test_results_new_attr
         )  # The test should pass because the instance attribute was not mutated, only a new one was added
+        assert match
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
