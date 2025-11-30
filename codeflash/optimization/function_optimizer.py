@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
+import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -583,6 +584,7 @@ class FunctionOptimizer:
                     baseline_results=original_code_baseline,
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
+                    code_context=code_context,
                 )
                 console.rule()
                 if not is_successful(run_results):
@@ -672,21 +674,21 @@ class FunctionOptimizer:
                             async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
-                        # queue corresponding refined optimization for best optimization
-                        if not candidate.optimization_id.endswith("refi"):
-                            future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=self.executor,
-                                    function_references=function_references,
-                                )
-                            )
+                        # # queue corresponding refined optimization for best optimization
+                        # if not candidate.optimization_id.endswith("refi"):
+                        #     future_all_refinements.append(
+                        #         self.refine_optimizations(
+                        #             valid_optimizations=[best_optimization],
+                        #             original_code_baseline=original_code_baseline,
+                        #             code_context=code_context,
+                        #             trace_id=self.function_trace_id[:-4] + exp_type
+                        #             if self.experiment_id
+                        #             else self.function_trace_id,
+                        #             ai_service_client=ai_service_client,
+                        #             executor=self.executor,
+                        #             function_references=function_references,
+                        #         )
+                        #     )
                     else:
                         # For async functions, prioritize throughput metrics over runtime even for slow candidates
                         is_async = (
@@ -1813,6 +1815,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
+            # print(type(code_context), type(candidate))
             match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
             if match:
                 logger.info("h3|Test results matched ✅")
@@ -1823,7 +1826,25 @@ class FunctionOptimizer:
                     # if the test unmatched percentage is greater than 50%, we can't fix it
                     return self.get_results_not_matched_error()
 
-                print(f"should try to fix it, diffs: {diffs}")
+                logger.info("running code repair...")
+                # not sure if all return types will be convertible to string
+                diff_per_test_fn = {}
+                for diff in diffs:
+                    try:
+                        diff_per_test_fn.setdefault(diff.test_src_code, []).append(
+                            f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.pytest_error}"
+                        )
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+                        logger.exception(e)
+                try:
+                    test_issues = "\n".join(
+                        f"{test_fn_def}\n{value}" for test_fn_def, value in diff_per_test_fn.items()
+                    )
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
+                    logger.exception(e)
+                print(type(diff_per_test_fn), type(test_issues))
                 # with the parsed test results diff ask the llm to fix the candidate to match the test results of the original code, and run again
                 # self.run_optimized_candidate(
                 #     optimization_candidate_index=optimization_candidate_index,
