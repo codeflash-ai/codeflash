@@ -119,7 +119,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     candidate_pass=cdd_test_result.did_pass,
                 )
             )
-            break
 
         if original_test_result.test_type in {
             TestType.EXISTING_UNIT_TEST,
@@ -138,7 +137,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                     candidate_pass=cdd_test_result.did_pass,
                 )
             )
-            break
     sys.setrecursionlimit(original_recursion_limit)
     if did_all_timeout:
         return False, test_diffs
