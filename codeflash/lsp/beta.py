@@ -194,10 +194,7 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
     # Validate tests_root directory exists if provided
     if tests_root:
         # Resolve path relative to config file directory or current working directory
-        if cfg_file:
-            base_dir = cfg_file.parent
-        else:
-            base_dir = Path.cwd()
+        base_dir = cfg_file.parent if cfg_file else Path.cwd()
         tests_root_path = (base_dir / tests_root).resolve()
         if not tests_root_path.exists() or not tests_root_path.is_dir():
             return {
