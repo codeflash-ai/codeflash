@@ -584,13 +584,34 @@ class FunctionOptimizer:
                     baseline_results=original_code_baseline,
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
-                    code_context=code_context,
                 )
                 console.rule()
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
+                    fail_value = run_results.value
+                    if (
+                        fail_value != "Test results did not match the test results of the original code."
+                        and len(future_all_refinements) <= 3
+                        and not candidate.optimization_id.endswith("cdrp")
+                    ):
+                        # # queue corresponding code repair optimization for best optimization
+                        future_all_refinements.append(
+                            self.code_repair_optimizations(
+                                original_source_code=candidate,
+                                modified_source_code=code_context,
+                                original_code_baseline=original_code_baseline,
+                                test_details="test_details",
+                                code_context=code_context,
+                                trace_id=self.function_trace_id[:-4] + exp_type
+                                if self.experiment_id
+                                else self.function_trace_id,
+                                ai_service_client=ai_service_client,
+                                executor=self.executor,
+                                function_references=function_references,
+                            )
+                        )
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
@@ -1831,12 +1852,15 @@ class FunctionOptimizer:
                 diff_per_test_fn = {}
                 for diff in diffs:
                     try:
-                        diff_per_test_fn.setdefault(diff.test_src_code, []).append(
-                            f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.pytest_error}"
+                        diff_per_test_fn[diff.test_src_code] = (
+                            diff_per_test_fn.setdefault(diff.test_src_code, "")
+                            + f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.pytest_error}\n"
                         )
+
                     except Exception as e:
                         sentry_sdk.capture_exception(e)
                         logger.exception(e)
+                        return self.get_results_not_matched_error()
                 try:
                     test_issues = "\n".join(
                         f"{test_fn_def}\n{value}" for test_fn_def, value in diff_per_test_fn.items()
@@ -1844,15 +1868,8 @@ class FunctionOptimizer:
                 except Exception as e:
                     sentry_sdk.capture_exception(e)
                     logger.exception(e)
-                print(type(diff_per_test_fn), type(test_issues))
-                # with the parsed test results diff ask the llm to fix the candidate to match the test results of the original code, and run again
-                # self.run_optimized_candidate(
-                #     optimization_candidate_index=optimization_candidate_index,
-                #     baseline_results=baseline_results,
-                #     original_helper_code=original_helper_code,
-                #     file_path_to_helper_classes=file_path_to_helper_classes,
-                # )
-                return self.get_results_not_matched_error()
+                    return self.get_results_not_matched_error()
+                return Failure(test_issues)
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 
