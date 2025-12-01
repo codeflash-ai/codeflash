@@ -593,24 +593,22 @@ class FunctionOptimizer:
                     speedup_ratios[candidate.optimization_id] = None
                     fail_value = run_results.value
                     if (
-                        fail_value != "Test results did not match the test results of the original code."
+                        fail_value.strip() != "Test results did not match the test results of the original code."
                         and len(future_all_refinements) <= 3
                         and not candidate.optimization_id.endswith("cdrp")
                     ):
                         # # queue corresponding code repair optimization for best optimization
                         future_all_refinements.append(
                             self.code_repair_optimizations(
-                                original_source_code=candidate,
-                                modified_source_code=code_context,
-                                original_code_baseline=original_code_baseline,
-                                test_details="test_details",
-                                code_context=code_context,
+                                original_source_code=code_context.read_writable_code.markdown,
+                                modified_source_code=candidate.source_code.markdown,
+                                test_details=fail_value,
                                 trace_id=self.function_trace_id[:-4] + exp_type
                                 if self.experiment_id
                                 else self.function_trace_id,
                                 ai_service_client=ai_service_client,
                                 executor=self.executor,
-                                function_references=function_references,
+                                optimization_id=candidate.optimization_id,
                             )
                         )
                 else:
@@ -869,12 +867,13 @@ class FunctionOptimizer:
         modified_source_code: str,
         test_details: str,
         trace_id: str,
+        optimization_id: str,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
     ) -> concurrent.futures.Future:
         request = [
             AIServiceCodeRepairRequest(
-                optimization_id="",
+                optimization_id=optimization_id,
                 original_source_code=original_source_code,
                 modified_source_code=modified_source_code,
                 test_details=test_details,
