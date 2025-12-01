@@ -70,6 +70,7 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
+    AIServiceCodeRepairRequest,
     BestOptimization,
     CodeOptimizationContext,
     GeneratedTests,
@@ -861,6 +862,26 @@ class FunctionOptimizer:
             for opt in valid_optimizations
         ]
         return executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
+
+    def code_repair_optimizations(
+        self,
+        original_source_code: str,
+        modified_source_code: str,
+        test_details: str,
+        trace_id: str,
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
+    ) -> concurrent.futures.Future:
+        request = [
+            AIServiceCodeRepairRequest(
+                optimization_id="",
+                original_source_code=original_source_code,
+                modified_source_code=modified_source_code,
+                test_details=test_details,
+                trace_id=trace_id,
+            )
+        ]
+        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str

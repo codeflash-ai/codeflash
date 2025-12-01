@@ -48,6 +48,15 @@ class AIServiceRefinerRequest:
     function_references: str | None = None
 
 
+@dataclass(frozen=True)
+class AIServiceCodeRepairRequest:
+    optimization_id: str
+    original_source_code: str
+    modified_source_code: str
+    test_details: str
+    trace_id: str
+
+
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
 # qualified name of the method is foo.eggs.Ham.spam, its qualified name is Ham.spam, and its name is spam. The full name
 # of the module is foo.eggs.
