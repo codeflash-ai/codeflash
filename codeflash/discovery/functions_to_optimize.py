@@ -685,6 +685,8 @@ def filter_functions(
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         # Resolve file path to absolute path
+        # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
+        file_path_path = _resolve_path(file_path_path)
         try:
             file_path_resolved = file_path_path.resolve()
         except (OSError, RuntimeError):
