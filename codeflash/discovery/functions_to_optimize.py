@@ -686,13 +686,13 @@ def filter_functions(
         _functions = functions
         # Resolve file path to absolute path
         # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
-        file_path_path = _resolve_path(file_path_path)
+        file_path_obj = _resolve_path(file_path_path)
         try:
-            file_path_resolved = file_path_path.resolve()
+            file_path_resolved = file_path_obj.resolve()
         except (OSError, RuntimeError):
-            file_path_resolved = file_path_path.absolute() if not file_path_path.is_absolute() else file_path_path
+            file_path_resolved = file_path_obj.absolute() if not file_path_obj.is_absolute() else file_path_obj
 
-        file_path = str(file_path_path)
+        file_path = str(file_path_obj)
 
         # Check if file is in tests root using resolved paths
         try:
