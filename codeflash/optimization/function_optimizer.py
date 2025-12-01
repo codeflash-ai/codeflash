@@ -5,6 +5,7 @@ import concurrent.futures
 import os
 import queue
 import random
+import sqlite3
 import subprocess
 import time
 import uuid
@@ -117,6 +118,61 @@ if TYPE_CHECKING:
         FunctionSource,
     )
     from codeflash.verification.verification_utils import TestConfig
+
+
+def log_code_repair_to_db(
+    code_repair_log_db: Path,
+    optimization_id: str,
+    trace_id: str | None = None,
+    passed: str | None = None,
+    faster: str | None = None,
+) -> None:
+    """Log code repair data to SQLite database.
+
+    Uses upsert pattern to allow incremental logging with different columns at different places.
+    Only non-None values will be updated; existing values are preserved.
+    """
+    try:
+        conn = sqlite3.connect(code_repair_log_db)
+        cursor = conn.cursor()
+
+        # Build dynamic upsert query based on provided columns
+        columns = ["optimization_id"]
+        values = [optimization_id]
+        update_parts = ["updated_at = CURRENT_TIMESTAMP"]
+
+        if trace_id is not None:
+            columns.append("trace_id")
+            values.append(trace_id)
+            update_parts.append("trace_id = excluded.trace_id")
+
+        if passed is not None:
+            columns.append("passed")
+            values.append(passed)
+            update_parts.append("passed = excluded.passed")
+
+        if faster is not None:
+            columns.append("faster")
+            values.append(faster)
+            update_parts.append("faster = excluded.faster")
+
+        placeholders = ", ".join(["?"] * len(values))
+        columns_str = ", ".join(columns)
+        update_str = ", ".join(update_parts)
+
+        cursor.execute(
+            f"""
+            INSERT INTO code_repair_logs_cf ({columns_str})
+            VALUES ({placeholders})
+            ON CONFLICT(optimization_id) DO UPDATE SET {update_str}
+            """,  # noqa: S608
+            values,
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        logger.exception(e)
 
 
 class CandidateProcessor:
@@ -249,6 +305,8 @@ class FunctionOptimizer:
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
         self.optimization_review = ""
+        # SQLite database setup for logging
+        self.code_repair_log_db = Path(__file__).parent / "code_repair_log_cf.db"
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -389,7 +447,19 @@ class FunctionOptimizer:
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
-
+        conn = sqlite3.connect(self.code_repair_log_db)
+        cursor = conn.cursor()
+        cursor.execute("""
+                               CREATE TABLE IF NOT EXISTS code_repair_logs (
+            optimization_id TEXT PRIMARY KEY,
+            trace_id TEXT,
+            passed TEXT,
+            faster TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                       """)
+        conn.commit()
+        conn.close()
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
         code_print(
@@ -540,6 +610,14 @@ class FunctionOptimizer:
                         logger.warning(
                             "force_lsp|No functions were replaced in the optimized code. Skipping optimization candidate."
                         )
+                        if candidate.optimization_id.endswith("cdrp"):
+                            log_code_repair_to_db(
+                                code_repair_log_db=self.code_repair_log_db,
+                                trace_id=self.function_trace_id[:-4] + exp_type,
+                                optimization_id=candidate.optimization_id,
+                                passed="no",
+                                faster="no",  # this also may or may not pass
+                            )
                         console.rule()
                         continue
                 except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
@@ -547,6 +625,14 @@ class FunctionOptimizer:
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
+                    if candidate.optimization_id.endswith("cdrp"):
+                        log_code_repair_to_db(
+                            code_repair_log_db=self.code_repair_log_db,
+                            trace_id=self.function_trace_id[:-4] + exp_type,
+                            optimization_id=candidate.optimization_id,
+                            passed="no",
+                            faster="no",  # this also may or may not pass
+                        )
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = normalize_code(candidate.source_code.flat.strip())
@@ -574,6 +660,16 @@ class FunctionOptimizer:
                     ):  # new candidate has a shorter diff than the previously encountered one
                         ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
                         ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
+                    if candidate.optimization_id.endswith("cdrp"):
+                        log_code_repair_to_db(
+                            code_repair_log_db=self.code_repair_log_db,
+                            trace_id=self.function_trace_id[:-4] + exp_type,
+                            optimization_id=candidate.optimization_id,
+                            passed="yes" if is_correct[candidate.optimization_id] else "no",
+                            faster="yes"
+                            if speedup_ratios[candidate.optimization_id] > 0
+                            else "no",  # this also may or may not pass
+                        )
                     continue
                 ast_code_to_id[normalized_code] = {
                     "optimization_id": candidate.optimization_id,
@@ -743,6 +839,16 @@ class FunctionOptimizer:
                     if self.args.benchmark and benchmark_tree:
                         console.print(benchmark_tree)
                     console.rule()
+                if candidate.optimization_id.endswith("cdrp"):
+                    log_code_repair_to_db(
+                        code_repair_log_db=self.code_repair_log_db,
+                        trace_id=self.function_trace_id[:-4] + exp_type,
+                        optimization_id=candidate.optimization_id,
+                        passed="yes" if is_correct[candidate.optimization_id] else "no",
+                        faster="yes"
+                        if speedup_ratios[candidate.optimization_id] > 0
+                        else "no",  # this also may or may not pass
+                    )
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
