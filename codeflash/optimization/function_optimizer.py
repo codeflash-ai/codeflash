@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libcst as cst
+import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -69,6 +70,7 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
+    AIServiceCodeRepairRequest,
     BestOptimization,
     CodeOptimizationContext,
     GeneratedTests,
@@ -589,6 +591,28 @@ class FunctionOptimizer:
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
+                    fail_value = run_results.value
+                    if (
+                        fail_value != "Test results did not match the test results of the original code."
+                        and len(future_all_refinements) <= 3
+                        and not candidate.optimization_id.endswith("cdrp")
+                    ):
+                        # # queue corresponding code repair optimization for best optimization
+                        future_all_refinements.append(
+                            self.code_repair_optimizations(
+                                original_source_code=candidate,
+                                modified_source_code=code_context,
+                                original_code_baseline=original_code_baseline,
+                                test_details="test_details",
+                                code_context=code_context,
+                                trace_id=self.function_trace_id[:-4] + exp_type
+                                if self.experiment_id
+                                else self.function_trace_id,
+                                ai_service_client=ai_service_client,
+                                executor=self.executor,
+                                function_references=function_references,
+                            )
+                        )
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
@@ -672,21 +696,21 @@ class FunctionOptimizer:
                             async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
-                        # queue corresponding refined optimization for best optimization
-                        if not candidate.optimization_id.endswith("refi"):
-                            future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=self.executor,
-                                    function_references=function_references,
-                                )
-                            )
+                        # # queue corresponding refined optimization for best optimization
+                        # if not candidate.optimization_id.endswith("refi"):
+                        #     future_all_refinements.append(
+                        #         self.refine_optimizations(
+                        #             valid_optimizations=[best_optimization],
+                        #             original_code_baseline=original_code_baseline,
+                        #             code_context=code_context,
+                        #             trace_id=self.function_trace_id[:-4] + exp_type
+                        #             if self.experiment_id
+                        #             else self.function_trace_id,
+                        #             ai_service_client=ai_service_client,
+                        #             executor=self.executor,
+                        #             function_references=function_references,
+                        #         )
+                        #     )
                     else:
                         # For async functions, prioritize throughput metrics over runtime even for slow candidates
                         is_async = (
@@ -838,6 +862,26 @@ class FunctionOptimizer:
             for opt in valid_optimizations
         ]
         return executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
+
+    def code_repair_optimizations(
+        self,
+        original_source_code: str,
+        modified_source_code: str,
+        test_details: str,
+        trace_id: str,
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
+    ) -> concurrent.futures.Future:
+        request = [
+            AIServiceCodeRepairRequest(
+                optimization_id="",
+                original_source_code=original_source_code,
+                modified_source_code=modified_source_code,
+                test_details=test_details,
+                trace_id=trace_id,
+            )
+        ]
+        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1813,6 +1857,7 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
+            # print(type(code_context), type(candidate))
             match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
             if match:
                 logger.info("h3|Test results matched ✅")
@@ -1823,15 +1868,29 @@ class FunctionOptimizer:
                     # if the test unmatched percentage is greater than 50%, we can't fix it
                     return self.get_results_not_matched_error()
 
-                print(f"should try to fix it, diffs: {diffs}")
-                # with the parsed test results diff ask the llm to fix the candidate to match the test results of the original code, and run again
-                # self.run_optimized_candidate(
-                #     optimization_candidate_index=optimization_candidate_index,
-                #     baseline_results=baseline_results,
-                #     original_helper_code=original_helper_code,
-                #     file_path_to_helper_classes=file_path_to_helper_classes,
-                # )
-                return self.get_results_not_matched_error()
+                logger.info("running code repair...")
+                # not sure if all return types will be convertible to string
+                diff_per_test_fn = {}
+                for diff in diffs:
+                    try:
+                        diff_per_test_fn[diff.test_src_code] = (
+                            diff_per_test_fn.setdefault(diff.test_src_code, "")
+                            + f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.pytest_error}\n"
+                        )
+
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+                        logger.exception(e)
+                        return self.get_results_not_matched_error()
+                try:
+                    test_issues = "\n".join(
+                        f"{test_fn_def}\n{value}" for test_fn_def, value in diff_per_test_fn.items()
+                    )
+                except Exception as e:
+                    sentry_sdk.capture_exception(e)
+                    logger.exception(e)
+                    return self.get_results_not_matched_error()
+                return Failure(test_issues)
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 

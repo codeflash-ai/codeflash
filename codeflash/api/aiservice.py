@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
-    from codeflash.models.models import AIServiceRefinerRequest
+    from codeflash.models.models import AIServiceCodeRepairRequest, AIServiceRefinerRequest
     from codeflash.result.explanation import Explanation
 
 
@@ -281,6 +281,59 @@ class AiServiceClient:
                     source_code=c.source_code,
                     explanation=c.explanation,
                     optimization_id=c.optimization_id[:-4] + "refi",
+                )
+                for c in refinements
+            ]
+
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def optimize_python_code_repair(self, request: list[AIServiceCodeRepairRequest]) -> list[OptimizedCandidate]:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Args:
+        request: A list of optimization candidate details for refinement
+
+        Returns:
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        payload = [
+            {
+                "optimization_id": opt.optimization_id,
+                "original_source_code": opt.original_source_code,
+                "modified_source_code": opt.modified_source_code,
+                "trace_id": opt.trace_id,
+            }
+            for opt in request
+        ]
+        # logger.debug(f"Repair {len(request)} optimizations…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimization repair: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            refined_optimizations = response.json()["code_repairs"]
+            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
+            console.rule()
+
+            refinements = self._get_valid_candidates(refined_optimizations)
+            return [
+                OptimizedCandidate(
+                    source_code=c.source_code,
+                    explanation=c.explanation,
+                    optimization_id=c.optimization_id[:-4] + "cdrp",
                 )
                 for c in refinements
             ]
