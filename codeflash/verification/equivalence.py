@@ -53,12 +53,14 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         candidate_test_failures = candidate_results.test_failures
         original_test_failures = original_results.test_failures
         cdd_pytest_error = (
-            candidate_test_failures.get(original_test_result.id.test_function_name, "")
+            candidate_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
             if candidate_test_failures
             else ""
         )
         original_pytest_error = (
-            original_test_failures.get(original_test_result.id.test_function_name, "") if original_test_failures else ""
+            original_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
+            if original_test_failures
+            else ""
         )
 
         if cdd_test_result is not None and original_test_result is None:

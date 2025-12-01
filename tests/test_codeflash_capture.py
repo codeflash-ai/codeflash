@@ -1406,7 +1406,6 @@ def calculate_portfolio_metrics(
         # Remove instrumentation
         FunctionOptimizer.write_code_and_helpers(candidate_fto_code, candidate_helper_code, fto.file_path)
         matched, diffs = compare_test_results(test_results, modified_test_results)
-        print(diffs)
 
         assert not matched
 
