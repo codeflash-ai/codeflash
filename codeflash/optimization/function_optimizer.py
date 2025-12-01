@@ -617,7 +617,7 @@ class FunctionOptimizer:
                                 trace_id=self.function_trace_id[:-4] + exp_type,
                                 optimization_id=candidate.optimization_id,
                                 passed="no",
-                                faster="no",  # this also may or may not pass
+                                faster="no",
                             )
                         console.rule()
                         continue
@@ -632,7 +632,7 @@ class FunctionOptimizer:
                             trace_id=self.function_trace_id[:-4] + exp_type,
                             optimization_id=candidate.optimization_id,
                             passed="no",
-                            faster="no",  # this also may or may not pass
+                            faster="no",
                         )
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
@@ -668,8 +668,11 @@ class FunctionOptimizer:
                             optimization_id=candidate.optimization_id,
                             passed="yes" if is_correct[candidate.optimization_id] else "no",
                             faster="yes"
-                            if speedup_ratios[candidate.optimization_id] > 0
-                            else "no",  # this also may or may not pass
+                            if (
+                                speedup_ratios[candidate.optimization_id] is not None
+                                and speedup_ratios[candidate.optimization_id] > 0
+                            )
+                            else "no",
                         )
                     continue
                 ast_code_to_id[normalized_code] = {
@@ -847,8 +850,11 @@ class FunctionOptimizer:
                         optimization_id=candidate.optimization_id,
                         passed="yes" if is_correct[candidate.optimization_id] else "no",
                         faster="yes"
-                        if speedup_ratios[candidate.optimization_id] > 0
-                        else "no",  # this also may or may not pass
+                        if (
+                            speedup_ratios[candidate.optimization_id] is not None
+                            and speedup_ratios[candidate.optimization_id] > 0
+                        )
+                        else "no",
                     )
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
