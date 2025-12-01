@@ -306,7 +306,7 @@ class FunctionOptimizer:
         )
         self.optimization_review = ""
         # SQLite database setup for logging
-        self.code_repair_log_db = Path(__file__).parent / "code_repair_log_cf.db"
+        self.code_repair_log_db = Path(__file__).parent / "code_repair_logs_cf.db"
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -450,13 +450,14 @@ class FunctionOptimizer:
         conn = sqlite3.connect(self.code_repair_log_db)
         cursor = conn.cursor()
         cursor.execute("""
-                               CREATE TABLE IF NOT EXISTS code_repair_logs (
+                               CREATE TABLE IF NOT EXISTS code_repair_logs_cf (
             optimization_id TEXT PRIMARY KEY,
             trace_id TEXT,
             passed TEXT,
             faster TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
                        """)
         conn.commit()
         conn.close()
@@ -1980,7 +1981,7 @@ class FunctionOptimizer:
                     try:
                         diff_per_test_fn[diff.test_src_code] = (
                             diff_per_test_fn.setdefault(diff.test_src_code, "")
-                            + f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.pytest_error}\n"
+                            + f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.candidate_pytest_error}\n"
                         )
 
                     except Exception as e:
