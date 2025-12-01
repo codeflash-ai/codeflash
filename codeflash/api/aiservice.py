@@ -310,6 +310,7 @@ class AiServiceClient:
                 "optimization_id": opt.optimization_id,
                 "original_source_code": opt.original_source_code,
                 "modified_source_code": opt.modified_source_code,
+                "test_details": opt.test_details,
                 "trace_id": opt.trace_id,
             }
             for opt in request
@@ -325,7 +326,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["code_repairs"]
-            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
+            # logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
             console.rule()
 
             refinements = self._get_valid_candidates(refined_optimizations)
