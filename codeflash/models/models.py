@@ -517,8 +517,12 @@ class InvocationId:
 
     # TestSuiteClass.test_function_name
     def test_fn_qualified_name(self) -> str:
-        class_prefix = f"{self.test_class_name}." if self.test_class_name else ""
-        return f"{class_prefix}{self.test_function_name}"
+        # Use f-string with inline conditional to reduce string concatenation operations
+        return (
+            f"{self.test_class_name}.{self.test_function_name}"
+            if self.test_class_name
+            else str(self.test_function_name)
+        )
 
     def find_func_in_class(self, class_node: cst.ClassDef, func_name: str) -> Optional[cst.FunctionDef]:
         for stmt in class_node.body.body:
