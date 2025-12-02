@@ -512,44 +512,58 @@ def merge_test_results(
     return merged_test_results
 
 
-def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> TestResults:
-    stdout_lines = stdout.splitlines()
-    start_line = end_line = None
+FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
+TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
 
-    for i, line in enumerate(stdout_lines):
-        stripped_line = line.strip()
-        if start_line is None and stripped_line[0] == "=" and "FAILURES" in stripped_line:
-            start_line = i
-        # exclude last summary line
-        elif start_line is not None and end_line is None and "short test summary info" in stripped_line:
-            end_line = i
+
+def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> TestResults:
+    """Extract individual pytest test failures from stdout grouped by test case qualified name, and add them to the test results."""
+    lines = stdout.splitlines()
+    start = end = None
+
+    for i, line in enumerate(lines):
+        if FAILURES_HEADER_RE.search(line.strip()):
+            start = i
             break
 
-    if start_line is None or end_line is None:
+    if start is None:
         return test_results
 
-    complete_failure_output_lines = stdout_lines[start_line:end_line]
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].strip()
+        if "short test summary info" in stripped:
+            end = j
+            break
+        # any new === section === block
+        if stripped.startswith("=") and stripped.count("=") > 3:
+            end = j
+            break
 
-    test_case_to_failure: dict[str, str] = {}
+    # If no clear "end", just grap the rest of the string
+    if end is None:
+        end = len(lines)
 
-    current_test_case: str | None = None
-    current_failure_lines: list[str] = []
+    failure_block = lines[start:end]
 
-    underline_prefix = "_______"
+    failures: dict[str, str] = {}
+    current_name = None
+    current_lines: list[str] = []
 
-    for line in complete_failure_output_lines:
-        if line and line[0] == "_" and line.startswith(underline_prefix):
-            if current_test_case:
-                test_case_to_failure[current_test_case] = "".join(current_failure_lines)
-            current_test_case = line.strip("_ ").strip()
-            current_failure_lines.clear()
-        elif current_test_case:
-            current_failure_lines.append(line + "\n")
+    for line in failure_block:
+        m = TEST_HEADER_RE.match(line.strip())
+        if m:
+            if current_name is not None:
+                failures[current_name] = "".join(current_lines)
 
-    if current_test_case:
-        test_case_to_failure[current_test_case] = "".join(current_failure_lines)
+            current_name = m.group(1)
+            current_lines = []
+        elif current_name:
+            current_lines.append(line + "\n")
 
-    test_results.test_failures = test_case_to_failure
+    if current_name:
+        failures[current_name] = "".join(current_lines)
+
+    test_results.test_failures = failures
     return test_results
 
 
