@@ -204,10 +204,10 @@ def check_create_pr(
             base_branch=base_branch,
             file_changes=build_file_changes,
             pr_comment=PrComment(
-                optimization_explanation="## Experiment Type: " + exp_type + "\n\n" + explanation.explanation_message(),
+                optimization_explanation=explanation.explanation_message(),
                 best_runtime=explanation.best_runtime_ns,
                 original_runtime=explanation.original_runtime_ns,
-                function_name=explanation.function_name,
+                function_name=f"{exp_type}___{explanation.function_name}",
                 relative_file_path=relative_path,
                 speedup_x=explanation.speedup_x,
                 speedup_pct=explanation.speedup_pct,
