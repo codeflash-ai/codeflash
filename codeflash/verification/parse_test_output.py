@@ -517,16 +517,18 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
     start_line = end_line = None
 
     for i, line in enumerate(stdout_lines):
-        if start_line is None and "FAILURES" in line:
+        stripped_line = line.strip()
+        if start_line is None and stripped_line[0] == "=" and "FAILURES" in stripped_line:
             start_line = i
-        elif start_line is not None and end_line is None and "short test summary info" in line:
+        # exclude last summary line
+        elif start_line is not None and end_line is None and "short test summary info" in stripped_line:
             end_line = i
             break
 
     if start_line is None or end_line is None:
         return test_results
 
-    complete_failure_output_lines = stdout_lines[start_line:end_line]  # exclude last summary line
+    complete_failure_output_lines = stdout_lines[start_line:end_line]
 
     test_case_to_failure: dict[str, str] = {}
 
