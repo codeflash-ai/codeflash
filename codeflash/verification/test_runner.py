@@ -147,7 +147,7 @@ def run_line_profile_tests(
     pytest_max_loops: int = 100_000,  # noqa: ARG001
     line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
@@ -209,7 +209,7 @@ def run_benchmarking_tests(
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
