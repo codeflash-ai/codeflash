@@ -6,7 +6,6 @@ import os
 import queue
 import random
 import subprocess
-import time
 import uuid
 from collections import defaultdict
 from pathlib import Path
@@ -1667,9 +1666,7 @@ class FunctionOptimizer:
             finally:
                 if self.function_to_optimize.is_async:
                     self.write_code_and_helpers(
-                        self.function_to_optimize_source_code,
-                        original_helper_code,
-                        self.function_to_optimize.file_path,
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                     )
 
         console.print(
@@ -1739,7 +1736,7 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
 
         with progress_bar("Testing optimization candidate"):
             test_env = self.get_test_env(
@@ -1822,11 +1819,7 @@ class FunctionOptimizer:
                     )
             loop_count = (
                 max(all_loop_indices)
-                if (
-                    all_loop_indices := {
-                        result.loop_index for result in candidate_benchmarking_results.test_results
-                    }
-                )
+                if (all_loop_indices := {result.loop_index for result in candidate_benchmarking_results.test_results})
                 else 0
             )
 

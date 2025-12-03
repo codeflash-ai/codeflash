@@ -514,10 +514,7 @@ def parse_test_results(
     run_result: subprocess.CompletedProcess | None = None,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
-        test_xml_path,
-        test_files=test_files,
-        test_config=test_config,
-        run_result=run_result,
+        test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
     )
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
