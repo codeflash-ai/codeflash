@@ -48,13 +48,33 @@ class AIServiceRefinerRequest:
     function_references: str | None = None
 
 
+class TestDiffScope(str, Enum):
+    RETURN_VALUE = "return_value"
+    STDOUT = "stdout"
+    DID_PASS = "did_pass"  # noqa: S105
+    TIMED_OUT = "timed_out"
+
+
+@dataclass
+class TestDiff:
+    scope: TestDiffScope
+    original_pass: bool
+    candidate_pass: bool
+
+    original_value: str | None = None
+    candidate_value: str | None = None
+    test_src_code: Optional[str] = None
+    candidate_pytest_error: Optional[str] = None
+    original_pytest_error: Optional[str] = None
+
+
 @dataclass(frozen=True)
 class AIServiceCodeRepairRequest:
     optimization_id: str
     original_source_code: str
     modified_source_code: str
-    test_details: str
     trace_id: str
+    test_diffs: list[TestDiff]
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully

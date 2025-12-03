@@ -1,38 +1,16 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
-from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import TestResults, TestType, VerificationType
+from codeflash.models.models import TestDiff, TestDiffScope, TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestResults
 
 INCREASED_RECURSION_LIMIT = 5000
-
-
-class TestDiffScope(Enum):
-    RETURN_VALUE = "return_value"
-    STDOUT = "stdout"
-    DID_PASS = "did_pass"  # noqa: S105
-    TIMED_OUT = "timed_out"
-
-
-@dataclass
-class TestDiff:
-    scope: TestDiffScope
-    original_value: any
-    candidate_value: any
-    original_pass: bool
-    candidate_pass: bool
-
-    test_src_code: Optional[str] = None
-    candidate_pytest_error: Optional[str] = None
-    original_pytest_error: Optional[str] = None
 
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
@@ -87,8 +65,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         test_diff = TestDiff(
             scope=TestDiffScope.RETURN_VALUE,
-            original_value=original_test_result.return_value,
-            candidate_value=cdd_test_result.return_value,
+            original_value=f"{original_test_result.return_value!r}",
+            candidate_value=f"{cdd_test_result.return_value!r}",
             test_src_code=test_src_code,
             candidate_pytest_error=cdd_pytest_error,
             original_pass=original_test_result.did_pass,
@@ -97,8 +75,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         )
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             test_diff.scope = TestDiffScope.RETURN_VALUE
-            test_diff.original_value = original_test_result.return_value
-            test_diff.candidate_value = cdd_test_result.return_value
             test_diffs.append(test_diff)
 
             try:
@@ -117,8 +93,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             original_test_result.stdout, cdd_test_result.stdout
         ):
             test_diff.scope = TestDiffScope.STDOUT
-            test_diff.original_value = original_test_result.stdout
-            test_diff.candidate_value = cdd_test_result.stdout
+            test_diff.original_value = str(original_test_result.stdout)
+            test_diff.candidate_value = str(cdd_test_result.stdout)
             test_diffs.append(test_diff)
 
         if original_test_result.test_type in {
@@ -128,8 +104,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             TestType.REPLAY_TEST,
         } and (cdd_test_result.did_pass != original_test_result.did_pass):
             test_diff.scope = TestDiffScope.DID_PASS
-            test_diff.original_value = original_test_result.did_pass
-            test_diff.candidate_value = cdd_test_result.did_pass
+            test_diff.original_value = str(original_test_result.did_pass)
+            test_diff.candidate_value = str(cdd_test_result.did_pass)
             test_diffs.append(test_diff)
 
     sys.setrecursionlimit(original_recursion_limit)

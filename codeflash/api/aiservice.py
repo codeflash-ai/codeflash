@@ -294,50 +294,39 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_repair(self, request: list[AIServiceCodeRepairRequest]) -> list[OptimizedCandidate]:
+    def optimize_python_code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
         Args:
-        request: A list of optimization candidate details for refinement
+        request: optimization candidate details for refinement
 
         Returns:
         -------
-        - List[OptimizationCandidate]: A list of Optimization Candidates.
+        - OptimizationCandidate: new fixed candidate.
 
         """
-        payload = [
-            {
-                "optimization_id": opt.optimization_id,
-                "original_source_code": opt.original_source_code,
-                "modified_source_code": opt.modified_source_code,
-                "test_details": opt.test_details,
-                "trace_id": opt.trace_id,
-            }
-            for opt in request
-        ]
-        # logger.debug(f"Repair {len(request)} optimizations…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/code_repair", payload=request, timeout=120)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization repair: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return []
 
         if response.status_code == 200:
-            refined_optimizations = response.json()["code_repairs"]
-            # logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
+            refined_optimization = response.json()
             console.rule()
 
-            refinements = self._get_valid_candidates(refined_optimizations)
-            return [
-                OptimizedCandidate(
-                    source_code=c.source_code,
-                    explanation=c.explanation,
-                    optimization_id=c.optimization_id[:-4] + "cdrp",
-                )
-                for c in refinements
-            ]
+            refinements = self._get_valid_candidates([refined_optimization])
+            if not refinements:
+                logger.error("Code repair failed to generate a valid candidate.")
+                return None
+
+            return OptimizedCandidate(
+                source_code=refinements[0].source_code,
+                explanation=refinements[0].explanation,
+                optimization_id=refinements[0].optimization_id[:-4] + "cdrp",
+            )
 
         try:
             error = response.json()["error"]
@@ -346,7 +335,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return []
+        return None
 
     def get_new_explanation(  # noqa: D417
         self,

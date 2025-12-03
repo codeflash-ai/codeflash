@@ -116,6 +116,7 @@ if TYPE_CHECKING:
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
+        TestDiff,
     )
     from codeflash.verification.verification_utils import TestConfig
 
@@ -685,32 +686,15 @@ class FunctionOptimizer:
                     baseline_results=original_code_baseline,
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
+                    code_context=code_context,
+                    candidate=candidate,
+                    exp_type=exp_type,
                 )
                 console.rule()
                 if not is_successful(run_results):
                     optimized_runtimes[candidate.optimization_id] = None
                     is_correct[candidate.optimization_id] = False
                     speedup_ratios[candidate.optimization_id] = None
-                    fail_value = run_results.value
-                    if (
-                        fail_value.strip() != "Test results did not match the test results of the original code."
-                        and len(future_all_refinements) <= 3
-                        and not candidate.optimization_id.endswith("cdrp")
-                    ):
-                        # # queue corresponding code repair optimization for best optimization
-                        future_all_refinements.append(
-                            self.code_repair_optimizations(
-                                original_source_code=code_context.read_writable_code.markdown,
-                                modified_source_code=candidate.source_code.markdown,
-                                test_details=fail_value,
-                                trace_id=self.function_trace_id[:-4] + exp_type
-                                if self.experiment_id
-                                else self.function_trace_id,
-                                ai_service_client=ai_service_client,
-                                executor=self.executor,
-                                optimization_id=candidate.optimization_id,
-                            )
-                        )
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
@@ -978,22 +962,19 @@ class FunctionOptimizer:
         self,
         original_source_code: str,
         modified_source_code: str,
-        test_details: str,
+        test_diffs: list[TestDiff],
         trace_id: str,
         optimization_id: str,
         ai_service_client: AiServiceClient,
-        executor: concurrent.futures.ThreadPoolExecutor,
-    ) -> concurrent.futures.Future:
-        request = [
-            AIServiceCodeRepairRequest(
-                optimization_id=optimization_id,
-                original_source_code=original_source_code,
-                modified_source_code=modified_source_code,
-                test_details=test_details,
-                trace_id=trace_id,
-            )
-        ]
-        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
+    ) -> OptimizedCandidate | None:
+        request = AIServiceCodeRepairRequest(
+            optimization_id=optimization_id,
+            original_source_code=original_source_code,
+            modified_source_code=modified_source_code,
+            test_diffs=test_diffs,
+            trace_id=trace_id,
+        )
+        return ai_service_client.optimize_python_code_repair(request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1920,6 +1901,9 @@ class FunctionOptimizer:
         baseline_results: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        code_context: CodeOptimizationContext,
+        candidate: OptimizedCandidate,
+        exp_type: str,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
 
@@ -1980,29 +1964,50 @@ class FunctionOptimizer:
                     # if the test unmatched percentage is greater than 50%, we can't fix it
                     return self.get_results_not_matched_error()
 
-                logger.info("running code repair...")
-                # not sure if all return types will be convertible to string
-                diff_per_test_fn = {}
-                for diff in diffs:
-                    try:
-                        diff_per_test_fn[diff.test_src_code] = (
-                            diff_per_test_fn.setdefault(diff.test_src_code, "")
-                            + f"Expected Value: {diff.original_value!s}\nActual Value: {diff.candidate_value!s}\nError String:{diff.candidate_pytest_error}\n"
-                        )
-
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-                        logger.exception(e)
-                        return self.get_results_not_matched_error()
-                try:
-                    test_issues = "\n".join(
-                        f"{test_fn_def}\n{value}" for test_fn_def, value in diff_per_test_fn.items()
-                    )
-                except Exception as e:
-                    sentry_sdk.capture_exception(e)
-                    logger.exception(e)
+                if candidate.optimization_id.endswith("cdrp"):
+                    # prevent looping for now
                     return self.get_results_not_matched_error()
-                return Failure(test_issues)
+
+                ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+
+                with progress_bar("The test results are not matching, let me see if I can fix this"):
+                    new_candidate = self.code_repair_optimizations(
+                        original_source_code=code_context.read_writable_code.markdown,
+                        modified_source_code=candidate.source_code.markdown,
+                        test_diffs=diffs,
+                        trace_id=self.function_trace_id[:-4] + exp_type
+                        if self.experiment_id
+                        else self.function_trace_id,
+                        ai_service_client=ai_service_client,
+                        optimization_id=candidate.optimization_id,
+                    )
+                    if not new_candidate:
+                        return Failure("Code repair failed to generate a valid candidate.")
+
+                code_print(new_candidate.source_code.flat)
+
+                try:
+                    did_update = self.replace_function_and_helpers_with_optimized_code(
+                        code_context=code_context,
+                        optimized_code=new_candidate.source_code,
+                        original_helper_code=original_helper_code,
+                    )
+                    if did_update:
+                        return self.run_optimized_candidate(
+                            optimization_candidate_index=optimization_candidate_index,
+                            baseline_results=baseline_results,
+                            original_helper_code=original_helper_code,
+                            file_path_to_helper_classes=file_path_to_helper_classes,
+                            code_context=code_context,
+                            candidate=new_candidate,
+                            exp_type=exp_type,
+                        )
+                except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
+                    logger.error(e)
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    )
+                    return Failure("Code repair failed to generate a valid candidate.")
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 
