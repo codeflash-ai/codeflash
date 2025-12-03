@@ -122,58 +122,32 @@ if TYPE_CHECKING:
 
 
 def log_code_repair_to_db(
-    code_repair_log_db: Path,
-    optimization_id: str,
-    trace_id: str | None = None,
-    passed: str | None = None,
-    faster: str | None = None,
+    code_repair_log_db: Path, optimization_id: str, trace_id: str, passed: str, faster: str
 ) -> None:
-    """Log code repair data to SQLite database.
-
-    Uses upsert pattern to allow incremental logging with different columns at different places.
-    Only non-None values will be updated; existing values are preserved.
-    """
+    """Log code repair data to SQLite database."""
     try:
-        conn = sqlite3.connect(code_repair_log_db)
-        cursor = conn.cursor()
-
-        # Build dynamic upsert query based on provided columns
-        columns = ["optimization_id"]
-        values = [optimization_id]
-        update_parts = ["updated_at = CURRENT_TIMESTAMP"]
-
-        if trace_id is not None:
-            columns.append("trace_id")
-            values.append(trace_id)
-            update_parts.append("trace_id = excluded.trace_id")
-
-        if passed is not None:
-            columns.append("passed")
-            values.append(passed)
-            update_parts.append("passed = excluded.passed")
-
-        if faster is not None:
-            columns.append("faster")
-            values.append(faster)
-            update_parts.append("faster = excluded.faster")
-
-        placeholders = ", ".join(["?"] * len(values))
-        columns_str = ", ".join(columns)
-        update_str = ", ".join(update_parts)
-
-        cursor.execute(
-            f"""
-            INSERT INTO code_repair_logs_cf ({columns_str})
-            VALUES ({placeholders})
-            ON CONFLICT(optimization_id) DO UPDATE SET {update_str}
-            """,  # noqa: S608
-            values,
-        )
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(code_repair_log_db) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS code_repair_logs_cf (
+                    optimization_id TEXT PRIMARY KEY,
+                    trace_id TEXT,
+                    passed TEXT,
+                    faster TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute(
+                """
+                INSERT INTO code_repair_logs_cf (optimization_id, trace_id, passed, faster)
+                VALUES (?, ?, ?, ?)
+                """,
+                (optimization_id, trace_id, passed, faster),
+            )
+            conn.commit()
     except Exception as e:
         sentry_sdk.capture_exception(e)
-        logger.exception(e)
+        logger.exception("Error logging code repair to db")
 
 
 class CandidateProcessor:
@@ -448,20 +422,6 @@ class FunctionOptimizer:
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
-        conn = sqlite3.connect(self.code_repair_log_db)
-        cursor = conn.cursor()
-        cursor.execute("""
-                               CREATE TABLE IF NOT EXISTS code_repair_logs_cf (
-            optimization_id TEXT PRIMARY KEY,
-            trace_id TEXT,
-            passed TEXT,
-            faster TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-                       """)
-        conn.commit()
-        conn.close()
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
         code_print(
