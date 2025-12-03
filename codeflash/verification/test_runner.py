@@ -44,7 +44,7 @@ def run_behavioral_tests(
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
-                # TODO: Does this work for unittest framework?
+                # Replay tests need specific test targeting because one file contains tests for multiple functions
                 test_files.extend(
                     [
                         str(file.instrumented_behavior_file_path) + "::" + test.test_function
@@ -153,21 +153,10 @@ def run_line_profile_tests(
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
+        # Always use file path - pytest discovers all tests including parametrized ones
+        test_files: list[str] = list(
+            {str(file.benchmarking_file_path) for file in test_paths.test_files}
+        )  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
             "-q",
@@ -215,21 +204,10 @@ def run_benchmarking_tests(
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
+        # Always use file path - pytest discovers all tests including parametrized ones
+        test_files: list[str] = list(
+            {str(file.benchmarking_file_path) for file in test_paths.test_files}
+        )  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
             "-q",

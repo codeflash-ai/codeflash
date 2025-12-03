@@ -3294,6 +3294,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 
