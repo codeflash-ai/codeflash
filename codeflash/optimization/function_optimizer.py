@@ -1736,8 +1736,6 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}
-
         with progress_bar("Testing optimization candidate"):
             test_env = self.get_test_env(
                 codeflash_loop_index=0,
