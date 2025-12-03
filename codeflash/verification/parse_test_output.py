@@ -210,9 +210,8 @@ def parse_test_xml(
     except Exception as e:
         logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
-    base_dir = (
-        test_config.tests_project_rootdir if test_config.test_framework == "pytest" else test_config.project_root_path
-    )
+    # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
+    base_dir = test_config.tests_project_rootdir
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
