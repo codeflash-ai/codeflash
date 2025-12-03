@@ -40,7 +40,7 @@ def run_behavioral_tests(
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
@@ -61,13 +61,14 @@ def run_behavioral_tests(
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         common_pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            common_pytest_args.insert(1, f"--timeout={pytest_timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
@@ -169,13 +170,14 @@ def run_line_profile_tests(
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            pytest_args.insert(1, f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
@@ -230,13 +232,14 @@ def run_benchmarking_tests(
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             f"--codeflash_min_loops={pytest_min_loops}",
             f"--codeflash_max_loops={pytest_max_loops}",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            pytest_args.insert(1, f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
