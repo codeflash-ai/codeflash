@@ -16,7 +16,6 @@ from codeflash.cli_cmds.console import DEBUG_MODE, console, logger
 from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     file_path_from_module_name,
-    get_run_tmp_file,
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
@@ -62,6 +61,56 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
             function_throughput += 1
     return function_throughput
+
+
+def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
+    """Resolve test file path from pytest's test class path.
+
+    This function handles various cases where pytest's classname in JUnit XML
+    includes parent directories that may already be part of base_dir.
+
+    Args:
+        test_class_path: The full class path from pytest (e.g., "project.tests.test_file.TestClass")
+        base_dir: The base directory for tests (tests project root)
+
+    Returns:
+        Path to the test file if found, None otherwise
+
+    Examples:
+        >>> # base_dir = "/path/to/tests"
+        >>> # test_class_path = "code_to_optimize.tests.unittest.test_file.TestClass"
+        >>> # Should find: /path/to/tests/unittest/test_file.py
+
+    """
+    # First try the full path
+    test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
+
+    # If we couldn't find the file, try stripping the last component (likely a class name)
+    # This handles cases like "module.TestClass" where TestClass is a class, not a module
+    if test_file_path is None and "." in test_class_path:
+        module_without_class = ".".join(test_class_path.split(".")[:-1])
+        test_file_path = file_name_from_test_module_name(module_without_class, base_dir)
+
+    # If still not found, progressively strip prefix components
+    # This handles cases where pytest's classname includes parent directories that are
+    # already part of base_dir (e.g., "project.tests.unittest.test_file.TestClass"
+    # when base_dir is "/.../tests")
+    if test_file_path is None:
+        parts = test_class_path.split(".")
+        # Try stripping 1, 2, 3, ... prefix components
+        for num_to_strip in range(1, len(parts)):
+            remaining = ".".join(parts[num_to_strip:])
+            test_file_path = file_name_from_test_module_name(remaining, base_dir)
+            if test_file_path:
+                break
+            # Also try without the last component (class name)
+            if "." in remaining:
+                remaining_no_class = ".".join(remaining.split(".")[:-1])
+                test_file_path = file_name_from_test_module_name(remaining_no_class, base_dir)
+                if test_file_path:
+                    break
+
+    return test_file_path
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -251,32 +300,7 @@ def parse_test_xml(
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
-                    test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
-
-                    # If we couldn't find the file, try stripping the last component (likely a class name)
-                    # This handles cases like "module.TestClass" where TestClass is a class, not a module
-                    if test_file_path is None and "." in test_class_path:
-                        module_without_class = ".".join(test_class_path.split(".")[:-1])
-                        test_file_path = file_name_from_test_module_name(module_without_class, base_dir)
-
-                    # If still not found, progressively strip prefix components
-                    # This handles cases where pytest's classname includes parent directories that are
-                    # already part of base_dir (e.g., "project.tests.unittest.test_file.TestClass"
-                    # when base_dir is "/.../tests")
-                    if test_file_path is None:
-                        parts = test_class_path.split(".")
-                        # Try stripping 1, 2, 3, ... prefix components
-                        for num_to_strip in range(1, len(parts)):
-                            remaining = ".".join(parts[num_to_strip:])
-                            test_file_path = file_name_from_test_module_name(remaining, base_dir)
-                            if test_file_path:
-                                break
-                            # Also try without the last component (class name)
-                            if "." in remaining:
-                                remaining_no_class = ".".join(remaining.split(".")[:-1])
-                                test_file_path = file_name_from_test_module_name(remaining_no_class, base_dir)
-                                if test_file_path:
-                                    break
+                    test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
 
                     if test_file_path is None:
                         logger.warning(f"Could not find the test for file name - {test_class_path} ")
