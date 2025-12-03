@@ -120,18 +120,6 @@ def run_behavioral_tests(
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
-    elif test_framework == "unittest":
-        if enable_coverage:
-            msg = "Coverage is not supported yet for unittest framework"
-            raise ValueError(msg)
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
-        test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
-        )
-        logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -200,34 +188,10 @@ def run_line_profile_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-    elif test_framework == "unittest":
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
-        test_env["LINE_PROFILE"] = "1"
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
-        line_profiler_output_file, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=[Path(file) for file in test_files], test_env=test_env, cwd=cwd
-        )
-        logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-    return line_profiler_output_file, results
+    return result_file_path, results
 
 
 def run_benchmarking_tests(
@@ -284,26 +248,7 @@ def run_benchmarking_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-    elif test_framework == "unittest":
-        test_files = [file.benchmarking_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-    return result_file_path, results
-
-
-def run_unittest_tests(
-    *, verbose: bool, test_file_paths: list[Path], test_env: dict[str, str], cwd: Path
-) -> tuple[Path, subprocess.CompletedProcess]:
-    result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
-    unittest_cmd_list = [SAFE_SYS_EXECUTABLE, "-m", "xmlrunner"]
-    log_level = ["-v"] if verbose else []
-    files = [str(file) for file in test_file_paths]
-    output_file = ["--output-file", str(result_file_path)]
-    results = execute_test_subprocess(
-        unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
-    )
     return result_file_path, results

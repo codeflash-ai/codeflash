@@ -198,7 +198,6 @@ def parse_test_xml(
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
-    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results = TestResults()
     # Parse unittest output
@@ -274,24 +273,15 @@ def parse_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
-            loop_index = unittest_loop_index if unittest_loop_index is not None else 1
+            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
 
             timed_out = False
-            if test_config.test_framework == "pytest":
-                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
-                if len(testcase.result) > 1:
-                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
-                if len(testcase.result) == 1:
-                    message = testcase.result[0].message.lower()
-                    if "failed: timeout >" in message:
-                        timed_out = True
-            else:
-                if len(testcase.result) > 1:
-                    logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
-                if len(testcase.result) == 1:
-                    message = testcase.result[0].message.lower()
-                    if "timed out" in message:
-                        timed_out = True
+            if len(testcase.result) > 1:
+                logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
+            if len(testcase.result) == 1:
+                message = testcase.result[0].message.lower()
+                if "failed: timeout >" in message or "timed out" in message:
+                    timed_out = True
 
             sys_stdout = testcase.system_out or ""
             begin_matches = list(matches_re_start.finditer(sys_stdout))
@@ -523,14 +513,12 @@ def parse_test_results(
     coverage_config_file: Path | None,
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
-    unittest_loop_index: int | None = None,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path,
         test_files=test_files,
         test_config=test_config,
         run_result=run_result,
-        unittest_loop_index=unittest_loop_index,
     )
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))

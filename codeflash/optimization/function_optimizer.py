@@ -1641,57 +1641,36 @@ class FunctionOptimizer:
                 f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
 
-        if test_framework == "pytest":
-            with progress_bar("Running line profiler to identify performance bottlenecks..."):
-                line_profile_results = self.line_profiler_step(
-                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+        with progress_bar("Running line profiler to identify performance bottlenecks..."):
+            line_profile_results = self.line_profiler_step(
+                code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+            )
+        console.rule()
+        with progress_bar("Running performance benchmarks..."):
+            if self.function_to_optimize.is_async:
+                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
+
+                add_async_decorator_to_function(
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                 )
-            console.rule()
-            with progress_bar("Running performance benchmarks..."):
+
+            try:
+                benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.PERFORMANCE,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=0,
+                    testing_time=total_looping_time,
+                    enable_coverage=False,
+                    code_context=code_context,
+                )
+            finally:
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-                    add_async_decorator_to_function(
-                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code,
+                        original_helper_code,
+                        self.function_to_optimize.file_path,
                     )
-
-                try:
-                    benchmarking_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=0,
-                        testing_time=total_looping_time,
-                        enable_coverage=False,
-                        code_context=code_context,
-                    )
-                finally:
-                    if self.function_to_optimize.is_async:
-                        self.write_code_and_helpers(
-                            self.function_to_optimize_source_code,
-                            original_helper_code,
-                            self.function_to_optimize.file_path,
-                        )
-        else:
-            benchmarking_results = TestResults()
-            start_time: float = time.time()
-            for i in range(100):
-                if i >= 5 and time.time() - start_time >= total_looping_time * 1.5:
-                    # * 1.5 to give unittest a bit more time to run
-                    break
-                test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                with progress_bar("Running performance benchmarks..."):
-                    unittest_loop_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=0,
-                        testing_time=total_looping_time,
-                        enable_coverage=False,
-                        code_context=code_context,
-                        unittest_loop_index=i + 1,
-                    )
-                    benchmarking_results.merge(unittest_loop_results)
 
         console.print(
             TestResults.report_to_tree(
@@ -1818,59 +1797,38 @@ class FunctionOptimizer:
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 
-            if test_framework == "pytest":
-                # For async functions, instrument at definition site for performance benchmarking
-                if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
+            # For async functions, instrument at definition site for performance benchmarking
+            if self.function_to_optimize.is_async:
+                from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-                    add_async_decorator_to_function(
-                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
-                    )
-
-                try:
-                    candidate_benchmarking_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        testing_time=total_looping_time,
-                        enable_coverage=False,
-                    )
-                finally:
-                    # Restore original source if we instrumented it
-                    if self.function_to_optimize.is_async:
-                        self.write_code_and_helpers(
-                            candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                        )
-                loop_count = (
-                    max(all_loop_indices)
-                    if (
-                        all_loop_indices := {
-                            result.loop_index for result in candidate_benchmarking_results.test_results
-                        }
-                    )
-                    else 0
+                add_async_decorator_to_function(
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                 )
 
-            else:
-                candidate_benchmarking_results = TestResults()
-                start_time: float = time.time()
-                loop_count = 0
-                for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME_EFFECTIVE * 1.5:
-                        # * 1.5 to give unittest a bit more time to run
-                        break
-                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, _cov = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                        unittest_loop_index=i + 1,
+            try:
+                candidate_benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.PERFORMANCE,
+                    test_env=test_env,
+                    test_files=self.test_files,
+                    optimization_iteration=optimization_candidate_index,
+                    testing_time=total_looping_time,
+                    enable_coverage=False,
+                )
+            finally:
+                # Restore original source if we instrumented it
+                if self.function_to_optimize.is_async:
+                    self.write_code_and_helpers(
+                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
-                    loop_count = i + 1
-                    candidate_benchmarking_results.merge(unittest_loop_results)
+            loop_count = (
+                max(all_loop_indices)
+                if (
+                    all_loop_indices := {
+                        result.loop_index for result in candidate_benchmarking_results.test_results
+                    }
+                )
+                else 0
+            )
 
             if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
@@ -1920,7 +1878,6 @@ class FunctionOptimizer:
         pytest_min_loops: int = 5,
         pytest_max_loops: int = 250,
         code_context: CodeOptimizationContext | None = None,
-        unittest_loop_index: int | None = None,
         line_profiler_output_file: Path | None = None,
     ) -> tuple[TestResults | dict, CoverageData | None]:
         coverage_database_file = None
@@ -1996,7 +1953,6 @@ class FunctionOptimizer:
                 test_config=self.test_cfg,
                 optimization_iteration=optimization_iteration,
                 run_result=run_result,
-                unittest_loop_index=unittest_loop_index,
                 function_name=self.function_to_optimize.function_name,
                 source_file=self.function_to_optimize.file_path,
                 code_context=code_context,
