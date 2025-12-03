@@ -17,6 +17,15 @@ from codeflash.verification.parse_test_output import parse_test_xml
 from codeflash.verification.test_runner import run_behavioral_tests
 from codeflash.verification.verification_utils import TestConfig
 
+# Move mapping dict construction to module level for efficiency
+_MAPPING: dict[str, TestType] = {
+    "existing_unit_test": TestType.EXISTING_UNIT_TEST,
+    "generated_regression": TestType.GENERATED_REGRESSION,
+    "replay_test": TestType.REPLAY_TEST,
+    "concolic_test": TestType.CONCOLIC_COVERAGE_TEST,
+    "concolic_coverage_test": TestType.CONCOLIC_COVERAGE_TEST,
+}
+
 
 class TestFileInput(BaseModel):
     """Input schema for a single test file."""
@@ -122,14 +131,7 @@ RUN_BEHAVIORAL_TESTS_TOOL_SCHEMA = {
 
 def _test_type_from_string(test_type_str: str) -> TestType:
     """Convert a string test type to TestType enum."""
-    mapping = {
-        "existing_unit_test": TestType.EXISTING_UNIT_TEST,
-        "generated_regression": TestType.GENERATED_REGRESSION,
-        "replay_test": TestType.REPLAY_TEST,
-        "concolic_test": TestType.CONCOLIC_COVERAGE_TEST,
-        "concolic_coverage_test": TestType.CONCOLIC_COVERAGE_TEST,
-    }
-    return mapping.get(test_type_str.lower(), TestType.EXISTING_UNIT_TEST)
+    return _MAPPING.get(test_type_str.lower(), TestType.EXISTING_UNIT_TEST)
 
 
 def run_behavioral_tests_tool(
