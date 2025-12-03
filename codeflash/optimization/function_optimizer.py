@@ -1881,7 +1881,6 @@ class FunctionOptimizer:
                     cwd=self.project_root,
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
-                    verbose=True,
                     enable_coverage=enable_coverage,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
@@ -1895,7 +1894,6 @@ class FunctionOptimizer:
                     pytest_min_loops=1,
                     pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
-                    line_profiler_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(

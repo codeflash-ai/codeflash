@@ -36,7 +36,6 @@ def run_behavioral_tests(
     *,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
-    verbose: bool = False,
     pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
@@ -141,11 +140,9 @@ def run_line_profile_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
-    verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
     pytest_max_loops: int = 100_000,  # noqa: ARG001
-    line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
@@ -193,7 +190,6 @@ def run_benchmarking_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
-    verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
