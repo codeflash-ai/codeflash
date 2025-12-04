@@ -321,18 +321,17 @@ class AiServiceClient:
             return None
 
         if response.status_code == 200:
-            refined_optimization = response.json()
+            fixed_optimization = response.json()
             console.rule()
 
-            refinements = self._get_valid_candidates([refined_optimization])
-            if not refinements:
+            if not self._get_valid_candidates([fixed_optimization]):
                 logger.error("Code repair failed to generate a valid candidate.")
                 return None
 
             return OptimizedCandidate(
-                source_code=refinements[0].source_code,
-                explanation=refinements[0].explanation,
-                optimization_id=refinements[0].optimization_id[:-4] + "cdrp",
+                source_code=fixed_optimization["source_code"],
+                explanation=fixed_optimization["explanation"],
+                optimization_id=fixed_optimization["optimization_id"],
             )
 
         try:

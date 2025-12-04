@@ -1892,7 +1892,7 @@ class FunctionOptimizer:
 
                 ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
 
-                with progress_bar("The test results are not matching, let me see if I can fix this"):
+                with progress_bar("Some of the test results are not matching, let me see if I can fix this"):
                     new_candidate = self.code_repair_optimizations(
                         original_source_code=code_context.read_writable_code.markdown,
                         modified_source_code=candidate.source_code.markdown,
