@@ -437,7 +437,7 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
     # Normalize path separators for checking
     normalized = path.replace("\\", "/")
     if ".." in normalized:
-        return False, "Path cannot contain '..' (parent directory traversal)"
+        return False, "Path cannot contain '..'. Use a relative path like 'tests' or 'src/app' instead"
 
     # Check for absolute paths, invalid characters, and validate path format
     error_msg = ""
