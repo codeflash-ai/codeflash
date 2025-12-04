@@ -2072,7 +2072,7 @@ class FunctionOptimizer:
                 testing_type=TestingMode.LINE_PROFILE,
                 test_env=test_env,
                 test_files=self.test_files,
-                optimization_iteration=0,
+                optimization_iteration=candidate_index,
                 testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
                 enable_coverage=False,
                 code_context=code_context,
