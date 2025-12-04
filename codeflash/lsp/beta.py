@@ -23,6 +23,7 @@ from codeflash.cli_cmds.cmd_init import (
     get_valid_subdirs,
     is_valid_pyproject_toml,
 )
+from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.git_worktree_utils import create_worktree_snapshot_commit
 from codeflash.code_utils.shell_utils import save_api_key_to_rc
@@ -191,9 +192,16 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
         return getattr(cfg, key, default)
 
     tests_root = get_config_value("tests_root", "")
-    # Validate tests_root directory exists if provided
+    # Validate tests_root path format and safety
     if tests_root:
-        # Resolve path relative to config file directory or current working directory
+        is_valid, error_msg = validate_relative_directory_path(tests_root)
+        if not is_valid:
+            return {
+                "status": "error",
+                "message": f"Invalid 'tests_root': {error_msg}",
+                "field_errors": {"tests_root": error_msg},
+            }
+        # Validate tests_root directory exists if provided
         base_dir = cfg_file.parent if cfg_file else Path.cwd()
         tests_root_path = (base_dir / tests_root).resolve()
         if not tests_root_path.exists() or not tests_root_path.is_dir():
@@ -203,8 +211,19 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
                 "field_errors": {"tests_root": f"Directory does not exist at {tests_root_path}"},
             }
 
+    # Validate module_root path format and safety
+    module_root = get_config_value("module_root", "")
+    if module_root:
+        is_valid, error_msg = validate_relative_directory_path(module_root)
+        if not is_valid:
+            return {
+                "status": "error",
+                "message": f"Invalid 'module_root': {error_msg}",
+                "field_errors": {"module_root": error_msg},
+            }
+
     setup_info = VsCodeSetupInfo(
-        module_root=get_config_value("module_root", ""),
+        module_root=module_root,
         tests_root=tests_root,
         test_framework=get_config_value("test_framework", "pytest"),
         formatter=get_formatter_cmds(get_config_value("formatter_cmds", "disabled")),
