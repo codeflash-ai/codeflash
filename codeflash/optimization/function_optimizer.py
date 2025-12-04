@@ -1806,7 +1806,7 @@ class FunctionOptimizer:
         console.rule()
         return Failure("Test results did not match the test results of the original code.")
 
-    def run_optimized_candidate(
+    def run_optimized_candidate(  # noqa: PLR0911
         self,
         *,
         optimization_candidate_index: int,
@@ -1924,6 +1924,9 @@ class FunctionOptimizer:
                             candidate=new_candidate,
                             exp_type=exp_type,
                         )
+                    msg = "No functions were replaced in the optimized code. Skipping optimization candidate."
+                    logger.warning(f"force_lsp|{msg}")
+                    return Failure(msg), candidate
                 except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
                     logger.error(e)
                     self.write_code_and_helpers(
