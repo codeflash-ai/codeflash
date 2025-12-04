@@ -280,6 +280,7 @@ class FunctionOptimizer:
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
         self.optimization_review = ""
+        self.ast_code_to_id = {}
         # SQLite database setup for logging
         self.code_repair_log_db = Path(__file__).parent / "code_repair_logs_cf.db"
 
@@ -519,7 +520,7 @@ class FunctionOptimizer:
         console.rule()
 
         future_all_refinements: list[concurrent.futures.Future] = []
-        ast_code_to_id = {}
+        self.ast_code_to_id.clear()
         valid_optimizations = []
         optimizations_post = {}  # we need to overwrite some opt candidates' code strings as they are no longer evaluated, instead their shorter/longer versions might be evaluated
 
@@ -598,11 +599,11 @@ class FunctionOptimizer:
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = normalize_code(candidate.source_code.flat.strip())
-                if normalized_code in ast_code_to_id:
+                if normalized_code in self.ast_code_to_id:
                     logger.info(
                         "Current candidate has been encountered before in testing, Skipping optimization candidate."
                     )
-                    past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
+                    past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
                     # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
                     speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
                     is_correct[candidate.optimization_id] = is_correct[past_opt_id]
@@ -612,16 +613,18 @@ class FunctionOptimizer:
                         optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[
                             past_opt_id
                         ]
-                    optimizations_post[candidate.optimization_id] = ast_code_to_id[normalized_code][
+                    optimizations_post[candidate.optimization_id] = self.ast_code_to_id[normalized_code][
                         "shorter_source_code"
                     ].markdown
-                    optimizations_post[past_opt_id] = ast_code_to_id[normalized_code]["shorter_source_code"].markdown
+                    optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code][
+                        "shorter_source_code"
+                    ].markdown
                     new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
                     if (
-                        new_diff_len < ast_code_to_id[normalized_code]["diff_len"]
+                        new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]
                     ):  # new candidate has a shorter diff than the previously encountered one
-                        ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
-                        ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
+                        self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
+                        self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
                     if candidate.optimization_id.endswith("cdrp"):
                         log_code_repair_to_db(
                             code_repair_log_db=self.code_repair_log_db,
@@ -636,7 +639,7 @@ class FunctionOptimizer:
                             else "no",
                         )
                     continue
-                ast_code_to_id[normalized_code] = {
+                self.ast_code_to_id[normalized_code] = {
                     "optimization_id": candidate.optimization_id,
                     "shorter_source_code": candidate.source_code,
                     "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
@@ -657,6 +660,9 @@ class FunctionOptimizer:
                     speedup_ratios[candidate.optimization_id] = None
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
+                    # override the candidate if the optimization_id has changed, this may happen if the candidate was modified by the code-repair
+                    if candidate.optimization_id != candidate_result.optimized_candidate.optimization_id:
+                        candidate = candidate_result.optimized_candidate
                     best_test_runtime = candidate_result.best_test_runtime
                     optimized_runtimes[candidate.optimization_id] = best_test_runtime
                     is_correct[candidate.optimization_id] = True
@@ -821,7 +827,7 @@ class FunctionOptimizer:
         for valid_opt in valid_optimizations:
             valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
             new_candidate_with_shorter_code = OptimizedCandidate(
-                source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
+                source_code=self.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
                 explanation=valid_opt.candidate.explanation,
             )
@@ -1946,7 +1952,18 @@ class FunctionOptimizer:
 
                 code_print(new_candidate.source_code.flat)
 
+                normalized_code = normalize_code(candidate.source_code.flat.strip())
+                self.ast_code_to_id[normalized_code] = {
+                    "optimization_id": candidate.optimization_id,
+                    "shorter_source_code": candidate.source_code,
+                    "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
+                }
+
                 try:
+                    # revert first to original code then replace with new repaired code, so we don't get any weird behavior
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    )
                     did_update = self.replace_function_and_helpers_with_optimized_code(
                         code_context=code_context,
                         optimized_code=new_candidate.source_code,
@@ -2048,6 +2065,7 @@ class FunctionOptimizer:
                     )
             return Success(
                 OptimizedCandidateResult(
+                    optimized_candidate=candidate,
                     max_loop_count=loop_count,
                     best_test_runtime=total_candidate_timing,
                     behavior_test_results=candidate_behavior_results,

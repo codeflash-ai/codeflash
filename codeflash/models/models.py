@@ -302,6 +302,7 @@ class CodeContextType(str, Enum):
 
 
 class OptimizedCandidateResult(BaseModel):
+    optimized_candidate: OptimizedCandidate
     max_loop_count: int
     best_test_runtime: int
     behavior_test_results: TestResults
