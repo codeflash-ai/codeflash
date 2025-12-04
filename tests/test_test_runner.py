@@ -34,6 +34,14 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         tests_project_rootdir=cur_dir_path.parent,
     )
 
+    test_env = os.environ.copy()
+    test_env["CODEFLASH_TEST_ITERATION"] = "0"
+    test_env["CODEFLASH_TRACER_DISABLE"] = "1"
+    if "PYTHONPATH" not in test_env:
+        test_env["PYTHONPATH"] = str(config.project_root_path)
+    else:
+        test_env["PYTHONPATH"] += os.pathsep + str(config.project_root_path)
+
     with tempfile.TemporaryDirectory(dir=cur_dir_path) as temp_dir:
         test_file_path = Path(temp_dir) / "test_xx.py"
         test_files = TestFiles(
@@ -44,7 +52,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
             test_files,
             test_framework=config.test_framework,
             cwd=Path(config.project_root_path),
-            test_env=os.environ.copy(),
+            test_env=test_env,
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"
