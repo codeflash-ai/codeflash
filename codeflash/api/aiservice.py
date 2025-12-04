@@ -307,7 +307,14 @@ class AiServiceClient:
         """
         console.rule()
         try:
-            response = self.make_ai_service_request("/code_repair", payload=request, timeout=120)
+            payload = {
+                "optimization_id": request.optimization_id,
+                "original_source_code": request.original_source_code,
+                "modified_source_code": request.modified_source_code,
+                "trace_id": request.trace_id,
+                "test_diffs": request.test_diffs,
+            }
+            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating optimization repair: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})

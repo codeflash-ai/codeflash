@@ -703,7 +703,7 @@ class FunctionOptimizer:
                             async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
-                        # # queue corresponding refined optimization for best optimization
+                        # queue corresponding refined optimization for best optimization
                         if not candidate.optimization_id.endswith("refi"):
                             future_all_refinements.append(
                                 self.refine_optimizations(
@@ -1896,7 +1896,11 @@ class FunctionOptimizer:
                     if not new_candidate:
                         return Failure("Code repair failed to generate a valid candidate."), candidate
 
-                code_print(new_candidate.source_code.flat)
+                code_print(
+                    new_candidate.source_code.flat,
+                    file_name=f"candidate_{optimization_candidate_index}.py",
+                    function_name=self.function_to_optimize.function_name,
+                )
                 normalized_code = normalize_code(new_candidate.source_code.flat.strip())
                 self.ast_code_to_id[normalized_code] = {
                     "optimization_id": new_candidate.optimization_id,
