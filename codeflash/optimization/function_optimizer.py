@@ -1951,12 +1951,11 @@ class FunctionOptimizer:
                         return Failure("Code repair failed to generate a valid candidate.")
 
                 code_print(new_candidate.source_code.flat)
-
-                normalized_code = normalize_code(candidate.source_code.flat.strip())
+                normalized_code = normalize_code(new_candidate.source_code.flat.strip())
                 self.ast_code_to_id[normalized_code] = {
-                    "optimization_id": candidate.optimization_id,
-                    "shorter_source_code": candidate.source_code,
-                    "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
+                    "optimization_id": new_candidate.optimization_id,
+                    "shorter_source_code": new_candidate.source_code,
+                    "diff_len": diff_length(new_candidate.source_code.flat, code_context.read_writable_code.flat),
                 }
 
                 try:
