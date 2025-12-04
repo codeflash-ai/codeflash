@@ -52,7 +52,6 @@ class TestDiffScope(str, Enum):
     RETURN_VALUE = "return_value"
     STDOUT = "stdout"
     DID_PASS = "did_pass"  # noqa: S105
-    TIMED_OUT = "timed_out"
 
 
 @dataclass

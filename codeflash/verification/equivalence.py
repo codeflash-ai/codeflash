@@ -65,8 +65,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         test_diff = TestDiff(
             scope=TestDiffScope.RETURN_VALUE,
-            original_value=f"{original_test_result.return_value!r}",
-            candidate_value=f"{cdd_test_result.return_value!r}",
+            original_value=repr(original_test_result.return_value),
+            candidate_value=repr(cdd_test_result.return_value),
             test_src_code=test_src_code,
             candidate_pytest_error=cdd_pytest_error,
             original_pass=original_test_result.did_pass,
@@ -88,8 +88,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                 )
             except Exception as e:
                 logger.error(e)
-            break
-        if (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
+        elif (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
         ):
             test_diff.scope = TestDiffScope.STDOUT
@@ -97,7 +96,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             test_diff.candidate_value = str(cdd_test_result.stdout)
             test_diffs.append(test_diff)
 
-        if original_test_result.test_type in {
+        elif original_test_result.test_type in {
             TestType.EXISTING_UNIT_TEST,
             TestType.CONCOLIC_COVERAGE_TEST,
             TestType.GENERATED_REGRESSION,

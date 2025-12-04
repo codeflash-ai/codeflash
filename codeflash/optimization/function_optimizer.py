@@ -461,6 +461,13 @@ class FunctionOptimizer:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
+    def reset_optimization_metrics_for_candidate(
+        self, opt_id: str, speedup_ratios: dict, is_correct: dict, optimized_runtimes: dict
+    ) -> None:
+        speedup_ratios[opt_id] = None
+        is_correct[opt_id] = False
+        optimized_runtimes[opt_id] = None
+
     def was_candidate_tested_before(self, normalized_code: str) -> bool:
         # check if this code has been evaluated before by checking the ast normalized code string
         return normalized_code in self.ast_code_to_id
@@ -602,6 +609,9 @@ class FunctionOptimizer:
                     "shorter_source_code": candidate.source_code,
                     "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
                 }
+                self.reset_optimization_metrics_for_candidate(
+                    candidate.optimization_id, speedup_ratios, is_correct, optimized_runtimes
+                )
                 run_results, new_candidate = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     baseline_results=original_code_baseline,
@@ -617,9 +627,9 @@ class FunctionOptimizer:
 
                 console.rule()
                 if not is_successful(run_results):
-                    optimized_runtimes[candidate.optimization_id] = None
-                    is_correct[candidate.optimization_id] = False
-                    speedup_ratios[candidate.optimization_id] = None
+                    self.reset_optimization_metrics_for_candidate(
+                        candidate.optimization_id, speedup_ratios, is_correct, optimized_runtimes
+                    )
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
