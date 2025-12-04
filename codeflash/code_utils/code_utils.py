@@ -380,24 +380,26 @@ def extract_unique_errors(pytest_output: str) -> set[str]:
 
 def validate_relative_directory_path(path: str) -> tuple[bool, str]:
     """Validate that a path is a safe relative directory path.
-    
+
     Prevents path traversal attacks and invalid paths.
     Works cross-platform (Windows, Linux, macOS).
-    
+
     Args:
         path: The path string to validate
-        
+
     Returns:
         tuple[bool, str]: (is_valid, error_message)
         - is_valid: True if path is valid, False otherwise
         - error_message: Empty string if valid, error description if invalid
+
     """
+    # Check for empty path
     if not path or not path.strip():
         return False, "Path cannot be empty"
-    
+
     # Normalize whitespace
     path = path.strip()
-    
+
     # Check for shell commands or dangerous patterns
     dangerous_patterns = [
         "cd ",
@@ -423,36 +425,26 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
     for pattern in dangerous_patterns:
         if pattern in path_lower:
             return False, f"Path contains invalid characters or commands: {pattern.strip()}"
-    
+
     # Check for path traversal attempts (cross-platform)
-    # Normalize path separators for checking
     normalized = path.replace("\\", "/")
     if ".." in normalized:
         return False, "Path cannot contain '..' (parent directory traversal)"
-    
-    # Check for absolute paths (Windows and Unix)
-    if os.path.isabs(path):
-        return False, "Path must be relative, not absolute"
-    
-    # Check for invalid characters (OS-specific)
-    invalid_chars = set()
-    if os.name == "nt":  # Windows
-        invalid_chars = {'<', '>', ':', '"', '|', '?', '*'}
-    else:  # Unix-like
-        invalid_chars = {'\0'}
-    
-    if any(char in path for char in invalid_chars):
-        return False, f"Path contains invalid characters for this operating system"
-    
-    # Validate using pathlib to ensure it's a valid path structure
-    try:
-        path_obj = Path(path)
-        # Check if path would resolve outside the current directory
-        # This is a safety check for edge cases
-        parts = path_obj.parts
-        if any(part == ".." for part in parts):
-            return False, "Path cannot contain '..' (parent directory traversal)"
-    except (ValueError, OSError) as e:
-        return False, f"Invalid path format: {str(e)}"
-    
+
+    # Check for absolute paths and invalid characters
+    invalid_chars = {"<", ">", ":", '"', "|", "?", "*"} if os.name == "nt" else {"\0"}
+    error_msg = ""
+    if Path(path).is_absolute():
+        error_msg = "Path must be relative, not absolute"
+    elif any(char in path for char in invalid_chars):
+        error_msg = "Path contains invalid characters for this operating system"
+    else:
+        # Validate using pathlib to ensure it's a valid path structure
+        try:
+            Path(path)
+        except (ValueError, OSError) as e:
+            error_msg = f"Invalid path format: {e!s}"
+
+    if error_msg:
+        return False, error_msg
     return True, ""
