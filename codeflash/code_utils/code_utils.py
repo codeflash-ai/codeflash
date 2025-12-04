@@ -19,6 +19,35 @@ from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 from codeflash.lsp.helpers import is_LSP_enabled
 
+_DANGEROUS_PATTERNS = [
+    "cd ",
+    "ls ",
+    "rm ",
+    "mkdir ",
+    "rmdir ",
+    "del ",
+    "dir ",
+    "type ",
+    "cat ",
+    "echo ",
+    "&&",
+    "||",
+    ";",
+    "|",
+    ">",
+    "<",
+    "$",
+    "`",
+]
+
+_DANGEROUS_PATTERNS_SET = set(_DANGEROUS_PATTERNS)
+
+_DANGEROUS_PATTERNS_LOWER = tuple(pat.lower() for pat in _DANGEROUS_PATTERNS)
+
+_INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
+
+_INVALID_CHARS_UNIX = {"\0"}
+
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
 BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
@@ -393,50 +422,31 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
         - error_message: Empty string if valid, error description if invalid
 
     """
-    # Check for empty path
     if not path or not path.strip():
         return False, "Path cannot be empty"
 
     # Normalize whitespace
     path = path.strip()
-
-    # Check for shell commands or dangerous patterns
-    dangerous_patterns = [
-        "cd ",
-        "ls ",
-        "rm ",
-        "mkdir ",
-        "rmdir ",
-        "del ",
-        "dir ",
-        "type ",
-        "cat ",
-        "echo ",
-        "&&",
-        "||",
-        ";",
-        "|",
-        ">",
-        "<",
-        "$",
-        "`",
-    ]
     path_lower = path.lower()
-    for pattern in dangerous_patterns:
-        if pattern in path_lower:
-            return False, f"Path contains invalid characters or commands: {pattern.strip()}"
+    # Instead of for-loop, use generator with next() for early exit
+    found_pattern = next((pattern for pattern in _DANGEROUS_PATTERNS_LOWER if pattern in path_lower), None)
+    if found_pattern is not None:
+        return False, f"Path contains invalid characters or commands: {found_pattern.strip()}"
 
     # Check for path traversal attempts (cross-platform)
+    # Normalize path separators for checking
     normalized = path.replace("\\", "/")
     if ".." in normalized:
         return False, "Path cannot contain '..' (parent directory traversal)"
 
-    # Check for absolute paths and invalid characters
-    invalid_chars = {"<", ">", ":", '"', "|", "?", "*"} if os.name == "nt" else {"\0"}
+    # Check for absolute paths, invalid characters, and validate path format
     error_msg = ""
     if Path(path).is_absolute():
         error_msg = "Path must be relative, not absolute"
-    elif any(char in path for char in invalid_chars):
+    elif os.name == "nt":  # Windows
+        if any(char in _INVALID_CHARS_NT for char in path):
+            error_msg = "Path contains invalid characters for this operating system"
+    elif "\0" in path:  # Unix-like
         error_msg = "Path contains invalid characters for this operating system"
     else:
         # Validate using pathlib to ensure it's a valid path structure
