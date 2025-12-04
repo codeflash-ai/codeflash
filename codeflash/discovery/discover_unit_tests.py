@@ -584,20 +584,42 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    
+    logger.info(f"!lsp|Starting pytest discovery. Cwd: {project_root}")
+    discovery_script = Path(__file__).parent / "pytest_new_process_discovery.py"
+
+    run_kwargs = {
+        "cwd": project_root,
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "stdin": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        # Prevent console window spawning on Windows which can cause hangs in LSP
+        run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
     with custom_addopts():
-        result = subprocess.run(
-            [
-                SAFE_SYS_EXECUTABLE,
-                Path(__file__).parent / "pytest_new_process_discovery.py",
-                str(project_root),
-                str(tests_root),
-                str(tmp_pickle_path),
-            ],
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    SAFE_SYS_EXECUTABLE,
+                    discovery_script,
+                    str(project_root),
+                    str(tests_root),
+                    str(tmp_pickle_path),
+                ],
+                **run_kwargs,
+                timeout=60,
+            )
+            logger.info(f"!lsp|Pytest discovery finished with code {result.returncode}")
+        except subprocess.TimeoutExpired:
+            logger.error("!lsp|Pytest discovery timed out after 60s")
+            result = subprocess.CompletedProcess(args=[], returncode=-1, stdout="", stderr="Timeout")
+        except Exception as e:
+            logger.error(f"!lsp|Pytest discovery failed: {e}")
+            result = subprocess.CompletedProcess(args=[], returncode=-1, stdout="", stderr=str(e))
+
     try:
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)

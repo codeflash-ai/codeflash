@@ -479,10 +479,13 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
         server.current_optimization_init_result = initialization_result.unwrap()
         server.show_message_log(f"Successfully initialized optimization for {params.functionName}", "Info")
 
-        files = [document.path]
+        # Use the worktree file path (which is normalized) instead of document.path
+        # document.path might be malformed on Windows (missing drive letter)
+        worktree_file_path = str(server.optimizer.args.file.resolve())
+        files = [worktree_file_path]
 
         _, _, original_helpers = server.current_optimization_init_result
-        files.extend([str(helper_path) for helper_path in original_helpers])
+        files.extend([str(helper_path.resolve()) for helper_path in original_helpers])
 
         return {"functionName": params.functionName, "status": "success", "files_inside_context": files}
 
