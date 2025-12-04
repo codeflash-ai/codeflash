@@ -308,10 +308,10 @@ class AiServiceClient:
         console.rule()
         try:
             response = self.make_ai_service_request("/code_repair", payload=request, timeout=120)
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating optimization repair: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return []
+            return None
 
         if response.status_code == 200:
             refined_optimization = response.json()
