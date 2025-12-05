@@ -77,6 +77,7 @@ from codeflash.models.models import (
     OptimizationSet,
     OptimizedCandidate,
     OptimizedCandidateResult,
+    OptimizedCandidateSource,
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
@@ -739,7 +740,7 @@ class FunctionOptimizer:
                         )
                         valid_optimizations.append(best_optimization)
                         # queue corresponding refined optimization for best optimization
-                        if not candidate.optimization_id.endswith("refi"):
+                        if candidate.source != OptimizedCandidateSource.REFINE:
                             self.future_all_refinements.append(
                                 self.refine_optimizations(
                                     valid_optimizations=[best_optimization],
@@ -1908,12 +1909,8 @@ class FunctionOptimizer:
                 console.rule()
             else:
                 result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
-                if result_unmatched_perc > 0.5:
+                if candidate.source == OptimizedCandidateSource.REPAIR or result_unmatched_perc > 0.5:
                     # if the test unmatched percentage is greater than 50%, we can't fix it
-                    return self.get_results_not_matched_error()
-
-                if candidate.optimization_id.endswith("cdrp"):
-                    # prevent looping for now
                     return self.get_results_not_matched_error()
 
                 ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client

@@ -383,11 +383,19 @@ class TestsInFile:
     test_type: TestType
 
 
+class OptimizedCandidateSource(enum.Enum, str):
+    OPTIMIZE = "OPTIMIZE"
+    OPTIMIZE_LP = "OPTIMIZE_LP"
+    REFINE = "REFINE"
+    REPAIR = "REPAIR"
+
+
 @dataclass(frozen=True)
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
+    source: OptimizedCandidateSource
 
 
 @dataclass(frozen=True)
