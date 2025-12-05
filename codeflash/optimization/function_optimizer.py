@@ -69,6 +69,7 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
+    AIServiceCodeRepairRequest,
     BestOptimization,
     CodeOptimizationContext,
     GeneratedTests,
@@ -76,6 +77,7 @@ from codeflash.models.models import (
     OptimizationSet,
     OptimizedCandidate,
     OptimizedCandidateResult,
+    OptimizedCandidateSource,
     OriginalCodeBaseline,
     TestFile,
     TestFiles,
@@ -113,6 +115,7 @@ if TYPE_CHECKING:
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
+        TestDiff,
     )
     from codeflash.verification.verification_utils import TestConfig
 
@@ -124,7 +127,8 @@ class CandidateProcessor:
         self,
         initial_candidates: list,
         future_line_profile_results: concurrent.futures.Future,
-        future_all_refinements: list,
+        future_all_refinements: list[concurrent.futures.Future],
+        future_all_code_repair: list[concurrent.futures.Future],
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
@@ -137,6 +141,7 @@ class CandidateProcessor:
 
         self.future_line_profile_results = future_line_profile_results
         self.future_all_refinements = future_all_refinements
+        self.future_all_code_repair = future_all_code_repair
 
     def get_next_candidate(self) -> OptimizedCandidate | None:
         """Get the next candidate from the queue, handling async results as needed."""
@@ -149,6 +154,8 @@ class CandidateProcessor:
         """Handle empty queue by checking for pending async results."""
         if not self.line_profiler_done:
             return self._process_line_profiler_results()
+        if len(self.future_all_code_repair) > 0:
+            return self._process_code_repair()
         if self.line_profiler_done and not self.refinement_done:
             return self._process_refinement_results()
         return None  # All done
@@ -188,7 +195,27 @@ class CandidateProcessor:
             logger.info(
                 f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
             )
+        self.future_all_refinements = []
         self.refinement_done = True
+
+        return self.get_next_candidate()
+
+    def _process_code_repair(self) -> OptimizedCandidate | None:
+        logger.info(f"loading|Repairing {len(self.future_all_code_repair)} candidates")
+        concurrent.futures.wait(self.future_all_code_repair)
+        candidates_added = 0
+        for future_code_repair in self.future_all_code_repair:
+            possible_code_repair = future_code_repair.result()
+            if possible_code_repair:
+                self.candidate_queue.put(possible_code_repair)
+                self.candidate_len += 1
+                candidates_added += 1
+
+        if candidates_added > 0:
+            logger.info(
+                f"Added {candidates_added} candidates from code repair, total candidates now: {self.candidate_len}"
+            )
+        self.future_all_code_repair = []
 
         return self.get_next_candidate()
 
@@ -247,6 +274,9 @@ class FunctionOptimizer:
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
         self.optimization_review = ""
+        self.ast_code_to_id = {}
+        self.future_all_refinements: list[concurrent.futures.Future] = []
+        self.future_all_code_repair: list[concurrent.futures.Future] = []
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -387,7 +417,6 @@ class FunctionOptimizer:
         initialization_result = self.can_be_optimized()
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
-
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
 
         code_print(
@@ -459,6 +488,48 @@ class FunctionOptimizer:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
+    def reset_optimization_metrics_for_candidate(
+        self, opt_id: str, speedup_ratios: dict, is_correct: dict, optimized_runtimes: dict
+    ) -> None:
+        speedup_ratios[opt_id] = None
+        is_correct[opt_id] = False
+        optimized_runtimes[opt_id] = None
+
+    def was_candidate_tested_before(self, normalized_code: str) -> bool:
+        # check if this code has been evaluated before by checking the ast normalized code string
+        return normalized_code in self.ast_code_to_id
+
+    def update_results_for_duplicate_candidate(
+        self,
+        candidate: OptimizedCandidate,
+        code_context: CodeOptimizationContext,
+        normalized_code: str,
+        speedup_ratios: dict,
+        is_correct: dict,
+        optimized_runtimes: dict,
+        optimized_line_profiler_results: dict,
+        optimizations_post: dict,
+    ) -> None:
+        logger.info("Current candidate has been encountered before in testing, Skipping optimization candidate.")
+        past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
+        # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
+        speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
+        is_correct[candidate.optimization_id] = is_correct[past_opt_id]
+        optimized_runtimes[candidate.optimization_id] = optimized_runtimes[past_opt_id]
+        # line profiler results only available for successful runs
+        if past_opt_id in optimized_line_profiler_results:
+            optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[past_opt_id]
+        optimizations_post[candidate.optimization_id] = self.ast_code_to_id[normalized_code][
+            "shorter_source_code"
+        ].markdown
+        optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
+        new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
+        if (
+            new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]
+        ):  # new candidate has a shorter diff than the previously encountered one
+            self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
+            self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
+
     def determine_best_candidate(
         self,
         *,
@@ -484,8 +555,10 @@ class FunctionOptimizer:
         )
         console.rule()
 
-        future_all_refinements: list[concurrent.futures.Future] = []
-        ast_code_to_id = {}
+        self.ast_code_to_id.clear()
+        self.future_all_refinements.clear()
+        self.future_all_code_repair.clear()
+
         valid_optimizations = []
         optimizations_post = {}  # we need to overwrite some opt candidates' code strings as they are no longer evaluated, instead their shorter/longer versions might be evaluated
 
@@ -506,7 +579,9 @@ class FunctionOptimizer:
         )
 
         # Initialize candidate processor
-        processor = CandidateProcessor(candidates, future_line_profile_results, future_all_refinements)
+        processor = CandidateProcessor(
+            candidates, future_line_profile_results, self.future_all_refinements, self.future_all_code_repair
+        )
         candidate_index = 0
 
         # Process candidates using queue-based approach
@@ -548,47 +623,39 @@ class FunctionOptimizer:
                     continue
                 # check if this code has been evaluated before by checking the ast normalized code string
                 normalized_code = normalize_code(candidate.source_code.flat.strip())
-                if normalized_code in ast_code_to_id:
-                    logger.info(
-                        "Current candidate has been encountered before in testing, Skipping optimization candidate."
+                if self.was_candidate_tested_before(normalized_code):
+                    self.update_results_for_duplicate_candidate(
+                        candidate=candidate,
+                        code_context=code_context,
+                        normalized_code=normalized_code,
+                        speedup_ratios=speedup_ratios,
+                        is_correct=is_correct,
+                        optimized_runtimes=optimized_runtimes,
+                        optimized_line_profiler_results=optimized_line_profiler_results,
+                        optimizations_post=optimizations_post,
                     )
-                    past_opt_id = ast_code_to_id[normalized_code]["optimization_id"]
-                    # update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
-                    speedup_ratios[candidate.optimization_id] = speedup_ratios[past_opt_id]
-                    is_correct[candidate.optimization_id] = is_correct[past_opt_id]
-                    optimized_runtimes[candidate.optimization_id] = optimized_runtimes[past_opt_id]
-                    # line profiler results only available for successful runs
-                    if past_opt_id in optimized_line_profiler_results:
-                        optimized_line_profiler_results[candidate.optimization_id] = optimized_line_profiler_results[
-                            past_opt_id
-                        ]
-                    optimizations_post[candidate.optimization_id] = ast_code_to_id[normalized_code][
-                        "shorter_source_code"
-                    ].markdown
-                    optimizations_post[past_opt_id] = ast_code_to_id[normalized_code]["shorter_source_code"].markdown
-                    new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
-                    if (
-                        new_diff_len < ast_code_to_id[normalized_code]["diff_len"]
-                    ):  # new candidate has a shorter diff than the previously encountered one
-                        ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
-                        ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
                     continue
-                ast_code_to_id[normalized_code] = {
+                self.ast_code_to_id[normalized_code] = {
                     "optimization_id": candidate.optimization_id,
                     "shorter_source_code": candidate.source_code,
                     "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
                 }
+
                 run_results = self.run_optimized_candidate(
                     optimization_candidate_index=candidate_index,
                     baseline_results=original_code_baseline,
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
+                    code_context=code_context,
+                    candidate=candidate,
+                    exp_type=exp_type,
                 )
+
                 console.rule()
                 if not is_successful(run_results):
-                    optimized_runtimes[candidate.optimization_id] = None
-                    is_correct[candidate.optimization_id] = False
-                    speedup_ratios[candidate.optimization_id] = None
+                    self.reset_optimization_metrics_for_candidate(
+                        candidate.optimization_id, speedup_ratios, is_correct, optimized_runtimes
+                    )
                 else:
                     candidate_result: OptimizedCandidateResult = run_results.unwrap()
                     best_test_runtime = candidate_result.best_test_runtime
@@ -672,21 +739,21 @@ class FunctionOptimizer:
                             async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
-                        # queue corresponding refined optimization for best optimization
-                        if not candidate.optimization_id.endswith("refi"):
-                            future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=self.executor,
-                                    function_references=function_references,
-                                )
-                            )
+                        # # queue corresponding refined optimization for best optimization
+                        # if candidate.source != OptimizedCandidateSource.REFINE:
+                        #     self.future_all_refinements.append(
+                        #         self.refine_optimizations(
+                        #             valid_optimizations=[best_optimization],
+                        #             original_code_baseline=original_code_baseline,
+                        #             code_context=code_context,
+                        #             trace_id=self.function_trace_id[:-4] + exp_type
+                        #             if self.experiment_id
+                        #             else self.function_trace_id,
+                        #             ai_service_client=ai_service_client,
+                        #             executor=self.executor,
+                        #             function_references=function_references,
+                        #         )
+                        #     )
                     else:
                         # For async functions, prioritize throughput metrics over runtime even for slow candidates
                         is_async = (
@@ -742,7 +809,7 @@ class FunctionOptimizer:
         for valid_opt in valid_optimizations:
             valid_opt_normalized_code = normalize_code(valid_opt.candidate.source_code.flat.strip())
             new_candidate_with_shorter_code = OptimizedCandidate(
-                source_code=ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
+                source_code=self.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
                 explanation=valid_opt.candidate.explanation,
             )
@@ -838,6 +905,27 @@ class FunctionOptimizer:
             for opt in valid_optimizations
         ]
         return executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
+
+    def repair_optimization(
+        self,
+        original_source_code: str,
+        modified_source_code: str,
+        test_diffs: list[TestDiff],
+        trace_id: str,
+        optimization_id: str,
+        past_trials: str,
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
+    ) -> concurrent.futures.Future[OptimizedCandidate | None]:
+        request = AIServiceCodeRepairRequest(
+            optimization_id=optimization_id,
+            original_source_code=original_source_code,
+            modified_source_code=modified_source_code,
+            test_diffs=test_diffs,
+            trace_id=trace_id,
+            past_trials=past_trials,
+        )
+        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1752,6 +1840,11 @@ class FunctionOptimizer:
             )
         )
 
+    def get_results_not_matched_error(self) -> Failure:
+        logger.info("h4|Test results did not match the test results of the original code ❌")
+        console.rule()
+        return Failure("Test results did not match the test results of the original code.")
+
     def run_optimized_candidate(
         self,
         *,
@@ -1759,6 +1852,9 @@ class FunctionOptimizer:
         baseline_results: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        code_context: CodeOptimizationContext,
+        candidate: OptimizedCandidate,
+        exp_type: str,
     ) -> Result[OptimizedCandidateResult, str]:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
 
@@ -1808,13 +1904,35 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            if compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results):
+            # print(type(code_context), type(candidate))
+            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+            if match:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                logger.info("h4|Test results did not match the test results of the original code ❌")
-                console.rule()
-                return Failure("Test results did not match the test results of the original code.")
+                result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
+                if candidate.source == OptimizedCandidateSource.REPAIR or result_unmatched_perc > 0.5:
+                    # if the test unmatched percentage is greater than 50%, we can't fix it
+                    return self.get_results_not_matched_error()
+
+                ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+                logger.info("Adding this to the repair queue")
+                for _ in range(3):
+                    # first candidate
+                    self.repair_optimization(
+                        original_source_code=code_context.read_writable_code.markdown,
+                        modified_source_code=candidate.source_code.markdown,
+                        test_diffs=diffs,
+                        trace_id=self.function_trace_id[:-4] + exp_type
+                        if self.experiment_id
+                        else self.function_trace_id,
+                        ai_service_client=ai_service_client,
+                        optimization_id=candidate.optimization_id,
+                        executor=self.executor,
+                        past_trials="",
+                    )
+                    # behavior to test, if pass break
+                return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
 
