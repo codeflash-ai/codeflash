@@ -324,15 +324,12 @@ class AiServiceClient:
             fixed_optimization = response.json()
             console.rule()
 
-            if not self._get_valid_candidates([fixed_optimization]):
+            valid_candidates = self._get_valid_candidates([fixed_optimization])
+            if not valid_candidates:
                 logger.error("Code repair failed to generate a valid candidate.")
                 return None
 
-            return OptimizedCandidate(
-                source_code=fixed_optimization["source_code"],
-                explanation=fixed_optimization["explanation"],
-                optimization_id=fixed_optimization["optimization_id"],
-            )
+            return valid_candidates[0]
 
         try:
             error = response.json()["error"]
