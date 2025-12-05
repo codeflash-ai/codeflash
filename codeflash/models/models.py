@@ -74,6 +74,7 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+    past_trials: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully

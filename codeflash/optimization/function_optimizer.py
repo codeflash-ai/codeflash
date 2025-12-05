@@ -739,21 +739,21 @@ class FunctionOptimizer:
                             async_throughput=candidate_result.async_throughput,
                         )
                         valid_optimizations.append(best_optimization)
-                        # queue corresponding refined optimization for best optimization
-                        if candidate.source != OptimizedCandidateSource.REFINE:
-                            self.future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=self.executor,
-                                    function_references=function_references,
-                                )
-                            )
+                        # # queue corresponding refined optimization for best optimization
+                        # if candidate.source != OptimizedCandidateSource.REFINE:
+                        #     self.future_all_refinements.append(
+                        #         self.refine_optimizations(
+                        #             valid_optimizations=[best_optimization],
+                        #             original_code_baseline=original_code_baseline,
+                        #             code_context=code_context,
+                        #             trace_id=self.function_trace_id[:-4] + exp_type
+                        #             if self.experiment_id
+                        #             else self.function_trace_id,
+                        #             ai_service_client=ai_service_client,
+                        #             executor=self.executor,
+                        #             function_references=function_references,
+                        #         )
+                        #     )
                     else:
                         # For async functions, prioritize throughput metrics over runtime even for slow candidates
                         is_async = (
@@ -913,6 +913,7 @@ class FunctionOptimizer:
         test_diffs: list[TestDiff],
         trace_id: str,
         optimization_id: str,
+        past_trials: str,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
     ) -> concurrent.futures.Future[OptimizedCandidate | None]:
@@ -922,6 +923,7 @@ class FunctionOptimizer:
             modified_source_code=modified_source_code,
             test_diffs=test_diffs,
             trace_id=trace_id,
+            past_trials=past_trials,
         )
         return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
 
@@ -1915,7 +1917,8 @@ class FunctionOptimizer:
 
                 ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
                 logger.info("Adding this to the repair queue")
-                self.future_all_code_repair.append(
+                for _ in range(3):
+                    # first candidate
                     self.repair_optimization(
                         original_source_code=code_context.read_writable_code.markdown,
                         modified_source_code=candidate.source_code.markdown,
@@ -1926,9 +1929,9 @@ class FunctionOptimizer:
                         ai_service_client=ai_service_client,
                         optimization_id=candidate.optimization_id,
                         executor=self.executor,
+                        past_trials="",
                     )
-                )
-
+                    # behavior to test, if pass break
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")

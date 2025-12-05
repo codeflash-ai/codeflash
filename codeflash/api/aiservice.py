@@ -315,6 +315,7 @@ class AiServiceClient:
                 "modified_source_code": request.modified_source_code,
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
+                "past_trials": request.past_trials,
             }
             response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
         except (requests.exceptions.RequestException, TypeError) as e:
