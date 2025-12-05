@@ -51,7 +51,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         ):
             continue
         if original_test_result is None or cdd_test_result is None:
-            return False, []
+            continue
         did_all_timeout = did_all_timeout and original_test_result.timed_out
         if original_test_result.timed_out:
             continue
