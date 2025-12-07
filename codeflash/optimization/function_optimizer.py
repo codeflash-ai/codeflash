@@ -1269,7 +1269,7 @@ class FunctionOptimizer:
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results, "pytest")
+            not coverage_critic(original_code_baseline.coverage_results)
             or not quantity_of_tests_critic(original_code_baseline)
         ):
             if self.args.override_fixtures:
@@ -1629,7 +1629,7 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        if not coverage_critic(coverage_results, "pytest"):
+        if not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
