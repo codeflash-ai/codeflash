@@ -85,7 +85,6 @@ def run_codeflash_command(
 
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
-    # Check if tests/pytest exists, otherwise use tests/ directly
     pytest_dir = cwd / "tests" / "pytest"
     test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
 
@@ -130,7 +129,6 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    # Always use pytest - test framework is specified via tests-root and module-root
     base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
@@ -189,7 +187,6 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    # Check if tests/pytest exists, otherwise use tests/ directly
     pytest_dir = cwd / "tests" / "pytest"
     test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
     clear_directory(test_root)

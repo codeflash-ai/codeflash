@@ -1615,7 +1615,7 @@ class FunctionOptimizer:
                     test_files=self.test_files,
                     optimization_iteration=0,
                     testing_time=total_looping_time,
-                    enable_coverage=True,  # Always enable coverage with pytest
+                    enable_coverage=True,
                     code_context=code_context,
                 )
             finally:
