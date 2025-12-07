@@ -799,7 +799,6 @@ def test_sync_sort():
             [CodePosition(6, 13), CodePosition(10, 13)],  # Lines where sync_sorter is called
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
