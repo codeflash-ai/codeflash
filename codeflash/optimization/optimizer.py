@@ -283,12 +283,6 @@ class Optimizer:
                 return
 
             function_to_tests, _ = self.discover_tests(file_to_funcs_to_optimize)
-            # --- TEMPORARY: Early exit after test discovery to avoid full optimization run ---
-            # This is intentionally hard-coded (no CLI flag) per request.
-            console.rule()
-            logger.info("Forced early exit after test discovery (temporary). Skipping optimization phase.")
-            return
-            # -------------------------------------------------------------------------------
             if self.args.all:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
