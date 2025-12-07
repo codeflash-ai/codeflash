@@ -12,6 +12,7 @@ pickle_path = sys.argv[3]
 collected_tests = []
 pytest_rootdir = None
 sys.path.insert(1, str(cwd))
+sys.path.insert(1, str(Path(cwd) / "src"))
 
 
 def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:

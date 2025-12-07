@@ -580,8 +580,8 @@ def discover_tests_pytest(
     discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
-    tests_root = cfg.tests_root
-    project_root = cfg.project_root_path
+    tests_root = cfg.tests_project_rootdir
+    project_root = cfg.tests_project_rootdir
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
     with custom_addopts():
