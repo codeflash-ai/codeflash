@@ -8,7 +8,6 @@ def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="remove_control_chars.py",
         function_name="CharacterRemover.remove_control_characters",
-        test_framework="pytest",
         min_improvement_x=0.1,
         coverage_expectations=[
             CoverageExpectation(

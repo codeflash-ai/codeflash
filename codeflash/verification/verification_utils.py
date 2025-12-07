@@ -75,7 +75,7 @@ class TestConfig:
     pytest_cmd: str = "pytest"
     benchmark_tests_root: Optional[Path] = None
     use_cache: bool = True
-    
+
     @property
     def test_framework(self) -> str:
         """Always returns 'pytest' as we use pytest for all tests."""

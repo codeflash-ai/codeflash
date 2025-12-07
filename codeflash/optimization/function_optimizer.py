@@ -1591,7 +1591,6 @@ class FunctionOptimizer:
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
-        test_framework = "pytest"  # Always use pytest for all tests
         success = True
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
