@@ -44,8 +44,7 @@ class Optimizer:
             tests_root=args.tests_root,
             tests_project_rootdir=args.test_project_root,
             project_root_path=args.project_root,
-            test_framework=args.test_framework,
-            pytest_cmd=args.pytest_cmd,
+            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") else "pytest",
             benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
@@ -274,10 +273,9 @@ class Optimizer:
             file_to_funcs_to_optimize, num_optimizable_functions
         )
         optimizations_found: int = 0
-        if self.args.test_framework == "pytest":
-            self.test_cfg.concolic_test_root_dir = Path(
-                tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
-            )
+        self.test_cfg.concolic_test_root_dir = Path(
+            tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
+        )
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:

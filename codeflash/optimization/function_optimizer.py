@@ -1053,7 +1053,7 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    test_framework=self.args.test_framework,
+                    test_framework="pytest",
                 )
                 if not success:
                     continue
@@ -1063,7 +1063,7 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    test_framework=self.args.test_framework,
+                    test_framework="pytest",
                 )
                 if not success:
                     continue
@@ -1271,7 +1271,7 @@ class FunctionOptimizer:
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
         if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results, self.args.test_framework)
+            not coverage_critic(original_code_baseline.coverage_results, "pytest")
             or not quantity_of_tests_critic(original_code_baseline)
         ):
             if self.args.override_fixtures:
@@ -1593,7 +1593,7 @@ class FunctionOptimizer:
     ) -> Result[tuple[OriginalCodeBaseline, list[str]], str]:
         line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         # For the original function - run the tests and get the runtime, plus coverage
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        test_framework = "pytest"  # Always use pytest for all tests
         success = True
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
@@ -1618,7 +1618,7 @@ class FunctionOptimizer:
                     test_files=self.test_files,
                     optimization_iteration=0,
                     testing_time=total_looping_time,
-                    enable_coverage=test_framework == "pytest",
+                    enable_coverage=True,  # Always enable coverage with pytest
                     code_context=code_context,
                 )
             finally:
@@ -1632,7 +1632,7 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        if not coverage_critic(coverage_results, self.args.test_framework):
+        if not coverage_critic(coverage_results, "pytest"):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
