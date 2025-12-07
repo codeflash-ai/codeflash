@@ -383,7 +383,7 @@ class TestsInFile:
     test_type: TestType
 
 
-class OptimizedCandidateSource(enum.Enum, str):
+class OptimizedCandidateSource(str, Enum):
     OPTIMIZE = "OPTIMIZE"
     OPTIMIZE_LP = "OPTIMIZE_LP"
     REFINE = "REFINE"

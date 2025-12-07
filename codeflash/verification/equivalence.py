@@ -28,6 +28,28 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     for test_id in test_ids_superset:
         original_test_result = original_results.get_by_unique_invocation_loop_id(test_id)
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
+
+        if cdd_test_result is not None and original_test_result is None:
+            continue
+        # If helper function instance_state verification is not present, that's ok. continue
+        if (
+            original_test_result.verification_type
+            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
+            and cdd_test_result is None
+        ):
+            continue
+        if original_test_result is None or cdd_test_result is None:
+            continue
+        did_all_timeout = did_all_timeout and original_test_result.timed_out
+        if original_test_result.timed_out:
+            continue
+        superset_obj = False
+        if original_test_result.verification_type and (
+            original_test_result.verification_type
+            in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
+        ):
+            superset_obj = True
+
         candidate_test_failures = candidate_results.test_failures
         original_test_failures = original_results.test_failures
         cdd_pytest_error = (
@@ -40,27 +62,6 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             if original_test_failures
             else ""
         )
-
-        if cdd_test_result is not None and original_test_result is None:
-            continue
-        # If helper function instance_state verification is not present, that's ok. continue
-        if (
-            original_test_result.verification_type
-            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
-            and cdd_test_result is None
-        ):
-            continue
-        if original_test_result is None or cdd_test_result is None:
-            return False, []
-        did_all_timeout = did_all_timeout and original_test_result.timed_out
-        if original_test_result.timed_out:
-            continue
-        superset_obj = False
-        if original_test_result.verification_type and (
-            original_test_result.verification_type
-            in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
-        ):
-            superset_obj = True
 
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         test_diff = TestDiff(
