@@ -81,7 +81,6 @@ def generate_concolic_tests(
                 tests_root=concolic_test_suite_dir,
                 tests_project_rootdir=test_cfg.concolic_test_root_dir,
                 project_root_path=args.project_root,
-                pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") else "pytest",
             )
             function_to_concolic_tests, num_discovered_concolic_tests, _ = discover_unit_tests(concolic_test_cfg)
             logger.info(

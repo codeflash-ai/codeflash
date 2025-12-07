@@ -44,7 +44,7 @@ class Optimizer:
             tests_root=args.tests_root,
             tests_project_rootdir=args.test_project_root,
             project_root_path=args.project_root,
-            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") else "pytest",
+            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") and args.pytest_cmd else "pytest",
             benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
