@@ -85,7 +85,9 @@ def run_codeflash_command(
 
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
-    test_root = cwd / "tests" / "pytest"  # Always use pytest
+    # Check if tests/pytest exists, otherwise use tests/ directly
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     env = os.environ.copy()
@@ -187,7 +189,9 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    test_root = cwd / "tests" / "pytest"  # Always use pytest
+    # Check if tests/pytest exists, otherwise use tests/ directly
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
     clear_directory(test_root)
     command = ["uv", "run", "--no-project", "-m", "codeflash.main", "optimize", "workload.py"]
     env = os.environ.copy()
