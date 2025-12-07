@@ -89,8 +89,6 @@ def run_codeflash_command(
     test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
-    logging.info(f"Executing command: {' '.join(command)}")
-    logging.info(f"Working directory: {cwd}")
     env = os.environ.copy()
     env['PYTHONIOENCODING'] = 'utf-8'
     process = subprocess.Popen(
