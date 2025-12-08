@@ -6,7 +6,7 @@ import contextvars
 import os
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import code_print
+from codeflash.cli_cmds.console import code_print, logger
 from codeflash.code_utils.git_worktree_utils import create_diff_patch_from_worktree
 from codeflash.either import is_successful
 
@@ -47,20 +47,23 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
 
     abort_if_cancelled(cancel_event)
 
-    ctx = contextvars.copy_context()
+    ctx_tests = contextvars.copy_context()
+    ctx_opts = contextvars.copy_context()
 
-    # Generate tests and optimizations in parallel
-    future_tests = function_optimizer.executor.submit(
-        ctx.run, function_optimizer.generate_and_instrument_tests, code_context
-    )
-    future_optimizations = function_optimizer.executor.submit(
-        ctx.run,
-        function_optimizer.generate_optimizations,
-        read_writable_code=code_context.read_writable_code,
-        read_only_context_code=code_context.read_only_context_code,
-        run_experiment=should_run_experiment,
-    )
+    def run_generate_tests():  # noqa: ANN202
+        return function_optimizer.generate_and_instrument_tests(code_context)
 
+    def run_generate_optimizations():  # noqa: ANN202
+        return function_optimizer.generate_optimizations(
+            read_writable_code=code_context.read_writable_code,
+            read_only_context_code=code_context.read_only_context_code,
+            run_experiment=should_run_experiment,
+        )
+
+    future_tests = function_optimizer.executor.submit(ctx_tests.run, run_generate_tests)
+    future_optimizations = function_optimizer.executor.submit(ctx_opts.run, run_generate_optimizations)
+
+    logger.info("loading|Generating optimizations and tests...")
     concurrent.futures.wait([future_tests, future_optimizations])
 
     test_setup_result = future_tests.result()
