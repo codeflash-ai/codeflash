@@ -22,6 +22,7 @@ from codeflash.code_utils.git_worktree_utils import (
     create_worktree_snapshot_commit,
     remove_worktree,
 )
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -269,6 +270,16 @@ class Optimizer:
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
+        if self.args.all:
+            three_min_in_ns = int(1.8e11)
+            console.rule()
+            pr_message = (
+                "\nCodeflash will keep opening pull requests as it finds optimizations." if not self.args.no_pr else ""
+            )
+            logger.info(
+                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project.{pr_message}"
+            )
+
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
