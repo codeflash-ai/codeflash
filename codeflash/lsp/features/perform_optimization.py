@@ -131,7 +131,10 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         "status": "success",
         "message": "Optimization completed successfully",
         "extra": f"Speedup: {speedup:.2f}x faster",
+        "original_runtime": original_code_baseline.runtime,
+        "optimized_runtime": best_optimization.runtime,
         "patch_file": str(patch_path),
         "task_id": params.task_id,
         "explanation": best_optimization.explanation_v2,
+        "optimizationReview": function_optimizer.optimization_review.capitalize(),
     }

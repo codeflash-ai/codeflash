@@ -98,8 +98,7 @@ import time
 import unittest
 
 import dill as pickle"""
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # timeout_decorator no longer used since pytest handles timeouts
     if extra_imports:
         imports += "\n" + extra_imports
     return imports
@@ -148,15 +147,14 @@ import time
 import unittest
 
 import dill as pickle"""
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # timeout_decorator no longer used since pytest handles timeouts
 
     imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
     wrapper_func = codeflash_wrap_string
     
     test_class_header = "class TestPigLatin(unittest.TestCase):"
-    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator = ""  # pytest-timeout handles timeouts now, not timeout_decorator
     
     expected = imports + "\n\n\n" + wrapper_func + "\n" + test_class_header + "\n\n"
     if test_decorator:
@@ -1585,7 +1583,6 @@ import time
 import unittest
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -1595,7 +1592,6 @@ from code_to_optimize.bubble_sort import sorter
             + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1626,8 +1622,6 @@ import os
 import time
 import unittest
 
-import timeout_decorator
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -1636,7 +1630,6 @@ from code_to_optimize.bubble_sort import sorter
             + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         input = [5, 4, 3, 2, 1, 0]
@@ -1865,7 +1858,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1892,11 +1885,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -2116,7 +2108,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports()
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
 """
@@ -2148,13 +2140,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
-        imports_perf += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    else:
-        imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
 """
@@ -2378,7 +2367,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -2406,11 +2395,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -3225,11 +3213,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.sleeptime import accurate_sleepfunc"
     
-    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator = ""  # pytest-timeout handles timeouts now
     test_class = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
@@ -3307,6 +3294,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 

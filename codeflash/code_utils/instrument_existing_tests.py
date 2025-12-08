@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -329,17 +328,6 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "unittest" and platform.system() != "Windows":
-                # Only add timeout decorator on non-Windows platforms
-                # Windows doesn't support SIGALRM signal required by timeout_decorator
-
-                node.decorator_list.append(
-                    ast.Call(
-                        func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                        args=[ast.Constant(value=15)],
-                        keywords=[],
-                    )
-                )
             i = len(node.body) - 1
             while i >= 0:
                 line_node = node.body[i]
@@ -505,25 +493,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
             self.class_name = function.top_level_parent_name
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        # Add timeout decorator for unittest test classes if needed
-        if self.test_framework == "unittest":
-            timeout_decorator = ast.Call(
-                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                args=[ast.Constant(value=15)],
-                keywords=[],
-            )
-            for item in node.body:
-                if (
-                    isinstance(item, ast.FunctionDef)
-                    and item.name.startswith("test_")
-                    and not any(
-                        isinstance(d, ast.Call)
-                        and isinstance(d.func, ast.Name)
-                        and d.func.id == "timeout_decorator.timeout"
-                        for d in item.decorator_list
-                    )
-                ):
-                    item.decorator_list.append(timeout_decorator)
         return self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
@@ -542,25 +511,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
     def _process_test_function(
         self, node: ast.AsyncFunctionDef | ast.FunctionDef
     ) -> ast.AsyncFunctionDef | ast.FunctionDef:
-        # Optimize the search for decorator presence
-        if self.test_framework == "unittest":
-            found_timeout = False
-            for d in node.decorator_list:
-                # Avoid isinstance(d.func, ast.Name) if d is not ast.Call
-                if isinstance(d, ast.Call):
-                    f = d.func
-                    # Avoid attribute lookup if f is not ast.Name
-                    if isinstance(f, ast.Name) and f.id == "timeout_decorator.timeout":
-                        found_timeout = True
-                        break
-            if not found_timeout:
-                timeout_decorator = ast.Call(
-                    func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                    args=[ast.Constant(value=15)],
-                    keywords=[],
-                )
-                node.decorator_list.append(timeout_decorator)
-
         # Initialize counter for this test function
         if node.name not in self.async_call_counter:
             self.async_call_counter[node.name] = 0
@@ -684,27 +634,6 @@ class FunctionImportedAsVisitor(ast.NodeVisitor):
                     )
 
 
-def instrument_source_module_with_async_decorators(
-    source_path: Path, function_to_optimize: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
-) -> tuple[bool, str | None]:
-    if not function_to_optimize.is_async:
-        return False, None
-
-    try:
-        with source_path.open(encoding="utf8") as f:
-            source_code = f.read()
-
-        modified_code, decorator_added = add_async_decorator_to_function(source_code, function_to_optimize, mode)
-
-        if decorator_added:
-            return True, modified_code
-
-    except Exception:
-        return False, None
-    else:
-        return False, None
-
-
 def inject_async_profiling_into_existing_test(
     test_path: Path,
     call_positions: list[CodePosition],
@@ -736,8 +665,6 @@ def inject_async_profiling_into_existing_test(
 
     # Add necessary imports
     new_imports = [ast.Import(names=[ast.alias(name="os")])]
-    if test_framework == "unittest":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
 
     tree.body = [*new_imports, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
@@ -783,8 +710,6 @@ def inject_profiling_into_existing_test(
                 ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
             ]
         )
-    if test_framework == "unittest" and platform.system() != "Windows":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     additional_functions = [create_wrapper_function(mode)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
@@ -1288,25 +1213,29 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
 
 
 def add_async_decorator_to_function(
-    source_code: str, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
-) -> tuple[str, bool]:
-    """Add async decorator to an async function definition.
+    source_path: Path, function: FunctionToOptimize, mode: TestingMode = TestingMode.BEHAVIOR
+) -> bool:
+    """Add async decorator to an async function definition and write back to file.
 
     Args:
     ----
-        source_code: The source code to modify.
+        source_path: Path to the source file to modify in-place.
         function: The FunctionToOptimize object representing the target async function.
         mode: The testing mode to determine which decorator to apply.
 
     Returns:
     -------
-        Tuple of (modified_source_code, was_decorator_added).
+        Boolean indicating whether the decorator was successfully added.
 
     """
     if not function.is_async:
-        return source_code, False
+        return False
 
     try:
+        # Read source code
+        with source_path.open(encoding="utf8") as f:
+            source_code = f.read()
+
         module = cst.parse_module(source_code)
 
         # Add the decorator to the function
@@ -1318,10 +1247,17 @@ def add_async_decorator_to_function(
             import_transformer = AsyncDecoratorImportAdder(mode)
             module = module.visit(import_transformer)
 
-        return sort_imports(code=module.code, float_to_top=True), decorator_transformer.added_decorator
+        modified_code = sort_imports(code=module.code, float_to_top=True)
     except Exception as e:
         logger.exception(f"Error adding async decorator to function {function.qualified_name}: {e}")
-        return source_code, False
+        return False
+    else:
+        if decorator_transformer.added_decorator:
+            with source_path.open("w", encoding="utf8") as f:
+                f.write(modified_code)
+            logger.debug(f"Applied async {mode.value} instrumentation to {source_path}")
+            return True
+        return False
 
 
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:

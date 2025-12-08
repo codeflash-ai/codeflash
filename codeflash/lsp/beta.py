@@ -14,6 +14,7 @@ from codeflash.cli_cmds.cli import process_pyproject_config
 from codeflash.cli_cmds.cmd_init import (
     CommonSections,
     VsCodeSetupInfo,
+    config_found,
     configure_pyproject_toml,
     create_empty_pyproject_toml,
     create_find_common_tags_file,
@@ -206,24 +207,39 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
 
-    configured_module_root = Path(server.args.module_root).relative_to(Path.cwd()) if server.args.module_root else None
-    configured_tests_root = Path(server.args.tests_root).relative_to(Path.cwd()) if server.args.tests_root else None
-    configured_test_framework = server.args.test_framework if server.args.test_framework else None
+    # Provide sensible fallbacks when no subdirectories are found
+    # Only suggest directories that actually exist in the workspace
+    if not module_root_suggestions:
+        cwd = Path.cwd()
+        common_module_dirs = ["src", "lib", "app"]
+        module_root_suggestions = ["."]  # Always include current directory
 
-    configured_formatter = ""
-    if isinstance(server.args.formatter_cmds, list):
-        configured_formatter = " && ".join([cmd.strip() for cmd in server.args.formatter_cmds])
-    elif isinstance(server.args.formatter_cmds, str):
-        configured_formatter = server.args.formatter_cmds.strip()
+        # Add common patterns only if they exist
+        for dir_name in common_module_dirs:
+            if (cwd / dir_name).is_dir():
+                module_root_suggestions.append(dir_name)
+
+        default_module_root = "."
+
+    if not tests_root_suggestions:
+        cwd = Path.cwd()
+        common_test_dirs = ["tests", "test", "__tests__"]
+        tests_root_suggestions = []
+
+        # Add common test directories only if they exist
+        for dir_name in common_test_dirs:
+            if (cwd / dir_name).is_dir():
+                tests_root_suggestions.append(dir_name)
+
+        # Always include current directory as fallback
+        tests_root_suggestions.append(".")
+        default_tests_root = tests_root_suggestions[0] if tests_root_suggestions else "."
 
     return {
-        "module_root": {"choices": module_root_suggestions, "default": configured_module_root or default_module_root},
-        "tests_root": {"choices": tests_root_suggestions, "default": configured_tests_root or default_tests_root},
-        "test_framework": {
-            "choices": test_framework_suggestions,
-            "default": configured_test_framework or default_test_framework,
-        },
-        "formatter_cmds": {"choices": formatter_suggestions, "default": configured_formatter or default_formatter},
+        "module_root": {"choices": module_root_suggestions, "default": default_module_root},
+        "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
+        "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
+        "formatter_cmds": {"choices": formatter_suggestions, "default": default_formatter},
     }
 
 
@@ -263,6 +279,10 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
             "root": root,
         }
 
+    found, message = config_found(pyproject_toml_path)
+    if not found:
+        return {"status": "error", "message": message}
+
     valid, config, reason = is_valid_pyproject_toml(pyproject_toml_path)
     if not valid:
         return {
@@ -273,7 +293,13 @@ def init_project(params: ValidateProjectParams) -> dict[str, str]:
         }
 
     args = process_args()
-    return {"status": "success", "moduleRoot": args.module_root, "pyprojectPath": pyproject_toml_path, "root": root}
+    return {
+        "status": "success",
+        "moduleRoot": args.module_root,
+        "pyprojectPath": pyproject_toml_path,
+        "root": root,
+        "existingConfig": config,
+    }
 
 
 def _initialize_optimizer_if_api_key_is_valid(api_key: Optional[str] = None) -> dict[str, str]:
@@ -465,6 +491,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
 async def start_demo_optimization(params: DemoOptimizationParams) -> dict[str, str]:
     try:
         _init()
+        cancel_event = threading.Event()
         # start by creating the worktree so that the demo file is not created in user workspace
         server.optimizer.worktree_mode()
         file_path = create_find_common_tags_file(server.args, params.functionName + ".py")
@@ -483,6 +510,9 @@ async def start_demo_optimization(params: DemoOptimizationParams) -> dict[str, s
         return await perform_function_optimization(
             FunctionOptimizationParams(functionName=params.functionName, task_id=None)
         )
+    except asyncio.CancelledError:
+        cancel_event.set()
+        return get_cancelled_reponse()
     finally:
         server.cleanup_the_optimizer()
 

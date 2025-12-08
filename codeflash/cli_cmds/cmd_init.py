@@ -24,6 +24,7 @@ from rich.text import Text
 
 from codeflash.api.aiservice import AiServiceClient
 from codeflash.api.cfapi import is_github_app_installed_on_repo, setup_github_actions
+from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -32,7 +33,8 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_current_branch, get_git_remotes, get_repo_owner_and_name
 from codeflash.code_utils.github_utils import get_github_secrets_page_url
-from codeflash.code_utils.shell_utils import get_shell_rc_path, save_api_key_to_rc
+from codeflash.code_utils.oauth_handler import perform_oauth_signin
+from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell, save_api_key_to_rc
 from codeflash.either import is_successful
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
@@ -136,7 +138,10 @@ def init_codeflash() -> None:
             completion_message += (
                 "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
             )
-            reload_cmd = f"call {get_shell_rc_path()}" if os.name == "nt" else f"source {get_shell_rc_path()}"
+            if os.name == "nt":
+                reload_cmd = f". {get_shell_rc_path()}" if is_powershell() else f"call {get_shell_rc_path()}"
+            else:
+                reload_cmd = f"source {get_shell_rc_path()}"
             completion_message += f"\nOr run: {reload_cmd}"
 
         completion_panel = Panel(
@@ -172,10 +177,23 @@ def ask_run_end_to_end_test(args: Namespace) -> None:
         run_end_to_end_test(args, file_path)
 
 
-def is_valid_pyproject_toml(pyproject_toml_path: Path) -> tuple[bool, dict[str, Any] | None, str]:  # noqa: PLR0911
-    if not pyproject_toml_path.exists():
-        return False, None, f"Configuration file not found: {pyproject_toml_path}"
+def config_found(pyproject_toml_path: Union[str, Path]) -> tuple[bool, str]:
+    pyproject_toml_path = Path(pyproject_toml_path)
 
+    if not pyproject_toml_path.exists():
+        return False, f"Configuration file not found: {pyproject_toml_path}"
+
+    if not pyproject_toml_path.is_file():
+        return False, f"Configuration file is not a file: {pyproject_toml_path}"
+
+    if pyproject_toml_path.suffix != ".toml":
+        return False, f"Configuration file is not a .toml file: {pyproject_toml_path}"
+
+    return True, ""
+
+
+def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool, dict[str, Any] | None, str]:
+    pyproject_toml_path = Path(pyproject_toml_path)
     try:
         config, _ = parse_config_file(pyproject_toml_path)
     except Exception as e:
@@ -206,6 +224,10 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     from rich.prompt import Confirm
 
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
+
+    found, _ = config_found(pyproject_toml_path)
+    if not found:
+        return True, None
 
     valid, config, _message = is_valid_pyproject_toml(pyproject_toml_path)
     if not valid:
@@ -409,7 +431,10 @@ def collect_setup_info() -> CLISetupInfo:
 
         custom_tests_questions = [
             inquirer.Path(
-                "custom_tests_path", message="Enter the path to your tests directory", path_type=inquirer.Path.DIRECTORY
+                "custom_tests_path",
+                message="Enter the path to your tests directory",
+                path_type=inquirer.Path.DIRECTORY,
+                exists=True,
             )
         ]
 
@@ -1601,7 +1626,7 @@ def configure_pyproject_toml(
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"✅ Added Codeflash configuration to {toml_path}")
+    click.echo(f"Added Codeflash configuration to {toml_path}")
     click.echo()
     return True
 
@@ -1629,18 +1654,18 @@ def install_github_app(git_remote: str) -> None:
             click.prompt(
                 f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
                 f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Press Enter to open the page to let you install the app…{LF}",
+                f"Please, press ENTER to open the app installation page{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
             click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
             click.prompt(
-                f"Press Enter once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
+                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
                 default="",
                 type=click.STRING,
-                prompt_suffix="",
+                prompt_suffix=">>> ",
                 show_default=False,
             )
 
@@ -1656,10 +1681,10 @@ def install_github_app(git_remote: str) -> None:
                 click.prompt(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                     f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                    f"Press Enter to continue once you've finished installing the github app…{LF}",
+                    f"Please, press ENTER to continue once you've finished installing the github app…{LF}",
                     default="",
                     type=click.STRING,
-                    prompt_suffix="",
+                    prompt_suffix=">>> ",
                     show_default=False,
                 )
                 count -= 1
@@ -1684,10 +1709,13 @@ class CFAPIKeyType(click.ParamType):
 
 # Returns True if the user entered a new API key, False if they used an existing one
 def prompt_api_key() -> bool:
+    """Prompt user for API key via OAuth or manual entry."""
+    # Check for existing API key
     try:
         existing_api_key = get_codeflash_api_key()
     except OSError:
         existing_api_key = None
+
     if existing_api_key:
         display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
         api_key_panel = Panel(
@@ -1704,8 +1732,52 @@ def prompt_api_key() -> bool:
         console.print()
         return False
 
-    enter_api_key_and_save_to_rc()
-    ph("cli-new-api-key-entered")
+    # Prompt for authentication method
+    auth_choices = ["🔐 Login in with Codeflash", "🔑 Use Codeflash API key"]
+
+    questions = [
+        inquirer.List(
+            "auth_method",
+            message="How would you like to authenticate?",
+            choices=auth_choices,
+            default=auth_choices[0],
+            carousel=True,
+        )
+    ]
+
+    answers = inquirer.prompt(questions, theme=CodeflashTheme())
+    if not answers:
+        apologize_and_exit()
+
+    method = answers["auth_method"]
+
+    if method == auth_choices[1]:
+        enter_api_key_and_save_to_rc()
+        ph("cli-new-api-key-entered")
+        return True
+
+    # Perform OAuth sign-in
+    api_key = perform_oauth_signin()
+
+    if not api_key:
+        apologize_and_exit()
+
+    # Save API key
+    shell_rc_path = get_shell_rc_path()
+    if not shell_rc_path.exists() and os.name == "nt":
+        shell_rc_path.touch()
+        click.echo(f"✅ Created {shell_rc_path}")
+
+    result = save_api_key_to_rc(api_key)
+    if is_successful(result):
+        click.echo(result.unwrap())
+        click.echo("✅ Signed in successfully and API key saved!")
+    else:
+        click.echo(result.failure())
+        click.pause()
+
+    os.environ["CODEFLASH_API_KEY"] = api_key
+    ph("cli-oauth-signin-completed")
     return True
 
 
@@ -1731,9 +1803,11 @@ def enter_api_key_and_save_to_rc() -> None:
             browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
-        # On Windows, create a batch file in the user's home directory (not auto-run, just used to store api key)
+        # On Windows, create the appropriate file (PowerShell .ps1 or CMD .bat) in the user's home directory
+        shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
         shell_rc_path.touch()
         click.echo(f"✅ Created {shell_rc_path}")
+    get_user_id(api_key=api_key)  # Used to verify whether the API key is valid.
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
         click.echo(result.unwrap())
@@ -1745,13 +1819,16 @@ def enter_api_key_and_save_to_rc() -> None:
 
 
 def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
-    find_common_tags_content = """def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
+    find_common_tags_content = """from __future__ import annotations
+
+
+def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     if not articles:
         return set()
 
-    common_tags = articles[0]["tags"]
+    common_tags = articles[0].get("tags", [])
     for article in articles[1:]:
-        common_tags = [tag for tag in common_tags if tag in article["tags"]]
+        common_tags = [tag for tag in common_tags if tag in article.get("tags", [])]
     return set(common_tags)
 """
 
@@ -1891,7 +1968,7 @@ def ask_for_telemetry() -> bool:
     from rich.prompt import Confirm
 
     return Confirm.ask(
-        "⚡️ Would you like to enable telemetry to help us improve the Codeflash experience?",
+        "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g. errors encountered)?",
         default=True,
         show_default=True,
     )
