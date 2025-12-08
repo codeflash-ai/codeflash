@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import configparser
+import os
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -96,11 +99,126 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
 
 def remove_worktree(worktree_dir: Path) -> None:
+    """
+    Remove a git worktree with robust error handling for Windows file locking issues.
+    
+    This function handles Windows-specific issues where files may be locked by processes,
+    causing 'Permission denied' errors. It implements retry logic with exponential backoff
+    and falls back to manual directory removal if git worktree remove fails.
+    
+    Args:
+        worktree_dir: Path to the worktree directory to remove
+    """
+    if not worktree_dir or not worktree_dir.exists():
+        logger.info(f"remove_worktree: Worktree does not exist, skipping removal. worktree_dir={worktree_dir}")
+        return
+
+    is_windows = sys.platform == "win32"
+    max_retries = 3 if is_windows else 1
+    retry_delay = 0.5  # Start with 500ms delay
+    
+    logger.info(f"remove_worktree: Starting worktree removal. worktree_dir={worktree_dir}, platform={sys.platform}, max_retries={max_retries}")
+    
+    # Try to get the repository and git root for worktree removal
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
-        repository.git.worktree("remove", "--force", worktree_dir)
-    except Exception:
-        logger.exception(f"Failed to remove worktree: {worktree_dir}")
+        git_root = repository.working_dir or repository.git_dir
+        logger.info(f"remove_worktree: Found repository. git_root={git_root}")
+    except Exception as e:
+        logger.warning(f"remove_worktree: Could not access repository, attempting manual cleanup. worktree_dir={worktree_dir}, error={e}")
+        # If we can't access the repository, try manual cleanup
+        _manual_cleanup_worktree_directory(worktree_dir)
+        return
+
+    # Attempt to remove worktree using git command with retries
+    for attempt in range(max_retries):
+        try:
+            attempt_num = attempt + 1
+            logger.info(f"remove_worktree: Attempting git worktree remove. attempt={attempt_num}, max_retries={max_retries}, worktree_dir={worktree_dir}")
+            repository.git.worktree("remove", "--force", str(worktree_dir))
+            logger.info(f"remove_worktree: Successfully removed worktree via git command. worktree_dir={worktree_dir}")
+            return
+        except git.exc.GitCommandError as e:
+            error_msg = str(e).lower()
+            is_permission_error = "permission denied" in error_msg or "access is denied" in error_msg
+            
+            if is_permission_error and attempt < max_retries - 1:
+                # On Windows, file locks may be temporary - retry with exponential backoff
+                logger.info(
+                    f"remove_worktree: Permission denied, retrying. attempt={attempt_num}, "
+                    f"retry_delay={retry_delay}, worktree_dir={worktree_dir}, error={e}"
+                )
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                # Last attempt failed or non-permission error
+                logger.warning(
+                    f"remove_worktree: Git worktree remove failed, attempting fallback cleanup. "
+                    f"attempts={attempt_num}, worktree_dir={worktree_dir}, error={e}"
+                )
+                break
+        except Exception as e:
+            logger.warning(
+                f"remove_worktree: Unexpected error during git worktree remove, attempting fallback cleanup. "
+                f"worktree_dir={worktree_dir}, error={e}"
+            )
+            break
+
+    # Fallback: Try to remove worktree entry from git, then manually delete directory
+    try:
+        logger.info(f"remove_worktree: Attempting fallback cleanup. worktree_dir={worktree_dir}")
+        
+        # Try to prune the worktree entry from git (this doesn't delete the directory)
+        try:
+            # Use git worktree prune to remove stale entries
+            repository.git.worktree("prune")
+            logger.info(f"remove_worktree: Successfully pruned worktree entries")
+        except Exception as prune_error:
+            logger.info(f"remove_worktree: Could not prune worktree entries. error={prune_error}")
+        
+        # Manually remove the directory
+        _manual_cleanup_worktree_directory(worktree_dir)
+        
+    except Exception as e:
+        logger.error(
+            f"remove_worktree: Failed to cleanup worktree directory after all attempts. "
+            f"worktree_dir={worktree_dir}, error={e}"
+        )
+
+
+def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
+    """
+    Manually remove a worktree directory, handling Windows file locking issues.
+    
+    This is a fallback method when git worktree remove fails. It uses shutil.rmtree
+    with error handling similar to cleanup_paths.
+    
+    Args:
+        worktree_dir: Path to the worktree directory to remove
+    """
+    if not worktree_dir or not worktree_dir.exists():
+        logger.info(f"_manual_cleanup_worktree_directory: Directory does not exist, skipping. worktree_dir={worktree_dir}")
+        return
+
+    logger.info(f"_manual_cleanup_worktree_directory: Starting manual directory removal. worktree_dir={worktree_dir}")
+    
+    try:
+        # On Windows, files may be locked - use ignore_errors similar to cleanup_paths
+        shutil.rmtree(worktree_dir, ignore_errors=True)
+        
+        # Verify removal
+        if worktree_dir.exists():
+            logger.warning(
+                f"_manual_cleanup_worktree_directory: Directory still exists after removal attempt. "
+                f"worktree_dir={worktree_dir}"
+            )
+        else:
+            logger.info(f"_manual_cleanup_worktree_directory: Successfully removed directory. worktree_dir={worktree_dir}")
+    except Exception as e:
+        logger.error(
+            f"_manual_cleanup_worktree_directory: Failed to remove directory. "
+            f"worktree_dir={worktree_dir}, error={e}"
+        )
 
 
 def create_diff_patch_from_worktree(
