@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
 import os
 from typing import TYPE_CHECKING
@@ -44,23 +45,40 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         function_optimizer.function_to_tests = function_to_tests
 
     abort_if_cancelled(cancel_event)
-    test_setup_result = function_optimizer.generate_and_instrument_tests(
-        code_context, should_run_experiment=should_run_experiment
+
+    # Generate tests and optimizations in parallel
+    future_tests = function_optimizer.executor.submit(
+        function_optimizer.generate_and_instrument_tests, code_context
     )
+    future_optimizations = function_optimizer.executor.submit(
+        function_optimizer.generate_optimizations,
+        read_writable_code=code_context.read_writable_code,
+        read_only_context_code=code_context.read_only_context_code,
+        run_experiment=should_run_experiment,
+    )
+
+    concurrent.futures.wait([future_tests, future_optimizations])
+
+    test_setup_result = future_tests.result()
+    optimization_result = future_optimizations.result()
+
     abort_if_cancelled(cancel_event)
     if not is_successful(test_setup_result):
         return {"functionName": params.functionName, "status": "error", "message": test_setup_result.failure()}
+    if not is_successful(optimization_result):
+        return {"functionName": params.functionName, "status": "error", "message": optimization_result.failure()}
+
     (
         generated_tests,
         function_to_concolic_tests,
         concolic_test_str,
-        optimizations_set,
         generated_test_paths,
         generated_perf_test_paths,
         instrumented_unittests_created_for_function,
         original_conftest_content,
-        function_references,
     ) = test_setup_result.unwrap()
+
+    optimizations_set, function_references = optimization_result.unwrap()
 
     baseline_setup_result = function_optimizer.setup_and_establish_baseline(
         code_context=code_context,

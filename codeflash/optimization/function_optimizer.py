@@ -272,21 +272,20 @@ class FunctionOptimizer:
         return Success((should_run_experiment, code_context, original_helper_code))
 
     def generate_and_instrument_tests(
-        self, code_context: CodeOptimizationContext, *, should_run_experiment: bool
+        self, code_context: CodeOptimizationContext
     ) -> Result[
         tuple[
             GeneratedTestsList,
             dict[str, set[FunctionCalledInTest]],
             str,
-            OptimizationSet,
             list[Path],
             list[Path],
             set[Path],
             dict | None,
-            str,
-        ]
+        ],
+        str,
     ]:
-        """Generate and instrument tests, returning all necessary data for optimization."""
+        """Generate and instrument tests for the function."""
         n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
         generated_test_paths = [
             get_test_file_path(
@@ -301,42 +300,17 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
-        with progress_bar(
-            f"Generating new tests and optimizations for function '{self.function_to_optimize.function_name}'",
-            transient=True,
-            revert_to_print=bool(get_pr_number()),
-        ):
-            console.rule()
-            # Submit both test generation and optimization generation in parallel
-            future_tests = self.executor.submit(
-                self.generate_tests,
-                testgen_context=code_context.testgen_context,
-                helper_functions=code_context.helper_functions,
-                generated_test_paths=generated_test_paths,
-                generated_perf_test_paths=generated_perf_test_paths,
-            )
-            future_optimizations = self.executor.submit(
-                self.generate_optimizations,
-                read_writable_code=code_context.read_writable_code,
-                read_only_context_code=code_context.read_only_context_code,
-                run_experiment=should_run_experiment,
-            )
-
-            # Wait for both to complete
-            concurrent.futures.wait([future_tests, future_optimizations])
-
-            test_results = future_tests.result()
-            optimization_results = future_optimizations.result()
-            console.rule()
+        test_results = self.generate_tests(
+            testgen_context=code_context.testgen_context,
+            helper_functions=code_context.helper_functions,
+            generated_test_paths=generated_test_paths,
+            generated_perf_test_paths=generated_perf_test_paths,
+        )
 
         if not is_successful(test_results):
             return Failure(test_results.failure())
 
-        if not is_successful(optimization_results):
-            return Failure(optimization_results.failure())
-
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
-        optimizations_set, function_references = optimization_results.unwrap()
 
         for i, generated_test in enumerate(generated_tests.generated_tests):
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
@@ -377,12 +351,10 @@ class FunctionOptimizer:
                 generated_tests,
                 function_to_concolic_tests,
                 concolic_test_str,
-                optimizations_set,
                 generated_test_paths,
                 generated_perf_test_paths,
                 instrumented_unittests_created_for_function,
                 original_conftest_content,
-                function_references,
             )
         )
 
@@ -400,23 +372,44 @@ class FunctionOptimizer:
             function_name=self.function_to_optimize.function_name,
         )
 
-        test_setup_result = self.generate_and_instrument_tests(  # also generates optimizations
-            code_context, should_run_experiment=should_run_experiment
-        )
+        with progress_bar(
+            f"Generating new tests and optimizations for function '{self.function_to_optimize.function_name}'",
+            transient=True,
+            revert_to_print=bool(get_pr_number()),
+        ):
+            console.rule()
+            # Generate tests and optimizations in parallel
+            future_tests = self.executor.submit(self.generate_and_instrument_tests, code_context)
+            future_optimizations = self.executor.submit(
+                self.generate_optimizations,
+                read_writable_code=code_context.read_writable_code,
+                read_only_context_code=code_context.read_only_context_code,
+                run_experiment=should_run_experiment,
+            )
+
+            concurrent.futures.wait([future_tests, future_optimizations])
+
+            test_setup_result = future_tests.result()
+            optimization_result = future_optimizations.result()
+            console.rule()
+
         if not is_successful(test_setup_result):
             return Failure(test_setup_result.failure())
+
+        if not is_successful(optimization_result):
+            return Failure(optimization_result.failure())
 
         (
             generated_tests,
             function_to_concolic_tests,
             concolic_test_str,
-            optimizations_set,
             generated_test_paths,
             generated_perf_test_paths,
             instrumented_unittests_created_for_function,
             original_conftest_content,
-            function_references,
         ) = test_setup_result.unwrap()
+
+        optimizations_set, function_references = optimization_result.unwrap()
 
         baseline_setup_result = self.setup_and_establish_baseline(
             code_context=code_context,
