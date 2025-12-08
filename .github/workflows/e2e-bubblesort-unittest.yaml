@@ -7,6 +7,10 @@ on:
 
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   bubble-sort-optimization-unittest:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
@@ -61,6 +65,7 @@ jobs:
       - name: Install dependencies (CLI)
         run: |
           uv sync
+          uv add timeout_decorator
 
       - name: Run Codeflash to optimize code
         id: optimize_code
