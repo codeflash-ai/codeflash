@@ -221,7 +221,12 @@ class CandidateProcessor:
 
     def is_done(self) -> bool:
         """Check if processing is complete."""
-        return self.line_profiler_done and self.refinement_done and self.candidate_queue.empty()
+        return (
+            self.line_profiler_done
+            and self.refinement_done
+            and len(self.future_all_code_repair) == 0
+            and self.candidate_queue.empty()
+        )
 
 
 class FunctionOptimizer:
