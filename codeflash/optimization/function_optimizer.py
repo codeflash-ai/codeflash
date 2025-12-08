@@ -1597,22 +1597,56 @@ class FunctionOptimizer:
         assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
         success = True
 
+        logger.info(
+            f"!lsp|function_optimizer.establish_baseline: Starting baseline establishment. "
+            f"function={self.function_to_optimize.function_name}, "
+            f"test_files_count={len(self.test_files.test_files)}, "
+            f"test_framework={test_framework}"
+        )
+        
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
+        logger.info(
+            f"!lsp|function_optimizer.establish_baseline: Test environment created. "
+            f"CODEFLASH_TEST_ITERATION={test_env.get('CODEFLASH_TEST_ITERATION')}, "
+            f"CODEFLASH_LOOP_INDEX={test_env.get('CODEFLASH_LOOP_INDEX')}, "
+            f"PYTHONPATH={test_env.get('PYTHONPATH', 'not set')[:100]}..."
+        )
 
         if self.function_to_optimize.is_async:
+            logger.info("!lsp|function_optimizer.establish_baseline: Function is async, adding async decorator")
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
                 self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
             )
+            logger.info(f"!lsp|function_optimizer.establish_baseline: Async decorator added. success={success}")
 
         # Instrument codeflash capture
+        logger.info(
+            f"!lsp|function_optimizer.establish_baseline: About to enter progress_bar context. "
+            f"test_files={len(self.test_files.test_files)}, test_framework={test_framework}, "
+            f"function_name={self.function_to_optimize.function_name}"
+        )
         with progress_bar("Running tests to establish original code behavior..."):
             try:
+                logger.info("!lsp|function_optimizer.establish_baseline: Entered progress_bar context")
+                logger.info(
+                    f"!lsp|function_optimizer.establish_baseline: Calling instrument_codeflash_capture. "
+                    f"function={self.function_to_optimize.function_name}, "
+                    f"helper_classes={len(file_path_to_helper_classes)}"
+                )
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
+                logger.info("!lsp|function_optimizer.establish_baseline: instrument_codeflash_capture completed")
+                
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                logger.info(
+                    f"!lsp|function_optimizer.establish_baseline: About to call run_and_parse_tests. "
+                    f"testing_type=BEHAVIOR, enable_coverage={test_framework == 'pytest'}, "
+                    f"test_files_count={len(self.test_files.test_files)}, "
+                    f"testing_time={total_looping_time}"
+                )
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -1622,11 +1656,18 @@ class FunctionOptimizer:
                     enable_coverage=test_framework == "pytest",
                     code_context=code_context,
                 )
+                logger.info(
+                    f"!lsp|function_optimizer.establish_baseline: run_and_parse_tests completed. "
+                    f"behavioral_results_count={len(behavioral_results) if behavioral_results else 0}, "
+                    f"coverage_results={'present' if coverage_results else 'None'}"
+                )
             finally:
+                logger.info("!lsp|function_optimizer.establish_baseline: Cleaning up - removing codeflash capture")
                 # Remove codeflash capture
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
+                logger.info("!lsp|function_optimizer.establish_baseline: Cleanup completed")
         if not behavioral_results:
             logger.warning(
                 f"force_lsp|Couldn't run any tests for original function {self.function_to_optimize.function_name}. Skipping optimization."
@@ -1923,10 +1964,21 @@ class FunctionOptimizer:
         unittest_loop_index: int | None = None,
         line_profiler_output_file: Path | None = None,
     ) -> tuple[TestResults | dict, CoverageData | None]:
+        logger.info(
+            f"!lsp|function_optimizer.run_and_parse_tests: Starting test execution. "
+            f"testing_type={testing_type}, optimization_iteration={optimization_iteration}, "
+            f"enable_coverage={enable_coverage}, test_files_count={len(test_files.test_files)}, "
+            f"testing_time={testing_time}"
+        )
         coverage_database_file = None
         coverage_config_file = None
         try:
             if testing_type == TestingMode.BEHAVIOR:
+                logger.info(
+                    f"!lsp|function_optimizer.run_and_parse_tests: Calling run_behavioral_tests. "
+                    f"test_framework={self.test_cfg.test_framework}, cwd={self.project_root}, "
+                    f"pytest_timeout={INDIVIDUAL_TESTCASE_TIMEOUT}"
+                )
                 result_file_path, run_result, coverage_database_file, coverage_config_file = run_behavioral_tests(
                     test_files,
                     test_framework=self.test_cfg.test_framework,
@@ -1964,9 +2016,15 @@ class FunctionOptimizer:
             else:
                 msg = f"Unexpected testing type: {testing_type}"
                 raise ValueError(msg)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
+            test_files_str = ', '.join(str(f) for f in test_files.test_files)
+            logger.error(
+                f"!lsp|function_optimizer.run_and_parse_tests: Test execution timed out. "
+                f"testing_type={testing_type}, test_files=[{test_files_str}], "
+                f"timeout={e.timeout if hasattr(e, 'timeout') else 'unknown'}"
+            )
             logger.exception(
-                f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
+                f"Error running tests in {test_files_str}.\nTimeout Error"
             )
             return TestResults(), None
         if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
