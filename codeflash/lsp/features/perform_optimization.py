@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextlib
+import contextvars
 import os
 from typing import TYPE_CHECKING
 
@@ -46,9 +47,14 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
 
     abort_if_cancelled(cancel_event)
 
+    ctx = contextvars.copy_context()
+
     # Generate tests and optimizations in parallel
-    future_tests = function_optimizer.executor.submit(function_optimizer.generate_and_instrument_tests, code_context)
+    future_tests = function_optimizer.executor.submit(
+        ctx.run, function_optimizer.generate_and_instrument_tests, code_context
+    )
     future_optimizations = function_optimizer.executor.submit(
+        ctx.run,
         function_optimizer.generate_optimizations,
         read_writable_code=code_context.read_writable_code,
         read_only_context_code=code_context.read_only_context_code,
