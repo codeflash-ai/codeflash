@@ -191,7 +191,7 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
     Manually remove a worktree directory, handling Windows file locking issues.
     
     This is a fallback method when git worktree remove fails. It uses shutil.rmtree
-    with error handling similar to cleanup_paths.
+    with custom error handling for Windows-specific issues.
     
     SAFETY: This function includes multiple safeguards to prevent accidental deletion:
     - Only deletes directories under the worktree_dirs cache location
@@ -205,154 +205,150 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
         logger.info(f"_manual_cleanup_worktree_directory: Directory does not exist, skipping. worktree_dir={worktree_dir}")
         return
 
-    # SAFETY CHECK 1: Resolve paths to absolute, normalized paths
-    try:
-        worktree_dir = worktree_dir.resolve()
-        worktree_dirs_resolved = worktree_dirs.resolve()
-    except (OSError, ValueError) as e:
-        logger.error(
-            f"_manual_cleanup_worktree_directory: Failed to resolve paths, aborting for safety. "
-            f"worktree_dir={worktree_dir}, error={e}"
-        )
-        return
-
-    # SAFETY CHECK 2: Ensure worktree_dir is actually under worktree_dirs
-    # This prevents deletion of the original repository or any other directory
-    try:
-        # Check if worktree_dir is a subdirectory of worktree_dirs
-        worktree_dir_parts = worktree_dir.parts
-        worktree_dirs_parts = worktree_dirs_resolved.parts
-        
-        # worktree_dir must have more parts than worktree_dirs and start with the same parts
-        if len(worktree_dir_parts) <= len(worktree_dirs_parts):
-            logger.error(
-                f"_manual_cleanup_worktree_directory: Path is not a subdirectory of worktree_dirs, aborting for safety. "
-                f"worktree_dir={worktree_dir}, worktree_dirs={worktree_dirs_resolved}"
-            )
-            return
-        
-        if worktree_dir_parts[:len(worktree_dirs_parts)] != worktree_dirs_parts:
-            logger.error(
-                f"_manual_cleanup_worktree_directory: Path is not under worktree_dirs, aborting for safety. "
-                f"worktree_dir={worktree_dir}, worktree_dirs={worktree_dirs_resolved}"
-            )
-            return
-    except Exception as e:
-        logger.error(
-            f"_manual_cleanup_worktree_directory: Error during path validation, aborting for safety. "
-            f"worktree_dir={worktree_dir}, error={e}"
-        )
-        return
-
-    # SAFETY CHECK 3: Additional verification - ensure it's not the worktree_dirs root itself
-    if worktree_dir == worktree_dirs_resolved:
-        logger.error(
-            f"_manual_cleanup_worktree_directory: Attempted to delete worktree_dirs root, aborting for safety. "
-            f"worktree_dir={worktree_dir}"
-        )
+    # Validate paths for safety
+    if not _validate_worktree_path_safety(worktree_dir):
         return
 
     logger.info(f"_manual_cleanup_worktree_directory: Starting manual directory removal. worktree_dir={worktree_dir}")
     
-    # On Windows, files may be locked by processes - retry with delays
+    # Attempt removal with retries on Windows
     is_windows = sys.platform == "win32"
-    max_cleanup_retries = 3 if is_windows else 1
-    cleanup_retry_delay = 0.5
+    max_retries = 3 if is_windows else 1
+    retry_delay = 0.5
     
-    # On Windows, try to remove read-only attributes before deletion
-    if is_windows:
-        try:
-            _remove_readonly_attributes_windows(worktree_dir)
-        except Exception as e:
+    for attempt in range(max_retries):
+        attempt_num = attempt + 1
+        
+        # Log retry attempts
+        if attempt_num > 1:
             logger.info(
-                f"_manual_cleanup_worktree_directory: Could not remove read-only attributes. "
-                f"worktree_dir={worktree_dir}, error={e}"
+                f"_manual_cleanup_worktree_directory: Retrying directory removal. "
+                f"attempt={attempt_num}, retry_delay={retry_delay}, worktree_dir={worktree_dir}"
             )
-    
-    for cleanup_attempt in range(max_cleanup_retries):
+            time.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff
+        
+        # On Windows, use custom error handler to remove read-only attributes on the fly
+        # This is more efficient than pre-scanning the entire directory tree
+        error_handler = _create_windows_rmtree_error_handler() if is_windows else None
+        
         try:
-            cleanup_attempt_num = cleanup_attempt + 1
-            if cleanup_attempt_num > 1:
-                logger.info(
-                    f"_manual_cleanup_worktree_directory: Retrying directory removal. "
-                    f"attempt={cleanup_attempt_num}, retry_delay={cleanup_retry_delay}, worktree_dir={worktree_dir}"
-                )
-                time.sleep(cleanup_retry_delay)
-                cleanup_retry_delay *= 2  # Exponential backoff
-                # On retry, try removing read-only attributes again
-                if is_windows:
-                    try:
-                        _remove_readonly_attributes_windows(worktree_dir)
-                    except Exception:
-                        pass  # Ignore errors on retry
+            if is_windows and error_handler:
+                shutil.rmtree(worktree_dir, onerror=error_handler)
+            else:
+                shutil.rmtree(worktree_dir, ignore_errors=True)
             
-            # Try to remove the directory
-            # On Windows, use ignore_errors to handle locked files gracefully
-            shutil.rmtree(worktree_dir, ignore_errors=True)
-            
-            # Verify removal - wait a bit for Windows to release locks
+            # Brief wait on Windows to allow file handles to be released
             if is_windows:
-                # Longer wait on Windows to allow file handles to be released
-                wait_time = 0.3 if cleanup_attempt_num < max_cleanup_retries else 0.1
+                wait_time = 0.3 if attempt_num < max_retries else 0.1
                 time.sleep(wait_time)
             
+            # Check if removal was successful
             if not worktree_dir.exists():
                 logger.info(f"_manual_cleanup_worktree_directory: Successfully removed directory. worktree_dir={worktree_dir}")
                 return
-            elif cleanup_attempt_num < max_cleanup_retries:
-                # Directory still exists, will retry
+            
+            # Directory still exists
+            if attempt_num < max_retries:
                 logger.info(
                     f"_manual_cleanup_worktree_directory: Directory still exists, will retry. "
-                    f"attempt={cleanup_attempt_num}, worktree_dir={worktree_dir}"
+                    f"attempt={attempt_num}, worktree_dir={worktree_dir}"
                 )
             else:
-                # Last attempt failed
                 logger.warning(
-                    f"_manual_cleanup_worktree_directory: Directory still exists after all removal attempts. "
-                    f"attempts={cleanup_attempt_num}, worktree_dir={worktree_dir}. "
-                    f"This may indicate locked files that will be cleaned up later."
+                    f"_manual_cleanup_worktree_directory: Directory still exists after all attempts. "
+                    f"attempts={attempt_num}, worktree_dir={worktree_dir}. "
+                    f"Files may be locked and will be cleaned up later."
                 )
-                return
                 
         except Exception as e:
-            if cleanup_attempt_num < max_cleanup_retries:
+            if attempt_num < max_retries:
                 logger.info(
                     f"_manual_cleanup_worktree_directory: Exception during removal, will retry. "
-                    f"attempt={cleanup_attempt_num}, worktree_dir={worktree_dir}, error={e}"
+                    f"attempt={attempt_num}, error={e}"
                 )
             else:
                 logger.error(
-                    f"_manual_cleanup_worktree_directory: Failed to remove directory after all attempts. "
-                    f"attempts={cleanup_attempt_num}, worktree_dir={worktree_dir}, error={e}"
+                    f"_manual_cleanup_worktree_directory: Failed after all attempts. "
+                    f"attempts={attempt_num}, worktree_dir={worktree_dir}, error={e}"
                 )
-                return
 
 
-def _remove_readonly_attributes_windows(path: Path) -> None:
+def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
     """
-    Remove read-only attributes from files and directories on Windows.
-    
-    This helps with deletion of files that may have been marked read-only.
+    Validate that a path is safe to delete (must be under worktree_dirs).
     
     Args:
-        path: Path to the file or directory to process
+        worktree_dir: Path to validate
+        
+    Returns:
+        True if the path is safe to delete, False otherwise
     """
-    if not path.exists():
-        return
-    
+    # SAFETY CHECK 1: Resolve paths to absolute, normalized paths
     try:
-        # Remove read-only attribute from the path itself
-        os.chmod(path, 0o777)
-    except (OSError, PermissionError):
-        pass  # Ignore errors - file may be locked
+        worktree_dir_resolved = worktree_dir.resolve()
+        worktree_dirs_resolved = worktree_dirs.resolve()
+    except (OSError, ValueError) as e:
+        logger.error(
+            f"_validate_worktree_path_safety: Failed to resolve paths, aborting for safety. "
+            f"worktree_dir={worktree_dir}, error={e}"
+        )
+        return False
+
+    # SAFETY CHECK 2: Ensure worktree_dir is a subdirectory of worktree_dirs
+    try:
+        # Use relative_to to check if path is under worktree_dirs
+        worktree_dir_resolved.relative_to(worktree_dirs_resolved)
+    except ValueError:
+        logger.error(
+            f"_validate_worktree_path_safety: Path is not under worktree_dirs, aborting for safety. "
+            f"worktree_dir={worktree_dir_resolved}, worktree_dirs={worktree_dirs_resolved}"
+        )
+        return False
+
+    # SAFETY CHECK 3: Ensure it's not the worktree_dirs root itself
+    if worktree_dir_resolved == worktree_dirs_resolved:
+        logger.error(
+            f"_validate_worktree_path_safety: Attempted to delete worktree_dirs root, aborting for safety. "
+            f"worktree_dir={worktree_dir_resolved}"
+        )
+        return False
+
+    return True
+
+
+def _create_windows_rmtree_error_handler():
+    """
+    Create an error handler for shutil.rmtree that handles Windows-specific issues.
     
-    # Recursively process directory contents
-    if path.is_dir():
+    This handler attempts to remove read-only attributes when encountering permission errors.
+    
+    Returns:
+        A callable error handler for shutil.rmtree's onerror parameter
+    """
+    def handle_remove_error(func, path, exc_info):
+        """
+        Error handler for shutil.rmtree on Windows.
+        
+        Attempts to remove read-only attributes and retry the operation.
+        """
+        # Get the exception type
+        exc_type, exc_value, exc_traceback = exc_info
+        
+        # Only handle permission errors
+        if not isinstance(exc_value, (PermissionError, OSError)):
+            return
+        
         try:
-            for item in path.iterdir():
-                _remove_readonly_attributes_windows(item)
-        except (OSError, PermissionError):
-            pass  # Ignore errors - directory may be locked or inaccessible
+            # Try to change file permissions to make it writable
+            os.chmod(path, 0o777)
+            # Retry the failed operation
+            func(path)
+        except Exception:
+            # If it still fails, silently ignore (file is truly locked)
+            pass
+    
+    return handle_remove_error
 
 
 def create_diff_patch_from_worktree(
