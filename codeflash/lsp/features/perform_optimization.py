@@ -63,7 +63,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
     future_tests = function_optimizer.executor.submit(ctx_tests.run, run_generate_tests)
     future_optimizations = function_optimizer.executor.submit(ctx_opts.run, run_generate_optimizations)
 
-    logger.info("loading|Generating optimizations and tests...")
+    logger.info(f"loading|Generating new tests and optimizations for function '{params.functionName}'...")
     concurrent.futures.wait([future_tests, future_optimizations])
 
     test_setup_result = future_tests.result()
@@ -87,6 +87,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
 
     optimizations_set, function_references = optimization_result.unwrap()
 
+    logger.info(f"Generated '{len(optimizations_set.control)}' candidate optimizations.")
     baseline_setup_result = function_optimizer.setup_and_establish_baseline(
         code_context=code_context,
         original_helper_code=original_helper_code,

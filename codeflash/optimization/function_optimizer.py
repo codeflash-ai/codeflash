@@ -1165,7 +1165,7 @@ class FunctionOptimizer:
         if concolic_test_str:
             count_tests += 1
 
-        logger.info(f"Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
+        logger.info(f"!lsp|Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
 
         generated_tests = GeneratedTestsList(generated_tests=tests)
         return Success((count_tests, generated_tests, function_to_concolic_tests, concolic_test_str))
@@ -1218,7 +1218,7 @@ class FunctionOptimizer:
 
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"lsp|Generated '{len(candidates)}' candidate optimizations.")
+        logger.info(f"!lsp|Generated '{len(candidates)}' candidate optimizations.")
 
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
