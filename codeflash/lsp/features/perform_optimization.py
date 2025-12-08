@@ -47,9 +47,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
     abort_if_cancelled(cancel_event)
 
     # Generate tests and optimizations in parallel
-    future_tests = function_optimizer.executor.submit(
-        function_optimizer.generate_and_instrument_tests, code_context
-    )
+    future_tests = function_optimizer.executor.submit(function_optimizer.generate_and_instrument_tests, code_context)
     future_optimizations = function_optimizer.executor.submit(
         function_optimizer.generate_optimizations,
         read_writable_code=code_context.read_writable_code,
