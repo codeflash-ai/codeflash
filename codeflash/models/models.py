@@ -364,9 +364,7 @@ class CandidateEvaluationContext:
         self.is_correct[optimization_id] = False
         self.speedup_ratios[optimization_id] = None
 
-    def record_successful_candidate(
-        self, optimization_id: str, runtime: float, speedup: float
-    ) -> None:
+    def record_successful_candidate(self, optimization_id: str, runtime: float, speedup: float) -> None:
         """Record results for a successful candidate."""
         self.optimized_runtimes[optimization_id] = runtime
         self.is_correct[optimization_id] = True
@@ -377,10 +375,7 @@ class CandidateEvaluationContext:
         self.optimized_line_profiler_results[optimization_id] = result
 
     def handle_duplicate_candidate(
-        self,
-        candidate: OptimizedCandidate,
-        normalized_code: str,
-        code_context: CodeOptimizationContext,
+        self, candidate: OptimizedCandidate, normalized_code: str, code_context: CodeOptimizationContext
     ) -> None:
         """Handle a candidate that has been seen before."""
         past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
@@ -392,16 +387,14 @@ class CandidateEvaluationContext:
 
         # Line profiler results only available for successful runs
         if past_opt_id in self.optimized_line_profiler_results:
-            self.optimized_line_profiler_results[candidate.optimization_id] = (
-                self.optimized_line_profiler_results[past_opt_id]
-            )
+            self.optimized_line_profiler_results[candidate.optimization_id] = self.optimized_line_profiler_results[
+                past_opt_id
+            ]
 
-        self.optimizations_post[candidate.optimization_id] = (
-            self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
-        )
-        self.optimizations_post[past_opt_id] = (
-            self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
-        )
+        self.optimizations_post[candidate.optimization_id] = self.ast_code_to_id[normalized_code][
+            "shorter_source_code"
+        ].markdown
+        self.optimizations_post[past_opt_id] = self.ast_code_to_id[normalized_code]["shorter_source_code"].markdown
 
         # Update to shorter code if this candidate has a shorter diff
         new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
@@ -410,10 +403,7 @@ class CandidateEvaluationContext:
             self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
 
     def register_new_candidate(
-        self,
-        normalized_code: str,
-        candidate: OptimizedCandidate,
-        code_context: CodeOptimizationContext,
+        self, normalized_code: str, candidate: OptimizedCandidate, code_context: CodeOptimizationContext
     ) -> None:
         """Register a new candidate that hasn't been seen before."""
         self.ast_code_to_id[normalized_code] = {

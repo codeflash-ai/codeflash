@@ -727,9 +727,7 @@ class FunctionOptimizer:
         # Check for duplicate candidates
         normalized_code = normalize_code(candidate.source_code.flat.strip())
         if normalized_code in eval_ctx.ast_code_to_id:
-            logger.info(
-                "Current candidate has been encountered before in testing, Skipping optimization candidate."
-            )
+            logger.info("Current candidate has been encountered before in testing, Skipping optimization candidate.")
             eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
             return None
 
@@ -750,12 +748,9 @@ class FunctionOptimizer:
 
         candidate_result: OptimizedCandidateResult = run_results.unwrap()
         perf_gain = performance_gain(
-            original_runtime_ns=original_code_baseline.runtime,
-            optimized_runtime_ns=candidate_result.best_test_runtime,
+            original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=candidate_result.best_test_runtime
         )
-        eval_ctx.record_successful_candidate(
-            candidate.optimization_id, candidate_result.best_test_runtime, perf_gain
-        )
+        eval_ctx.record_successful_candidate(candidate.optimization_id, candidate_result.best_test_runtime, perf_gain)
 
         # Check if this is a successful optimization
         is_successful_opt = speedup_critic(
