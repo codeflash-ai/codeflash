@@ -144,10 +144,10 @@ def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Pro
     if is_LSP_enabled():
 
         class DummyProgress:
-            def advance(self, *args, **kwargs) -> None:
+            def advance(self, *args: object, **kwargs: object) -> None:
                 pass
 
-        yield DummyProgress(), 0  # type: ignore
+        yield DummyProgress(), 0  # type: ignore[return-value]
         return
 
     with Progress(

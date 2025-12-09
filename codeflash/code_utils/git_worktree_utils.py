@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import configparser
-import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import git
 
@@ -143,7 +145,7 @@ def remove_worktree(worktree_dir: Path) -> None:
             )
             repository.git.worktree("remove", "--force", str(worktree_dir))
             logger.info(f"remove_worktree: Successfully removed worktree via git command. worktree_dir={worktree_dir}")
-            return
+            return  # noqa: TRY300
         except git.exc.GitCommandError as e:
             error_msg = str(e).lower()
             is_permission_error = "permission denied" in error_msg or "access is denied" in error_msg
@@ -327,7 +329,9 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
     return True
 
 
-def _create_windows_rmtree_error_handler():
+def _create_windows_rmtree_error_handler() -> Callable[
+    [Callable[[str], None], str, tuple[type[BaseException], BaseException, Any]], None
+]:
     """Create an error handler for shutil.rmtree that handles Windows-specific issues.
 
     This handler attempts to remove read-only attributes when encountering permission errors.
@@ -337,13 +341,15 @@ def _create_windows_rmtree_error_handler():
 
     """
 
-    def handle_remove_error(func, path, exc_info):
+    def handle_remove_error(
+        func: Callable[[str], None], path: str, exc_info: tuple[type[BaseException], BaseException, Any]
+    ) -> None:
         """Error handler for shutil.rmtree on Windows.
 
         Attempts to remove read-only attributes and retry the operation.
         """
         # Get the exception type
-        exc_type, exc_value, exc_traceback = exc_info
+        _exc_type, exc_value, _exc_traceback = exc_info
 
         # Only handle permission errors
         if not isinstance(exc_value, (PermissionError, OSError)):
@@ -351,12 +357,15 @@ def _create_windows_rmtree_error_handler():
 
         try:
             # Try to change file permissions to make it writable
-            os.chmod(path, 0o777)
+            # Using permissive mask (0o777) is intentional for Windows file cleanup
+            Path(path).chmod(0o777)
             # Retry the failed operation
             func(path)
-        except Exception:
-            # If it still fails, silently ignore (file is truly locked)
-            pass
+        except Exception as e:
+            # If it still fails, log and ignore (file is truly locked)
+            logger.debug(
+                f"_create_windows_rmtree_error_handler: Failed to remove file after permission change. path={path}, error={e}"
+            )
 
     return handle_remove_error
 
