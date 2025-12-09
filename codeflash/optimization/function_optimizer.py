@@ -583,7 +583,11 @@ class FunctionOptimizer:
         exp_type: str,
         function_references: str,
     ) -> BestOptimization | None:
-        """Select the best optimization from valid candidates."""
+        """Select the best optimization from valid candidates.
+        
+        Reassigns the shorter code versions for candidates with the same AST structure,
+        then ranks them to determine the best optimization.
+        """
         if not eval_ctx.valid_optimizations:
             return None
 
@@ -645,11 +649,12 @@ class FunctionOptimizer:
             else:
                 diff_lens_ranking = create_rank_dictionary_compact(diff_lens_list)
                 runtimes_ranking = create_rank_dictionary_compact(runtimes_list)
+                # TODO: better way to resolve conflicts with same min ranking
                 overall_ranking = {key: diff_lens_ranking[key] + runtimes_ranking[key] for key in diff_lens_ranking}
                 min_key = min(overall_ranking, key=overall_ranking.get)
         elif len(optimization_ids) == 1:
-            min_key = 0
-        else:
+            min_key = 0  # only one candidate in valid optimizations
+        else:  # 0 candidates - shouldn't happen, but defensive check
             return None
 
         return valid_candidates_with_shorter_code[min_key]
@@ -726,6 +731,7 @@ class FunctionOptimizer:
             return None
 
         # Check for duplicate candidates
+        # Check if this code has been evaluated before by checking the AST normalized code string
         normalized_code = normalize_code(candidate.source_code.flat.strip())
         if normalized_code in eval_ctx.ast_code_to_id:
             logger.info("Current candidate has been encountered before in testing, Skipping optimization candidate.")
@@ -754,6 +760,7 @@ class FunctionOptimizer:
         eval_ctx.record_successful_candidate(candidate.optimization_id, candidate_result.best_test_runtime, perf_gain)
 
         # Check if this is a successful optimization
+        # For async functions, prioritize throughput metrics over runtime
         is_successful_opt = speedup_critic(
             candidate_result,
             original_code_baseline.runtime,

@@ -354,7 +354,9 @@ class CandidateEvaluationContext:
     optimized_runtimes: dict[str, float | None] = Field(default_factory=dict)
     is_correct: dict[str, bool] = Field(default_factory=dict)
     optimized_line_profiler_results: dict[str, str] = Field(default_factory=dict)
+    # Maps AST normalized code to: optimization_id, shorter_source_code, and diff_len (for deduplication)
     ast_code_to_id: dict = Field(default_factory=dict)
+    # Stores final code strings for candidates (may differ from original if shorter/longer versions were found)
     optimizations_post: dict[str, str] = Field(default_factory=dict)
     valid_optimizations: list = Field(default_factory=list)
 
@@ -377,9 +379,14 @@ class CandidateEvaluationContext:
     def handle_duplicate_candidate(
         self, candidate: OptimizedCandidate, normalized_code: str, code_context: CodeOptimizationContext
     ) -> None:
-        """Handle a candidate that has been seen before."""
+        """Handle a candidate that has been seen before.
+        
+        When we encounter duplicate candidates (same AST-normalized code), we reuse the previous
+        evaluation results instead of re-running tests.
+        """
         past_opt_id = self.ast_code_to_id[normalized_code]["optimization_id"]
 
+        # Update speedup ratio, is_correct, optimizations_post, optimized_line_profiler_results, optimized_runtimes
         # Copy results from the previous evaluation
         self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios[past_opt_id]
         self.is_correct[candidate.optimization_id] = self.is_correct[past_opt_id]
@@ -398,14 +405,18 @@ class CandidateEvaluationContext:
 
         # Update to shorter code if this candidate has a shorter diff
         new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
-        if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:
+        if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:  # new candidate has a shorter diff than the previously encountered one
             self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
             self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
 
     def register_new_candidate(
         self, normalized_code: str, candidate: OptimizedCandidate, code_context: CodeOptimizationContext
     ) -> None:
-        """Register a new candidate that hasn't been seen before."""
+        """Register a new candidate that hasn't been seen before.
+        
+        Maps AST normalized code to: diff len, unnormalized code, and optimization ID.
+        Tracks the shortest unnormalized code for each unique AST structure.
+        """
         self.ast_code_to_id[normalized_code] = {
             "optimization_id": candidate.optimization_id,
             "shorter_source_code": candidate.source_code,
