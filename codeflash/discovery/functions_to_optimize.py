@@ -24,7 +24,6 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
-from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
@@ -243,13 +242,6 @@ def get_functions_to_optimize(
         )
 
         logger.info(f"!lsp|Found {functions_count} function{'s' if functions_count > 1 else ''} to optimize")
-        if optimize_all:
-            three_min_in_ns = int(1.8e11)
-            console.rule()
-            logger.info(
-                f"It might take about {humanize_runtime(functions_count * three_min_in_ns)} to fully optimize this project. Codeflash "
-                f"will keep opening pull requests as it finds optimizations."
-            )
         return filtered_modified_functions, functions_count, trace_file_path
 
 
