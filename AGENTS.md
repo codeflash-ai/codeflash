@@ -123,7 +123,6 @@ All configuration in `pyproject.toml` under `[tool.codeflash]`:
 module-root = "codeflash"           # Source code location
 tests-root = "tests"                # Test directory
 benchmarks-root = "tests/benchmarks" # Benchmark tests
-test-framework = "pytest"          # Always pytest
 formatter-cmds = [                  # Auto-formatting commands
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",
@@ -186,6 +185,12 @@ uv run pytest -m "not ci_skip"
 # Initialize CodeFlash in a project
 uv run codeflash init
 
+# Install VSCode extension
+uv run codeflash vscode-install
+
+# Initialize GitHub Actions workflow
+uv run codeflash init-actions
+
 # Optimize entire codebase
 uv run codeflash --all
 
@@ -209,6 +214,12 @@ uv run codeflash --benchmark --file target_file.py
 
 # Use replay tests for debugging
 uv run codeflash --replay-test tests/specific_test.py
+
+# Create PR (skip for local testing)
+uv run codeflash --no-pr --file target_file.py
+
+# Use worktree isolation
+uv run codeflash --worktree --file target_file.py
 ```
 
 ## Development Guidelines
@@ -218,7 +229,7 @@ uv run codeflash --replay-test tests/specific_test.py
 - Strict mypy type checking enabled
 - Pre-commit hooks enforce code quality
 - Line length: 120 characters
-- Python 3.10+ syntax
+- Python 3.9+ syntax (requires-python = ">=3.9")
 
 ### Testing Strategy
 - Primary test framework: pytest
@@ -230,10 +241,11 @@ uv run codeflash --replay-test tests/specific_test.py
 - Test isolation via custom pytest plugin
 
 ### Key Dependencies
-- **Core**: `libcst`, `jedi`, `gitpython`, `pydantic`
-- **Testing**: `pytest`, `coverage`, `crosshair-tool`
-- **Performance**: `line_profiler`, `timeout-decorator`
-- **UI**: `rich`, `inquirer`, `click`
+- **Core**: `libcst`, `jedi`, `gitpython`, `pydantic`, `unidiff`, `tomlkit`
+- **Testing**: `pytest`, `pytest-timeout`, `pytest-asyncio`, `coverage`, `crosshair-tool`, `parameterized`, `junitparser`
+- **Performance**: `line_profiler`, `codeflash-benchmark`, `dill`
+- **UI**: `rich`, `inquirer`, `click`, `humanize`
+- **Language Server**: `pygls`
 - **AI**: Custom API client for LLM interactions
 
 ### Data Models & Types
