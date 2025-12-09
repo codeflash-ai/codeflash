@@ -22,7 +22,7 @@ from re import Pattern
 from typing import Annotated, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, PrivateAttr, ValidationError, field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -350,13 +350,13 @@ class OptimizationSet(BaseModel):
 class CandidateEvaluationContext:
     """Holds tracking state during candidate evaluation in determine_best_candidate."""
 
-    speedup_ratios: dict[str, float | None] = field(default_factory=dict)
-    optimized_runtimes: dict[str, float | None] = field(default_factory=dict)
-    is_correct: dict[str, bool] = field(default_factory=dict)
-    optimized_line_profiler_results: dict[str, str] = field(default_factory=dict)
-    ast_code_to_id: dict = field(default_factory=dict)
-    optimizations_post: dict[str, str] = field(default_factory=dict)
-    valid_optimizations: list = field(default_factory=list)
+    speedup_ratios: dict[str, float | None] = Field(default_factory=dict)
+    optimized_runtimes: dict[str, float | None] = Field(default_factory=dict)
+    is_correct: dict[str, bool] = Field(default_factory=dict)
+    optimized_line_profiler_results: dict[str, str] = Field(default_factory=dict)
+    ast_code_to_id: dict = Field(default_factory=dict)
+    optimizations_post: dict[str, str] = Field(default_factory=dict)
+    valid_optimizations: list = Field(default_factory=list)
 
     def record_failed_candidate(self, optimization_id: str) -> None:
         """Record results for a failed candidate."""
