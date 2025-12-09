@@ -104,7 +104,7 @@ def run_behavioral_tests(
     *,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
-    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """
@@ -119,12 +119,13 @@ def run_behavioral_tests(
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
                 # Replay tests need specific test targeting because one file contains tests for multiple functions
-                test_files.extend(
-                    [
-                        str(file.instrumented_behavior_file_path) + "::" + test.test_function
-                        for test in file.tests_in_file
-                    ]
-                )
+                if file.tests_in_file:
+                    test_files.extend(
+                        [
+                            str(file.instrumented_behavior_file_path) + "::" + test.test_function
+                            for test in file.tests_in_file
+                        ]
+                    )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
 
@@ -148,7 +149,7 @@ def run_behavioral_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            common_pytest_args.insert(1, f"--timeout={pytest_timeout}")
+            common_pytest_args.append(f"--timeout={pytest_timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
@@ -248,7 +249,7 @@ def run_line_profile_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            pytest_args.insert(1, f"--timeout={pytest_timeout}")
+            pytest_args.append(f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
@@ -298,7 +299,8 @@ def run_benchmarking_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            pytest_args.insert(1, f"--timeout={pytest_timeout}")
+            pytest_args.append(f"--timeout={pytest_timeout}")
+
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
