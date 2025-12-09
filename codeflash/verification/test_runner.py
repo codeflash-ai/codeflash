@@ -68,7 +68,7 @@ def run_behavioral_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            common_pytest_args.append(f"--timeout={pytest_timeout}")
+            common_pytest_args.insert(1, f"--timeout={pytest_timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
@@ -164,7 +164,7 @@ def run_line_profile_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            pytest_args.append(f"--timeout={pytest_timeout}")
+            pytest_args.insert(1, f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
@@ -214,8 +214,7 @@ def run_benchmarking_tests(
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
         if pytest_timeout is not None:
-            pytest_args.append(f"--timeout={pytest_timeout}")
-
+            pytest_args.insert(1, f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
