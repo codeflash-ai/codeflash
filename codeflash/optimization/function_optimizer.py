@@ -2025,10 +2025,11 @@ class FunctionOptimizer:
             if unique_errors:
                 from rich.text import Text
 
-                for error in unique_errors:
-                    if is_LSP_enabled():
-                        lsp_log(LspCodeMessage(code=error, file_name="errors"))
-                    else:
+                if is_LSP_enabled():
+                    combined_errors = "\n\n".join(unique_errors)
+                    lsp_log(LspCodeMessage(code=combined_errors, file_name="errors", collapsed=True))
+                else:
+                    for error in unique_errors:
                         panel = Panel(Text.from_markup(f"⚠️  {error} ", style="bold red"), expand=False)
                         console.print(panel)
 
