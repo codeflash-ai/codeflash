@@ -584,7 +584,7 @@ class FunctionOptimizer:
         function_references: str,
     ) -> BestOptimization | None:
         """Select the best optimization from valid candidates.
-        
+
         Reassigns the shorter code versions for candidates with the same AST structure,
         then ranks them to determine the best optimization.
         """

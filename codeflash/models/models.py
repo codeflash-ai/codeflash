@@ -380,7 +380,7 @@ class CandidateEvaluationContext:
         self, candidate: OptimizedCandidate, normalized_code: str, code_context: CodeOptimizationContext
     ) -> None:
         """Handle a candidate that has been seen before.
-        
+
         When we encounter duplicate candidates (same AST-normalized code), we reuse the previous
         evaluation results instead of re-running tests.
         """
@@ -405,7 +405,9 @@ class CandidateEvaluationContext:
 
         # Update to shorter code if this candidate has a shorter diff
         new_diff_len = diff_length(candidate.source_code.flat, code_context.read_writable_code.flat)
-        if new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]:  # new candidate has a shorter diff than the previously encountered one
+        if (
+            new_diff_len < self.ast_code_to_id[normalized_code]["diff_len"]
+        ):  # new candidate has a shorter diff than the previously encountered one
             self.ast_code_to_id[normalized_code]["shorter_source_code"] = candidate.source_code
             self.ast_code_to_id[normalized_code]["diff_len"] = new_diff_len
 
@@ -413,7 +415,7 @@ class CandidateEvaluationContext:
         self, normalized_code: str, candidate: OptimizedCandidate, code_context: CodeOptimizationContext
     ) -> None:
         """Register a new candidate that hasn't been seen before.
-        
+
         Maps AST normalized code to: diff len, unnormalized code, and optimization ID.
         Tracks the shortest unnormalized code for each unique AST structure.
         """
