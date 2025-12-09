@@ -817,6 +817,7 @@ class FunctionOptimizer:
                 source_code=self.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
                 explanation=valid_opt.candidate.explanation,
+                source=valid_opt.candidate.source,
             )
             new_best_opt = BestOptimization(
                 candidate=new_candidate_with_shorter_code,
