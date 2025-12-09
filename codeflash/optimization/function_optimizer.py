@@ -8,7 +8,6 @@ import random
 import subprocess
 import uuid
 from collections import defaultdict
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -458,6 +457,12 @@ class FunctionOptimizer:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
 
+    def get_trace_id(self, exp_type: str) -> str:
+        """Get the trace ID for the current experiment type."""
+        if self.experiment_id:
+            return self.function_trace_id[:-4] + exp_type
+        return self.function_trace_id
+
     def build_runtime_info_tree(
         self,
         candidate_index: int,
@@ -525,8 +530,7 @@ class FunctionOptimizer:
         candidate_index: int,
         eval_ctx: CandidateEvaluationContext,
     ) -> tuple[BestOptimization, Tree | None]:
-        """
-        Handle a successful optimization candidate.
+        """Handle a successful optimization candidate.
 
         Returns the BestOptimization and optional benchmark tree.
         """
@@ -630,7 +634,7 @@ class FunctionOptimizer:
                 diffs=diff_strs,
                 optimization_ids=optimization_ids,
                 speedups=speedups_list,
-                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+                trace_id=self.get_trace_id(exp_type),
                 function_references=function_references,
             )
             concurrent.futures.wait([future_ranking])
@@ -659,7 +663,7 @@ class FunctionOptimizer:
     ) -> None:
         """Log evaluation results to the AI service."""
         ai_service_client.log_results(
-            function_trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            function_trace_id=self.get_trace_id(exp_type),
             speedup_ratio=eval_ctx.speedup_ratios,
             original_runtime=original_code_baseline.runtime,
             optimized_runtime=eval_ctx.optimized_runtimes,
@@ -668,6 +672,147 @@ class FunctionOptimizer:
             optimizations_post=eval_ctx.optimizations_post,
             metadata={"best_optimization_id": best_optimization.candidate.optimization_id},
         )
+
+    def process_single_candidate(
+        self,
+        candidate: OptimizedCandidate,
+        candidate_index: int,
+        total_candidates: int,
+        code_context: CodeOptimizationContext,
+        original_code_baseline: OriginalCodeBaseline,
+        original_helper_code: dict[Path, str],
+        file_path_to_helper_classes: dict[Path, set[str]],
+        eval_ctx: CandidateEvaluationContext,
+        future_all_refinements: list[concurrent.futures.Future],
+        ai_service_client: AiServiceClient,
+        exp_type: str,
+        function_references: str,
+    ) -> BestOptimization | None:
+        """Process a single optimization candidate.
+
+        Returns the BestOptimization if the candidate is successful, None otherwise.
+        Updates eval_ctx with results and may append to future_all_refinements.
+        """
+        # Cleanup temp files
+        get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
+        get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
+
+        logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
+        code_print(
+            candidate.source_code.flat,
+            file_name=f"candidate_{candidate_index}.py",
+            lsp_message_id=LSPMessageId.CANDIDATE.value,
+        )
+
+        # Try to replace function with optimized code
+        try:
+            did_update = self.replace_function_and_helpers_with_optimized_code(
+                code_context=code_context,
+                optimized_code=candidate.source_code,
+                original_helper_code=original_helper_code,
+            )
+            if not did_update:
+                logger.warning(
+                    "force_lsp|No functions were replaced in the optimized code. Skipping optimization candidate."
+                )
+                console.rule()
+                return None
+        except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
+            logger.error(e)
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+            return None
+
+        # Check for duplicate candidates
+        normalized_code = normalize_code(candidate.source_code.flat.strip())
+        if normalized_code in eval_ctx.ast_code_to_id:
+            logger.info(
+                "Current candidate has been encountered before in testing, Skipping optimization candidate."
+            )
+            eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
+            return None
+
+        eval_ctx.register_new_candidate(normalized_code, candidate, code_context)
+
+        # Run the optimized candidate
+        run_results = self.run_optimized_candidate(
+            optimization_candidate_index=candidate_index,
+            baseline_results=original_code_baseline,
+            original_helper_code=original_helper_code,
+            file_path_to_helper_classes=file_path_to_helper_classes,
+        )
+        console.rule()
+
+        if not is_successful(run_results):
+            eval_ctx.record_failed_candidate(candidate.optimization_id)
+            return None
+
+        candidate_result: OptimizedCandidateResult = run_results.unwrap()
+        perf_gain = performance_gain(
+            original_runtime_ns=original_code_baseline.runtime,
+            optimized_runtime_ns=candidate_result.best_test_runtime,
+        )
+        eval_ctx.record_successful_candidate(
+            candidate.optimization_id, candidate_result.best_test_runtime, perf_gain
+        )
+
+        # Check if this is a successful optimization
+        is_successful_opt = speedup_critic(
+            candidate_result,
+            original_code_baseline.runtime,
+            best_runtime_until_now=None,
+            original_async_throughput=original_code_baseline.async_throughput,
+            best_throughput_until_now=None,
+        ) and quantity_of_tests_critic(candidate_result)
+
+        tree = self.build_runtime_info_tree(
+            candidate_index=candidate_index,
+            candidate_result=candidate_result,
+            original_code_baseline=original_code_baseline,
+            perf_gain=perf_gain,
+            is_successful_candidate=is_successful_opt,
+        )
+
+        best_optimization = None
+        benchmark_tree = None
+
+        if is_successful_opt:
+            best_optimization, benchmark_tree = self.handle_successful_candidate(
+                candidate=candidate,
+                candidate_result=candidate_result,
+                code_context=code_context,
+                original_code_baseline=original_code_baseline,
+                original_helper_code=original_helper_code,
+                candidate_index=candidate_index,
+                eval_ctx=eval_ctx,
+            )
+            eval_ctx.valid_optimizations.append(best_optimization)
+
+            # Queue refinement for non-refined candidates
+            if not candidate.optimization_id.endswith("refi"):
+                future_all_refinements.append(
+                    self.refine_optimizations(
+                        valid_optimizations=[best_optimization],
+                        original_code_baseline=original_code_baseline,
+                        code_context=code_context,
+                        trace_id=self.get_trace_id(exp_type),
+                        ai_service_client=ai_service_client,
+                        executor=self.executor,
+                        function_references=function_references,
+                    )
+                )
+
+        # Display runtime information
+        if is_LSP_enabled():
+            lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
+        else:
+            console.print(tree)
+        if self.args.benchmark and benchmark_tree:
+            console.print(benchmark_tree)
+        console.rule()
+
+        return best_optimization
 
     def determine_best_candidate(
         self,
@@ -691,12 +836,13 @@ class FunctionOptimizer:
         eval_ctx = CandidateEvaluationContext()
         future_all_refinements: list[concurrent.futures.Future] = []
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+        assert ai_service_client is not None, "AI service client must be set for optimization"
 
         future_line_profile_results = self.executor.submit(
             ai_service_client.optimize_python_code_line_profiler,
             source_code=code_context.read_writable_code.markdown,
             dependency_code=code_context.read_only_context_code,
-            trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+            trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
             num_candidates=N_CANDIDATES_LP_EFFECTIVE,
             experiment_metadata=ExperimentMetadata(
@@ -718,122 +864,20 @@ class FunctionOptimizer:
 
             try:
                 candidate_index += 1
-                get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
-                get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
-                logger.info(f"h3|Optimization candidate {candidate_index}/{processor.candidate_len}:")
-                code_print(
-                    candidate.source_code.flat,
-                    file_name=f"candidate_{candidate_index}.py",
-                    lsp_message_id=LSPMessageId.CANDIDATE.value,
-                )
-
-                # Try to replace function with optimized code
-                try:
-                    did_update = self.replace_function_and_helpers_with_optimized_code(
-                        code_context=code_context,
-                        optimized_code=candidate.source_code,
-                        original_helper_code=original_helper_code,
-                    )
-                    if not did_update:
-                        logger.warning(
-                            "force_lsp|No functions were replaced in the optimized code. Skipping optimization candidate."
-                        )
-                        console.rule()
-                        continue
-                except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
-                    logger.error(e)
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
-                    continue
-
-                # Check for duplicate candidates
-                normalized_code = normalize_code(candidate.source_code.flat.strip())
-                if normalized_code in eval_ctx.ast_code_to_id:
-                    logger.info(
-                        "Current candidate has been encountered before in testing, Skipping optimization candidate."
-                    )
-                    eval_ctx.handle_duplicate_candidate(candidate, normalized_code, code_context)
-                    continue
-
-                eval_ctx.register_new_candidate(normalized_code, candidate, code_context)
-
-                # Run the optimized candidate
-                run_results = self.run_optimized_candidate(
-                    optimization_candidate_index=candidate_index,
-                    baseline_results=original_code_baseline,
+                self.process_single_candidate(
+                    candidate=candidate,
+                    candidate_index=candidate_index,
+                    total_candidates=processor.candidate_len,
+                    code_context=code_context,
+                    original_code_baseline=original_code_baseline,
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
+                    eval_ctx=eval_ctx,
+                    future_all_refinements=future_all_refinements,
+                    ai_service_client=ai_service_client,
+                    exp_type=exp_type,
+                    function_references=function_references,
                 )
-                console.rule()
-
-                if not is_successful(run_results):
-                    eval_ctx.record_failed_candidate(candidate.optimization_id)
-                else:
-                    candidate_result: OptimizedCandidateResult = run_results.unwrap()
-                    perf_gain = performance_gain(
-                        original_runtime_ns=original_code_baseline.runtime,
-                        optimized_runtime_ns=candidate_result.best_test_runtime,
-                    )
-                    eval_ctx.record_successful_candidate(
-                        candidate.optimization_id, candidate_result.best_test_runtime, perf_gain
-                    )
-
-                    # Check if this is a successful optimization
-                    is_successful_opt = speedup_critic(
-                        candidate_result,
-                        original_code_baseline.runtime,
-                        best_runtime_until_now=None,
-                        original_async_throughput=original_code_baseline.async_throughput,
-                        best_throughput_until_now=None,
-                    ) and quantity_of_tests_critic(candidate_result)
-
-                    tree = self.build_runtime_info_tree(
-                        candidate_index=candidate_index,
-                        candidate_result=candidate_result,
-                        original_code_baseline=original_code_baseline,
-                        perf_gain=perf_gain,
-                        is_successful_candidate=is_successful_opt,
-                    )
-
-                    benchmark_tree = None
-                    if is_successful_opt:
-                        best_optimization, benchmark_tree = self.handle_successful_candidate(
-                            candidate=candidate,
-                            candidate_result=candidate_result,
-                            code_context=code_context,
-                            original_code_baseline=original_code_baseline,
-                            original_helper_code=original_helper_code,
-                            candidate_index=candidate_index,
-                            eval_ctx=eval_ctx,
-                        )
-                        eval_ctx.valid_optimizations.append(best_optimization)
-
-                        # Queue refinement for non-refined candidates
-                        if not candidate.optimization_id.endswith("refi"):
-                            future_all_refinements.append(
-                                self.refine_optimizations(
-                                    valid_optimizations=[best_optimization],
-                                    original_code_baseline=original_code_baseline,
-                                    code_context=code_context,
-                                    trace_id=self.function_trace_id[:-4] + exp_type
-                                    if self.experiment_id
-                                    else self.function_trace_id,
-                                    ai_service_client=ai_service_client,
-                                    executor=self.executor,
-                                    function_references=function_references,
-                                )
-                            )
-
-                    # Display runtime information
-                    if is_LSP_enabled():
-                        lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
-                    else:
-                        console.print(tree)
-                    if self.args.benchmark and benchmark_tree:
-                        console.print(benchmark_tree)
-                    console.rule()
-
             except KeyboardInterrupt as e:
                 logger.exception(f"Optimization interrupted: {e}")
                 raise
