@@ -40,10 +40,84 @@ matches_re_start = re.compile(r"!\$######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)
 matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)######!")
 
 
+start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+
+
+def calculate_function_throughput_from_test_results(test_results: TestResults, function_name: str) -> int:
+    """Calculate function throughput from TestResults by extracting performance stdout.
+
+    A completed execution is defined as having both a start tag and matching end tag from performance wrappers.
+    Start: !$######test_module:test_function:function_name:loop_index:iteration_id######$!
+    End:   !######test_module:test_function:function_name:loop_index:iteration_id:duration######!
+    """
+    start_matches = start_pattern.findall(test_results.perf_stdout or "")
+    end_matches = end_pattern.findall(test_results.perf_stdout or "")
+
+    end_matches_truncated = [end_match[:5] for end_match in end_matches]
+    end_matches_set = set(end_matches_truncated)
+
+    function_throughput = 0
+    for start_match in start_matches:
+        if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
+            function_throughput += 1
+    return function_throughput
+
+
+def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
+    """Resolve test file path from pytest's test class path.
+
+    This function handles various cases where pytest's classname in JUnit XML
+    includes parent directories that may already be part of base_dir.
+
+    Args:
+        test_class_path: The full class path from pytest (e.g., "project.tests.test_file.TestClass")
+        base_dir: The base directory for tests (tests project root)
+
+    Returns:
+        Path to the test file if found, None otherwise
+
+    Examples:
+        >>> # base_dir = "/path/to/tests"
+        >>> # test_class_path = "code_to_optimize.tests.unittest.test_file.TestClass"
+        >>> # Should find: /path/to/tests/unittest/test_file.py
+
+    """
+    # First try the full path
+    test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
+
+    # If we couldn't find the file, try stripping the last component (likely a class name)
+    # This handles cases like "module.TestClass" where TestClass is a class, not a module
+    if test_file_path is None and "." in test_class_path:
+        module_without_class = ".".join(test_class_path.split(".")[:-1])
+        test_file_path = file_name_from_test_module_name(module_without_class, base_dir)
+
+    # If still not found, progressively strip prefix components
+    # This handles cases where pytest's classname includes parent directories that are
+    # already part of base_dir (e.g., "project.tests.unittest.test_file.TestClass"
+    # when base_dir is "/.../tests")
+    if test_file_path is None:
+        parts = test_class_path.split(".")
+        # Try stripping 1, 2, 3, ... prefix components
+        for num_to_strip in range(1, len(parts)):
+            remaining = ".".join(parts[num_to_strip:])
+            test_file_path = file_name_from_test_module_name(remaining, base_dir)
+            if test_file_path:
+                break
+            # Also try without the last component (class name)
+            if "." in remaining:
+                remaining_no_class = ".".join(remaining.split(".")[:-1])
+                test_file_path = file_name_from_test_module_name(remaining_no_class, base_dir)
+                if test_file_path:
+                    break
+
+    return test_file_path
+
+
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
     test_results = TestResults()
     if not file_location.exists():
-        logger.warning(f"No test results for {file_location} found.")
+        logger.debug(f"No test results for {file_location} found.")
         console.rule()
         return test_results
 
@@ -174,7 +248,6 @@ def parse_test_xml(
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
-    unittest_loop_index: int | None = None,
 ) -> TestResults:
     test_results = TestResults()
     # Parse unittest output
@@ -187,9 +260,8 @@ def parse_test_xml(
     except Exception as e:
         logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
-    base_dir = (
-        test_config.tests_project_rootdir if test_config.test_framework == "pytest" else test_config.project_root_path
-    )
+    # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
+    base_dir = test_config.tests_project_rootdir
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -213,6 +285,11 @@ def parse_test_xml(
 
             test_class_path = testcase.classname
             try:
+                if testcase.name is None:
+                    logger.debug(
+                        f"testcase.name is None for testcase {testcase!r} in file {test_xml_file_path}, skipping"
+                    )
+                    continue
                 test_function = testcase.name.split("[", 1)[0] if "[" in testcase.name else testcase.name
             except (AttributeError, TypeError) as e:
                 msg = (
@@ -224,7 +301,8 @@ def parse_test_xml(
             if test_file_name is None:
                 if test_class_path:
                     # TODO : This might not be true if the test is organized under a class
-                    test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
+                    test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
+
                     if test_file_path is None:
                         logger.warning(f"Could not find the test for file name - {test_class_path} ")
                         continue
@@ -245,24 +323,15 @@ def parse_test_xml(
             if class_name is not None and class_name.startswith(test_module_path):
                 test_class = class_name[len(test_module_path) + 1 :]  # +1 for the dot, gets Unittest class name
 
-            loop_index = unittest_loop_index if unittest_loop_index is not None else 1
+            loop_index = int(testcase.name.split("[ ")[-1][:-2]) if testcase.name and "[" in testcase.name else 1
 
             timed_out = False
-            if test_config.test_framework == "pytest":
-                loop_index = int(testcase.name.split("[ ")[-1][:-2]) if "[" in testcase.name else 1
-                if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
-                if len(testcase.result) == 1:
-                    message = testcase.result[0].message.lower()
-                    if "failed: timeout >" in message:
-                        timed_out = True
-            else:
-                if len(testcase.result) > 1:
-                    logger.warning(f"!!!!!Multiple results for {testcase.name} in {test_xml_file_path}!!!")
-                if len(testcase.result) == 1:
-                    message = testcase.result[0].message.lower()
-                    if "timed out" in message:
-                        timed_out = True
+            if len(testcase.result) > 1:
+                logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
+            if len(testcase.result) == 1:
+                message = testcase.result[0].message.lower()
+                if "failed: timeout >" in message or "timed out" in message:
+                    timed_out = True
 
             sys_stdout = testcase.system_out or ""
             begin_matches = list(matches_re_start.finditer(sys_stdout))
@@ -494,14 +563,9 @@ def parse_test_results(
     coverage_config_file: Path | None,
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
-    unittest_loop_index: int | None = None,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
-        test_xml_path,
-        test_files=test_files,
-        test_config=test_config,
-        run_result=run_result,
-        unittest_loop_index=unittest_loop_index,
+        test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
     )
     try:
         bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))

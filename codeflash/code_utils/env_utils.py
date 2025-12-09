@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -10,39 +12,80 @@ from typing import Any, Optional
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
-from codeflash.code_utils.shell_utils import read_api_key_from_shell_config
+from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
-    return_code = True
-    if formatter_cmds[0] == "disabled":
-        return return_code
+    if not formatter_cmds or formatter_cmds[0] == "disabled":
+        return True
+
+    first_cmd = formatter_cmds[0]
+    cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
+
+    if not cmd_tokens:
+        return True
+
+    exe_name = cmd_tokens[0]
+    command_str = " ".join(formatter_cmds).replace(" $file", "")
+
+    if shutil.which(exe_name) is None:
+        logger.error(
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
+        )
+        return False
+
     tmp_code = """print("hello world")"""
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".py") as f:
-        f.write(tmp_code)
-        f.flush()
-        tmp_file = Path(f.name)
-        try:
-            format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=exit_on_failure)
-        except Exception:
-            exit_with_message(
-                "⚠️ Codeflash requires a code formatter to be installed in your environment, but none was found. Please install a supported formatter, verify the formatter-cmds in your codeflash pyproject.toml config and try again.",
-                error_on_exit=True,
-            )
-    return return_code
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_file = Path(tmpdir) / "test_codeflash_formatter.py"
+            tmp_file.write_text(tmp_code, encoding="utf-8")
+            format_code(formatter_cmds, tmp_file, print_status=False, exit_on_failure=False)
+            return True
+    except FileNotFoundError:
+        logger.error(
+            f"Could not find formatter: {command_str}\n"
+            f"Please install it or update 'formatter-cmds' in your codeflash configuration"
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Formatter failed to run: {command_str}\nError: {e}")
+        return False
 
 
 @lru_cache(maxsize=1)
 def get_codeflash_api_key() -> str:
-    # prefer shell config over env var in lsp mode
-    api_key = (
-        read_api_key_from_shell_config()
-        if is_LSP_enabled()
-        else os.environ.get("CODEFLASH_API_KEY") or read_api_key_from_shell_config()
+    # Check environment variable first
+    env_api_key = os.environ.get("CODEFLASH_API_KEY")
+    shell_api_key = read_api_key_from_shell_config()
+    logger.debug(
+        f"env_utils.py:get_codeflash_api_key - env_api_key: {'***' + env_api_key[-4:] if env_api_key else None}, shell_api_key: {'***' + shell_api_key[-4:] if shell_api_key else None}"
     )
+    # If we have an env var but it's not in shell config, save it for persistence
+    if env_api_key and not shell_api_key:
+        try:
+            from codeflash.either import is_successful
 
-    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/getting-started/codeflash-github-actions#add-your-api-key-to-your-repository-secrets]."  # noqa
+            logger.debug("env_utils.py:get_codeflash_api_key - Saving API key from environment to shell config")
+            result = save_api_key_to_rc(env_api_key)
+            if is_successful(result):
+                logger.debug(
+                    f"env_utils.py:get_codeflash_api_key - Automatically saved API key from environment to shell config: {result.unwrap()}"
+                )
+            else:
+                logger.debug(f"env_utils.py:get_codeflash_api_key - Failed to save API key: {result.failure()}")
+        except Exception as e:
+            logger.debug(
+                f"env_utils.py:get_codeflash_api_key - Failed to automatically save API key to shell config: {e}"
+            )
+
+    # Prefer the shell configuration over environment variables for lsp,
+    # as the API key may change in the RC file during lsp runtime. Since the LSP client (extension) can restart
+    # within the same process, the environment variable could become outdated.
+    api_key = shell_api_key or env_api_key if is_LSP_enabled() else env_api_key or shell_api_key
+
+    api_secret_docs_message = "For more information, refer to the documentation at [https://docs.codeflash.ai/optimizing-with-codeflash/codeflash-github-actions#manual-setup]."  # noqa
     if not api_key:
         msg = (
             "I didn't find a Codeflash API key in your environment.\nYou can generate one at "
@@ -112,7 +155,7 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with Path(event_path).open() as f:
+    with Path(event_path).open(encoding="utf-8") as f:
         return json.load(f)  # type: ignore  # noqa
 
 

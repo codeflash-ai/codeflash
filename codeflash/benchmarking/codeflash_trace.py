@@ -4,6 +4,7 @@ import pickle
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
@@ -143,12 +144,13 @@ class CodeflashTrace:
                 print("Pickle limit reached")
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
+                normalized_file_path = Path(func.__code__.co_filename).as_posix()
                 self.function_calls_data.append(
                     (
                         func.__name__,
                         class_name,
                         func.__module__,
-                        func.__code__.co_filename,
+                        normalized_file_path,
                         benchmark_function_name,
                         benchmark_module_path,
                         benchmark_line_number,
@@ -169,12 +171,13 @@ class CodeflashTrace:
                 # Add to the list of function calls without pickled args. Used for timing info only
                 self._thread_local.active_functions.remove(func_id)
                 overhead_time = time.thread_time_ns() - end_time
+                normalized_file_path = Path(func.__code__.co_filename).as_posix()
                 self.function_calls_data.append(
                     (
                         func.__name__,
                         class_name,
                         func.__module__,
-                        func.__code__.co_filename,
+                        normalized_file_path,
                         benchmark_function_name,
                         benchmark_module_path,
                         benchmark_line_number,
@@ -192,12 +195,13 @@ class CodeflashTrace:
             # Add to the list of function calls with pickled args, to be used for replay tests
             self._thread_local.active_functions.remove(func_id)
             overhead_time = time.thread_time_ns() - end_time
+            normalized_file_path = Path(func.__code__.co_filename).as_posix()
             self.function_calls_data.append(
                 (
                     func.__name__,
                     class_name,
                     func.__module__,
-                    func.__code__.co_filename,
+                    normalized_file_path,
                     benchmark_function_name,
                     benchmark_module_path,
                     benchmark_line_number,

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.tracing.pytest_parallelization import pytest_split
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -63,13 +65,15 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         parsed_args.tracer_timeout = getattr(args, "timeout", None)
         parsed_args.codeflash_config = getattr(args, "config_file_path", None)
         parsed_args.trace_only = getattr(args, "trace_only", False)
-        parsed_args.module = False
+
+        temp_parsed, unknown_args = parser.parse_known_args()
+        parsed_args.module = temp_parsed.module
+        sys.argv[:] = unknown_args
 
         if getattr(args, "disable", False):
             console.rule("Codeflash: Tracer disabled by --disable option", style="bold red")
             return parser
 
-        unknown_args = []
     else:
         if not sys.argv[1:]:
             parser.print_usage()
@@ -86,51 +90,120 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
     project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
     if len(unknown_args) > 0:
+        args_dict = {
+            "functions": parsed_args.only_functions,
+            "disable": False,
+            "project_root": str(project_root),
+            "max_function_count": parsed_args.max_function_count,
+            "timeout": parsed_args.tracer_timeout,
+            "progname": unknown_args[0],
+            "config": config,
+            "module": parsed_args.module,
+        }
         try:
-            result_pickle_file_path = get_run_tmp_file("tracer_results_file.pkl")
-            args_dict = {
-                "result_pickle_file_path": str(result_pickle_file_path),
-                "output": str(parsed_args.outfile),
-                "functions": parsed_args.only_functions,
-                "disable": False,
-                "project_root": str(project_root),
-                "max_function_count": parsed_args.max_function_count,
-                "timeout": parsed_args.tracer_timeout,
-                "command": " ".join(sys.argv),
-                "progname": unknown_args[0],
-                "config": config,
-                "module": parsed_args.module,
-            }
+            pytest_splits = []
+            test_paths = []
+            replay_test_paths = []
+            if parsed_args.module and unknown_args[0] == "pytest":
+                pytest_splits, test_paths = pytest_split(unknown_args[1:])
+                if pytest_splits is None or test_paths is None:
+                    console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
+                    console.print(f"Current working directory: {Path.cwd()}")
+                    console.print("Please ensure the test directory exists and contains test files.")
+                    sys.exit(1)
 
-            subprocess.run(
-                [
-                    SAFE_SYS_EXECUTABLE,
-                    Path(__file__).parent / "tracing" / "tracing_new_process.py",
-                    *sys.argv,
-                    json.dumps(args_dict),
-                ],
-                cwd=Path.cwd(),
-                check=False,
-            )
-            try:
-                with result_pickle_file_path.open(mode="rb") as f:
-                    data = pickle.load(f)
-            except Exception:
-                console.print("❌ Failed to trace. Exiting...")
-                sys.exit(1)
-            finally:
-                result_pickle_file_path.unlink(missing_ok=True)
+            if len(pytest_splits) > 1:
+                processes = []
+                test_paths_set = set(test_paths)
+                result_pickle_file_paths = []
+                for i, test_split in enumerate(pytest_splits, start=1):
+                    result_pickle_file_path = get_run_tmp_file(Path(f"tracer_results_file_{i}.pkl"))
+                    result_pickle_file_paths.append(result_pickle_file_path)
+                    args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
+                    outpath = parsed_args.outfile
+                    outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
+                    args_dict["output"] = str(outpath)
+                    updated_sys_argv = []
+                    for elem in sys.argv:
+                        if elem in test_paths_set:
+                            updated_sys_argv.extend(test_split)
+                        else:
+                            updated_sys_argv.append(elem)
+                    args_dict["command"] = " ".join(updated_sys_argv)
+                    env = os.environ.copy()
+                    pythonpath = env.get("PYTHONPATH", "")
+                    project_root_str = str(project_root)
+                    if pythonpath:
+                        env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+                    else:
+                        env["PYTHONPATH"] = project_root_str
+                    processes.append(
+                        subprocess.Popen(
+                            [
+                                SAFE_SYS_EXECUTABLE,
+                                Path(__file__).parent / "tracing" / "tracing_new_process.py",
+                                *updated_sys_argv,
+                                json.dumps(args_dict),
+                            ],
+                            cwd=Path.cwd(),
+                            env=env,
+                        )
+                    )
+                for process in processes:
+                    process.wait()
+                for result_pickle_file_path in result_pickle_file_paths:
+                    try:
+                        with result_pickle_file_path.open(mode="rb") as f:
+                            data = pickle.load(f)
+                            replay_test_paths.append(str(data["replay_test_file_path"]))
+                    except Exception:
+                        console.print("❌ Failed to trace. Exiting...")
+                        sys.exit(1)
+                    finally:
+                        result_pickle_file_path.unlink(missing_ok=True)
+            else:
+                result_pickle_file_path = get_run_tmp_file(Path("tracer_results_file.pkl"))
+                args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
+                args_dict["output"] = str(parsed_args.outfile)
+                args_dict["command"] = " ".join(sys.argv)
 
-            replay_test_path = data["replay_test_file_path"]
-            if not parsed_args.trace_only and replay_test_path is not None:
+                env = os.environ.copy()
+                # Add project root to PYTHONPATH so imports work correctly
+                pythonpath = env.get("PYTHONPATH", "")
+                project_root_str = str(project_root)
+                if pythonpath:
+                    env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
+                else:
+                    env["PYTHONPATH"] = project_root_str
+
+                subprocess.run(
+                    [
+                        SAFE_SYS_EXECUTABLE,
+                        Path(__file__).parent / "tracing" / "tracing_new_process.py",
+                        *sys.argv,
+                        json.dumps(args_dict),
+                    ],
+                    cwd=Path.cwd(),
+                    env=env,
+                    check=False,
+                )
+                try:
+                    with result_pickle_file_path.open(mode="rb") as f:
+                        data = pickle.load(f)
+                        replay_test_paths.append(str(data["replay_test_file_path"]))
+                except Exception:
+                    console.print("❌ Failed to trace. Exiting...")
+                    sys.exit(1)
+                finally:
+                    result_pickle_file_path.unlink(missing_ok=True)
+            if not parsed_args.trace_only and replay_test_paths:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
                 from codeflash.cli_cmds.console import paneled_text
                 from codeflash.telemetry import posthog_cf
                 from codeflash.telemetry.sentry import init_sentry
 
-                sys.argv = ["codeflash", "--replay-test", str(replay_test_path)]
-
+                sys.argv = ["codeflash", "--replay-test", *replay_test_paths]
                 args = parse_args()
                 paneled_text(
                     CODEFLASH_LOGO,
@@ -150,8 +223,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 # Delete the trace file and the replay test file if they exist
                 if outfile:
                     outfile.unlink(missing_ok=True)
-                if replay_test_path:
-                    replay_test_path.unlink(missing_ok=True)
+                for replay_test_path in replay_test_paths:
+                    Path(replay_test_path).unlink(missing_ok=True)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.

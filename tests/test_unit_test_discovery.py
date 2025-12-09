@@ -8,9 +8,12 @@ from codeflash.discovery.discover_unit_tests import (
     filter_test_files_by_imports,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import TestsInFile, TestType
+from codeflash.models.models import TestsInFile, TestType, FunctionParent
 from codeflash.verification.verification_utils import TestConfig
 
+
+from pathlib import Path
+from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
 def test_unit_test_discovery_pytest():
     project_path = Path(__file__).parent.parent.resolve() / "code_to_optimize"
@@ -133,7 +136,7 @@ def test_discover_tests_pytest_with_temp_dir_root():
         assert len(discovered_tests) == 1
         assert len(discovered_tests["dummy_code.dummy_function"]) == 2
         dummy_tests = discovered_tests["dummy_code.dummy_function"]
-        assert all(test.tests_in_file.test_file == test_file_path for test in dummy_tests)
+        assert all(test.tests_in_file.test_file.resolve() == test_file_path.resolve() for test in dummy_tests)
         assert {test.tests_in_file.test_function for test in dummy_tests} == {
             "test_dummy_parametrized_function[True]",
             "test_dummy_function",
@@ -204,16 +207,13 @@ def test_discover_tests_pytest_with_multi_level_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 3
-        assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
-        assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
-            == level1_test_file_path
-        )
+        discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
+        assert discovered_root_test.resolve() == root_test_file_path.resolve()
+        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
 
-        assert (
-            next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
-            == level2_test_file_path
-        )
+        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
 
 def test_discover_tests_pytest_dirs():
@@ -295,20 +295,15 @@ def test_discover_tests_pytest_dirs():
 
         # Check if the test files at all levels are discovered
         assert len(discovered_tests) == 4
-        assert next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file == root_test_file_path
-        assert (
-            next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
-            == level1_test_file_path
-        )
-        assert (
-            next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
-            == level2_test_file_path
-        )
+        discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
+        assert discovered_root_test.resolve() == root_test_file_path.resolve()
+        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
+        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
-        assert (
-            next(iter(discovered_tests["level1.level3.level3_code.level3_function"])).tests_in_file.test_file
-            == level3_test_file_path
-        )
+        discovered_level3_test = next(iter(discovered_tests["level1.level3.level3_code.level3_function"])).tests_in_file.test_file
+        assert discovered_level3_test.resolve() == level3_test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_class():
@@ -342,10 +337,8 @@ def test_discover_tests_pytest_with_class():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_class_test = next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
+        assert discovered_class_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_double_nested_directories():
@@ -383,12 +376,10 @@ def test_discover_tests_pytest_with_double_nested_directories():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(
-                iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])
-            ).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_nested_test = next(
+            iter(discovered_tests["nested.more_nested.nested_class_code.NestedClass.nested_method"])
+        ).tests_in_file.test_file
+        assert discovered_nested_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_with_code_in_dir_and_test_in_subdir():
@@ -433,7 +424,8 @@ def test_discover_tests_with_code_in_dir_and_test_in_subdir():
 
         # Check if the test file is discovered and associated with the code file
         assert len(discovered_tests) == 1
-        assert next(iter(discovered_tests["code.some_code.some_function"])).tests_in_file.test_file == test_file_path
+        discovered_test_file = next(iter(discovered_tests["code.some_code.some_function"])).tests_in_file.test_file
+        assert discovered_test_file.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_with_nested_class():
@@ -469,10 +461,8 @@ def test_discover_tests_pytest_with_nested_class():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        assert (
-            next(iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])).tests_in_file.test_file
-            == test_file_path
-        )
+        discovered_inner_test = next(iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])).tests_in_file.test_file
+        assert discovered_inner_test.resolve() == test_file_path.resolve()
 
 
 def test_discover_tests_pytest_separate_moduledir():
@@ -509,7 +499,8 @@ def test_discover_tests_pytest_separate_moduledir():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        assert next(iter(discovered_tests["mypackage.code.find_common_tags"])).tests_in_file.test_file == test_file_path
+        discovered_test_file = next(iter(discovered_tests["mypackage.code.find_common_tags"])).tests_in_file.test_file
+        assert discovered_test_file.resolve() == test_file_path.resolve()
 
 
 def test_unittest_discovery_with_pytest():
@@ -554,7 +545,7 @@ class TestCalculator(unittest.TestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add"
 
 
@@ -622,7 +613,7 @@ class TestCalculator(ExtendedTestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add"
 
 
@@ -720,8 +711,212 @@ class TestCalculator(unittest.TestCase):
         assert "calculator.Calculator.add" in discovered_tests
         assert len(discovered_tests["calculator.Calculator.add"]) == 1
         calculator_test = next(iter(discovered_tests["calculator.Calculator.add"]))
-        assert calculator_test.tests_in_file.test_file == test_file_path
+        assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add_with_parameters"
+
+def test_unittest_discovery_with_pytest_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "topological_sort.py"
+        code_file_content = """
+import uuid
+from collections import defaultdict
+
+
+class Graph:
+    def __init__(self, vertices: int):
+        self.vertices=vertices
+
+    def dummy_fn(self):
+        return 1
+
+    def topologicalSort(self):
+        return self.vertices
+
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with parameterized tests
+        test_file_path = path_obj_tmpdirname / "test_topological_sort.py"
+        test_file_content = """
+from topological_sort import Graph
+import pytest
+
+@pytest.fixture
+def g():
+    return Graph(6) 
+
+def test_topological_sort(g):
+    assert g.dummy_fn() == 1
+    assert g.topologicalSort() == 6
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+        fto = FunctionToOptimize(function_name="topologicalSort", file_path=code_file_path, parents=[FunctionParent(name="Graph", type="ClassDef")])
+        # Discover tests
+        discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 2
+        assert "topological_sort.Graph.topologicalSort" in discovered_tests
+        assert len(discovered_tests["topological_sort.Graph.topologicalSort"]) == 1
+        tpsort_test = next(iter(discovered_tests["topological_sort.Graph.topologicalSort"]))
+        assert tpsort_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
+        assert tpsort_test.tests_in_file.test_function == "test_topological_sort"
+
+def test_unittest_discovery_with_pytest_class_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a simple code file
+        code_file_path = path_obj_tmpdirname / "router_file.py"
+        code_file_content = """
+from __future__ import annotations
+
+import hashlib
+import json
+
+class Router:
+    model_names: list
+    cache_responses = False
+    tenacity = None
+
+    def __init__(  # noqa: PLR0915
+            self,
+            model_list = None,
+    ) -> None:
+        self.model_list = model_list
+        self.model_id_to_deployment_index_map = {}
+        self.model_name_to_deployment_indices = {}
+    def _generate_model_id(self, model_group, litellm_params):
+        # Optimized: Use list and join instead of string concatenation in loop
+        # This avoids creating many temporary string objects (O(n) vs O(n²) complexity)
+        parts = [model_group]
+        for k, v in litellm_params.items():
+            if isinstance(k, str):
+                parts.append(k)
+            elif isinstance(k, dict):
+                parts.append(json.dumps(k))
+            else:
+                parts.append(str(k))
+
+            if isinstance(v, str):
+                parts.append(v)
+            elif isinstance(v, dict):
+                parts.append(json.dumps(v))
+            else:
+                parts.append(str(v))
+
+        concat_str = "".join(parts)
+        hash_object = hashlib.sha256(concat_str.encode())
+
+        return hash_object.hexdigest()
+    def _add_model_to_list_and_index_map(
+            self, model, model_id  = None
+    ) -> None:
+        idx = len(self.model_list)
+        self.model_list.append(model)
+
+        # Update model_id index for O(1) lookup
+        if model_id is not None:
+            self.model_id_to_deployment_index_map[model_id] = idx
+        elif model.get("model_info", {}).get("id") is not None:
+            self.model_id_to_deployment_index_map[model["model_info"]["id"]] = idx
+
+        # Update model_name index for O(1) lookup
+        model_name = model.get("model_name")
+        if model_name:
+            if model_name not in self.model_name_to_deployment_indices:
+                self.model_name_to_deployment_indices[model_name] = []
+            self.model_name_to_deployment_indices[model_name].append(idx)
+
+    def _build_model_id_to_deployment_index_map(self, model_list):
+        # First populate the model_list
+        self.model_list = []
+        for _, model in enumerate(model_list):
+            # Extract model_info from the model dict
+            model_info = model.get("model_info", {})
+            model_id = model_info.get("id")
+
+            # If no ID exists, generate one using the same logic as set_model_list
+            if model_id is None:
+                model_name = model.get("model_name", "")
+                litellm_params = model.get("litellm_params", {})
+                model_id = self._generate_model_id(model_name, litellm_params)
+                # Update the model_info in the original list
+                if "model_info" not in model:
+                    model["model_info"] = {}
+                model["model_info"]["id"] = model_id
+
+            self._add_model_to_list_and_index_map(model=model, model_id=model_id)
+
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a unittest test file with parameterized tests
+        test_file_path = path_obj_tmpdirname / "test_router_file.py"
+        test_file_content = """
+import pytest
+
+from router_file import Router
+
+
+class TestRouterIndexManagement:
+    @pytest.fixture
+    def router(self):
+        return Router(model_list=[])
+    def test_build_model_id_to_deployment_index_map(self, router):
+        model_list = [
+            {
+                "model_name": "gpt-3.5-turbo",
+                "litellm_params": {"model": "gpt-3.5-turbo"},
+                "model_info": {"id": "model-1"},
+            },
+            {
+                "model_name": "gpt-4",
+                "litellm_params": {"model": "gpt-4"},
+                "model_info": {"id": "model-2"},
+            },
+        ]
+
+        # Test: Build index from model list
+        router._build_model_id_to_deployment_index_map(model_list)
+
+        # Verify: model_list is populated
+        assert len(router.model_list) == 2
+        # Verify: model_id_to_deployment_index_map is correctly built
+        assert router.model_id_to_deployment_index_map["model-1"] == 0
+        assert router.model_id_to_deployment_index_map["model-2"] == 1
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Configure test discovery
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",  # Using pytest framework to discover unittest tests
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+        fto = FunctionToOptimize(function_name="_build_model_id_to_deployment_index_map", file_path=code_file_path, parents=[FunctionParent(name="Router", type="ClassDef")])
+        # Discover tests
+        discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
+
+        # Verify the unittest was discovered
+        assert len(discovered_tests) == 1
+        assert "router_file.Router._build_model_id_to_deployment_index_map" in discovered_tests
+        assert len(discovered_tests["router_file.Router._build_model_id_to_deployment_index_map"]) == 1
+        router_test = next(iter(discovered_tests["router_file.Router._build_model_id_to_deployment_index_map"]))
+        assert router_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
+        assert router_test.tests_in_file.test_function == "test_build_model_id_to_deployment_index_map"
 
 
 def test_unittest_discovery_with_pytest_parameterized():
@@ -1319,6 +1514,101 @@ def test_target():
 
         assert should_process is True
 
+def test_analyze_imports_method():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+
+
+def test_topological_sort():
+    g = Graph(6)
+    g.addEdge(5, 2)
+    g.addEdge(5, 0)
+    g.addEdge(4, 0)
+    g.addEdge(4, 1)
+    g.addEdge(2, 3)
+    g.addEdge(3, 1)
+
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+def test_analyze_imports_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+import pytest
+
+@pytest.fixture
+def g():
+    return Graph(6) 
+
+def test_topological_sort(g):
+    g.addEdge(5, 2)
+    g.addEdge(5, 0)
+    g.addEdge(4, 0)
+    g.addEdge(4, 1)
+    g.addEdge(2, 3)
+    g.addEdge(3, 1)
+
+    assert g.topologicalSort()[0] == [5, 4, 2, 3, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+def test_analyze_imports_class_fixture():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+import pytest
+
+from router_file import Router
+
+
+class TestRouterIndexManagement:
+    @pytest.fixture
+    def router(self):
+        return Router(model_list=[])
+    def test_build_model_id_to_deployment_index_map(self, router):
+        model_list = [
+            {
+                "model_name": "gpt-3.5-turbo",
+                "litellm_params": {"model": "gpt-3.5-turbo"},
+                "model_info": {"id": "model-1"},
+            },
+            {
+                "model_name": "gpt-4",
+                "litellm_params": {"model": "gpt-4"},
+                "model_info": {"id": "model-2"},
+            },
+        ]
+
+        # Test: Build index from model list
+        router._build_model_id_to_deployment_index_map(model_list)
+
+        # Verify: model_list is populated
+        assert len(router.model_list) == 2
+        # Verify: model_id_to_deployment_index_map is correctly built
+        assert router.model_id_to_deployment_index_map["model-1"] == 0
+        assert router.model_id_to_deployment_index_map["model-2"] == 1
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Router._build_model_id_to_deployment_index_map"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
 
 def test_analyze_imports_aliased_class_method_negative():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1339,3 +1629,397 @@ def test_target():
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
         assert should_process is False
+
+
+
+def test_analyze_imports_class_with_multiple_methods():
+    """Test importing a class when looking for multiple methods of that class."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_methods():
+    obj = MyClass()
+    assert obj.method1() is True
+    assert obj.method2() is False
+    assert obj.method3() == 42
+"""
+        test_file.write_text(test_content)
+
+        # Looking for multiple methods of the same class
+        target_functions = {"MyClass.method1", "MyClass.method2", "MyClass.method3"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_with_nested_classes():
+    """Test importing nested classes and their methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import OuterClass
+
+def test_nested():
+    outer = OuterClass()
+    inner = outer.InnerClass()
+    assert inner.inner_method() is True
+"""
+        test_file.write_text(test_content)
+
+        # This would require more complex analysis of nested classes
+        # Currently only direct class.method patterns are supported
+        target_functions = {"OuterClass.InnerClass.inner_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Our fix detects OuterClass from OuterClass.InnerClass.inner_method
+        # This is overly broad but conservative (better to include than exclude)
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_partial_match():
+    """Test that partial class names don't match incorrectly."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import GraphBuilder
+
+def test_builder():
+    builder = GraphBuilder()
+    assert builder.build() is not None
+"""
+        test_file.write_text(test_content)
+
+        # Looking for Graph.topologicalSort, not GraphBuilder
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_method_with_inheritance():
+    """Test importing a child class when looking for parent class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import ChildClass
+
+def test_inherited():
+    child = ChildClass()
+    # Assuming ChildClass inherits from ParentClass
+    assert child.parent_method() is True
+"""
+        test_file.write_text(test_content)
+
+        # Looking for parent class method, but only child is imported
+        target_functions = {"ParentClass.parent_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_static_and_class_methods():
+    """Test importing a class and calling static/class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_static_and_class_methods():
+    # Static method call
+    assert MyClass.static_method() is True
+
+    # Class method call
+    result = MyClass.class_method()
+    assert result == "expected"
+
+    # Instance method call
+    obj = MyClass()
+    assert obj.instance_method() is False
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.static_method", "MyClass.class_method", "MyClass.instance_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_multiple_classes_same_module():
+    """Test importing multiple classes from the same module."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import ClassA, ClassB, ClassC
+
+def test_multiple_classes():
+    a = ClassA()
+    b = ClassB()
+    c = ClassC()
+
+    assert a.methodA() is True
+    assert b.methodB() is False
+    assert c.methodC() == 42
+"""
+        test_file.write_text(test_content)
+
+        # Looking for methods from different classes
+        target_functions = {"ClassA.methodA", "ClassB.methodB", "ClassD.methodD"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # ClassA and ClassB are imported
+
+
+def test_analyze_imports_class_method_case_sensitive():
+    """Test that class name matching is case-sensitive."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import graph
+
+def test_lowercase():
+    g = graph()
+    assert g.topologicalSort() is not None
+"""
+        test_file.write_text(test_content)
+
+        # Looking for Graph (capital G), but imported graph (lowercase)
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is False
+
+
+def test_analyze_imports_class_from_submodule():
+    """Test importing a class from a submodule."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from package.subpackage.module import MyClass
+
+def test_submodule_class():
+    obj = MyClass()
+    assert obj.my_method() is True
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.my_method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_aliased_class_with_methods():
+    """Test importing a class with an alias and looking for its methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import Graph as G
+
+def test_aliased_class():
+    graph = G(10)
+    result = graph.topologicalSort()
+    assert result is not None
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_property_access():
+    """Test importing a class and accessing properties (not methods)."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_properties():
+    obj = MyClass()
+    # Accessing properties, not methods
+    assert obj.size == 10
+    assert obj.name == "test"
+"""
+        test_file.write_text(test_content)
+
+        # Looking for methods, but only properties are accessed
+        # Our fix conservatively includes when class is imported
+        target_functions = {"MyClass.get_size", "MyClass.get_name"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # Conservative approach
+
+
+def test_analyze_imports_class_constructor_params():
+    """Test class import when looking for __init__ method."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass
+
+def test_constructor():
+    # Testing the constructor
+    obj1 = MyClass()
+    obj2 = MyClass(10)
+    obj3 = MyClass(size=20, name="test")
+
+    assert obj1 is not None
+    assert obj2 is not None
+    assert obj3 is not None
+"""
+        test_file.write_text(test_content)
+
+        # __init__ is a special method that would require additional logic
+        target_functions = {"MyClass.__init__"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Our fix now detects MyClass from MyClass.__init__
+        assert should_process is True
+
+
+def test_analyze_imports_class_method_chaining():
+    """Test method chaining on imported classes."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import Builder
+
+def test_chaining():
+    result = Builder().add_item("a").add_item("b").build()
+    assert result is not None
+"""
+        test_file.write_text(test_content)
+
+        # Method chaining requires tracking object types through chained calls
+        target_functions = {"Builder.add_item", "Builder.build"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Currently detects Builder import and methods
+        assert should_process is True
+
+
+def test_analyze_imports_mixed_function_and_class_imports():
+    """Test mixed imports of functions and classes from the same module."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from mymodule import MyClass, standalone_function, AnotherClass
+
+def test_mixed():
+    # Using class method
+    obj = MyClass()
+    assert obj.method() is True
+
+    # Using standalone function
+    assert standalone_function() is False
+
+    # Using another class
+    other = AnotherClass()
+    assert other.other_method() == 42
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method", "standalone_function", "YetAnotherClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True  # MyClass.method and standalone_function are imported
+
+
+def test_analyze_imports_class_with_module_prefix():
+    """Test looking for fully qualified class methods."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from code_to_optimize.topological_sort import Graph
+
+def test_fully_qualified():
+    g = Graph(5)
+    assert g.topologicalSort() == [4, 3, 2, 1, 0]
+"""
+        test_file.write_text(test_content)
+
+        # Looking with full module path would require more complex module resolution
+        target_functions = {"code_to_optimize.topological_sort.Graph.topologicalSort"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # Currently not supported - would need to match module path with imports
+        assert should_process is False
+
+
+def test_analyze_imports_reimport_in_function():
+    """Test class import inside a function."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+def test_local_import():
+    from mymodule import MyClass
+    obj = MyClass()
+    assert obj.method() is True
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        assert should_process is True
+
+
+def test_analyze_imports_class_in_type_annotation():
+    """Test class used only in type annotations."""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        test_file = Path(tmpdirname) / "test_example.py"
+        test_content = """
+from typing import Optional
+from mymodule import MyClass
+
+def helper_function(obj: Optional[MyClass]) -> bool:
+    if obj:
+        return obj.method()
+    return False
+
+def test_with_type_annotation():
+    # MyClass is imported but only used in type annotation
+    result = helper_function(None)
+    assert result is False
+"""
+        test_file.write_text(test_content)
+
+        target_functions = {"MyClass.method"}
+        should_process = analyze_imports_in_test_file(test_file, target_functions)
+
+        # MyClass is imported, so class.method pattern should match
+        assert should_process is True
+
+
+def test_discover_unit_tests_caching():
+    tests_root = Path(__file__).parent.resolve() / "tests"
+    project_root_path = tests_root.parent.resolve()
+
+    test_config = TestConfig(
+        tests_root=tests_root,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        tests_project_rootdir=project_root_path,
+        use_cache=False,
+    )
+
+
+
+    non_cached_function_to_tests, non_cached_num_discovered_tests, non_cached_num_discovered_replay_tests = (
+        discover_unit_tests(test_config)
+    )
+    cache_config = TestConfig(
+        tests_root=tests_root,
+        project_root_path=project_root_path,
+        test_framework="pytest",
+        tests_project_rootdir=project_root_path,
+        use_cache=True,
+    )
+    tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(cache_config)
+
+    assert non_cached_num_discovered_tests == num_discovered_tests
+    assert non_cached_function_to_tests == tests
+    assert non_cached_num_discovered_replay_tests == num_discovered_replay_tests

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import enum
 import hashlib
 import os
 import pickle
@@ -11,12 +12,11 @@ import subprocess
 import unittest
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-import pytest
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text
@@ -35,6 +35,22 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+@final
+class PytestExitCode(enum.IntEnum):  # don't need to import entire pytest just for this
+    #: Tests passed.
+    OK = 0
+    #: Tests failed.
+    TESTS_FAILED = 1
+    #: pytest was interrupted.
+    INTERRUPTED = 2
+    #: An internal error got in the way.
+    INTERNAL_ERROR = 3
+    #: pytest was misused.
+    USAGE_ERROR = 4
+    #: pytest couldn't find tests.
+    NO_TESTS_COLLECTED = 5
+
+
 @dataclass(frozen=True)
 class TestFunction:
     function_name: str
@@ -51,13 +67,39 @@ FUNCTION_NAME_REGEX = re.compile(r"([^.]+)\.([a-zA-Z0-9_]+)$")
 
 
 class TestsCache:
-    def __init__(self) -> None:
+    SCHEMA_VERSION = 1  # Increment this when schema changes
+
+    def __init__(self, project_root_path: str | Path) -> None:
+        self.project_root_path = Path(project_root_path).resolve().as_posix()
         self.connection = sqlite3.connect(codeflash_cache_db)
         self.cur = self.connection.cursor()
 
         self.cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS schema_version(
+                version INTEGER PRIMARY KEY
+            )
+            """
+        )
+
+        self.cur.execute("SELECT version FROM schema_version")
+        result = self.cur.fetchone()
+        current_version = result[0] if result else None
+
+        if current_version != self.SCHEMA_VERSION:
+            logger.debug(
+                f"Schema version mismatch (current: {current_version}, expected: {self.SCHEMA_VERSION}). Recreating tables."
+            )
+            self.cur.execute("DROP TABLE IF EXISTS discovered_tests")
+            self.cur.execute("DROP INDEX IF EXISTS idx_discovered_tests_project_file_path_hash")
+            self.cur.execute("DELETE FROM schema_version")
+            self.cur.execute("INSERT INTO schema_version (version) VALUES (?)", (self.SCHEMA_VERSION,))
+            self.connection.commit()
+
+        self.cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS discovered_tests(
+                project_root_path TEXT,
                 file_path TEXT,
                 file_hash TEXT,
                 qualified_name_with_modules_from_root TEXT,
@@ -72,11 +114,12 @@ class TestsCache:
         )
         self.cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_discovered_tests_file_path_hash
-            ON discovered_tests (file_path, file_hash)
+            CREATE INDEX IF NOT EXISTS idx_discovered_tests_project_file_path_hash
+            ON discovered_tests (project_root_path, file_path, file_hash)
             """
         )
-        self._memory_cache = {}
+
+        self.memory_cache = {}
 
     def insert_test(
         self,
@@ -92,8 +135,9 @@ class TestsCache:
     ) -> None:
         test_type_value = test_type.value if hasattr(test_type, "value") else test_type
         self.cur.execute(
-            "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO discovered_tests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
+                self.project_root_path,
                 file_path,
                 file_hash,
                 qualified_name_with_modules_from_root,
@@ -107,32 +151,48 @@ class TestsCache:
         )
         self.connection.commit()
 
-    def get_tests_for_file(self, file_path: str, file_hash: str) -> list[FunctionCalledInTest]:
-        cache_key = (file_path, file_hash)
-        if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
-        self.cur.execute("SELECT * FROM discovered_tests WHERE file_path = ? AND file_hash = ?", (file_path, file_hash))
-        result = [
-            FunctionCalledInTest(
+    def get_function_to_test_map_for_file(
+        self, file_path: str, file_hash: str
+    ) -> dict[str, set[FunctionCalledInTest]] | None:
+        cache_key = (self.project_root_path, file_path, file_hash)
+        if cache_key in self.memory_cache:
+            return self.memory_cache[cache_key]
+
+        self.cur.execute(
+            "SELECT * FROM discovered_tests WHERE project_root_path = ? AND file_path = ? AND file_hash = ?",
+            (self.project_root_path, file_path, file_hash),
+        )
+        rows = self.cur.fetchall()
+        if not rows:
+            return None
+
+        function_to_test_map = defaultdict(set)
+
+        for row in rows:
+            qualified_name_with_modules_from_root = row[3]
+            function_called_in_test = FunctionCalledInTest(
                 tests_in_file=TestsInFile(
-                    test_file=Path(row[0]), test_class=row[4], test_function=row[5], test_type=TestType(int(row[6]))
+                    test_file=Path(row[1]), test_class=row[5], test_function=row[6], test_type=TestType(int(row[7]))
                 ),
-                position=CodePosition(line_no=row[7], col_no=row[8]),
+                position=CodePosition(line_no=row[8], col_no=row[9]),
             )
-            for row in self.cur.fetchall()
-        ]
-        self._memory_cache[cache_key] = result
+            function_to_test_map[qualified_name_with_modules_from_root].add(function_called_in_test)
+
+        result = dict(function_to_test_map)
+        self.memory_cache[cache_key] = result
         return result
 
     @staticmethod
-    def compute_file_hash(path: str) -> str:
+    def compute_file_hash(path: Path) -> str:
         h = hashlib.sha256(usedforsecurity=False)
-        with Path(path).open("rb") as f:
+        with path.open("rb", buffering=0) as f:
+            buf = bytearray(8192)
+            mv = memoryview(buf)
             while True:
-                chunk = f.read(8192)
-                if not chunk:
+                n = f.readinto(mv)
+                if n == 0:
                     break
-                h.update(chunk)
+                h.update(mv[:n])
         return h.hexdigest()
 
     def close(self) -> None:
@@ -152,15 +212,31 @@ class ImportAnalyzer(ast.NodeVisitor):
         self.wildcard_modules: set[str] = set()
         # Track aliases: alias_name -> original_name
         self.alias_mapping: dict[str, str] = {}
+        # Track instances: variable_name -> class_name
+        self.instance_mapping: dict[str, str] = {}
 
         # Precompute function_names for prefix search
         # For prefix match, store mapping from prefix-root to candidates for O(1) matching
         self._exact_names = function_names_to_find
         self._prefix_roots: dict[str, list[str]] = {}
+        # Precompute sets for faster lookup during visit_Attribute()
+        self._dot_names: set[str] = set()
+        self._dot_methods: dict[str, set[str]] = {}
+        self._class_method_to_target: dict[tuple[str, str], str] = {}
+
+        # Optimize prefix-roots and dot_methods construction
+        add_dot_methods = self._dot_methods.setdefault
+        add_prefix_roots = self._prefix_roots.setdefault
+        dot_names_add = self._dot_names.add
+        class_method_to_target = self._class_method_to_target
         for name in function_names_to_find:
             if "." in name:
-                root = name.split(".", 1)[0]
-                self._prefix_roots.setdefault(root, []).append(name)
+                root, method = name.rsplit(".", 1)
+                dot_names_add(name)
+                add_dot_methods(method, set()).add(root)
+                class_method_to_target[(root, method)] = name
+                root_prefix = name.split(".", 1)[0]
+                add_prefix_roots(root_prefix, []).append(name)
 
     def visit_Import(self, node: ast.Import) -> None:
         """Handle 'import module' statements."""
@@ -186,6 +262,30 @@ class ImportAnalyzer(ast.NodeVisitor):
                     self.found_any_target_function = True
                     self.found_qualified_name = target_func
                     return
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Track variable assignments, especially class instantiations."""
+        if self.found_any_target_function:
+            return
+
+        # Check if the assignment is a class instantiation
+        value = node.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+            class_name = value.func.id
+            if class_name in self.imported_modules:
+                # Map the variable to the actual class name (handling aliases)
+                original_class = self.alias_mapping.get(class_name, class_name)
+                # Use list comprehension for direct assignment to instance_mapping, reducing loop overhead
+                targets = node.targets
+                instance_mapping = self.instance_mapping
+                # since ast.Name nodes are heavily used, avoid local lookup for isinstance
+                # and reuse locals for faster attribute access
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        instance_mapping[target.id] = original_class
+
+        # Continue visiting child nodes
+        self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Handle 'from module import name' statements."""
@@ -227,6 +327,18 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.found_qualified_name = qname
                 return
 
+            # Check if any target function is a method of the imported class/module
+            # Be conservative except when an alias is used (which requires exact method matching)
+            for target_func in fnames:
+                if "." in target_func:
+                    class_name, method_name = target_func.split(".", 1)
+                    if aname == class_name and not alias.asname:
+                        self.found_any_target_function = True
+                        self.found_qualified_name = target_func
+                        return
+                        # If an alias is used, track it for later method access detection
+                        # The actual method usage will be detected in visit_Attribute
+
             prefix = qname + "."
             # Only bother if one of the targets startswith the prefix-root
             candidates = proots.get(qname, ())
@@ -242,33 +354,66 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         # Check if this is accessing a target function through an imported module
-        if (
-            isinstance(node.value, ast.Name)
-            and node.value.id in self.imported_modules
-            and node.attr in self.function_names_to_find
-        ):
+
+        node_value = node.value
+        node_attr = node.attr
+
+        # Check if this is accessing a target function through an imported module
+
+        # Accessing a target function through an imported module (fast path for imported modules)
+        val_id = getattr(node_value, "id", None)
+        if val_id is not None and val_id in self.imported_modules:
+            if node_attr in self.function_names_to_find:
+                self.found_any_target_function = True
+                self.found_qualified_name = node_attr
+                return
+            # Methods via imported modules using precomputed _dot_methods and _class_method_to_target
+            roots_possible = self._dot_methods.get(node_attr)
+            if roots_possible:
+                imported_name = val_id
+                original_name = self.alias_mapping.get(imported_name, imported_name)
+                if original_name in roots_possible:
+                    self.found_any_target_function = True
+                    self.found_qualified_name = self._class_method_to_target[(original_name, node_attr)]
+                    return
+                # Also check if the imported name itself (without resolving alias) matches
+                # This handles cases where the class itself is the target
+                if imported_name in roots_possible:
+                    self.found_any_target_function = True
+                    self.found_qualified_name = self._class_method_to_target.get(
+                        (imported_name, node_attr), f"{imported_name}.{node_attr}"
+                    )
+                    return
+
+        # Methods on instance variables (tighten type check and lookup, important for larger ASTs)
+        if val_id is not None and val_id in self.instance_mapping:
+            class_name = self.instance_mapping[val_id]
+            roots_possible = self._dot_methods.get(node_attr)
+            if roots_possible and class_name in roots_possible:
+                self.found_any_target_function = True
+                self.found_qualified_name = self._class_method_to_target[(class_name, node_attr)]
+                return
+
+        # Check for dynamic import match
+        if self.has_dynamic_imports and node_attr in self.function_names_to_find:
             self.found_any_target_function = True
-            self.found_qualified_name = node.attr
+            self.found_qualified_name = node_attr
             return
 
-        if isinstance(node.value, ast.Name) and node.value.id in self.imported_modules:
-            for target_func in self.function_names_to_find:
-                if "." in target_func:
-                    class_name, method_name = target_func.rsplit(".", 1)
-                    if node.attr == method_name:
-                        imported_name = node.value.id
-                        original_name = self.alias_mapping.get(imported_name, imported_name)
-                        if original_name == class_name:
-                            self.found_any_target_function = True
-                            self.found_qualified_name = target_func
-                            return
+        # Replace self.generic_visit with base class impl directly: removes an attribute lookup
+        if not self.found_any_target_function:
+            ast.NodeVisitor.generic_visit(self, node)
 
-        # Check if this is accessing a target function through a dynamically imported module
-        # Only if we've detected dynamic imports are being used
-        if self.has_dynamic_imports and node.attr in self.function_names_to_find:
-            self.found_any_target_function = True
-            self.found_qualified_name = node.attr
+    def visit_Call(self, node: ast.Call) -> None:
+        """Handle function calls, particularly __import__."""
+        if self.found_any_target_function:
             return
+
+        # Check if this is a __import__ call
+        if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+            self.has_dynamic_imports = True
+            # When __import__ is used, any target function could potentially be imported
+            # Be conservative and assume it might import target functions
 
         self.generic_visit(node)
 
@@ -281,6 +426,8 @@ class ImportAnalyzer(ast.NodeVisitor):
         if node.id == "__import__":
             self.has_dynamic_imports = True
 
+        # Check if this is a direct usage of a target function name
+        # This catches cases like: result = target_function()
         if node.id in self.function_names_to_find:
             self.found_any_target_function = True
             self.found_qualified_name = node.id
@@ -301,7 +448,51 @@ class ImportAnalyzer(ast.NodeVisitor):
         """Override generic_visit to stop traversal if a target function is found."""
         if self.found_any_target_function:
             return
-        super().generic_visit(node)
+        # Direct base call improves run speed (avoids extra method resolution)
+        self._fast_generic_visit(node)
+
+    def _fast_generic_visit(self, node: ast.AST) -> None:
+        """Faster generic_visit: Inline traversal, avoiding method resolution overhead.
+
+        Short-circuits (returns) if found_any_target_function is True.
+        """
+        # This logic is derived from ast.NodeVisitor.generic_visit, but with optimizations.
+        if self.found_any_target_function:
+            return
+
+        # Local bindings for improved lookup speed (10-15% faster for inner loop)
+        visit_cache = type(self).__dict__
+        node_fields = node._fields
+
+        # Use manual stack for iterative traversal, replacing recursion
+        stack = [(node_fields, node)]
+        append = stack.append
+        pop = stack.pop
+
+        while stack:
+            fields, curr_node = pop()
+            for field in fields:
+                value = getattr(curr_node, field, None)
+                if isinstance(value, list):
+                    for item in value:
+                        if self.found_any_target_function:
+                            return
+                        if isinstance(item, ast.AST):
+                            # Method resolution: fast dict lookup first, then getattr fallback
+                            meth = visit_cache.get("visit_" + item.__class__.__name__)
+                            if meth is not None:
+                                meth(self, item)
+                            else:
+                                append((item._fields, item))
+                    continue
+                if isinstance(value, ast.AST):
+                    if self.found_any_target_function:
+                        return
+                    meth = visit_cache.get("visit_" + value.__class__.__name__)
+                    if meth is not None:
+                        meth(self, value)
+                    else:
+                        append((value._fields, value))
 
 
 def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: set[str]) -> bool:
@@ -315,12 +506,22 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
     except (SyntaxError, FileNotFoundError) as e:
         logger.debug(f"Failed to analyze imports in {test_file_path}: {e}")
         return True
-    else:
-        if analyzer.found_any_target_function:
-            logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
-            return True
-        logger.debug(f"Test file {test_file_path} does not import any target functions.")
-        return False
+
+    if analyzer.found_any_target_function:
+        logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
+        return True
+
+    # Be conservative with dynamic imports - if __import__ is used and a target function
+    # is referenced, we should process the file
+    if analyzer.has_dynamic_imports:
+        # Check if any target function name appears as a string literal or direct usage
+        for target_func in target_functions:
+            if target_func in source_code:
+                logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
+                return True
+
+    logger.debug(f"Test file {test_file_path} does not import any target functions.")
+    return False
 
 
 def filter_test_files_by_imports(
@@ -378,7 +579,7 @@ def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root = cfg.tests_root
     project_root = cfg.project_root_path
 
@@ -401,6 +602,7 @@ def discover_tests_pytest(
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)
     except Exception as e:
+        tests, pytest_rootdir = [], None
         logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     finally:
@@ -412,15 +614,17 @@ def discover_tests_pytest(
             error_section = match.group(1) if match else result.stdout
 
             logger.warning(
-                f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}\n {error_section}"
+                f"Failed to collect tests. Pytest Exit code: {exitcode}={PytestExitCode(exitcode).name}\n {error_section}"
             )
             if "ModuleNotFoundError" in result.stdout:
-                match = ImportErrorPattern.search(result.stdout).group()
-                panel = Panel(Text.from_markup(f"⚠️  {match} ", style="bold red"), expand=False)
-                console.print(panel)
+                match = ImportErrorPattern.search(result.stdout)
+                if match:
+                    error_message = match.group()
+                    panel = Panel(Text.from_markup(f"⚠️  {error_message} ", style="bold red"), expand=False)
+                    console.print(panel)
 
         elif 0 <= exitcode <= 5:
-            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={pytest.ExitCode(exitcode).name}")
+            logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}={PytestExitCode(exitcode).name}")
         else:
             logger.warning(f"Failed to collect tests. Pytest Exit code: {exitcode}")
         console.rule()
@@ -452,13 +656,13 @@ def discover_tests_pytest(
 
 def discover_tests_unittest(
     cfg: TestConfig,
-    discover_only_these_tests: list[str] | None = None,
+    discover_only_these_tests: list[Path] | None = None,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     tests_root: Path = cfg.tests_root
     loader: unittest.TestLoader = unittest.TestLoader()
     tests: unittest.TestSuite = loader.discover(str(tests_root))
-    file_to_test_map: defaultdict[str, list[TestsInFile]] = defaultdict(list)
+    file_to_test_map: defaultdict[Path, list[TestsInFile]] = defaultdict(list)
 
     def get_test_details(_test: unittest.TestCase) -> TestsInFile | None:
         _test_function, _test_module, _test_suite_name = (
@@ -470,7 +674,7 @@ def discover_tests_unittest(
         _test_module_path = Path(_test_module.replace(".", os.sep)).with_suffix(".py")
         _test_module_path = tests_root / _test_module_path
         if not _test_module_path.exists() or (
-            discover_only_these_tests and str(_test_module_path) not in discover_only_these_tests
+            discover_only_these_tests and _test_module_path not in discover_only_these_tests
         ):
             return None
         if "__replay_test" in str(_test_module_path):
@@ -480,10 +684,7 @@ def discover_tests_unittest(
         else:
             test_type = TestType.EXISTING_UNIT_TEST
         return TestsInFile(
-            test_file=str(_test_module_path),
-            test_function=_test_function,
-            test_type=test_type,
-            test_class=_test_suite_name,
+            test_file=_test_module_path, test_function=_test_function, test_type=test_type, test_class=_test_suite_name
         )
 
     for _test_suite in tests._tests:
@@ -501,18 +702,18 @@ def discover_tests_unittest(
                             continue
                         details = get_test_details(test_2)
                         if details is not None:
-                            file_to_test_map[str(details.test_file)].append(details)
+                            file_to_test_map[details.test_file].append(details)
                 else:
                     details = get_test_details(test)
                     if details is not None:
-                        file_to_test_map[str(details.test_file)].append(details)
+                        file_to_test_map[details.test_file].append(details)
     return process_test_files(file_to_test_map, cfg, functions_to_optimize)
 
 
 def discover_parameters_unittest(function_name: str) -> tuple[bool, str, str | None]:
-    function_name = function_name.split("_")
-    if len(function_name) > 1 and function_name[-1].isdigit():
-        return True, "_".join(function_name[:-1]), function_name[-1]
+    function_parts = function_name.split("_")
+    if len(function_parts) > 1 and function_parts[-1].isdigit():
+        return True, "_".join(function_parts[:-1]), function_parts[-1]
 
     return False, function_name, None
 
@@ -521,7 +722,7 @@ def process_test_files(
     file_to_test_map: dict[Path, list[TestsInFile]],
     cfg: TestConfig,
     functions_to_optimize: list[FunctionToOptimize] | None = None,
-) -> tuple[dict[str, set[FunctionCalledInTest]], int]:
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     import jedi
 
     project_root_path = cfg.project_root_path
@@ -534,31 +735,53 @@ def process_test_files(
     function_to_test_map = defaultdict(set)
     num_discovered_tests = 0
     num_discovered_replay_tests = 0
-    jedi_project = jedi.Project(path=project_root_path)
 
+    # Set up sys_path for Jedi to resolve imports correctly
+    import sys
+
+    jedi_sys_path = list(sys.path)
+    # Add project root and its parent to sys_path so modules can be imported
+    if str(project_root_path) not in jedi_sys_path:
+        jedi_sys_path.insert(0, str(project_root_path))
+    parent_path = project_root_path.parent
+    if str(parent_path) not in jedi_sys_path:
+        jedi_sys_path.insert(0, str(parent_path))
+
+    jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path)
+
+    tests_cache = TestsCache(project_root_path)
+    logger.info("!lsp|Discovering tests and processing unit tests")
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
         for test_file, functions in file_to_test_map.items():
+            file_hash = TestsCache.compute_file_hash(test_file)
+
+            cached_function_to_test_map = tests_cache.get_function_to_test_map_for_file(str(test_file), file_hash)
+
+            if cfg.use_cache and cached_function_to_test_map:
+                for qualified_name, test_set in cached_function_to_test_map.items():
+                    function_to_test_map[qualified_name].update(test_set)
+
+                    for function_called_in_test in test_set:
+                        if function_called_in_test.tests_in_file.test_type == TestType.REPLAY_TEST:
+                            num_discovered_replay_tests += 1
+                        num_discovered_tests += 1
+
+                progress.advance(task_id)
+                continue
             try:
                 script = jedi.Script(path=test_file, project=jedi_project)
                 test_functions = set()
 
-                # Single call to get all names with references and definitions
-                all_names = script.get_names(all_scopes=True, references=True, definitions=True)
+                all_names = script.get_names(all_scopes=True, references=True)
+                all_defs = script.get_names(all_scopes=True, definitions=True)
+                all_names_top = script.get_names(all_scopes=True)
 
-                # Filter once and create lookup dictionaries
-                top_level_functions = {}
-                top_level_classes = {}
-                all_defs = []
+                top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
+                top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
 
-                for name in all_names:
-                    if name.type == "function":
-                        top_level_functions[name.name] = name
-                        all_defs.append(name)
-                    elif name.type == "class":
-                        top_level_classes[name.name] = name
             except Exception as e:
                 logger.debug(f"Failed to get jedi script for {test_file}: {e}")
                 progress.advance(task_id)
@@ -645,6 +868,58 @@ def process_test_files(
                     continue
                 try:
                     if not definition or definition[0].type != "function":
+                        # Fallback: Try to match against functions_to_optimize when Jedi can't resolve
+                        # This handles cases where Jedi fails with pytest fixtures
+                        if functions_to_optimize and name.name:
+                            for func_to_opt in functions_to_optimize:
+                                # Check if this unresolved name matches a function we're looking for
+                                if func_to_opt.function_name == name.name:
+                                    # Check if the test file imports the class/module containing this function
+                                    qualified_name_with_modules = func_to_opt.qualified_name_with_modules_from_root(
+                                        project_root_path
+                                    )
+
+                                    # Only add if this test actually tests the function we're optimizing
+                                    for test_func in test_functions_by_name[scope]:
+                                        if test_func.parameters is not None:
+                                            if test_framework == "pytest":
+                                                scope_test_function = (
+                                                    f"{test_func.function_name}[{test_func.parameters}]"
+                                                )
+                                            else:  # unittest
+                                                scope_test_function = (
+                                                    f"{test_func.function_name}_{test_func.parameters}"
+                                                )
+                                        else:
+                                            scope_test_function = test_func.function_name
+
+                                        function_to_test_map[qualified_name_with_modules].add(
+                                            FunctionCalledInTest(
+                                                tests_in_file=TestsInFile(
+                                                    test_file=test_file,
+                                                    test_class=test_func.test_class,
+                                                    test_function=scope_test_function,
+                                                    test_type=test_func.test_type,
+                                                ),
+                                                position=CodePosition(line_no=name.line, col_no=name.column),
+                                            )
+                                        )
+                                        tests_cache.insert_test(
+                                            file_path=str(test_file),
+                                            file_hash=file_hash,
+                                            qualified_name_with_modules_from_root=qualified_name_with_modules,
+                                            function_name=scope,
+                                            test_class=test_func.test_class or "",
+                                            test_function=scope_test_function,
+                                            test_type=test_func.test_type,
+                                            line_number=name.line,
+                                            col_number=name.column,
+                                        )
+
+                                        if test_func.test_type == TestType.REPLAY_TEST:
+                                            num_discovered_replay_tests += 1
+
+                                        num_discovered_tests += 1
                         continue
                     definition_obj = definition[0]
                     definition_path = str(definition_obj.module_path)
@@ -680,6 +955,18 @@ def process_test_files(
                                     position=CodePosition(line_no=name.line, col_no=name.column),
                                 )
                             )
+                            tests_cache.insert_test(
+                                file_path=str(test_file),
+                                file_hash=file_hash,
+                                qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
+                                function_name=scope,
+                                test_class=test_func.test_class or "",
+                                test_function=scope_test_function,
+                                test_type=test_func.test_type,
+                                line_number=name.line,
+                                col_number=name.column,
+                            )
+
                             if test_func.test_type == TestType.REPLAY_TEST:
                                 num_discovered_replay_tests += 1
 
@@ -689,5 +976,7 @@ def process_test_files(
                     continue
 
             progress.advance(task_id)
+
+    tests_cache.close()
 
     return dict(function_to_test_map), num_discovered_tests, num_discovered_replay_tests

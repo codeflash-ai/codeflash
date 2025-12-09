@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import isort
 
@@ -76,12 +76,9 @@ def apply_formatter_cmds(
                 logger.error(f"Failed to format code with {' '.join(formatter_cmd_list)}")
         except FileNotFoundError as e:
             from rich.panel import Panel
-            from rich.text import Text
 
-            panel = Panel(
-                Text.from_markup(f"⚠️  Formatter command not found: {' '.join(formatter_cmd_list)}", style="bold red"),
-                expand=False,
-            )
+            command_str = " ".join(str(part) for part in formatter_cmd_list)
+            panel = Panel(f"⚠️  Formatter command not found: {command_str}", expand=False, border_style="yellow")
             console.print(panel)
             if exit_on_failure:
                 raise e from None
@@ -97,6 +94,22 @@ def get_diff_lines_count(diff_output: str) -> int:
 
     diff_lines = [line for line in lines if is_diff_line(line)]
     return len(diff_lines)
+
+
+def format_generated_code(generated_test_source: str, formatter_cmds: list[str]) -> str:
+    formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
+    if formatter_name == "disabled":  # nothing to do if no formatter provided
+        return re.sub(r"\n{2,}", "\n\n", generated_test_source)
+    with tempfile.TemporaryDirectory() as test_dir_str:
+        # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed) return code with 2 or more newlines substituted with 2 newlines
+        original_temp = Path(test_dir_str) / "original_temp.py"
+        original_temp.write_text(generated_test_source, encoding="utf8")
+        _, formatted_code, changed = apply_formatter_cmds(
+            formatter_cmds, original_temp, test_dir_str, print_status=False, exit_on_failure=False
+        )
+        if not changed:
+            return re.sub(r"\n{2,}", "\n\n", formatted_code)
+    return formatted_code
 
 
 def format_code(
@@ -123,7 +136,7 @@ def format_code(
         original_code_lines = len(original_code.split("\n"))
 
         if check_diff and original_code_lines > 50:
-            # we dont' count the formatting diff for the optimized function as it should be well-formatted
+            # we don't count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_code, "")
 
             original_temp = Path(test_dir_str) / "original_temp.py"
@@ -166,11 +179,11 @@ def format_code(
         return formatted_code
 
 
-def sort_imports(code: str) -> str:
+def sort_imports(code: str, **kwargs: Any) -> str:  # noqa : ANN401
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
-        sorted_code = isort.code(code)
-    except Exception:
+        sorted_code = isort.code(code, **kwargs)
+    except Exception:  # this will also catch the FileSkipComment exception, use this fn everywhere
         logger.exception("Failed to sort imports with isort.")
         return code  # Fall back to original code if isort fails
 

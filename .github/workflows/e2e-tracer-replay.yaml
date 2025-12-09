@@ -6,6 +6,10 @@ on:
       - '**'  # Trigger for all paths
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   tracer-replay:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
@@ -54,7 +58,7 @@ jobs:
 
 
       - name: Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: 3.11.6
 

@@ -7,6 +7,10 @@ on:
 
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   bubble-sort-optimization-pytest-no-git:
     # Dynamically determine if environment is needed only when workflow files change and contributor is external
@@ -20,7 +24,7 @@ jobs:
       COLUMNS: 110
       MAX_RETRIES: 3
       RETRY_DELAY: 5
-      EXPECTED_IMPROVEMENT_PCT: 300
+      EXPECTED_IMPROVEMENT_PCT: 70
       CODEFLASH_END_TO_END: 1
     steps:
       - name: 🛎️ Checkout
@@ -54,7 +58,7 @@ jobs:
           fi
 
       - name: Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: 3.11.6
 

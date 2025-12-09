@@ -9,6 +9,8 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
+from codeflash.context.unused_definition_remover import revert_unused_helper_functions
+
 
 
 @pytest.fixture
@@ -225,6 +227,15 @@ def helper_function_2(x):
 def test_no_unused_helpers_no_revert(temp_project):
     """Test that when all helpers are still used, nothing is reverted."""
     temp_dir, main_file, test_cfg = temp_project
+    
+    
+    # Store original content to verify nothing changes
+    original_content = main_file.read_text()
+    
+    revert_unused_helper_functions(temp_dir, [], {})
+    
+    # Verify the file content remains unchanged
+    assert main_file.read_text() == original_content, "File should remain unchanged when no helpers to revert"
 
     # Optimized version that still calls both helpers
     optimized_code = """
@@ -308,17 +319,23 @@ def helper_function_1(x):
 def helper_function_2(x):
     \"\"\"Second helper function.\"\"\"
     return x * 3
+
+def helper_function_1(y):  # Duplicate name to test line 575
+    \"\"\"Overloaded helper function.\"\"\"
+    return y + 10
 """)
 
-        # Optimized version that only calls one helper
+        # Optimized version that only calls one helper with aliased import
         optimized_code = """
 ```python:main.py
-from helpers import helper_function_1
+from helpers import helper_function_1 as h1
+import helpers as h_module
 
 def entrypoint_function(n):
-    \"\"\"Optimized function that only calls one helper.\"\"\"
-    result1 = helper_function_1(n)
-    return result1 + n * 3  # Inlined helper_function_2
+    \"\"\"Optimized function that only calls one helper with aliasing.\"\"\"
+    result1 = h1(n)  # Using aliased import
+    # Inlined helper_function_2 functionality: n * 3
+    return result1 + n * 3  # Fully inlined helper_function_2
 ```
 """
 
@@ -1459,4 +1476,663 @@ class MathUtils:
         # Cleanup
         import shutil
 
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_async_entrypoint_with_async_helpers():
+    """Test that unused async helper functions are correctly detected when entrypoint is async."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with async entrypoint and async helpers
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Second async helper function.\"\"\"
+    return x * 3
+
+async def async_entrypoint(n):
+    \"\"\"Async entrypoint function that calls async helpers.\"\"\"
+    result1 = await async_helper_1(n)
+    result2 = await async_helper_2(n)
+    return result1 + result2
+""")
+
+        # Optimized version that only calls one async helper
+        optimized_code = """
+```python:main.py
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Second async helper function - should be unused.\"\"\"
+    return x * 3
+
+async def async_entrypoint(n):
+    \"\"\"Optimized async entrypoint that only calls one helper.\"\"\"
+    result1 = await async_helper_1(n)
+    return result1 + n * 3  # Inlined async_helper_2
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for async function
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, 
+            function_name="async_entrypoint", 
+            parents=[],
+            is_async=True
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should detect async_helper_2 as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        expected_unused = {"async_helper_2"}
+
+        assert unused_names == expected_unused, f"Expected unused: {expected_unused}, got: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_sync_entrypoint_with_async_helpers():
+    """Test that unused async helper functions are detected when entrypoint is sync."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with sync entrypoint and async helpers
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+import asyncio
+
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Second async helper function.\"\"\"
+    return x * 3
+
+def sync_entrypoint(n):
+    \"\"\"Sync entrypoint function that calls async helpers.\"\"\"
+    result1 = asyncio.run(async_helper_1(n))
+    result2 = asyncio.run(async_helper_2(n))
+    return result1 + result2
+""")
+
+        # Optimized version that only calls one async helper
+        optimized_code = """
+```python:main.py
+import asyncio
+
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Second async helper function - should be unused.\"\"\"
+    return x * 3
+
+def sync_entrypoint(n):
+    \"\"\"Optimized sync entrypoint that only calls one async helper.\"\"\"
+    result1 = asyncio.run(async_helper_1(n))
+    return result1 + n * 3  # Inlined async_helper_2
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for sync function
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, 
+            function_name="sync_entrypoint", 
+            parents=[]
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should detect async_helper_2 as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        expected_unused = {"async_helper_2"}
+
+        assert unused_names == expected_unused, f"Expected unused: {expected_unused}, got: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_mixed_sync_and_async_helpers():
+    """Test detection when both sync and async helpers are mixed."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with mixed sync and async helpers
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+import asyncio
+
+def sync_helper_1(x):
+    \"\"\"Sync helper function.\"\"\"
+    return x * 2
+
+async def async_helper_1(x):
+    \"\"\"Async helper function.\"\"\"
+    return x * 3
+
+def sync_helper_2(x):
+    \"\"\"Another sync helper function.\"\"\"
+    return x * 4
+
+async def async_helper_2(x):
+    \"\"\"Another async helper function.\"\"\"
+    return x * 5
+
+async def mixed_entrypoint(n):
+    \"\"\"Async entrypoint function that calls both sync and async helpers.\"\"\"
+    sync_result = sync_helper_1(n)
+    async_result = await async_helper_1(n)
+    sync_result2 = sync_helper_2(n)
+    async_result2 = await async_helper_2(n)
+    return sync_result + async_result + sync_result2 + async_result2
+""")
+
+        # Optimized version that only calls some helpers
+        optimized_code = """
+```python:main.py
+import asyncio
+
+def sync_helper_1(x):
+    \"\"\"Sync helper function.\"\"\"
+    return x * 2
+
+async def async_helper_1(x):
+    \"\"\"Async helper function.\"\"\"
+    return x * 3
+
+def sync_helper_2(x):
+    \"\"\"Another sync helper function - should be unused.\"\"\"
+    return x * 4
+
+async def async_helper_2(x):
+    \"\"\"Another async helper function - should be unused.\"\"\"
+    return x * 5
+
+async def mixed_entrypoint(n):
+    \"\"\"Optimized async entrypoint that only calls some helpers.\"\"\"
+    sync_result = sync_helper_1(n)
+    async_result = await async_helper_1(n)
+    return sync_result + async_result + n * 4 + n * 5  # Inlined both helper_2 functions
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for async function
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, 
+            function_name="mixed_entrypoint", 
+            parents=[],
+            is_async=True
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should detect both sync_helper_2 and async_helper_2 as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        expected_unused = {"sync_helper_2", "async_helper_2"}
+
+        assert unused_names == expected_unused, f"Expected unused: {expected_unused}, got: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_async_class_methods():
+    """Test unused async method detection in classes."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with class containing async methods
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+class AsyncProcessor:
+    async def entrypoint_method(self, n):
+        \"\"\"Async main method that calls async helper methods.\"\"\"
+        result1 = await self.async_helper_method_1(n)
+        result2 = await self.async_helper_method_2(n)
+        return result1 + result2
+
+    async def async_helper_method_1(self, x):
+        \"\"\"First async helper method.\"\"\"
+        return x * 2
+
+    async def async_helper_method_2(self, x):
+        \"\"\"Second async helper method.\"\"\"
+        return x * 3
+
+    def sync_helper_method(self, x):
+        \"\"\"Sync helper method.\"\"\"
+        return x * 4
+""")
+
+        # Optimized version that only calls one async helper
+        optimized_code = """
+```python:main.py
+class AsyncProcessor:
+    async def entrypoint_method(self, n):
+        \"\"\"Optimized async method that only calls one helper.\"\"\"
+        result1 = await self.async_helper_method_1(n)
+        return result1 + n * 3  # Inlined async_helper_method_2
+
+    async def async_helper_method_1(self, x):
+        \"\"\"First async helper method.\"\"\"
+        return x * 2
+
+    async def async_helper_method_2(self, x):
+        \"\"\"Second async helper method - should be unused.\"\"\"
+        return x * 3
+
+    def sync_helper_method(self, x):
+        \"\"\"Sync helper method - should be unused.\"\"\"
+        return x * 4
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for async class method
+        from codeflash.models.models import FunctionParent
+
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file,
+            function_name="entrypoint_method",
+            parents=[FunctionParent(name="AsyncProcessor", type="ClassDef")],
+            is_async=True
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should detect async_helper_method_2 as unused (sync_helper_method may not be discovered as helper)
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        expected_unused = {"AsyncProcessor.async_helper_method_2"}
+
+        assert unused_names == expected_unused, f"Expected unused: {expected_unused}, got: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_async_helper_revert_functionality():
+    """Test that unused async helper functions are correctly reverted to original definitions."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with async functions
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Second async helper function.\"\"\"
+    return x * 3
+
+async def async_entrypoint(n):
+    \"\"\"Async entrypoint function that calls async helpers.\"\"\"
+    result1 = await async_helper_1(n)
+    result2 = await async_helper_2(n)
+    return result1 + result2
+""")
+
+        # Optimized version that only calls one helper and modifies the unused one
+        optimized_code = """
+```python:main.py
+async def async_helper_1(x):
+    \"\"\"First async helper function.\"\"\"
+    return x * 2
+
+async def async_helper_2(x):
+    \"\"\"Modified async helper function - should be reverted.\"\"\"
+    return x * 10  # This change should be reverted
+
+async def async_entrypoint(n):
+    \"\"\"Optimized async entrypoint that only calls one helper.\"\"\"
+    result1 = await async_helper_1(n)
+    return result1 + n * 3  # Inlined async_helper_2
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for async function
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, 
+            function_name="async_entrypoint", 
+            parents=[],
+            is_async=True
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Store original helper code
+        original_helper_code = {main_file: main_file.read_text()}
+
+        # Apply optimization and test reversion
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
+
+        # Check final file content
+        final_content = main_file.read_text()
+
+        # The entrypoint should be optimized
+        assert "result1 + n * 3" in final_content, "Async entrypoint function should be optimized"
+
+        # async_helper_2 should be reverted to original (return x * 3, not x * 10)
+        assert "return x * 3" in final_content, "async_helper_2 should be reverted to original"
+        assert "return x * 10" not in final_content, "async_helper_2 should not contain the modified version"
+
+        # async_helper_1 should remain (it's still called)
+        assert "async def async_helper_1(x):" in final_content, "async_helper_1 should still exist"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_recursive_helper_function_not_detected_as_unused():
+    """Test that recursive helper functions are NOT incorrectly detected as unused."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with recursive helper function
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+def gcd_recursive(a: int, b: int) -> int:
+    \"\"\"Calculate greatest common divisor using Euclidean algorithm with recursion.\"\"\"
+    if b == 0:
+        return a
+    return gcd_recursive(b, a % b)
+""")
+
+        # Optimized version that still uses the recursive helper
+        optimized_code = """
+```python:main.py
+def gcd_recursive(a: int, b: int) -> int:
+    \"\"\"Calculate greatest common divisor using Euclidean algorithm with recursion.\"\"\"
+    if b == 0:
+        return a
+    return gcd_recursive(b, a % b)
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, function_name="gcd_recursive", parents=[]
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should NOT detect gcd_recursive as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+
+        assert "gcd_recursive" not in unused_names, f"Recursive function gcd_recursive should NOT be detected as unused, but got unused: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_async_generators_and_coroutines():
+    """Test detection with async generators and coroutines."""
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Main file with async generators and coroutines
+        main_file = temp_dir / "main.py"
+        main_file.write_text("""
+import asyncio
+
+async def async_generator_helper(n):
+    \"\"\"Async generator helper.\"\"\"
+    for i in range(n):
+        yield i * 2
+
+async def coroutine_helper(x):
+    \"\"\"Coroutine helper.\"\"\"
+    await asyncio.sleep(0.1)
+    return x * 3
+
+async def another_coroutine_helper(x):
+    \"\"\"Another coroutine helper.\"\"\"
+    await asyncio.sleep(0.1)
+    return x * 4
+
+async def async_entrypoint_with_generators(n):
+    \"\"\"Async entrypoint function that uses generators and coroutines.\"\"\"
+    results = []
+    async for value in async_generator_helper(n):
+        results.append(value)
+    
+    final_result = await coroutine_helper(sum(results))
+    another_result = await another_coroutine_helper(n)
+    return final_result + another_result
+""")
+
+        # Optimized version that doesn't use one of the coroutines
+        optimized_code = """
+```python:main.py
+import asyncio
+
+async def async_generator_helper(n):
+    \"\"\"Async generator helper.\"\"\"
+    for i in range(n):
+        yield i * 2
+
+async def coroutine_helper(x):
+    \"\"\"Coroutine helper.\"\"\"
+    await asyncio.sleep(0.1)
+    return x * 3
+
+async def another_coroutine_helper(x):
+    \"\"\"Another coroutine helper - should be unused.\"\"\"
+    await asyncio.sleep(0.1)
+    return x * 4
+
+async def async_entrypoint_with_generators(n):
+    \"\"\"Optimized async entrypoint that inlines one coroutine.\"\"\"
+    results = []
+    async for value in async_generator_helper(n):
+        results.append(value)
+    
+    final_result = await coroutine_helper(sum(results))
+    return final_result + n * 4  # Inlined another_coroutine_helper
+```
+"""
+
+        # Create test config
+        test_cfg = TestConfig(
+            tests_root=temp_dir / "tests",
+            tests_project_rootdir=temp_dir,
+            project_root_path=temp_dir,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+
+        # Create FunctionToOptimize instance for async function
+        function_to_optimize = FunctionToOptimize(
+            file_path=main_file, 
+            function_name="async_entrypoint_with_generators", 
+            parents=[],
+            is_async=True
+        )
+
+        # Create function optimizer
+        optimizer = FunctionOptimizer(
+            function_to_optimize=function_to_optimize,
+            test_cfg=test_cfg,
+            function_to_optimize_source_code=main_file.read_text(),
+        )
+
+        # Get original code context
+        ctx_result = optimizer.get_code_optimization_context()
+        assert ctx_result.is_successful(), f"Failed to get context: {ctx_result.failure()}"
+
+        code_context = ctx_result.unwrap()
+
+        # Test unused helper detection
+        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+
+        # Should detect another_coroutine_helper as unused
+        unused_names = {uh.qualified_name for uh in unused_helpers}
+        expected_unused = {"another_coroutine_helper"}
+
+        assert unused_names == expected_unused, f"Expected unused: {expected_unused}, got: {unused_names}"
+
+    finally:
+        # Cleanup
+        import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)

@@ -4,7 +4,7 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import libcst as cst
 from libcst import MetadataWrapper
@@ -32,9 +32,11 @@ class CommentMapper(ast.NodeVisitor):
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
         self.context_stack.append(node.name)
-        for inner_node in ast.walk(node):
+        for inner_node in node.body:
             if isinstance(inner_node, ast.FunctionDef):
                 self.visit_FunctionDef(inner_node)
+            elif isinstance(inner_node, ast.AsyncFunctionDef):
+                self.visit_AsyncFunctionDef(inner_node)
         self.context_stack.pop()
         return node
 
@@ -50,6 +52,14 @@ class CommentMapper(ast.NodeVisitor):
         return f"# {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+        self._process_function_def_common(node)
+        return node
+
+    def _process_function_def_common(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self.context_stack.append(node.name)
         i = len(node.body) - 1
         test_qualified_name = ".".join(self.context_stack)
@@ -60,8 +70,9 @@ class CommentMapper(ast.NodeVisitor):
                 j = len(line_node.body) - 1
                 while j >= 0:
                     compound_line_node: ast.stmt = line_node.body[j]
-                    internal_node: ast.AST
-                    for internal_node in ast.walk(compound_line_node):
+                    nodes_to_check = [compound_line_node]
+                    nodes_to_check.extend(getattr(compound_line_node, "body", []))
+                    for internal_node in nodes_to_check:
                         if isinstance(internal_node, (ast.stmt, ast.Assign)):
                             inv_id = str(i) + "_" + str(j)
                             match_key = key + "#" + inv_id
@@ -75,7 +86,6 @@ class CommentMapper(ast.NodeVisitor):
                     self.results[line_node.lineno] = self.get_comment(match_key)
             i -= 1
         self.context_stack.pop()
-        return node
 
 
 def get_fn_call_linenos(
@@ -139,7 +149,7 @@ class CommentAdder(cst.CSTTransformer):
         return updated_node
 
 
-def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, int]:
+def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
     for inv_id, runtimes in inv_id_runtimes.items():
         test_qualified_name = (
@@ -147,10 +157,11 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]]) -> dict[str, i
             if inv_id.test_class_name
             else inv_id.test_function_name
         )
-        abs_path = str(Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve().with_suffix(""))
-        if "__unit_test_" not in abs_path:
+        abs_path = tests_project_rootdir / Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py")
+        abs_path_str = str(abs_path.resolve().with_suffix(""))
+        if "__unit_test_" not in abs_path_str or not test_qualified_name:
             continue
-        key = test_qualified_name + "#" + abs_path  # type: ignore[operator]
+        key = test_qualified_name + "#" + abs_path_str
         parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
         cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
@@ -164,10 +175,11 @@ def add_runtime_comments_to_generated_tests(
     generated_tests: GeneratedTestsList,
     original_runtimes: dict[InvocationId, list[int]],
     optimized_runtimes: dict[InvocationId, list[int]],
+    tests_project_rootdir: Optional[Path] = None,
 ) -> GeneratedTestsList:
     """Add runtime performance comments to function calls in generated tests."""
-    original_runtimes_dict = unique_inv_id(original_runtimes)
-    optimized_runtimes_dict = unique_inv_id(optimized_runtimes)
+    original_runtimes_dict = unique_inv_id(original_runtimes, tests_project_rootdir or Path())
+    optimized_runtimes_dict = unique_inv_id(optimized_runtimes, tests_project_rootdir or Path())
     # Process each generated test
     modified_tests = []
     for test in generated_tests.generated_tests:
@@ -197,23 +209,41 @@ def add_runtime_comments_to_generated_tests(
 def remove_functions_from_generated_tests(
     generated_tests: GeneratedTestsList, test_functions_to_remove: list[str]
 ) -> GeneratedTestsList:
+    # Pre-compile patterns for all function names to remove
+    function_patterns = _compile_function_patterns(test_functions_to_remove)
     new_generated_tests = []
+
     for generated_test in generated_tests.generated_tests:
-        for test_function in test_functions_to_remove:
-            function_pattern = re.compile(
-                rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?def\s+{re.escape(test_function)}\(.*?\):.*?(?=\ndef\s|$)",
-                re.DOTALL,
-            )
+        source = generated_test.generated_original_test_source
 
-            match = function_pattern.search(generated_test.generated_original_test_source)
+        # Apply all patterns without redundant searches
+        for pattern in function_patterns:
+            # Use finditer and sub only if necessary to avoid unnecessary .search()/.sub() calls
+            for match in pattern.finditer(source):
+                # Skip if "@pytest.mark.parametrize" present
+                # Only the matched function's code is targeted
+                if "@pytest.mark.parametrize" in match.group(0):
+                    continue
+                # Remove function from source
+                # If match, remove the function by substitution in the source
+                # Replace using start/end indices for efficiency
+                start, end = match.span()
+                source = source[:start] + source[end:]
+                # After removal, break since .finditer() is from left to right, and only one match expected per function in source
+                break
 
-            if match is None or "@pytest.mark.parametrize" in match.group(0):
-                continue
-
-            generated_test.generated_original_test_source = function_pattern.sub(
-                "", generated_test.generated_original_test_source
-            )
-
+        generated_test.generated_original_test_source = source
         new_generated_tests.append(generated_test)
 
     return GeneratedTestsList(generated_tests=new_generated_tests)
+
+
+# Pre-compile all function removal regexes upfront for efficiency.
+def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.Pattern[str]]:
+    return [
+        re.compile(
+            rf"(@pytest\.mark\.parametrize\(.*?\)\s*)?(async\s+)?def\s+{re.escape(func)}\(.*?\):.*?(?=\n(async\s+)?def\s|$)",
+            re.DOTALL,
+        )
+        for func in test_functions_to_remove
+    ]

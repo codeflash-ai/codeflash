@@ -7,6 +7,7 @@ from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
@@ -20,6 +21,8 @@ def parse_args() -> Namespace:
 
     init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
     init_parser.set_defaults(func=init_codeflash)
+
+    subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
 
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
@@ -72,7 +75,6 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
     )
-    parser.add_argument("--test-framework", choices=["pytest", "unittest"], default="pytest")
     parser.add_argument("--config-file", type=str, help="Path to the pyproject.toml with codeflash configs.")
     parser.add_argument("--replay-test", type=str, nargs="+", help="Paths to replay test to optimize functions from")
     parser.add_argument(
@@ -96,6 +98,12 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
+    parser.add_argument(
+        "--async",
+        default=False,
+        action="store_true",
+        help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -115,9 +123,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
     else:
         logging_config.set_level(logging.INFO, echo_setting=not is_init)
+
     if args.version:
         logger.info(f"Codeflash version {version}")
         sys.exit()
+
+    if args.command == "vscode-install":
+        install_vscode_extension()
+        sys.exit()
+
     if not check_running_in_git_repo(module_root=args.module_root):
         if not confirm_proceeding_with_no_git_repo():
             exit_with_message("No git repository detected and user aborted run. Exiting...", error_on_exit=True)
@@ -139,6 +153,12 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         if env_utils.is_ci():
             args.no_pr = True
 
+    if getattr(args, "async", False):
+        logger.warning(
+            "The --async flag is deprecated and will be removed in a future version. "
+            "Async function optimization is now enabled by default."
+        )
+
     return args
 
 
@@ -151,7 +171,6 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         "module_root",
         "tests_root",
         "benchmarks_root",
-        "test_framework",
         "ignore_paths",
         "pytest_cmd",
         "formatter_cmds",
@@ -225,25 +244,29 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
-    if hasattr(args, "all"):
-        import git
+    if hasattr(args, "all") or (hasattr(args, "file") and args.file):
+        no_pr = getattr(args, "no_pr", False)
 
-        from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
-        from codeflash.code_utils.github_utils import require_github_app_or_exit
+        if not no_pr:
+            import git
 
-        # Ensure that the user can actually open PRs on the repo.
-        try:
-            git_repo = git.Repo(search_parent_directories=True)
-        except git.exc.InvalidGitRepositoryError:
-            logger.exception(
-                "I couldn't find a git repository in the current directory. "
-                "I need a git repository to run --all and open PRs for optimizations. Exiting..."
-            )
-            apologize_and_exit()
-        if not args.no_pr and not check_and_push_branch(git_repo, git_remote=args.git_remote):
-            exit_with_message("Branch is not pushed...", error_on_exit=True)
-        owner, repo = get_repo_owner_and_name(git_repo)
-        if not args.no_pr:
+            from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
+            from codeflash.code_utils.github_utils import require_github_app_or_exit
+
+            # Ensure that the user can actually open PRs on the repo.
+            try:
+                git_repo = git.Repo(search_parent_directories=True)
+            except git.exc.InvalidGitRepositoryError:
+                mode = "--all" if hasattr(args, "all") else "--file"
+                logger.exception(
+                    f"I couldn't find a git repository in the current directory. "
+                    f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
+                )
+                apologize_and_exit()
+            git_remote = getattr(args, "git_remote", None)
+            if not check_and_push_branch(git_repo, git_remote=git_remote):
+                exit_with_message("Branch is not pushed...", error_on_exit=True)
+            owner, repo = get_repo_owner_and_name(git_repo)
             require_github_app_or_exit(owner, repo)
     if not hasattr(args, "all"):
         args.all = None

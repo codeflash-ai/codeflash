@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import contextmanager
 from itertools import cycle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -20,17 +19,22 @@ from rich.progress import (
 
 from codeflash.cli_cmds.console_constants import SPINNER_TYPES
 from codeflash.cli_cmds.logging_config import BARE_LOGGING_FORMAT
+from codeflash.lsp.helpers import is_LSP_enabled
+from codeflash.lsp.lsp_logger import enhanced_log
+from codeflash.lsp.lsp_message import LspCodeMessage, LspTextMessage
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
     from rich.progress import TaskID
 
+    from codeflash.lsp.lsp_message import LspMessage
+
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 console = Console()
 
-if os.getenv("CODEFLASH_LSP"):
+if is_LSP_enabled():
     console.quiet = True
 
 logging.basicConfig(
@@ -41,6 +45,24 @@ logging.basicConfig(
 
 logger = logging.getLogger("rich")
 logging.getLogger("parso").setLevel(logging.WARNING)
+
+# override the logger to reformat the messages for the lsp
+for level in ("info", "debug", "warning", "error"):
+    real_fn = getattr(logger, level)
+    setattr(
+        logger,
+        level,
+        lambda msg, *args, _real_fn=real_fn, _level=level, **kwargs: enhanced_log(
+            msg, _real_fn, _level, *args, **kwargs
+        ),
+    )
+
+
+def lsp_log(message: LspMessage) -> None:
+    if not is_LSP_enabled():
+        return
+    json_msg = message.serialize()
+    logger.info(json_msg)
 
 
 def paneled_text(
@@ -58,7 +80,17 @@ def paneled_text(
     console.print(panel)
 
 
-def code_print(code_str: str) -> None:
+def code_print(
+    code_str: str,
+    file_name: Optional[str] = None,
+    function_name: Optional[str] = None,
+    lsp_message_id: Optional[str] = None,
+) -> None:
+    if is_LSP_enabled():
+        lsp_log(
+            LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
+        )
+        return
     """Print code with syntax highlighting."""
     from rich.syntax import Syntax
 
@@ -79,6 +111,11 @@ def progress_bar(
     If revert_to_print is True, falls back to printing a single logger.info message
     instead of showing a progress bar.
     """
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=message, takes_time=True))
+        yield
+        return
+
     if revert_to_print:
         logger.info(message)
 

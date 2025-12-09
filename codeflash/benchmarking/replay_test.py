@@ -6,9 +6,8 @@ import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import isort
-
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import inspect_top_level_functions_or_methods
 from codeflash.verification.verification_utils import get_test_file_path
 
@@ -30,19 +29,24 @@ def get_next_arg_and_return(
     cur = db.cursor()
     limit = num_to_get
 
+    normalized_file_path = Path(file_path).as_posix()
+
     if class_name is not None:
         cursor = cur.execute(
             "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = ? LIMIT ?",
-            (benchmark_function_name, function_name, file_path, class_name, limit),
+            (benchmark_function_name, function_name, normalized_file_path, class_name, limit),
         )
     else:
         cursor = cur.execute(
             "SELECT * FROM benchmark_function_timings WHERE benchmark_function_name = ? AND function_name = ? AND file_path = ? AND class_name = '' LIMIT ?",
-            (benchmark_function_name, function_name, file_path, limit),
+            (benchmark_function_name, function_name, normalized_file_path, limit),
         )
 
-    while (val := cursor.fetchone()) is not None:
-        yield val[9], val[10]  # pickled_args, pickled_kwargs
+    try:
+        while (val := cursor.fetchone()) is not None:
+            yield val[9], val[10]  # pickled_args, pickled_kwargs
+    finally:
+        db.close()
 
 
 def get_function_alias(module: str, function_name: str) -> str:
@@ -166,7 +170,7 @@ trace_file_path = r"{trace_file}"
         module_name = func.get("module_name")
         function_name = func.get("function_name")
         class_name = func.get("class_name")
-        file_path = func.get("file_path")
+        file_path = Path(func.get("file_path")).as_posix()
         benchmark_function_name = func.get("benchmark_function_name")
         function_properties = func.get("function_properties")
         if not class_name:
@@ -294,7 +298,7 @@ def generate_replay_test(
                 test_framework=test_framework,
                 max_run_count=max_run_count,
             )
-            test_code = isort.code(test_code)
+            test_code = sort_imports(code=test_code)
             output_file = get_test_file_path(
                 test_dir=Path(output_dir), function_name=benchmark_module_path, test_type="replay"
             )

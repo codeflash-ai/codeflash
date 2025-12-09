@@ -1,55 +1,34 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from threading import Event
-from typing import TYPE_CHECKING, Any, Optional, TextIO
+from typing import TYPE_CHECKING
 
-from lsprotocol.types import INITIALIZE, LogMessageParams, MessageType
-from pygls import uris
-from pygls.protocol import LanguageServerProtocol, lsp_method
-from pygls.server import LanguageServer, StdOutTransportAdapter, aio_readline
+from lsprotocol.types import LogMessageParams, MessageType
+from pygls.lsp.server import LanguageServer
+from pygls.protocol import LanguageServerProtocol
+
+from codeflash.either import Result
+from codeflash.models.models import CodeOptimizationContext
 
 if TYPE_CHECKING:
-    from lsprotocol.types import InitializeParams, InitializeResult
-
     from codeflash.optimization.optimizer import Optimizer
 
 
 class CodeflashLanguageServerProtocol(LanguageServerProtocol):
     _server: CodeflashLanguageServer
 
-    @lsp_method(INITIALIZE)
-    def lsp_initialize(self, params: InitializeParams) -> InitializeResult:
-        server = self._server
-        initialize_result: InitializeResult = super().lsp_initialize(params)
 
-        workspace_uri = params.root_uri
-        if workspace_uri:
-            workspace_path = uris.to_fs_path(workspace_uri)
-            pyproject_toml_path = self._find_pyproject_toml(workspace_path)
-            if pyproject_toml_path:
-                server.prepare_optimizer_arguments(pyproject_toml_path)
-            else:
-                server.show_message("No pyproject.toml found in workspace.")
-        else:
-            server.show_message("No workspace URI provided.")
-
-        return initialize_result
-
-    def _find_pyproject_toml(self, workspace_path: str) -> Path | None:
-        workspace_path_obj = Path(workspace_path)
-        for file_path in workspace_path_obj.rglob("pyproject.toml"):
-            return file_path.resolve()
-        return None
+InitializationResultT = tuple[bool, CodeOptimizationContext, dict[Path, str]]
+WrappedInitializationResultT = Result[InitializationResultT, str]
 
 
 class CodeflashLanguageServer(LanguageServer):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-        super().__init__(*args, **kwargs)
+    def __init__(self, name: str, version: str, protocol_cls: type[LanguageServerProtocol]) -> None:
+        super().__init__(name, version, protocol_cls=protocol_cls)
+        self.initialized: bool = False
         self.optimizer: Optimizer | None = None
-        self.args_processed_before: bool = False
         self.args = None
+        self.current_optimization_init_result: tuple[bool, CodeOptimizationContext, dict[Path, str]] | None = None
 
     def prepare_optimizer_arguments(self, config_file: Path) -> None:
         from codeflash.cli_cmds.cli import parse_args
@@ -82,9 +61,12 @@ class CodeflashLanguageServer(LanguageServer):
 
         # Send log message to client (appears in output channel)
         log_params = LogMessageParams(type=lsp_message_type, message=message)
-        self.lsp.notify("window/logMessage", log_params)
+        self.protocol.notify("window/logMessage", log_params)
 
-    def cleanup_the_optimizer(self) -> None:
+    def cleanup_the_optimizer(self) -> bool:
+        self.current_optimization_init_result = None
+        if not self.optimizer:
+            return False
         try:
             self.optimizer.cleanup_temporary_paths()
             # restore args and test cfg
@@ -95,27 +77,10 @@ class CodeflashLanguageServer(LanguageServer):
             self.optimizer.current_function_optimizer = None
         except Exception:
             self.show_message_log("Failed to cleanup optimizer", "Error")
+            return False
+        return True
 
-    def start_io(self, stdin: Optional[TextIO] = None, stdout: Optional[TextIO] = None) -> None:
-        self.show_message_log("Starting IO server", "Info")
-
-        self._stop_event = Event()
-        transport = StdOutTransportAdapter(stdin or sys.stdin.buffer, stdout or sys.stdout.buffer)
-        self.lsp.connection_made(transport)
-        try:
-            self.loop.run_until_complete(
-                aio_readline(
-                    self.loop,
-                    self.thread_pool_executor,
-                    self._stop_event,
-                    stdin or sys.stdin.buffer,
-                    self.lsp.data_received,
-                )
-            )
-        except BrokenPipeError:
-            self.show_message_log("Connection to the client is lost! Shutting down the server.", "Error")
-        except (KeyboardInterrupt, SystemExit):
-            pass
-        finally:
-            self.cleanup_the_optimizer()
-            self.shutdown()
+    def shutdown(self) -> None:
+        """Gracefully shutdown the server."""
+        self.cleanup_the_optimizer()
+        super().shutdown()

@@ -7,11 +7,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Union
 
-import isort
 import libcst as cst
 from line_profiler import LineProfiler
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.formatter import sort_imports
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -212,13 +212,13 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
         transformer = ImportAdder("from codeflash.code_utils.line_profile_utils import LineProfilerDecorator")
         # Apply the transformer to add the import
         module_node = module_node.visit(transformer)
-        modified_code = isort.code(module_node.code, float_to_top=True)
+        modified_code = sort_imports(code=module_node.code, float_to_top=True)
         # write to file
         with file_path.open("w", encoding="utf-8") as file:
             file.write(modified_code)
     # Adding profile.enable line for changing the savepath of the data, do this only for the main file and not the helper files
     file_contents = function_to_optimize.file_path.read_text("utf-8")
-    modified_code = add_profile_enable(file_contents, str(line_profile_output_file))
+    modified_code = add_profile_enable(file_contents, line_profile_output_file.as_posix())
     function_to_optimize.file_path.write_text(modified_code, "utf-8")
     return line_profile_output_file
 

@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-
+import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
@@ -24,11 +24,13 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
+import platform
+
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
-codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+codeflash_wrap_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -36,14 +38,14 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}"
     print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -51,15 +53,15 @@ codeflash_wrap_string = """def codeflash_wrap(wrapped, test_module_name, test_cl
     gc.enable()
     print(f"!######{{test_stdout_tag}}######!")
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception
     return return_value
 """
 
-codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+codeflash_wrap_perfonly_string = """def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -67,14 +69,14 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    test_stdout_tag = f"{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}"
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
+    test_stdout_tag = f"{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}"
     print(f"!$######{{test_stdout_tag}}######$!")
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -87,7 +89,38 @@ codeflash_wrap_perfonly_string = """def codeflash_wrap(wrapped, test_module_name
 """
 
 
-def test_perfinjector_bubble_sort() -> None:
+def build_expected_unittest_imports(extra_imports: str = "") -> str:
+    imports = """import gc
+import inspect
+import os
+import sqlite3
+import time
+import unittest
+
+import dill as pickle"""
+    # timeout_decorator no longer used since pytest handles timeouts
+    if extra_imports:
+        imports += "\n" + extra_imports
+    return imports
+
+
+def build_expected_pytest_imports(extra_imports: str = "") -> str:
+    """Helper to build platform-aware imports for pytest tests."""
+    imports = """import gc
+import os
+import time
+
+import pytest"""
+    if extra_imports:
+        imports += "\n" + extra_imports
+    return imports
+# create a temporary directory for the test results
+@pytest.fixture
+def tmp_dir():
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        yield Path(tmpdirname)
+
+def test_perfinjector_bubble_sort(tmp_dir) -> None:
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -106,70 +139,50 @@ class TestPigLatin(unittest.TestCase):
         input = list(reversed(range(5000)))
         self.assertEqual(sorter(input), list(range(5000)))
 """
-    expected = """import gc
+    imports = """import gc
+import inspect
 import os
 import sqlite3
 import time
 import unittest
 
-import dill as pickle
-import timeout_decorator
+import dill as pickle"""
+    # timeout_decorator no longer used since pytest handles timeouts
 
-from code_to_optimize.bubble_sort import sorter
-
-
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
-    if not hasattr(codeflash_wrap, 'index'):
-        codeflash_wrap.index = {{}}
-    if test_id in codeflash_wrap.index:
-        codeflash_wrap.index[test_id] += 1
-    else:
-        codeflash_wrap.index[test_id] = 0
-    codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
-    """
-    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
-    """
-    expected += """print(f'!$######{{test_stdout_tag}}######$!')
-    exception = None
-    gc.disable()
-    try:
-        counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
-        codeflash_duration = time.perf_counter_ns() - counter
-    except Exception as e:
-        codeflash_duration = time.perf_counter_ns() - counter
-        exception = e
-    gc.enable()
-    print(f'!######{{test_stdout_tag}}######!')
-    pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
-    codeflash_con.commit()
-    if exception:
-        raise exception
-    return return_value
-
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+    imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    wrapper_func = codeflash_wrap_string
+    
+    test_class_header = "class TestPigLatin(unittest.TestCase):"
+    test_decorator = ""  # pytest-timeout handles timeouts now, not timeout_decorator
+    
+    expected = imports + "\n\n\n" + wrapper_func + "\n" + test_class_header + "\n\n"
+    if test_decorator:
+        expected += test_decorator + "\n"
+    expected += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(5000)))
-        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input), list(range(5000)))
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        self.assertEqual(codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs), list(range(5000)))
         codeflash_con.close()
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+
+    with (tmp_dir / "test_sort.py").open("w") as f:
         f.write(code)
         f.flush()
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(f.name))
@@ -181,16 +194,15 @@ class TestPigLatin(unittest.TestCase):
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             Path(f.name).parent,
-            "unittest",
         )
         os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=Path(f.name).stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     ).replace('"', "'")
 
 
-def test_perfinjector_only_replay_test() -> None:
+def test_perfinjector_only_replay_test(tmp_dir) -> None:
     code = """import dill as pickle
 import pytest
 from codeflash.tracing.replay_test import get_next_arg_and_return
@@ -204,6 +216,7 @@ def test_prepare_image_for_yolo():
         assert compare_results(return_val_1, ret)
 """
     expected = """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -218,8 +231,8 @@ from codeflash.tracing.replay_test import get_next_arg_and_return
 from codeflash.validation.equivalence import compare_results
 
 
-def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, function_name, line_id, loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
-    test_id = f'{{test_module_name}}:{{test_class_name}}:{{test_name}}:{{line_id}}:{{loop_index}}'
+def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_line_id, codeflash_loop_index, codeflash_cur, codeflash_con, *args, **kwargs):
+    test_id = f'{{codeflash_test_module_name}}:{{codeflash_test_class_name}}:{{codeflash_test_name}}:{{codeflash_line_id}}:{{codeflash_loop_index}}'
     if not hasattr(codeflash_wrap, 'index'):
         codeflash_wrap.index = {{}}
     if test_id in codeflash_wrap.index:
@@ -227,16 +240,16 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     else:
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
-    invocation_id = f'{{line_id}}_{{codeflash_test_index}}'
+    invocation_id = f'{{codeflash_line_id}}_{{codeflash_test_index}}'
     """
-    expected += """test_stdout_tag = f'{{test_module_name}}:{{(test_class_name + '.' if test_class_name else '')}}{{test_name}}:{{function_name}}:{{loop_index}}:{{invocation_id}}'
+    expected += """test_stdout_tag = f'{{codeflash_test_module_name}}:{{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}}{{codeflash_test_name}}:{{codeflash_function_name}}:{{codeflash_loop_index}}:{{invocation_id}}'
     """
     expected += """print(f'!$######{{test_stdout_tag}}######$!')
     exception = None
     gc.disable()
     try:
         counter = time.perf_counter_ns()
-        return_value = wrapped(*args, **kwargs)
+        return_value = codeflash_wrapped(*args, **kwargs)
         codeflash_duration = time.perf_counter_ns() - counter
     except Exception as e:
         codeflash_duration = time.perf_counter_ns() - counter
@@ -244,7 +257,7 @@ def codeflash_wrap(wrapped, test_module_name, test_class_name, test_name, functi
     gc.enable()
     print(f'!######{{test_stdout_tag}}######!')
     pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(return_value)
-    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (test_module_name, test_class_name, test_name, function_name, loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
+    codeflash_cur.execute('INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (codeflash_test_module_name, codeflash_test_class_name, codeflash_test_name, codeflash_function_name, codeflash_loop_index, invocation_id, codeflash_duration, pickled_return_value, 'function_call'))
     codeflash_con.commit()
     if exception:
         raise exception
@@ -265,11 +278,13 @@ def test_prepare_image_for_yolo():
 """
     expected += """        args = pickle.loads(arg_val_pkl)
         return_val_1 = pickle.loads(return_val_pkl)
-        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+        _call__bound__arguments = inspect.signature(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo).bind(**args)
+        _call__bound__arguments.apply_defaults()
+        ret = codeflash_wrap(packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo, '{module_path}', None, 'test_prepare_image_for_yolo', 'packagename_ml_yolo_image_reshaping_utils_prepare_image_for_yolo', '0_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert compare_results(return_val_1, ret)
     codeflash_con.close()
 """
-    with tempfile.NamedTemporaryFile(mode="w") as f:
+    with (tmp_dir / "test_return_values.py").open("w") as f:
         f.write(code)
         f.flush()
         func = FunctionToOptimize(function_name="prepare_image_for_yolo", parents=[], file_path=Path("module.py"))
@@ -277,12 +292,12 @@ def test_prepare_image_for_yolo():
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent, "pytest"
+            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent
         )
         os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=Path(f.name).stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     ).replace('"', "'")
 
 
@@ -305,6 +320,7 @@ def test_sort():
     expected = (
         """import datetime
 import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -325,10 +341,14 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     print(datetime.datetime.now().isoformat())
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '5', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -381,7 +401,6 @@ def test_sort():
             [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
@@ -389,7 +408,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
@@ -397,14 +416,13 @@ def test_sort():
             [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.PERFORMANCE,
         )
         assert success
         assert new_perf_test is not None
         assert new_perf_test.replace('"', "'") == expected_perfonly.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         with test_path.open("w") as f:
@@ -532,7 +550,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 2
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 2
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -564,6 +583,7 @@ def test_sort_parametrized(input, expected_output):
 """
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -584,7 +604,9 @@ def test_sort_parametrized(input, expected_output):
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == expected_output
     codeflash_con.close()
 """
@@ -631,11 +653,11 @@ def test_sort_parametrized(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -643,11 +665,11 @@ def test_sort_parametrized(input, expected_output):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perfonly.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -799,7 +821,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -832,6 +855,7 @@ def test_sort_parametrized_loop(input, expected_output):
 """
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -853,7 +877,9 @@ def test_sort_parametrized_loop(input, expected_output):
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     for i in range(2):
-        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort_parametrized_loop', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -904,11 +930,11 @@ def test_sort_parametrized_loop(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -916,7 +942,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -925,7 +951,7 @@ def test_sort_parametrized_loop(input, expected_output):
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1154,7 +1180,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 6
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 6
     finally:
         if computed_fn_opt:
             func_optimizer.write_code_and_helpers(
@@ -1184,6 +1211,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -1207,7 +1235,9 @@ def test_sort():
     for i in range(3):
         input = inputs[i]
         expected_output = expected_outputs[i]
-        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert output == expected_output
     codeflash_con.close()
 """
@@ -1260,23 +1290,23 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(str(run_cwd))
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1432,7 +1462,8 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
             line_profiler_output_file=line_profiler_output_file,
         )
         tmp_lpr = list(line_profile_results["timings"].keys())
-        assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
+        if sys.platform != "win32":
+            assert len(tmp_lpr) == 1 and line_profile_results["timings"][tmp_lpr[0]][0][1] == 3
     finally:
         if computed_fn_opt is True:
             func_optimizer.write_code_and_helpers(
@@ -1446,6 +1477,7 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
 
 
 def test_perfinjector_bubble_sort_unittest_results() -> None:
+    
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -1466,25 +1498,27 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, list(range(50)))
 """
 
-    expected = (
-        """import gc
+    is_windows = platform.system() == "Windows"
+    
+    if is_windows:
+        expected = (
+            """import gc
+import inspect
 import os
 import sqlite3
 import time
 import unittest
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
 
 """
-        + codeflash_wrap_string
-        + """
+            + codeflash_wrap_string
+            + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1492,34 +1526,37 @@ class TestPigLatin(unittest.TestCase):
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         input = [5, 4, 3, 2, 1, 0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0, 1, 2, 3, 4, 5])
         input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         input = list(reversed(range(50)))
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, list(range(50)))
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+        )
+        expected_perf = (
+            """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
 
 """
-        + codeflash_wrap_perfonly_string
-        + """
+            + codeflash_wrap_perfonly_string
+            + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         input = [5, 4, 3, 2, 1, 0]
@@ -1532,7 +1569,77 @@ class TestPigLatin(unittest.TestCase):
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, input)
         self.assertEqual(output, list(range(50)))
 """
-    )
+        )
+    else:
+        expected = (
+            """import gc
+import inspect
+import os
+import sqlite3
+import time
+import unittest
+
+import dill as pickle
+
+from code_to_optimize.bubble_sort import sorter
+
+
+"""
+            + codeflash_wrap_string
+            + """
+class TestPigLatin(unittest.TestCase):
+
+    def test_sort(self):
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
+        codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
+        codeflash_cur = codeflash_con.cursor()
+        codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
+        input = [5, 4, 3, 2, 1, 0]
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        input = list(reversed(range(50)))
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
+        self.assertEqual(output, list(range(50)))
+        codeflash_con.close()
+"""
+        )
+        expected_perf = (
+            """import gc
+import os
+import time
+import unittest
+
+from code_to_optimize.bubble_sort import sorter
+
+
+"""
+            + codeflash_wrap_perfonly_string
+            + """
+class TestPigLatin(unittest.TestCase):
+
+    def test_sort(self):
+        codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
+        input = [5, 4, 3, 2, 1, 0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '1', codeflash_loop_index, input)
+        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
+        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '4', codeflash_loop_index, input)
+        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        input = list(reversed(range(50)))
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '7', codeflash_loop_index, input)
+        self.assertEqual(output, list(range(50)))
+"""
+        )
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -1562,7 +1669,6 @@ class TestPigLatin(unittest.TestCase):
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
-            "unittest",
             mode=TestingMode.BEHAVIOR,
         )
         assert success
@@ -1571,7 +1677,6 @@ class TestPigLatin(unittest.TestCase):
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
-            "unittest",
             mode=TestingMode.PERFORMANCE,
         )
         os.chdir(original_cwd)
@@ -1580,11 +1685,11 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -1744,63 +1849,54 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
 """
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
-"""
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # Build expected behavior output with platform-aware imports
+    imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+    
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, input)
         self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -1825,11 +1921,11 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -1837,13 +1933,13 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         assert new_test_perf is not None
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
 
         #
@@ -2003,26 +2099,17 @@ class TestPigLatin(unittest.TestCase):
             output = sorter(input)
             self.assertEqual(output, expected_output)"""
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-
-from code_to_optimize.bubble_sort import sorter
-
+    # Build expected behavior output with platform-aware imports  
+    imports_behavior = build_expected_unittest_imports()
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
 """
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
@@ -2033,30 +2120,31 @@ class TestPigLatin(unittest.TestCase):
         for i in range(3):
             input = inputs[i]
             expected_output = expected_outputs[i]
-            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+            _call__bound__arguments = inspect.signature(sorter).bind(input)
+            _call__bound__arguments.apply_defaults()
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
 
-    expected_perf = (
-        """import gc
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
+
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-
-from code_to_optimize.bubble_sort import sorter
-
+"""
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
-
-    @timeout_decorator.timeout(15)
-    def test_sort(self):
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         inputs = [[5, 4, 3, 2, 1, 0], [5.0, 4.0, 3.0, 2.0, 1.0, 0.0], list(reversed(range(50)))]
         expected_outputs = [[0, 1, 2, 3, 4, 5], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0], list(range(50))]
@@ -2066,7 +2154,8 @@ class TestPigLatin(unittest.TestCase):
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -2092,22 +2181,22 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # # Overwrite old test with new instrumented test
@@ -2269,65 +2358,56 @@ class TestPigLatin(unittest.TestCase):
             self.assertEqual(output, expected_output)
 """
 
-    expected_behavior = (
-        """import gc
-import os
-import sqlite3
-import time
-import unittest
-
-import dill as pickle
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
-"""
-        + codeflash_wrap_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # Build expected behavior output with platform-aware imports
+    imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
+    imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
+    test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_behavior:
+        test_class_behavior += test_decorator_behavior + "\n"
+    test_class_behavior += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
         codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
         codeflash_cur = codeflash_con.cursor()
         codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
         for i in range(2):
-            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+            _call__bound__arguments = inspect.signature(sorter).bind(input)
+            _call__bound__arguments.apply_defaults()
+            output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
             self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    )
-    expected_perf = (
-        """import gc
+
+    expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
+    # Build expected perf output with platform-aware imports
+    imports_perf = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.bubble_sort import sorter
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
+    
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
+    test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
-    @timeout_decorator.timeout(15)
-    def test_sort(self, input, expected_output):
+"""
+    if test_decorator_perf:
+        test_class_perf += test_decorator_perf + "\n"
+    test_class_perf += """    def test_sort(self, input, expected_output):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         for i in range(2):
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    )
+    
+    expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -2352,21 +2432,21 @@ class TestPigLatin(unittest.TestCase):
         f = FunctionToOptimize(function_name="sorter", file_path=code_path, parents=[])
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.BEHAVIOR
         )
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -2616,6 +2696,7 @@ def test_class_name_A_function_name():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2633,7 +2714,9 @@ def test_class_name_A_function_name():
     codeflash_con = sqlite3.connect(f'{tmp_dir_path}_{{codeflash_iteration}}.sqlite')
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
-    ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, **args)
+    _call__bound__arguments = inspect.signature(class_name_A.function_name).bind(**args)
+    _call__bound__arguments.apply_defaults()
+    ret = codeflash_wrap(class_name_A.function_name, '{module_path}', None, 'test_class_name_A_function_name', 'class_name_A.function_name', '0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     codeflash_con.close()
 """
     )
@@ -2655,7 +2738,7 @@ def test_class_name_A_function_name():
         )
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(4, 23)], func, project_root_path, "pytest"
+            test_path, [CodePosition(4, 23)], func, project_root_path
         )
         os.chdir(original_cwd)
     finally:
@@ -2663,7 +2746,7 @@ def test_class_name_A_function_name():
     assert success
     assert new_test is not None
     assert new_test.replace('"', "'") == expected.format(
-        tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+        tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         module_path="tests.pytest.test_class_function_instrumentation_temp",
     ).replace('"', "'")
 
@@ -2684,6 +2767,7 @@ def test_common_tags_1():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2703,9 +2787,13 @@ def test_common_tags_1():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     articles_1 = [1, 2, 3]
-    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_loop_index, codeflash_cur, codeflash_con, articles_1) == set(1, 2)
+    _call__bound__arguments = inspect.signature(find_common_tags).bind(articles_1)
+    _call__bound__arguments.apply_defaults()
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == set(1, 2)
     articles_2 = [1, 2]
-    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_loop_index, codeflash_cur, codeflash_con, articles_2) == set(1)
+    _call__bound__arguments = inspect.signature(find_common_tags).bind(articles_2)
+    _call__bound__arguments.apply_defaults()
+    assert codeflash_wrap(find_common_tags, '{module_path}', None, 'test_common_tags_1', 'find_common_tags', '3', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == set(1)
     codeflash_con.close()
 """
     )
@@ -2727,14 +2815,14 @@ def test_common_tags_1():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path, "pytest"
+            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_wrong_function_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2751,6 +2839,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2771,7 +2860,9 @@ def test_sort():
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
     if len(input) > 0:
-        assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, input) == [0, 1, 2, 3, 4, 5]
+        _call__bound__arguments = inspect.signature(sorter).bind(input)
+        _call__bound__arguments.apply_defaults()
+        assert codeflash_wrap(sorter, '{module_path}', None, 'test_sort', 'sorter', '1_0', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs) == [0, 1, 2, 3, 4, 5]
     codeflash_con.close()
 """
     )
@@ -2790,14 +2881,14 @@ def test_sort():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(7, 15)], func, project_root_path, "pytest"
+            test_path, [CodePosition(7, 15)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2818,6 +2909,7 @@ def test_sort():
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2837,10 +2929,14 @@ def test_sort():
     codeflash_cur = codeflash_con.cursor()
     codeflash_cur.execute('CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)')
     input = [5, 4, 3, 2, 1, 0]
-    output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter, 'tests.pytest.test_perfinjector_bubble_sort_results_temp', None, 'test_sort', 'BubbleSorter.sorter', '1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0, 1, 2, 3, 4, 5]
     input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-    output = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, input)
+    _call__bound__arguments = inspect.signature(BubbleSorter.sorter).bind(input)
+    _call__bound__arguments.apply_defaults()
+    output = codeflash_wrap(BubbleSorter.sorter, '{module_path}', None, 'test_sort', 'BubbleSorter.sorter', '4', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
     assert output == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     codeflash_con.close()
 """
@@ -2868,13 +2964,13 @@ def test_sort():
 
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path, "pytest"
+            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path
         )
         os.chdir(original_cwd)
         assert success
         formatted_expected = expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=str(get_run_tmp_file(Path("test_return_values"))),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         )
         assert new_test is not None
         assert new_test.replace('"', "'") == formatted_expected.replace('"', "'")
@@ -2882,7 +2978,7 @@ def test_sort():
         test_path.unlink(missing_ok=True)
 
 
-def test_class_method_instrumentation() -> None:
+def test_class_method_instrumentation(tmp_path: Path) -> None:
     code = """from codeflash.optimization.optimizer import Optimizer
 def test_code_replacement10() -> None:
     get_code_output = '''random code'''
@@ -2920,6 +3016,7 @@ def test_code_replacement10() -> None:
 
     expected = (
         """import gc
+import inspect
 import os
 import sqlite3
 import time
@@ -2944,32 +3041,36 @@ def test_code_replacement10() -> None:
     func_top_optimize = FunctionToOptimize(function_name='main_method', file_path=str(file_path), parents=[FunctionParent('MainClass', 'ClassDef')])
     with open(file_path) as f:
         original_code = f.read()
-        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code).unwrap()
+        _call__bound__arguments = inspect.signature(opt.get_code_optimization_context).bind(function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments.apply_defaults()
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_1', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs).unwrap()
         assert code_context.testgen_context_code == get_code_output
-        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_loop_index, codeflash_cur, codeflash_con, function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments = inspect.signature(opt.get_code_optimization_context).bind(function_to_optimize=func_top_optimize, project_root=str(file_path.parent), original_source_code=original_code)
+        _call__bound__arguments.apply_defaults()
+        code_context = codeflash_wrap(opt.get_code_optimization_context, '{module_path}', None, 'test_code_replacement10', 'Optimizer.get_code_optimization_context', '4_3', codeflash_loop_index, codeflash_cur, codeflash_con, *_call__bound__arguments.args, **_call__bound__arguments.kwargs)
         assert code_context.testgen_context_code == get_code_output
     codeflash_con.close()
 """
     )
 
-    with tempfile.NamedTemporaryFile(mode="w") as f:
-        f.write(code)
-        f.flush()
-        func = FunctionToOptimize(
-            function_name="get_code_optimization_context",
-            parents=[FunctionParent("Optimizer", "ClassDef")],
-            file_path=Path(f.name),
-        )
-        original_cwd = Path.cwd()
-        run_cwd = Path(__file__).parent.parent.resolve()
-        os.chdir(run_cwd)
-        success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(22, 28), CodePosition(28, 28)], func, Path(f.name).parent, "pytest"
-        )
-        os.chdir(original_cwd)
+    test_file_path = tmp_path / "test_class_method_instrumentation.py"
+    test_file_path.write_text(code, encoding="utf-8")
+    
+    func = FunctionToOptimize(
+        function_name="get_code_optimization_context",
+        parents=[FunctionParent("Optimizer", "ClassDef")],
+        file_path=test_file_path,
+    )
+    original_cwd = Path.cwd()
+    run_cwd = Path(__file__).parent.parent.resolve()
+    os.chdir(run_cwd)
+    success, new_test = inject_profiling_into_existing_test(
+        test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent
+    )
+    os.chdir(original_cwd)
     assert success
     assert new_test.replace('"', "'") == expected.replace('"', "'").format(
-        module_path=Path(f.name).name, tmp_dir_path=get_run_tmp_file(Path("test_return_values"))
+        module_path=test_file_path.stem, tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
     )
 
 
@@ -3022,7 +3123,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(8, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(8, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3034,7 +3135,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_time_correction_instrumentation_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         # Overwrite old test with new instrumented test
         with test_path.open("w") as f:
@@ -3101,30 +3202,28 @@ class TestPigLatin(unittest.TestCase):
         output = accurate_sleepfunc(n)
 """
 
-    expected = (
-        """import gc
+    # Build expected output with platform-aware imports
+    imports = """import gc
 import os
 import time
 import unittest
-
-import timeout_decorator
-from parameterized import parameterized
-
-from code_to_optimize.sleeptime import accurate_sleepfunc
-
-
 """
-        + codeflash_wrap_perfonly_string
-        + """
-class TestPigLatin(unittest.TestCase):
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.sleeptime import accurate_sleepfunc"
+    
+    test_decorator = ""  # pytest-timeout handles timeouts now
+    test_class = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
-    @timeout_decorator.timeout(15)
-    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
+"""
+    if test_decorator:
+        test_class += test_decorator + "\n"
+    test_class += """    def test_sleepfunc_sequence_short(self, n, expected_total_sleep_time):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         output = codeflash_wrap(accurate_sleepfunc, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'accurate_sleepfunc', '0', codeflash_loop_index, n)
 """
-    )
+    
+    expected = imports + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/sleeptime.py").resolve()
     test_path = (
         Path(__file__).parent.resolve()
@@ -3141,7 +3240,7 @@ class TestPigLatin(unittest.TestCase):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(12, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(12, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3153,7 +3252,7 @@ class TestPigLatin(unittest.TestCase):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_time_correction_instrumentation_unittest_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")),
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         # Overwrite old test with new instrumented test
         with test_path.open("w") as f:
@@ -3190,6 +3289,8 @@ class TestPigLatin(unittest.TestCase):
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 

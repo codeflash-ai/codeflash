@@ -15,13 +15,14 @@ from codeflash.cli_cmds.console import console, logger, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import cleanup_paths, get_run_tmp_file
 from codeflash.code_utils.env_utils import get_pr_number, is_pr_draft
-from codeflash.code_utils.git_utils import check_running_in_git_repo
+from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 from codeflash.code_utils.git_worktree_utils import (
     create_detached_worktree,
     create_diff_patch_from_worktree,
     create_worktree_snapshot_commit,
     remove_worktree,
 )
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -44,8 +45,7 @@ class Optimizer:
             tests_root=args.tests_root,
             tests_project_rootdir=args.test_project_root,
             project_root_path=args.project_root,
-            test_framework=args.test_framework,
-            pytest_cmd=args.pytest_cmd,
+            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") and args.pytest_cmd else "pytest",
             benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
@@ -139,7 +139,7 @@ class Optimizer:
     def create_function_optimizer(
         self,
         function_to_optimize: FunctionToOptimize,
-        function_to_optimize_ast: ast.FunctionDef | None = None,
+        function_to_optimize_ast: ast.FunctionDef | ast.AsyncFunctionDef | None = None,
         function_to_tests: dict[str, set[FunctionCalledInTest]] | None = None,
         function_to_optimize_source_code: str | None = "",
         function_benchmark_timings: dict[str, dict[BenchmarkKey, float]] | None = None,
@@ -192,7 +192,7 @@ class Optimizer:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
 
-        logger.info(f"Examining file {original_module_path!s}…")
+        logger.info(f"loading|Examining file {original_module_path!s}")
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
@@ -239,6 +239,7 @@ class Optimizer:
 
         console.rule()
         start_time = time.time()
+        logger.info("lsp,loading|Discovering existing function tests...")
         function_to_tests, num_discovered_tests, num_discovered_replay_tests = discover_unit_tests(
             self.test_cfg, file_to_funcs_to_optimize=file_to_funcs_to_optimize
         )
@@ -258,8 +259,6 @@ class Optimizer:
         console.rule()
         if not env_utils.ensure_codeflash_api_key():
             return
-        if not env_utils.check_formatter_installed(self.args.formatter_cmds):
-            return
         if self.args.no_draft and is_pr_draft():
             logger.warning("PR is in draft mode, skipping optimization")
             return
@@ -271,14 +270,23 @@ class Optimizer:
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
+        if self.args.all:
+            three_min_in_ns = int(1.8e11)
+            console.rule()
+            pr_message = (
+                "\nCodeflash will keep opening pull requests as it finds optimizations." if not self.args.no_pr else ""
+            )
+            logger.info(
+                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project.{pr_message}"
+            )
+
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
         optimizations_found: int = 0
-        if self.args.test_framework == "pytest":
-            self.test_cfg.concolic_test_root_dir = Path(
-                tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
-            )
+        self.test_cfg.concolic_test_root_dir = Path(
+            tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
+        )
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -348,13 +356,12 @@ class Optimizer:
                                 relative_file_paths = [
                                     code_string.file_path for code_string in read_writable_code.code_strings
                                 ]
-                                metadata = create_diff_patch_from_worktree(
+                                patch_path = create_diff_patch_from_worktree(
                                     self.current_worktree,
                                     relative_file_paths,
                                     fto_name=function_to_optimize.qualified_name,
-                                    metadata_input={},
                                 )
-                                self.patch_files.append(metadata["patch_path"])
+                                self.patch_files.append(patch_path)
                                 if i < len(functions_to_optimize) - 1:
                                     create_worktree_snapshot_commit(
                                         self.current_worktree,
@@ -441,39 +448,54 @@ class Optimizer:
                 logger.warning("Failed to create worktree. Skipping optimization.")
                 return
             self.current_worktree = worktree_dir
-            self.mutate_args_for_worktree_mode(worktree_dir)
+            self.mirror_paths_for_worktree_mode(worktree_dir)
             # make sure the tests dir is created in the worktree, this can happen if the original tests dir is empty
             Path(self.args.tests_root).mkdir(parents=True, exist_ok=True)
 
-    def mutate_args_for_worktree_mode(self, worktree_dir: Path) -> None:
-        saved_args = copy.deepcopy(self.args)
-        saved_test_cfg = copy.deepcopy(self.test_cfg)
-        self.original_args_and_test_cfg = (saved_args, saved_test_cfg)
+    def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
+        original_args = copy.deepcopy(self.args)
+        original_test_cfg = copy.deepcopy(self.test_cfg)
+        self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
-        project_root = self.args.project_root
-        module_root = self.args.module_root
-        relative_module_root = module_root.relative_to(project_root)
-        relative_optimized_file = self.args.file.relative_to(project_root) if self.args.file else None
-        relative_tests_root = self.test_cfg.tests_root.relative_to(project_root)
-        relative_benchmarks_root = (
-            self.args.benchmarks_root.relative_to(project_root) if self.args.benchmarks_root else None
+        original_git_root = git_root_dir()
+
+        # mirror project_root
+        self.args.project_root = mirror_path(self.args.project_root, original_git_root, worktree_dir)
+        self.test_cfg.project_root_path = mirror_path(self.test_cfg.project_root_path, original_git_root, worktree_dir)
+
+        # mirror module_root
+        self.args.module_root = mirror_path(self.args.module_root, original_git_root, worktree_dir)
+
+        # mirror target file
+        if self.args.file:
+            self.args.file = mirror_path(self.args.file, original_git_root, worktree_dir)
+
+        if self.args.all:
+            # the args.all path is the same as module_root.
+            self.args.all = mirror_path(self.args.all, original_git_root, worktree_dir)
+
+        # mirror tests root
+        self.args.tests_root = mirror_path(self.args.tests_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_root = mirror_path(self.test_cfg.tests_root, original_git_root, worktree_dir)
+
+        # mirror tests project root
+        self.args.test_project_root = mirror_path(self.args.test_project_root, original_git_root, worktree_dir)
+        self.test_cfg.tests_project_rootdir = mirror_path(
+            self.test_cfg.tests_project_rootdir, original_git_root, worktree_dir
         )
 
-        self.args.module_root = worktree_dir / relative_module_root
-        self.args.project_root = worktree_dir
-        self.args.test_project_root = worktree_dir
-        self.args.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.args.benchmarks_root = worktree_dir / relative_benchmarks_root
+        # mirror benchmarks root paths
+        if self.args.benchmarks_root:
+            self.args.benchmarks_root = mirror_path(self.args.benchmarks_root, original_git_root, worktree_dir)
+        if self.test_cfg.benchmark_tests_root:
+            self.test_cfg.benchmark_tests_root = mirror_path(
+                self.test_cfg.benchmark_tests_root, original_git_root, worktree_dir
+            )
 
-        self.test_cfg.project_root_path = worktree_dir
-        self.test_cfg.tests_project_rootdir = worktree_dir
-        self.test_cfg.tests_root = worktree_dir / relative_tests_root
-        if relative_benchmarks_root:
-            self.test_cfg.benchmark_tests_root = worktree_dir / relative_benchmarks_root
 
-        if relative_optimized_file is not None:
-            self.args.file = worktree_dir / relative_optimized_file
+def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
+    relative_path = path.relative_to(src_root)
+    return dest_root / relative_path
 
 
 def run_with_args(args: Namespace) -> None:

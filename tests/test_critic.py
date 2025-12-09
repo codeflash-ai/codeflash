@@ -14,7 +14,13 @@ from codeflash.models.models import (
     TestResults,
     TestType,
 )
-from codeflash.result.critic import coverage_critic, performance_gain, quantity_of_tests_critic, speedup_critic
+from codeflash.result.critic import (
+    coverage_critic,
+    performance_gain,
+    quantity_of_tests_critic,
+    speedup_critic,
+    throughput_gain,
+)
 
 
 def test_performance_gain() -> None:
@@ -365,7 +371,7 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(passing_coverage, "pytest") is True
+    assert coverage_critic(passing_coverage) is True
 
     border_coverage = CoverageData(
         file_path=Path("test_file.py"),
@@ -386,7 +392,7 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(border_coverage, "pytest") is True
+    assert coverage_critic(border_coverage) is True
 
     failing_coverage = CoverageData(
         file_path=Path("test_file.py"),
@@ -407,25 +413,159 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(failing_coverage, "pytest") is False
+    assert coverage_critic(failing_coverage) is False
 
-    unittest_coverage = CoverageData(
-        file_path=Path("test_file.py"),
-        coverage=0,
-        function_name="test_function",
-        functions_being_tested=["function1", "function2"],
-        graph={},
-        code_context=mock_code_context,
-        main_func_coverage=FunctionCoverage(
-            name="test_function",
-            coverage=0,
-            executed_lines=[10],
-            unexecuted_lines=[2],
-            executed_branches=[[5]],
-            unexecuted_branches=[[1]],
-        ),
-        dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY,
+def test_throughput_gain() -> None:
+    """Test throughput_gain calculation."""
+    # Test basic throughput improvement
+    assert throughput_gain(original_throughput=100, optimized_throughput=150) == 0.5  # 50% improvement
+
+    # Test no improvement
+    assert throughput_gain(original_throughput=100, optimized_throughput=100) == 0.0
+
+    # Test regression
+    assert throughput_gain(original_throughput=100, optimized_throughput=80) == -0.2  # 20% regression
+
+    # Test zero original throughput (edge case)
+    assert throughput_gain(original_throughput=0, optimized_throughput=50) == 0.0
+
+    # Test large improvement
+    assert throughput_gain(original_throughput=50, optimized_throughput=200) == 3.0  # 300% improvement
+
+
+def test_speedup_critic_with_async_throughput() -> None:
+    """Test speedup_critic with async throughput evaluation."""
+    original_code_runtime = 10000  # 10 microseconds
+    original_async_throughput = 100
+
+    # Test case 1: Both runtime and throughput improve significantly
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=120,  # 20% throughput improvement
     )
 
-    assert coverage_critic(unittest_coverage, "unittest") is True
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )
+
+    # Test case 2: Runtime improves significantly, throughput doesn't meet threshold (should pass)
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=105,  # Only 5% throughput improvement (below 10% threshold)
+    )
+
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )
+
+    # Test case 3: Throughput improves significantly, runtime doesn't meet threshold (should pass)
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=9800,  # Only 2% runtime improvement (below 5% threshold)
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=9800,
+        async_throughput=120,  # 20% throughput improvement
+    )
+
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )
+
+    # Test case 4: No throughput data - should fall back to runtime-only evaluation
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=None,  # No throughput data
+    )
+
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=None,  # No original throughput data
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )
+
+    # Test case 5: Test best_throughput_until_now comparison
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=115,  # 15% throughput improvement
+    )
+
+    # Should pass when no best throughput yet
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )
+
+    # Should fail when there's a better throughput already
+    assert not speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=7000,  # Better runtime already exists
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=120,  # Better throughput already exists
+        disable_gh_action_noise=True
+    )
+
+    # Test case 6: Zero original throughput (edge case)
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=50,
+    )
+
+    # Should pass when original throughput is 0 (throughput evaluation skipped)
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=0,  # Zero original throughput
+        best_throughput_until_now=None,
+        disable_gh_action_noise=True
+    )

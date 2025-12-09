@@ -21,12 +21,12 @@ class TestConfig:
     # Make file_path optional when trace_mode is True
     file_path: Optional[pathlib.Path] = None
     function_name: Optional[str] = None
-    test_framework: Optional[str] = None
     expected_unit_tests: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
+    use_worktree: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -85,11 +85,14 @@ def run_codeflash_command(
 
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
-    test_root = cwd / "tests" / (config.test_framework or "")
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
     )
 
     output = []
@@ -122,16 +125,15 @@ def build_command(
 ) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
-    base_command = ["python", python_path, "--file", config.file_path, "--no-pr"]
+    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    if config.test_framework:
-        base_command.extend(
-            ["--test-framework", config.test_framework, "--tests-root", str(test_root), "--module-root", str(cwd)]
-        )
+    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
+    if config.use_worktree:
+        base_command.append("--worktree")
     return base_command
 
 
@@ -162,7 +164,7 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         return False
 
     if config.expected_unit_tests is not None:
-        unit_test_match = re.search(r"Discovered (\d+) existing unit tests", stdout)
+        unit_test_match = re.search(r"Discovered (\d+) existing unit test file", stdout)
         if not unit_test_match:
             logging.error("Could not find unit test count")
             return False
@@ -185,11 +187,14 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    test_root = cwd / "tests" / (config.test_framework or "")
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
     clear_directory(test_root)
-    command = ["python", "-m", "codeflash.main", "optimize", "workload.py"]
+    command = ["uv", "run", "--no-project", "-m", "codeflash.main", "optimize", "workload.py"]
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=os.environ.copy()
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
     )
 
     output = []
