@@ -469,6 +469,7 @@ class FunctionOptimizer:
         candidate_result: OptimizedCandidateResult,
         original_code_baseline: OriginalCodeBaseline,
         perf_gain: float,
+        *,
         is_successful_candidate: bool,
     ) -> Tree:
         """Build a Tree display for runtime information of a candidate."""
