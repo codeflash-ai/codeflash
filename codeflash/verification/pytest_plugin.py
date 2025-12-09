@@ -8,9 +8,11 @@ import logging
 import os
 import platform
 import re
+import statistics
 import sys
 import time as _time_module
 import warnings
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
@@ -271,9 +273,24 @@ class PytestLoops:
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
 
+    def dynamic_tolerance(self, avg: float) -> float:
+        # (< 0.1 ms)
+        if avg < 0.0001:
+            return 0.7  # 70%
+
+        # (< 0.5 ms)
+        if avg < 0.0005:
+            return 0.4  # 40%
+
+        # (< 1 ms)
+        if avg < 0.001:
+            return 0.2  # 20%
+
+        return CONSISTENT_DURATION_TOLERANCE
+
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
-        durations: list[float] = []
+        durations = deque(maxlen=CONSISTENT_LOOP_COUNT)
 
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
@@ -314,10 +331,12 @@ class PytestLoops:
             durations.append(loop_duration)
 
             # Consistency check
-            if len(durations) >= CONSISTENT_LOOP_COUNT:
-                recent = durations[-CONSISTENT_LOOP_COUNT:]
-                avg = sum(recent) / CONSISTENT_LOOP_COUNT
-                consistent = all(abs(d - avg) / avg <= CONSISTENT_DURATION_TOLERANCE for d in recent)
+            if len(durations) == CONSISTENT_LOOP_COUNT:
+                avg = statistics.median(durations)
+                if avg == 0:
+                    consistent = all(d == 0 for d in durations)
+                else:
+                    consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
                 if consistent:
                     break
 
