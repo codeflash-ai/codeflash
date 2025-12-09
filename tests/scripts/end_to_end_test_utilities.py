@@ -21,7 +21,6 @@ class TestConfig:
     # Make file_path optional when trace_mode is True
     file_path: Optional[pathlib.Path] = None
     function_name: Optional[str] = None
-    test_framework: Optional[str] = None
     expected_unit_tests: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
@@ -86,7 +85,8 @@ def run_codeflash_command(
 
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
-    test_root = cwd / "tests" / (config.test_framework or "")
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     env = os.environ.copy()
@@ -129,10 +129,7 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    if config.test_framework:
-        base_command.extend(
-            ["--test-framework", config.test_framework, "--tests-root", str(test_root), "--module-root", str(cwd)]
-        )
+    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
@@ -190,7 +187,8 @@ def validate_stdout_in_candidate(stdout: str, expected_in_stdout: list[str]) -> 
 
 
 def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int) -> bool:
-    test_root = cwd / "tests" / (config.test_framework or "")
+    pytest_dir = cwd / "tests" / "pytest"
+    test_root = pytest_dir if pytest_dir.is_dir() else cwd / "tests"
     clear_directory(test_root)
     command = ["uv", "run", "--no-project", "-m", "codeflash.main", "optimize", "workload.py"]
     env = os.environ.copy()

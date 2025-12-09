@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import logger
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
@@ -109,11 +108,8 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | Origin
     return bool(pass_count >= 1 and report[models.TestType.REPLAY_TEST]["passed"] >= 1)  # type: ignore  # noqa: PGH003
 
 
-def coverage_critic(original_code_coverage: CoverageData | None, test_framework: str) -> bool:
+def coverage_critic(original_code_coverage: CoverageData | None) -> bool:
     """Check if the coverage meets the threshold."""
-    if test_framework == "unittest":
-        logger.debug("Coverage critic is not implemented for unittest yet.")
-        return True
     if original_code_coverage:
         return original_code_coverage.coverage >= COVERAGE_THRESHOLD
     return False
