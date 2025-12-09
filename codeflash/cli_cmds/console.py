@@ -142,8 +142,6 @@ def progress_bar(
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
     if is_LSP_enabled():
-        lsp_log(LspTextMessage(text=description, takes_time=True))
-
         class DummyProgress:
             def advance(self, *args, **kwargs) -> None:
                 pass

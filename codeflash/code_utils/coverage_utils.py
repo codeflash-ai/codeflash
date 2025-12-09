@@ -73,34 +73,8 @@ def prepare_coverage_files() -> tuple[Path, Path]:
     
     Returns tuple of (coverage_database_file, coverage_config_file).
     """
-    from codeflash.cli_cmds.console import logger
-    
-    logger.info("!lsp|coverage_utils.prepare_coverage_files: Starting coverage file preparation")
-    
-    logger.info("!lsp|coverage_utils.prepare_coverage_files: Getting coverage database file path")
     coverage_database_file = get_run_tmp_file(Path(".coverage"))
-    logger.info(f"!lsp|coverage_utils.prepare_coverage_files: Coverage database file: {coverage_database_file}")
-    
-    logger.info("!lsp|coverage_utils.prepare_coverage_files: Getting coverage config file path")
     coveragercfile = get_run_tmp_file(Path(".coveragerc"))
-    logger.info(f"!lsp|coverage_utils.prepare_coverage_files: Coverage config file: {coveragercfile}")
-    
     coveragerc_content = f"[run]\n branch = True\ndata_file={coverage_database_file}\n"
-    logger.info("!lsp|coverage_utils.prepare_coverage_files: Writing coverage config content")
-    logger.debug(f"coverage_utils.prepare_coverage_files: Config content:\n{coveragerc_content}")
-    
-    try:
-        coveragercfile.write_text(coveragerc_content)
-        logger.info("!lsp|coverage_utils.prepare_coverage_files: Coverage config file written successfully")
-    except Exception as e:
-        logger.error(
-            f"!lsp|coverage_utils.prepare_coverage_files: Failed to write coverage config file: "
-            f"{type(e).__name__}: {e}"
-        )
-        raise
-    
-    logger.info(
-        f"!lsp|coverage_utils.prepare_coverage_files: Coverage files prepared successfully. "
-        f"database={coverage_database_file}, config={coveragercfile}"
-    )
+    coveragercfile.write_text(coveragerc_content)
     return coverage_database_file, coveragercfile

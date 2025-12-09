@@ -31,8 +31,6 @@ def execute_test_subprocess(
     """
     is_windows = sys.platform == "win32"
 
-    logger.debug(f"execute_test_subprocess: Starting. platform={sys.platform}, timeout={timeout}s, cwd={cwd}")
-
     with custom_addopts():
         try:
             if is_windows:
@@ -74,7 +72,6 @@ def execute_test_subprocess(
                     stdout_content, stderr_content = process.communicate(timeout=timeout)
                     returncode = process.returncode
                 except subprocess.TimeoutExpired:
-                    logger.warning(f"execute_test_subprocess: Process timed out after {timeout}s, terminating...")
                     # On Windows, terminate the entire process tree
                     try:
                         process.kill()
@@ -86,41 +83,16 @@ def execute_test_subprocess(
                         cmd_list, timeout, output=stdout_content, stderr=stderr_content
                     )
 
-                logger.debug(
-                    f"execute_test_subprocess: Completed. returncode={returncode}, "
-                    f"stdout_len={len(stdout_content) if stdout_content else 0}, "
-                    f"stderr_len={len(stderr_content) if stderr_content else 0}"
-                )
-
-                # Log output for debugging
-                if returncode != 0:
-                    logger.warning(f"execute_test_subprocess: Non-zero return code: {returncode}")
-                    if stderr_content:
-                        logger.warning(f"execute_test_subprocess: stderr: {stderr_content[:2000]}")
-                    if stdout_content:
-                        logger.info(f"execute_test_subprocess: stdout: {stdout_content[:2000]}")
-                elif stdout_content or stderr_content:
-                    # Log a brief summary even on success for debugging
-                    if stderr_content:
-                        logger.debug(f"execute_test_subprocess: stderr preview: {stderr_content[:500]}")
-
                 return subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
             else:
                 # On Linux/Mac, use subprocess.run (works fine there)
                 result = subprocess.run(
                     cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False
                 )
-                logger.debug(
-                    f"execute_test_subprocess: Completed. returncode={result.returncode}, "
-                    f"stdout_len={len(result.stdout) if result.stdout else 0}, "
-                    f"stderr_len={len(result.stderr) if result.stderr else 0}"
-                )
                 return result
         except subprocess.TimeoutExpired:
-            logger.warning(f"execute_test_subprocess: TimeoutExpired after {timeout}s")
             raise
-        except Exception as e:
-            logger.error(f"execute_test_subprocess: Unexpected exception: {type(e).__name__}: {e}")
+        except Exception:
             raise
 
 
@@ -142,8 +114,6 @@ def run_behavioral_tests(
     On Windows, uses --capture=no to avoid subprocess output deadlocks.
     """
     is_windows = sys.platform == "win32"
-
-    logger.debug(f"run_behavioral_tests: framework={test_framework}, enable_coverage={enable_coverage}")
 
     if test_framework == "pytest":
         test_files: list[str] = []
@@ -195,10 +165,8 @@ def run_behavioral_tests(
                 try:
                     if coverage_database_file.exists():
                         coverage_database_file.unlink()
-                except PermissionError as e:
-                    logger.warning(f"run_behavioral_tests: PermissionError deleting coverage database: {e}")
-                except Exception as e:
-                    logger.warning(f"run_behavioral_tests: Exception deleting coverage database: {e}")
+                except (PermissionError, Exception):
+                    pass
             else:
                 cov_erase = execute_test_subprocess(
                     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
