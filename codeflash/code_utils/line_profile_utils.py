@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import functools
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Union
+from typing import TYPE_CHECKING, Union
 
 import libcst as cst
-from line_profiler import LineProfiler
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
@@ -47,7 +45,6 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         self.context_stack.pop()
         return updated_node
 
-    # f6fa22dd-d711-425b-bed4-d2844ad6af36
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         # Track when we enter a function
         self.context_stack.append(node.name.value)
@@ -81,17 +78,6 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         return False
 
 
-# Helper to get full module path as string
-def get_module_path(node: Union[cst.Name, cst.Attribute]) -> str:
-    parts = []
-    while isinstance(node, cst.Attribute):
-        parts.insert(0, node.attr.value)
-        node = node.value
-    if isinstance(node, cst.Name):
-        parts.insert(0, node.value)
-    return ".".join(parts)
-
-
 class ProfileEnableTransformer(cst.CSTTransformer):
     def __init__(self, filename: str) -> None:
         # Flag to track if we found the import statement
@@ -101,13 +87,21 @@ class ProfileEnableTransformer(cst.CSTTransformer):
         self.filename = filename
 
     def leave_ImportFrom(self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom) -> cst.ImportFrom:
-        module_path = get_module_path(original_node.module)
-
-        if module_path == "codeflash.code_utils.line_profile_utils" and any(
-            name.name.value == "LineProfilerDecorator" for name in original_node.names
+        # Check if this is the line profiler import statement
+        if (
+            isinstance(original_node.module, cst.Name)
+            and original_node.module.value == "line_profiler"
+            and any(
+                name.name.value == "profile" and (not name.asname or name.asname.name.value == "codeflash_line_profile")
+                for name in original_node.names
+            )
         ):
-            print("Found import statement")
             self.found_import = True
+            # Get the indentation from the original node
+            if hasattr(original_node, "leading_lines"):
+                leading_whitespace = original_node.leading_lines[-1].whitespace if original_node.leading_lines else ""
+                self.import_indentation = leading_whitespace
+
         return updated_node
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
@@ -122,19 +116,26 @@ class ProfileEnableTransformer(cst.CSTTransformer):
         for i, stmt in enumerate(new_body):
             if isinstance(stmt, cst.SimpleStatementLine):
                 for small_stmt in stmt.body:
-                    if isinstance(small_stmt, cst.ImportFrom):
-                        module_path = get_module_path(small_stmt.module)
-                        if module_path == "codeflash.code_utils.line_profile_utils" and any(
-                            name.name.value == "LineProfilerDecorator" for name in small_stmt.names
-                        ):
-                            import_index = i
-                            break
+                    if isinstance(small_stmt, cst.ImportFrom) and (
+                        isinstance(small_stmt.module, cst.Name)
+                        and small_stmt.module.value == "line_profiler"
+                        and any(
+                            name.name.value == "profile"
+                            and (not name.asname or name.asname.name.value == "codeflash_line_profile")
+                            for name in small_stmt.names
+                        )
+                    ):
+                        import_index = i
+                        break
                 if import_index is not None:
                     break
 
         if import_index is not None:
-            assignment = cst.parse_statement(f"codeflash_line_profile = LineProfilerDecorator('{self.filename}')")
-            new_body.insert(import_index + 1, assignment)
+            # Create the new enable statement to insert after the import
+            enable_statement = cst.parse_statement(f"codeflash_line_profile.enable(output_prefix='{self.filename}')")
+
+            # Insert the new statement after the import statement
+            new_body.insert(import_index + 1, enable_statement)
 
         # Create a new module with the updated body
         return updated_node.with_changes(body=new_body)
@@ -195,7 +196,7 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
     # self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
     # grouped iteration, file to fns to optimize, from line_profiler import profile as codeflash_line_profile
     file_paths = defaultdict(list)
-    line_profile_output_file = get_run_tmp_file(Path("baseline_lprof.txt"))
+    line_profile_output_file = get_run_tmp_file(Path("baseline_lprof"))
     file_paths[function_to_optimize.file_path].append(function_to_optimize.qualified_name)
     for elem in code_context.helper_functions:
         file_paths[elem.file_path].append(elem.qualified_name)
@@ -209,7 +210,7 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
             module_node = add_decorator_to_qualified_function(module_node, fn_name, "codeflash_line_profile")
         # add imports
         # Create a transformer to add the import
-        transformer = ImportAdder("from codeflash.code_utils.line_profile_utils import LineProfilerDecorator")
+        transformer = ImportAdder("from line_profiler import profile as codeflash_line_profile")
         # Apply the transformer to add the import
         module_node = module_node.visit(transformer)
         modified_code = sort_imports(code=module_node.code, float_to_top=True)
@@ -221,28 +222,3 @@ def add_decorator_imports(function_to_optimize: FunctionToOptimize, code_context
     modified_code = add_profile_enable(file_contents, line_profile_output_file.as_posix())
     function_to_optimize.file_path.write_text(modified_code, "utf-8")
     return line_profile_output_file
-
-
-class LineProfilerDecorator:
-    """Decorator class that profiles multiple functions and saves stats automatically."""
-
-    def __init__(self, output_file: str | Path) -> None:
-        self.output_file: Path = Path(output_file)
-        self.profiler: LineProfiler = LineProfiler()
-        # Ensure parent folder exists
-        self.output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Decorate a function to profile it and save stats after execution."""
-        self.profiler.add_function(func)
-
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-            try:
-                return self.profiler(func)(*args, **kwargs)
-            finally:
-                # Save stats after each call
-                with self.output_file.open("w") as f:
-                    self.profiler.print_stats(f)
-
-        return wrapper

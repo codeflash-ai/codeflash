@@ -47,8 +47,7 @@ def sort_classmethod(x):
     y = BubbleSortClass()
     return y.sorter(x)
 """
-        expected_code_helper = """from codeflash.code_utils.line_profile_utils import LineProfilerDecorator
-codeflash_line_profile = LineProfilerDecorator('{line_profiler_output_file}')
+        expected_code_helper = """from line_profiler import profile as codeflash_line_profile
 
 
 def hi():

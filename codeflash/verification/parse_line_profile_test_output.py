@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Optional
 
 import dill as pickle
 
-from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.tabulate import tabulate
 
 if TYPE_CHECKING:
@@ -79,9 +78,9 @@ def show_text(stats: dict) -> str:
 
 
 def parse_line_profile_results(line_profiler_output_file: Optional[Path]) -> dict:
+    line_profiler_output_file = line_profiler_output_file.with_suffix(".lprof")
     stats_dict = {}
     if not line_profiler_output_file.exists():
-        logger.warning(f"Line profiler output file {line_profiler_output_file} does not exist.")
         return {"timings": {}, "unit": 0, "str_out": ""}, None
     with line_profiler_output_file.open("rb") as f:
         stats = pickle.load(f)
