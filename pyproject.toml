@@ -303,7 +303,6 @@ __version__ = "{version}"
 module-root = "codeflash"
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
-test-framework = "pytest"
 formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",

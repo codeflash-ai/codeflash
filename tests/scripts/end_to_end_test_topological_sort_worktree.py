@@ -8,7 +8,6 @@ def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="topological_sort.py",
         function_name="Graph.topologicalSort",
-        test_framework="pytest",
         min_improvement_x=0.05,
         use_worktree=True,
         coverage_expectations=[

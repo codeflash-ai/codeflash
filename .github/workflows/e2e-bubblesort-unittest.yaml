@@ -65,7 +65,6 @@ jobs:
       - name: Install dependencies (CLI)
         run: |
           uv sync
-          uv add timeout_decorator
 
       - name: Run Codeflash to optimize code
         id: optimize_code
