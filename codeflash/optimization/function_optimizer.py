@@ -5,6 +5,7 @@ import concurrent.futures
 import os
 import queue
 import random
+import sqlite3
 import subprocess
 import time
 import uuid
@@ -48,6 +49,8 @@ from codeflash.code_utils.config_consts import (
     N_TESTS_TO_GENERATE_EFFECTIVE,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
+    MIN_IMPROVEMENT_THRESHOLD,
+    MIN_TESTCASE_PASSED_THRESHOLD,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
@@ -67,6 +70,7 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
+from codeflash.models import models
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceCodeRepairRequest,
@@ -83,7 +87,7 @@ from codeflash.models.models import (
     TestFiles,
     TestingMode,
     TestResults,
-    TestType,
+    TestType, TestDiffScope,
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import (
@@ -119,6 +123,145 @@ if TYPE_CHECKING:
     )
     from codeflash.verification.verification_utils import TestConfig
 
+CODE_REPAIR_LOG_DB = Path("/Users/aseemsaxena/Downloads/codeflash_dev/codeflash-internal/django/aiservice/code_repair/code_repair_log.db")
+
+
+SCOPE_DESCRIPTIONS = {
+    TestDiffScope.RETURN_VALUE: (
+        "The function returned a different value in the optimized code compared to the original."
+    ),
+    TestDiffScope.STDOUT: ("The output printed to stdout is different in the optimized code compared to the original."),
+    TestDiffScope.DID_PASS: (
+        "The test passed in one version but failed in the other (a change in pass/fail behavior)."
+    ),
+}
+
+def build_test_details(test_diffs: list[TestDiff]) -> str:
+    sections = []
+    for test_no, diff in enumerate(test_diffs, 1):
+        test_src_code = "```python\n" + diff.test_src_code + "\n```" if diff.test_src_code else ""
+        section = [
+            f"#### Test #{test_no}",
+            f"{SCOPE_DESCRIPTIONS.get(diff.scope, diff.scope.value)}",
+            f"Expected: {diff.original_value!r}. Got: {diff.candidate_value!r}"
+            if diff.scope != TestDiffScope.DID_PASS
+            else "",
+            f"Original code test status: {'Passed' if diff.original_pass else 'Failed'}. Optimized code test status: {'Passed' if diff.candidate_pass else 'Failed'}",
+            f"Pytest error (original code): {diff.original_pytest_error}" if diff.original_pytest_error else "",
+            f"Pytest error (optimized code): {diff.candidate_pytest_error}" if diff.candidate_pytest_error else "",
+            "Test Source:",
+            test_src_code,
+            "---",
+        ]
+        sections.append("\n".join(filter(None, section)))
+
+    return "\n".join(sections)
+
+def _init_code_repair_log_db() -> None:
+    """Initialize the SQLite database for code repair logging."""
+    conn = sqlite3.connect(CODE_REPAIR_LOG_DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS code_repair_logs (
+            optimization_id TEXT PRIMARY KEY,
+            trace_id TEXT,
+            user_prompt TEXT,
+            explanation TEXT,
+            refined_optimization TEXT,
+            trial_no TEXT,
+            past_trials TEXT,
+            passed TEXT,
+            faster TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def log_code_repair_to_db(
+    optimization_id: str,
+    trace_id: str | None = None,
+    user_prompt: str | None = None,
+    explanation: str | None = None,
+    refined_optimization: str | None = None,
+    trial_no: str | None = None,
+    past_trials: str | None = None,
+    passed: str | None = None,
+    faster: str | None = None,
+) -> None:
+    """Log code repair data to SQLite database.
+
+    Uses upsert pattern to allow incremental logging with different columns at different places.
+    Only non-None values will be updated; existing values are preserved.
+    """
+    try:
+        _init_code_repair_log_db()
+        conn = sqlite3.connect(CODE_REPAIR_LOG_DB)
+        cursor = conn.cursor()
+
+        # Build dynamic upsert query based on provided columns
+        columns = ["optimization_id"]
+        values = [optimization_id]
+        update_parts = ["updated_at = CURRENT_TIMESTAMP"]
+
+        if trace_id is not None:
+            columns.append("trace_id")
+            values.append(trace_id)
+            update_parts.append("trace_id = excluded.trace_id")
+
+        if user_prompt is not None:
+            columns.append("user_prompt")
+            values.append(user_prompt)
+            update_parts.append("user_prompt = excluded.user_prompt")
+
+        if explanation is not None:
+            columns.append("explanation")
+            values.append(explanation)
+            update_parts.append("explanation = excluded.explanation")
+
+        if refined_optimization is not None:
+            columns.append("refined_optimization")
+            values.append(refined_optimization)
+            update_parts.append("refined_optimization = excluded.refined_optimization")
+
+        if trial_no is not None:
+            columns.append("trial_no")
+            values.append(trial_no)
+            update_parts.append("trial_no = excluded.trial_no")
+
+        if past_trials is not None:
+            columns.append("past_trials")
+            values.append(past_trials)
+            update_parts.append("past_trials = excluded.past_trials")
+
+        if passed is not None:
+            columns.append("passed")
+            values.append(passed)
+            update_parts.append("passed = excluded.passed")
+
+        if faster is not None:
+            columns.append("faster")
+            values.append(faster)
+            update_parts.append("faster = excluded.faster")
+
+        placeholders = ", ".join(["?"] * len(values))
+        columns_str = ", ".join(columns)
+        update_str = ", ".join(update_parts)
+
+        cursor.execute(
+            f"""
+            INSERT INTO code_repair_logs ({columns_str})
+            VALUES ({placeholders})
+            ON CONFLICT(optimization_id) DO UPDATE SET {update_str}
+            """,  # noqa: S608
+            values,
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("Failed to log code repair data to SQLite")
 
 class CandidateProcessor:
     """Handles candidate processing using a queue-based approach."""
@@ -649,6 +792,7 @@ class FunctionOptimizer:
                     code_context=code_context,
                     candidate=candidate,
                     exp_type=exp_type,
+                    original_code_baseline=original_code_baseline
                 )
 
                 console.rule()
@@ -812,6 +956,7 @@ class FunctionOptimizer:
                 source_code=self.ast_code_to_id[valid_opt_normalized_code]["shorter_source_code"],
                 optimization_id=valid_opt.candidate.optimization_id,
                 explanation=valid_opt.candidate.explanation,
+                source=valid_opt.candidate.source,
             )
             new_best_opt = BestOptimization(
                 candidate=new_candidate_with_shorter_code,
@@ -914,9 +1059,9 @@ class FunctionOptimizer:
         trace_id: str,
         optimization_id: str,
         past_trials: str,
+        trial_no: str,
         ai_service_client: AiServiceClient,
-        executor: concurrent.futures.ThreadPoolExecutor,
-    ) -> concurrent.futures.Future[OptimizedCandidate | None]:
+    ) -> OptimizedCandidate | None:
         request = AIServiceCodeRepairRequest(
             optimization_id=optimization_id,
             original_source_code=original_source_code,
@@ -924,8 +1069,9 @@ class FunctionOptimizer:
             test_diffs=test_diffs,
             trace_id=trace_id,
             past_trials=past_trials,
+            trial_no=trial_no
         )
-        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
+        return ai_service_client.optimize_python_code_repair(request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1855,176 +2001,244 @@ class FunctionOptimizer:
         code_context: CodeOptimizationContext,
         candidate: OptimizedCandidate,
         exp_type: str,
+        original_code_baseline,  # noqa: ANN001
     ) -> Result[OptimizedCandidateResult, str]:
-        assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+        current_candidate = candidate
+        current_candidate_index = optimization_candidate_index
+        past_trials = ""
+        for trial_no in range(4):
+            print("Trial no: ", trial_no)
+            assert (test_framework := self.args.test_framework) in {"pytest", "unittest"}  # noqa: RUF018
+            with progress_bar("Testing optimization candidate"):
+                test_env = self.get_test_env(
+                    codeflash_loop_index=0,
+                    codeflash_test_iteration=current_candidate_index,
+                    codeflash_tracer_disable=1,
+                )
+                get_run_tmp_file(Path(f"test_return_values_{current_candidate_index}.sqlite")).unlink(missing_ok=True)
+                # Instrument codeflash capture
+                candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
+                candidate_helper_code = {}
+                for module_abspath in original_helper_code:
+                    candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+                if self.function_to_optimize.is_async:
+                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
+                    add_async_decorator_to_function(
+                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    )
+                try:
+                    instrument_codeflash_capture(
+                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                    )
+                    total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                    candidate_behavior_results, _ = self.run_and_parse_tests(
+                        testing_type=TestingMode.BEHAVIOR,
+                        test_env=test_env,
+                        test_files=self.test_files,
+                        optimization_iteration=current_candidate_index,
+                        testing_time=total_looping_time,
+                        enable_coverage=False,
+                    )
+                # Remove instrumentation
+                finally:
+                    self.write_code_and_helpers(
+                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
+                    )
+                console.print(
+                    TestResults.report_to_tree(
+                        candidate_behavior_results.get_test_pass_fail_report_by_type(),
+                        title=f"Behavioral Test Results for candidate {current_candidate_index}",
+                    )
+                )
+                console.rule()
+                match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+                if match:
+                    logger.info("h3|Test results matched ✅")
+                    console.rule()
+                    if trial_no!=0:
+                        log_code_repair_to_db(
+                            trace_id=self.function_trace_id,
+                            optimization_id=candidate.optimization_id + "_" + str(trial_no),
+                            passed="yes",
+                        )
+                    break
+                if trial_no<=2:
+                    # repair process
+                    ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+                    # first candidate
+                    repair_candidate = self.repair_optimization(
+                        original_source_code=code_context.read_writable_code.markdown,
+                        modified_source_code=current_candidate.source_code.markdown,
+                        test_diffs=diffs,
+                        trace_id=self.function_trace_id,
+                        ai_service_client=ai_service_client,
+                        optimization_id=candidate.optimization_id,
+                        past_trials=past_trials,
+                        trial_no=str(trial_no+1)
+                    )
+                    if not repair_candidate:
+                        logger.debug("llm call failed")
+                        log_code_repair_to_db(
+                            trace_id=self.function_trace_id,
+                            optimization_id=candidate.optimization_id + "_" + str(trial_no+1),
+                            passed="no",
+                            faster="no"
+                        )
+                        match = False
+                        if trial_no != 2:
+                            continue
+                        break
+                    try:
+                        # update code
+                        did_update = self.replace_function_and_helpers_with_optimized_code(
+                            code_context=code_context,
+                            optimized_code=repair_candidate.source_code,
+                            original_helper_code=original_helper_code,
+                        )
+                        if not did_update:
+                            log_code_repair_to_db(
+                                trace_id=self.function_trace_id,
+                                optimization_id=candidate.optimization_id + "_" + str(trial_no + 1),
+                                passed="no",
+                                faster="no",
+                            )
+                            match = False
+                            if trial_no != 2:
+                                continue
+                            break
+                    except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
+                        logger.error(e)
+                        self.write_code_and_helpers(
+                            self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                        )
+                        log_code_repair_to_db(
+                            trace_id=self.function_trace_id,
+                            optimization_id=candidate.optimization_id + "_" + str(trial_no + 1),
+                            passed="no",
+                            faster="no",
+                        )
+                        match = False
+                        if trial_no != 2:
+                            continue
+                        break
+                    past_trials += f"Trial {trial_no + 1}\n"
+                    past_trials += f"Candidate Code\n{current_candidate.source_code.markdown}\n"
+                    past_trials += "Abridged test results\n"
+                    past_trials += build_test_details(diffs)[:2000]
+                    current_candidate = repair_candidate
+                    log_code_repair_to_db(
+                        trace_id=self.function_trace_id,
+                        optimization_id=candidate.optimization_id + "_" + str(trial_no + 1),
+                        passed="no",
+                        faster="no",
+                    )
+                # behavior to test, if pass break
+                # log the results
+                # return self.get_results_not_matched_error()
+        if not match:
+            print("didn't work after 3 trials abort")
+            if trial_no!=0:
+                log_code_repair_to_db(
+                    trace_id=self.function_trace_id,
+                    optimization_id=candidate.optimization_id + "_" + str(trial_no),
+                    passed="no",
+                    faster="no"
+                )
+            return self.get_results_not_matched_error()
+        # performance benchmark
+        logger.info(f"loading|Running performance tests for candidate {current_candidate_index}...")
 
-        with progress_bar("Testing optimization candidate"):
-            test_env = self.get_test_env(
-                codeflash_loop_index=0,
-                codeflash_test_iteration=optimization_candidate_index,
-                codeflash_tracer_disable=1,
-            )
-
-            get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite")).unlink(missing_ok=True)
-            # Instrument codeflash capture
-            candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
-            candidate_helper_code = {}
-            for module_abspath in original_helper_code:
-                candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
+        if test_framework == "pytest":
+            # For async functions, instrument at definition site for performance benchmarking
             if self.function_to_optimize.is_async:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
-                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.BEHAVIOR
+                    self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
                 )
 
             try:
-                instrument_codeflash_capture(
-                    self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                )
-
-                total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
-                candidate_behavior_results, _ = self.run_and_parse_tests(
-                    testing_type=TestingMode.BEHAVIOR,
+                candidate_benchmarking_results, _ = self.run_and_parse_tests(
+                    testing_type=TestingMode.PERFORMANCE,
                     test_env=test_env,
                     test_files=self.test_files,
-                    optimization_iteration=optimization_candidate_index,
+                    optimization_iteration=current_candidate_index,
                     testing_time=total_looping_time,
                     enable_coverage=False,
                 )
-            # Remove instrumentation
             finally:
-                self.write_code_and_helpers(
-                    candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                )
-            console.print(
-                TestResults.report_to_tree(
-                    candidate_behavior_results.get_test_pass_fail_report_by_type(),
-                    title=f"Behavioral Test Results for candidate {optimization_candidate_index}",
-                )
-            )
-            console.rule()
-            # print(type(code_context), type(candidate))
-            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
-            if match:
-                logger.info("h3|Test results matched ✅")
-                console.rule()
-            else:
-                result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
-                if candidate.source == OptimizedCandidateSource.REPAIR or result_unmatched_perc > 0.5:
-                    # if the test unmatched percentage is greater than 50%, we can't fix it
-                    return self.get_results_not_matched_error()
-
-                ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
-                logger.info("Adding this to the repair queue")
-                for _ in range(3):
-                    # first candidate
-                    self.repair_optimization(
-                        original_source_code=code_context.read_writable_code.markdown,
-                        modified_source_code=candidate.source_code.markdown,
-                        test_diffs=diffs,
-                        trace_id=self.function_trace_id[:-4] + exp_type
-                        if self.experiment_id
-                        else self.function_trace_id,
-                        ai_service_client=ai_service_client,
-                        optimization_id=candidate.optimization_id,
-                        executor=self.executor,
-                        past_trials="",
-                    )
-                    # behavior to test, if pass break
-                return self.get_results_not_matched_error()
-
-            logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
-
-            if test_framework == "pytest":
-                # For async functions, instrument at definition site for performance benchmarking
+                # Restore original source if we instrumented it
                 if self.function_to_optimize.is_async:
-                    from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
-
-                    add_async_decorator_to_function(
-                        self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.PERFORMANCE
+                    self.write_code_and_helpers(
+                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
-
-                try:
-                    candidate_benchmarking_results, _ = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        testing_time=total_looping_time,
-                        enable_coverage=False,
-                    )
-                finally:
-                    # Restore original source if we instrumented it
-                    if self.function_to_optimize.is_async:
-                        self.write_code_and_helpers(
-                            candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                        )
-                loop_count = (
-                    max(all_loop_indices)
-                    if (
-                        all_loop_indices := {
-                            result.loop_index for result in candidate_benchmarking_results.test_results
-                        }
-                    )
-                    else 0
+            loop_count = (
+                max(all_loop_indices)
+                if (
+                    all_loop_indices := {
+                        result.loop_index for result in candidate_benchmarking_results.test_results
+                    }
                 )
-
-            else:
-                candidate_benchmarking_results = TestResults()
-                start_time: float = time.time()
-                loop_count = 0
-                for i in range(100):
-                    if i >= 5 and time.time() - start_time >= TOTAL_LOOPING_TIME_EFFECTIVE * 1.5:
-                        # * 1.5 to give unittest a bit more time to run
-                        break
-                    test_env["CODEFLASH_LOOP_INDEX"] = str(i + 1)
-                    unittest_loop_results, _cov = self.run_and_parse_tests(
-                        testing_type=TestingMode.PERFORMANCE,
-                        test_env=test_env,
-                        test_files=self.test_files,
-                        optimization_iteration=optimization_candidate_index,
-                        testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
-                        unittest_loop_index=i + 1,
-                    )
-                    loop_count = i + 1
-                    candidate_benchmarking_results.merge(unittest_loop_results)
-
-            if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
-                logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
-                console.rule()
-
-            logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
-
-            candidate_async_throughput = None
-            if self.function_to_optimize.is_async:
-                candidate_async_throughput = calculate_function_throughput_from_test_results(
-                    candidate_benchmarking_results, self.function_to_optimize.function_name
-                )
-                logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
-
-            if self.args.benchmark:
-                candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
-                    self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
-                )
-                for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
-                    logger.debug(
-                        f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}"
-                    )
-            return Success(
-                OptimizedCandidateResult(
-                    max_loop_count=loop_count,
-                    best_test_runtime=total_candidate_timing,
-                    behavior_test_results=candidate_behavior_results,
-                    benchmarking_test_results=candidate_benchmarking_results,
-                    replay_benchmarking_test_results=candidate_replay_benchmarking_results
-                    if self.args.benchmark
-                    else None,
-                    optimization_candidate_index=optimization_candidate_index,
-                    total_candidate_timing=total_candidate_timing,
-                    async_throughput=candidate_async_throughput,
-                )
+                else 0
             )
+
+        if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
+            logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
+            console.rule()
+
+        logger.debug(f"Total optimized code {current_candidate_index} runtime (ns): {total_candidate_timing}")
+
+        candidate_async_throughput = None
+        if self.function_to_optimize.is_async:
+            candidate_async_throughput = calculate_function_throughput_from_test_results(
+                candidate_benchmarking_results, self.function_to_optimize.function_name
+            )
+            logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
+
+        if self.args.benchmark:
+            candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
+                self.total_benchmark_timings.keys(), self.replay_tests_dir, self.project_root
+            )
+            for benchmark_name, benchmark_results in candidate_replay_benchmarking_results.items():
+                logger.debug(
+                    f"Benchmark {benchmark_name} runtime (ns): {humanize_runtime(benchmark_results.total_passed_runtime())}"
+                )
+        best_test_runtime = total_candidate_timing
+        perf_gain = performance_gain(
+            original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_test_runtime
+        )
+        noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_code_baseline.runtime < 10000 else MIN_IMPROVEMENT_THRESHOLD
+        #log here again
+        report = candidate_behavior_results.get_test_pass_fail_report_by_type()
+        pass_count = 0
+        for test_type in report:
+            pass_count += report[test_type]["passed"]
+
+        if pass_count >= MIN_TESTCASE_PASSED_THRESHOLD:
+            speedup_critic_val = True
+        # If one or more tests passed, check if least one of them was a successful REPLAY_TEST
+        speedup_critic_val = bool(pass_count >= 6)
+        faster = "yes" if (perf_gain > noise_floor and speedup_critic_val) else "no"
+        if trial_no!=0:
+            log_code_repair_to_db(
+                trace_id=self.function_trace_id,
+                optimization_id=candidate.optimization_id + "_" + str(trial_no),
+                faster=faster,
+            )
+        return Success(
+            OptimizedCandidateResult(
+                max_loop_count=loop_count,
+                best_test_runtime=total_candidate_timing,
+                behavior_test_results=candidate_behavior_results,
+                benchmarking_test_results=candidate_benchmarking_results,
+                replay_benchmarking_test_results=candidate_replay_benchmarking_results
+                if self.args.benchmark
+                else None,
+                optimization_candidate_index=optimization_candidate_index,
+                total_candidate_timing=total_candidate_timing,
+                async_throughput=candidate_async_throughput,
+            )
+        )
 
     def run_and_parse_tests(
         self,

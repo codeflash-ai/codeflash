@@ -75,6 +75,7 @@ class AIServiceCodeRepairRequest:
     trace_id: str
     test_diffs: list[TestDiff]
     past_trials: str
+    trial_no: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -384,7 +385,7 @@ class TestsInFile:
     test_type: TestType
 
 
-class OptimizedCandidateSource(enum.Enum, str):
+class OptimizedCandidateSource(str, Enum):
     OPTIMIZE = "OPTIMIZE"
     OPTIMIZE_LP = "OPTIMIZE_LP"
     REFINE = "REFINE"

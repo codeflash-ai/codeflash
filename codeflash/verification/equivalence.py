@@ -30,16 +30,22 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         cdd_test_result = candidate_results.get_by_unique_invocation_loop_id(test_id)
         candidate_test_failures = candidate_results.test_failures
         original_test_failures = original_results.test_failures
-        cdd_pytest_error = (
-            candidate_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
-            if candidate_test_failures
-            else ""
-        )
-        original_pytest_error = (
-            original_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
-            if original_test_failures
-            else ""
-        )
+        try:
+            cdd_pytest_error = (
+                candidate_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
+                if candidate_test_failures
+                else ""
+            )
+        except:
+            cdd_pytest_error = ""
+        try:
+            original_pytest_error = (
+                original_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
+                if original_test_failures
+                else ""
+            )
+        except:
+            original_pytest_error=""
 
         if cdd_test_result is not None and original_test_result is None:
             continue
