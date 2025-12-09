@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
@@ -23,8 +22,8 @@ BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling",
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
-    """
-    Execute a subprocess with the given command list, working directory, environment variables, and timeout.
+    """Execute a subprocess with the given command list, working directory, environment variables, and timeout.
+
 
     On Windows, uses Popen with communicate() and process groups for proper cleanup.
     On other platforms, uses subprocess.run with capture_output.
@@ -32,67 +31,60 @@ def execute_test_subprocess(
     is_windows = sys.platform == "win32"
 
     with custom_addopts():
-        try:
-            if is_windows:
-                # WINDOWS SUBPROCESS FIX:
-                # On Windows, running pytest with coverage can hang indefinitely due to multiple issues:
-                #
-                # Problem 1: Pipe buffer deadlocks
-                #   - subprocess.run() with file handles can deadlock when the child process
-                #     produces output faster than the parent can read it
-                #   - Solution: Use Popen.communicate() which properly drains both stdout/stderr
-                #     concurrently using threads internally
-                #
-                # Problem 2: Child process waiting for stdin
-                #   - Some Windows processes (especially pytest) may wait for console input
-                #   - Solution: Use stdin=subprocess.DEVNULL to explicitly close stdin
-                #
-                # Problem 3: Orphaned child processes after timeout
-                #   - When killing a process on Windows, child processes may not be terminated
-                #   - Solution: Use CREATE_NEW_PROCESS_GROUP to allow proper process tree termination
-                #
-                # See: https://docs.python.org/3/library/subprocess.html#subprocess.Popen.communicate
+        if is_windows:
+            # WINDOWS SUBPROCESS FIX:
+            # On Windows, running pytest with coverage can hang indefinitely due to multiple issues:
+            #
+            # Problem 1: Pipe buffer deadlocks
+            #   - subprocess.run() with file handles can deadlock when the child process
+            #     produces output faster than the parent can read it
+            #   - Solution: Use Popen.communicate() which properly drains both stdout/stderr
+            #     concurrently using threads internally
+            #
+            # Problem 2: Child process waiting for stdin
+            #   - Some Windows processes (especially pytest) may wait for console input
+            #   - Solution: Use stdin=subprocess.DEVNULL to explicitly close stdin
+            #
+            # Problem 3: Orphaned child processes after timeout
+            #   - When killing a process on Windows, child processes may not be terminated
+            #   - Solution: Use CREATE_NEW_PROCESS_GROUP to allow proper process tree termination
+            #
+            # See: https://docs.python.org/3/library/subprocess.html#subprocess.Popen.communicate
 
-                # CREATE_NEW_PROCESS_GROUP: Creates process in new group for proper termination
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+            # CREATE_NEW_PROCESS_GROUP: Creates process in new group for proper termination
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
-                process = subprocess.Popen(
-                    cmd_list,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    stdin=subprocess.DEVNULL,
-                    cwd=cwd,
-                    env=env,
-                    text=True,
-                    creationflags=creationflags,
-                )
+            process = subprocess.Popen(
+                cmd_list,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                cwd=cwd,
+                env=env,
+                text=True,
+                creationflags=creationflags,
+            )
 
-                try:
-                    stdout_content, stderr_content = process.communicate(timeout=timeout)
-                    returncode = process.returncode
-                except subprocess.TimeoutExpired:
-                    # On Windows, terminate the entire process tree
-                    try:
-                        process.kill()
-                    except OSError:
-                        pass
-                    # Drain remaining output after killing
-                    stdout_content, stderr_content = process.communicate(timeout=5)
-                    raise subprocess.TimeoutExpired(
-                        cmd_list, timeout, output=stdout_content, stderr=stderr_content
-                    )
+            try:
+                stdout_content, stderr_content = process.communicate(timeout=timeout)
+                returncode = process.returncode
+            except subprocess.TimeoutExpired:
+                # On Windows, terminate the entire process tree
+                with contextlib.suppress(OSError):
+                    process.kill()
 
-                return subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
-            else:
-                # On Linux/Mac, use subprocess.run (works fine there)
-                result = subprocess.run(
-                    cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False
-                )
-                return result
-        except subprocess.TimeoutExpired:
-            raise
-        except Exception:
-            raise
+                # Drain remaining output after killing
+                stdout_content, stderr_content = process.communicate(timeout=5)
+                raise subprocess.TimeoutExpired(
+                    cmd_list, timeout, output=stdout_content, stderr=stderr_content
+                ) from None
+
+            return subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
+
+        # On Linux/Mac, use subprocess.run (works fine there)
+        return subprocess.run(
+            cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False
+        )
 
 
 def run_behavioral_tests(
@@ -106,8 +98,7 @@ def run_behavioral_tests(
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
-    """
-    Run behavioral tests with optional coverage.
+    """Run behavioral tests with optional coverage.
 
     On Windows, uses --capture=no to avoid subprocess output deadlocks.
     """
@@ -162,13 +153,11 @@ def run_behavioral_tests(
             # On Windows, delete coverage database file directly instead of using 'coverage erase'
             # to avoid file locking issues
             if is_windows:
-                try:
-                    if coverage_database_file.exists():
+                if coverage_database_file.exists():
+                    with contextlib.suppress(PermissionError, OSError):
                         coverage_database_file.unlink()
-                except (PermissionError, Exception):
-                    pass
             else:
-                cov_erase = execute_test_subprocess(
+                execute_test_subprocess(
                     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
                 )
 
