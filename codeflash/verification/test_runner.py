@@ -58,17 +58,16 @@ def execute_test_subprocess(
 
                 process = subprocess.Popen(
                     cmd_list,
-                    stdout=subprocess.PIPE,  # Capture stdout
-                    stderr=subprocess.PIPE,  # Capture stderr
-                    stdin=subprocess.DEVNULL,  # CRITICAL: Prevents child from waiting for input
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    stdin=subprocess.DEVNULL,
                     cwd=cwd,
                     env=env,
-                    text=True,  # Return strings instead of bytes
-                    creationflags=creationflags,  # Windows-specific process group handling
+                    text=True,
+                    creationflags=creationflags,
                 )
 
                 try:
-                    # communicate() properly drains stdout/stderr avoiding deadlocks
                     stdout_content, stderr_content = process.communicate(timeout=timeout)
                     returncode = process.returncode
                 except subprocess.TimeoutExpired:
@@ -136,9 +135,9 @@ def run_behavioral_tests(
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
 
-        # On Windows, use --capture=no to avoid subprocess output deadlocks
-        # On other platforms, use --capture=tee-sys to both capture and display output
-        capture_mode = "--capture=no" if is_windows else "--capture=tee-sys"
+        # On Windows, previously used --capture=no to avoid deadlocks with subprocess.run
+        # Now using Popen.communicate() which handles buffering correctly, so we can use capture=tee-sys
+        capture_mode = "--capture=tee-sys"
 
         common_pytest_args = [
             capture_mode,
