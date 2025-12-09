@@ -600,13 +600,7 @@ def discover_tests_pytest(
     with custom_addopts():
         try:
             result = subprocess.run(
-                [
-                    SAFE_SYS_EXECUTABLE,
-                    discovery_script,
-                    str(project_root),
-                    str(tests_root),
-                    str(tmp_pickle_path),
-                ],
+                [SAFE_SYS_EXECUTABLE, discovery_script, str(project_root), str(tests_root), str(tmp_pickle_path)],
                 **run_kwargs,
                 timeout=60,
             )

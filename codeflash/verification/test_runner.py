@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
@@ -23,7 +24,6 @@ def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout.
-
 
     On Windows, uses Popen with communicate() and process groups for proper cleanup.
     On other platforms, uses subprocess.run with capture_output.
@@ -82,9 +82,7 @@ def execute_test_subprocess(
             return subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
 
         # On Linux/Mac, use subprocess.run (works fine there)
-        return subprocess.run(
-            cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False
-        )
+        return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
 
 
 def run_behavioral_tests(
@@ -178,12 +176,7 @@ def run_behavioral_tests(
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
 
             final_cmd = coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files
-            results = execute_test_subprocess(
-                final_cmd,
-                cwd=cwd,
-                env=pytest_test_env,
-                timeout=60,
-            )
+            results = execute_test_subprocess(final_cmd, cwd=cwd, env=pytest_test_env, timeout=600)
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
 
@@ -298,7 +291,7 @@ def run_benchmarking_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=60,  # TODO: Make this dynamic
+            timeout=600,  # TODO: Make this dynamic
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"

@@ -68,9 +68,8 @@ def generate_candidates(source_code_path: Path) -> set[str]:
 
 
 def prepare_coverage_files() -> tuple[Path, Path]:
-    """
-    Prepare coverage configuration and output files.
-    
+    """Prepare coverage configuration and output files.
+
     Returns tuple of (coverage_database_file, coverage_config_file).
     """
     coverage_database_file = get_run_tmp_file(Path(".coverage"))

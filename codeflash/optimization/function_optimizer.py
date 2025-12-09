@@ -1708,7 +1708,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
-                
+
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,

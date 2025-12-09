@@ -99,15 +99,15 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
 
 
 def remove_worktree(worktree_dir: Path) -> None:
-    """
-    Remove a git worktree with robust error handling for Windows file locking issues.
-    
+    """Remove a git worktree with robust error handling for Windows file locking issues.
+
     This function handles Windows-specific issues where files may be locked by processes,
     causing 'Permission denied' errors. It implements retry logic with exponential backoff
     and falls back to manual directory removal if git worktree remove fails.
-    
+
     Args:
         worktree_dir: Path to the worktree directory to remove
+
     """
     if not worktree_dir or not worktree_dir.exists():
         logger.info(f"remove_worktree: Worktree does not exist, skipping removal. worktree_dir={worktree_dir}")
@@ -116,16 +116,20 @@ def remove_worktree(worktree_dir: Path) -> None:
     is_windows = sys.platform == "win32"
     max_retries = 3 if is_windows else 1
     retry_delay = 0.5  # Start with 500ms delay
-    
-    logger.info(f"remove_worktree: Starting worktree removal. worktree_dir={worktree_dir}, platform={sys.platform}, max_retries={max_retries}")
-    
+
+    logger.info(
+        f"remove_worktree: Starting worktree removal. worktree_dir={worktree_dir}, platform={sys.platform}, max_retries={max_retries}"
+    )
+
     # Try to get the repository and git root for worktree removal
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
         git_root = repository.working_dir or repository.git_dir
         logger.info(f"remove_worktree: Found repository. git_root={git_root}")
     except Exception as e:
-        logger.warning(f"remove_worktree: Could not access repository, attempting manual cleanup. worktree_dir={worktree_dir}, error={e}")
+        logger.warning(
+            f"remove_worktree: Could not access repository, attempting manual cleanup. worktree_dir={worktree_dir}, error={e}"
+        )
         # If we can't access the repository, try manual cleanup
         _manual_cleanup_worktree_directory(worktree_dir)
         return
@@ -134,14 +138,16 @@ def remove_worktree(worktree_dir: Path) -> None:
     for attempt in range(max_retries):
         try:
             attempt_num = attempt + 1
-            logger.info(f"remove_worktree: Attempting git worktree remove. attempt={attempt_num}, max_retries={max_retries}, worktree_dir={worktree_dir}")
+            logger.info(
+                f"remove_worktree: Attempting git worktree remove. attempt={attempt_num}, max_retries={max_retries}, worktree_dir={worktree_dir}"
+            )
             repository.git.worktree("remove", "--force", str(worktree_dir))
             logger.info(f"remove_worktree: Successfully removed worktree via git command. worktree_dir={worktree_dir}")
             return
         except git.exc.GitCommandError as e:
             error_msg = str(e).lower()
             is_permission_error = "permission denied" in error_msg or "access is denied" in error_msg
-            
+
             if is_permission_error and attempt < max_retries - 1:
                 # On Windows, file locks may be temporary - retry with exponential backoff
                 logger.info(
@@ -167,18 +173,18 @@ def remove_worktree(worktree_dir: Path) -> None:
     # Fallback: Try to remove worktree entry from git, then manually delete directory
     try:
         logger.info(f"remove_worktree: Attempting fallback cleanup. worktree_dir={worktree_dir}")
-        
+
         # Try to prune the worktree entry from git (this doesn't delete the directory)
         try:
             # Use git worktree prune to remove stale entries
             repository.git.worktree("prune")
-            logger.info(f"remove_worktree: Successfully pruned worktree entries")
+            logger.info("remove_worktree: Successfully pruned worktree entries")
         except Exception as prune_error:
             logger.info(f"remove_worktree: Could not prune worktree entries. error={prune_error}")
-        
+
         # Manually remove the directory
         _manual_cleanup_worktree_directory(worktree_dir)
-        
+
     except Exception as e:
         logger.error(
             f"remove_worktree: Failed to cleanup worktree directory after all attempts. "
@@ -187,22 +193,24 @@ def remove_worktree(worktree_dir: Path) -> None:
 
 
 def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
-    """
-    Manually remove a worktree directory, handling Windows file locking issues.
-    
+    """Manually remove a worktree directory, handling Windows file locking issues.
+
     This is a fallback method when git worktree remove fails. It uses shutil.rmtree
     with custom error handling for Windows-specific issues.
-    
+
     SAFETY: This function includes multiple safeguards to prevent accidental deletion:
     - Only deletes directories under the worktree_dirs cache location
     - Verifies the path is a worktree directory (not the original repo)
     - Uses resolve() to normalize paths and prevent path traversal attacks
-    
+
     Args:
         worktree_dir: Path to the worktree directory to remove
+
     """
     if not worktree_dir or not worktree_dir.exists():
-        logger.info(f"_manual_cleanup_worktree_directory: Directory does not exist, skipping. worktree_dir={worktree_dir}")
+        logger.info(
+            f"_manual_cleanup_worktree_directory: Directory does not exist, skipping. worktree_dir={worktree_dir}"
+        )
         return
 
     # Validate paths for safety
@@ -210,15 +218,15 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
         return
 
     logger.info(f"_manual_cleanup_worktree_directory: Starting manual directory removal. worktree_dir={worktree_dir}")
-    
+
     # Attempt removal with retries on Windows
     is_windows = sys.platform == "win32"
     max_retries = 3 if is_windows else 1
     retry_delay = 0.5
-    
+
     for attempt in range(max_retries):
         attempt_num = attempt + 1
-        
+
         # Log retry attempts
         if attempt_num > 1:
             logger.info(
@@ -227,27 +235,29 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
             )
             time.sleep(retry_delay)
             retry_delay *= 2  # Exponential backoff
-        
+
         # On Windows, use custom error handler to remove read-only attributes on the fly
         # This is more efficient than pre-scanning the entire directory tree
         error_handler = _create_windows_rmtree_error_handler() if is_windows else None
-        
+
         try:
             if is_windows and error_handler:
                 shutil.rmtree(worktree_dir, onerror=error_handler)
             else:
                 shutil.rmtree(worktree_dir, ignore_errors=True)
-            
+
             # Brief wait on Windows to allow file handles to be released
             if is_windows:
                 wait_time = 0.3 if attempt_num < max_retries else 0.1
                 time.sleep(wait_time)
-            
+
             # Check if removal was successful
             if not worktree_dir.exists():
-                logger.info(f"_manual_cleanup_worktree_directory: Successfully removed directory. worktree_dir={worktree_dir}")
+                logger.info(
+                    f"_manual_cleanup_worktree_directory: Successfully removed directory. worktree_dir={worktree_dir}"
+                )
                 return
-            
+
             # Directory still exists
             if attempt_num < max_retries:
                 logger.info(
@@ -260,7 +270,7 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
                     f"attempts={attempt_num}, worktree_dir={worktree_dir}. "
                     f"Files may be locked and will be cleaned up later."
                 )
-                
+
         except Exception as e:
             if attempt_num < max_retries:
                 logger.info(
@@ -275,14 +285,14 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
 
 
 def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
-    """
-    Validate that a path is safe to delete (must be under worktree_dirs).
-    
+    """Validate that a path is safe to delete (must be under worktree_dirs).
+
     Args:
         worktree_dir: Path to validate
-        
+
     Returns:
         True if the path is safe to delete, False otherwise
+
     """
     # SAFETY CHECK 1: Resolve paths to absolute, normalized paths
     try:
@@ -318,27 +328,27 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
 
 
 def _create_windows_rmtree_error_handler():
-    """
-    Create an error handler for shutil.rmtree that handles Windows-specific issues.
-    
+    """Create an error handler for shutil.rmtree that handles Windows-specific issues.
+
     This handler attempts to remove read-only attributes when encountering permission errors.
-    
+
     Returns:
         A callable error handler for shutil.rmtree's onerror parameter
+
     """
+
     def handle_remove_error(func, path, exc_info):
-        """
-        Error handler for shutil.rmtree on Windows.
-        
+        """Error handler for shutil.rmtree on Windows.
+
         Attempts to remove read-only attributes and retry the operation.
         """
         # Get the exception type
         exc_type, exc_value, exc_traceback = exc_info
-        
+
         # Only handle permission errors
         if not isinstance(exc_value, (PermissionError, OSError)):
             return
-        
+
         try:
             # Try to change file permissions to make it writable
             os.chmod(path, 0o777)
@@ -347,7 +357,7 @@ def _create_windows_rmtree_error_handler():
         except Exception:
             # If it still fails, silently ignore (file is truly locked)
             pass
-    
+
     return handle_remove_error
 
 
