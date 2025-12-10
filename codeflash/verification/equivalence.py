@@ -4,6 +4,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.code_utils import shorten_pytest_error
 from codeflash.models.models import TestDiff, TestDiffScope, TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
 
@@ -57,12 +58,15 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             if candidate_test_failures
             else ""
         )
+        if cdd_pytest_error:
+            cdd_pytest_error = shorten_pytest_error(cdd_pytest_error)
         original_pytest_error = (
             original_test_failures.get(original_test_result.id.test_fn_qualified_name(), "")
             if original_test_failures
             else ""
         )
-
+        if original_pytest_error:
+            original_pytest_error = shorten_pytest_error(original_pytest_error)
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         test_diff = TestDiff(
             scope=TestDiffScope.RETURN_VALUE,

@@ -362,6 +362,10 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     sys.exit(1 if error_on_exit else 0)
 
 
+def shorten_pytest_error(pytest_error_string: str) -> str:
+    return "\n".join(re.findall(r"^[E>] +(.*)$", pytest_error_string, re.MULTILINE))
+
+
 def extract_unique_errors(pytest_output: str) -> set[str]:
     unique_errors = set()
 
