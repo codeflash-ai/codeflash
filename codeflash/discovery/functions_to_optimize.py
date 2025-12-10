@@ -731,7 +731,7 @@ def filter_functions(
             non_modules_removed_count += len(_functions)
             continue
         try:
-            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+            ast.parse(f"import {module_name_from_file_path(file_path_resolved, project_root)}")
         except SyntaxError:
             malformed_paths_count += 1
             continue
