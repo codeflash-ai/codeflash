@@ -105,6 +105,7 @@ class AiServiceClient:
                     explanation=opt["explanation"],
                     optimization_id=opt["optimization_id"],
                     source=source,
+                    parent_id=opt.get("parent_id", None),
                 )
             )
         return candidates

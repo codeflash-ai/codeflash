@@ -396,6 +396,7 @@ class OptimizedCandidate:
     explanation: str
     optimization_id: str
     source: OptimizedCandidateSource
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)

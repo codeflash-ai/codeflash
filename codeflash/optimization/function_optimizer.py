@@ -818,6 +818,7 @@ class FunctionOptimizer:
                 optimization_id=valid_opt.candidate.optimization_id,
                 explanation=valid_opt.candidate.explanation,
                 source=valid_opt.candidate.source,
+                parent_id=valid_opt.candidate.parent_id,
             )
             new_best_opt = BestOptimization(
                 candidate=new_candidate_with_shorter_code,
