@@ -665,24 +665,39 @@ def filter_functions(
         # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
         return Path(path).resolve(strict=False)
 
+    def _resolve_path_consistent(path: Path | str) -> Path:
+        """Resolve path consistently: use strict resolution if path exists, otherwise non-strict."""
+        path_obj = Path(path)
+        if path_obj.exists():
+            try:
+                return path_obj.resolve()
+            except (OSError, RuntimeError):
+                return _resolve_path(path)
+        return _resolve_path(path)
+
     # Resolve all root paths to absolute paths for consistent comparison
-    tests_root_resolved = _resolve_path(tests_root)
-    module_root_resolved = _resolve_path(module_root)
+    # Use consistent resolution: strict for existing paths, non-strict for non-existent
+    tests_root_resolved = _resolve_path_consistent(tests_root)
+    module_root_resolved = _resolve_path_consistent(module_root)
 
     # Resolve ignore paths and submodule paths
-    ignore_paths_resolved = [_resolve_path(p) for p in ignore_paths]
-    submodule_paths_resolved = [_resolve_path(p) for p in submodule_paths]
+    ignore_paths_resolved = [_resolve_path_consistent(p) for p in ignore_paths]
+    submodule_paths_resolved = [_resolve_path_consistent(p) for p in submodule_paths]
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         # Resolve file path to absolute path
         # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
-        file_path_obj = _resolve_path(file_path_path)
-        try:
-            file_path_resolved = file_path_obj.resolve()
-        except (OSError, RuntimeError):
-            file_path_resolved = file_path_obj.absolute() if not file_path_obj.is_absolute() else file_path_obj
+        file_path_obj = Path(file_path_path)
+        # Use consistent resolution: try strict first (for existing files), fall back to non-strict
+        if file_path_obj.exists():
+            try:
+                file_path_resolved = file_path_obj.resolve()
+            except (OSError, RuntimeError):
+                file_path_resolved = _resolve_path(file_path_path)
+        else:
+            file_path_resolved = _resolve_path(file_path_path)
 
         file_path = str(file_path_obj)
 
