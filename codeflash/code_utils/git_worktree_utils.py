@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import contextlib
 import shutil
 import subprocess
 import sys
@@ -118,7 +119,6 @@ def remove_worktree(worktree_dir: Path) -> None:
     # Try to get the repository and git root for worktree removal
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
-        git_root = repository.working_dir or repository.git_dir
     except Exception:
         # If we can't access the repository, try manual cleanup
         _manual_cleanup_worktree_directory(worktree_dir)
@@ -127,7 +127,6 @@ def remove_worktree(worktree_dir: Path) -> None:
     # Attempt to remove worktree using git command with retries
     for attempt in range(max_retries):
         try:
-            attempt_num = attempt + 1
             repository.git.worktree("remove", "--force", str(worktree_dir))
             return  # noqa: TRY300
         except git.exc.GitCommandError as e:
@@ -145,19 +144,14 @@ def remove_worktree(worktree_dir: Path) -> None:
             break
 
     # Fallback: Try to remove worktree entry from git, then manually delete directory
-    try:
+    with contextlib.suppress(Exception):
         # Try to prune the worktree entry from git (this doesn't delete the directory)
-        try:
-            # Use git worktree prune to remove stale entries
-            repository.git.worktree("prune")
-        except Exception:
-            pass
+        # Use git worktree prune to remove stale entries
+        repository.git.worktree("prune")
 
-        # Manually remove the directory
+    # Manually remove the directory (always attempt, even if prune failed)
+    with contextlib.suppress(Exception):
         _manual_cleanup_worktree_directory(worktree_dir)
-
-    except Exception:
-        pass
 
 
 def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
@@ -213,7 +207,7 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
             if not worktree_dir.exists():
                 return
 
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
@@ -242,10 +236,7 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
         return False
 
     # SAFETY CHECK 3: Ensure it's not the worktree_dirs root itself
-    if worktree_dir_resolved == worktree_dirs_resolved:
-        return False
-
-    return True
+    return worktree_dir_resolved != worktree_dirs_resolved
 
 
 def _create_windows_rmtree_error_handler() -> Callable[
@@ -280,7 +271,7 @@ def _create_windows_rmtree_error_handler() -> Callable[
             Path(path).chmod(0o777)
             # Retry the failed operation
             func(path)
-        except Exception:
+        except Exception:  # noqa: S110
             # If it still fails, silently ignore (file is truly locked)
             pass
 
