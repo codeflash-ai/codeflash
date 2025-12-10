@@ -24,14 +24,14 @@ class PrComment:
     original_async_throughput: Optional[int] = None
     best_async_throughput: Optional[int] = None
 
-    def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
+    def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], list[str], None]]:
         report_table = {
             test_type.to_name(): result
             for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
             if test_type.to_name()
         }
 
-        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
+        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], list[str], None]] = {
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -41,6 +41,7 @@ class PrComment:
             "speedup_pct": self.speedup_pct,
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
+            "passed_existing_tests": self.winning_behavior_test_results.get_passed_existing_test_names(),
             "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }
 

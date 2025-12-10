@@ -686,6 +686,24 @@ class TestResults(BaseModel):  # noqa: PLW1641
                     report[test_result.test_type]["failed"] += 1
         return report
 
+    def get_passed_existing_test_names(self) -> list[str]:
+        """Get a list of passed existing unit test names.
+
+        Only considers tests from the first loop (loop_index == 1) to avoid duplicates.
+        Returns test names in the format: module_path::ClassName.test_name or module_path::test_name
+        """
+        passed_tests: list[str] = []
+        for test_result in self.test_results:
+            if (
+                test_result.loop_index == 1
+                and test_result.did_pass
+                and test_result.test_type == TestType.EXISTING_UNIT_TEST
+            ):
+                class_prefix = f"{test_result.id.test_class_name}." if test_result.id.test_class_name else ""
+                test_name = f"{test_result.id.test_module_path}::{class_prefix}{test_result.id.test_function_name}"
+                passed_tests.append(test_name)
+        return passed_tests
+
     @staticmethod
     def report_to_string(report: dict[TestType, dict[str, int]]) -> str:
         return " ".join(
