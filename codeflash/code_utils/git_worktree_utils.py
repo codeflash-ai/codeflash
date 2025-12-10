@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 import git
 
-from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 
@@ -58,7 +57,6 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:
     if not check_running_in_git_repo(module_root):
-        logger.warning("Module is not in a git repository. Skipping worktree creation.")
         return None
     git_root = git_root_dir()
     current_time_str = time.strftime("%Y%m%d-%H%M%S")
@@ -76,7 +74,6 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
     )
 
     if not uni_diff_text.strip():
-        logger.info("!lsp|No uncommitted changes to copy to worktree.")
         return worktree_dir
 
     # Write the diff to a temporary file
@@ -94,8 +91,8 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
                 check=True,
             )
             create_worktree_snapshot_commit(worktree_dir, "Initial Snapshot")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to apply patch to worktree: {e}")
+        except subprocess.CalledProcessError:
+            pass
 
         return worktree_dir
 
@@ -112,26 +109,17 @@ def remove_worktree(worktree_dir: Path) -> None:
 
     """
     if not worktree_dir or not worktree_dir.exists():
-        logger.info(f"remove_worktree: Worktree does not exist, skipping removal. worktree_dir={worktree_dir}")
         return
 
     is_windows = sys.platform == "win32"
     max_retries = 3 if is_windows else 1
     retry_delay = 0.5  # Start with 500ms delay
 
-    logger.info(
-        f"remove_worktree: Starting worktree removal. worktree_dir={worktree_dir}, platform={sys.platform}, max_retries={max_retries}"
-    )
-
     # Try to get the repository and git root for worktree removal
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
         git_root = repository.working_dir or repository.git_dir
-        logger.info(f"remove_worktree: Found repository. git_root={git_root}")
-    except Exception as e:
-        logger.warning(
-            f"remove_worktree: Could not access repository, attempting manual cleanup. worktree_dir={worktree_dir}, error={e}"
-        )
+    except Exception:
         # If we can't access the repository, try manual cleanup
         _manual_cleanup_worktree_directory(worktree_dir)
         return
@@ -140,11 +128,7 @@ def remove_worktree(worktree_dir: Path) -> None:
     for attempt in range(max_retries):
         try:
             attempt_num = attempt + 1
-            logger.info(
-                f"remove_worktree: Attempting git worktree remove. attempt={attempt_num}, max_retries={max_retries}, worktree_dir={worktree_dir}"
-            )
             repository.git.worktree("remove", "--force", str(worktree_dir))
-            logger.info(f"remove_worktree: Successfully removed worktree via git command. worktree_dir={worktree_dir}")
             return  # noqa: TRY300
         except git.exc.GitCommandError as e:
             error_msg = str(e).lower()
@@ -152,46 +136,28 @@ def remove_worktree(worktree_dir: Path) -> None:
 
             if is_permission_error and attempt < max_retries - 1:
                 # On Windows, file locks may be temporary - retry with exponential backoff
-                logger.info(
-                    f"remove_worktree: Permission denied, retrying. attempt={attempt_num}, "
-                    f"retry_delay={retry_delay}, worktree_dir={worktree_dir}, error={e}"
-                )
                 time.sleep(retry_delay)
                 retry_delay *= 2  # Exponential backoff
             else:
                 # Last attempt failed or non-permission error
-                logger.warning(
-                    f"remove_worktree: Git worktree remove failed, attempting fallback cleanup. "
-                    f"attempts={attempt_num}, worktree_dir={worktree_dir}, error={e}"
-                )
                 break
-        except Exception as e:
-            logger.warning(
-                f"remove_worktree: Unexpected error during git worktree remove, attempting fallback cleanup. "
-                f"worktree_dir={worktree_dir}, error={e}"
-            )
+        except Exception:
             break
 
     # Fallback: Try to remove worktree entry from git, then manually delete directory
     try:
-        logger.info(f"remove_worktree: Attempting fallback cleanup. worktree_dir={worktree_dir}")
-
         # Try to prune the worktree entry from git (this doesn't delete the directory)
         try:
             # Use git worktree prune to remove stale entries
             repository.git.worktree("prune")
-            logger.info("remove_worktree: Successfully pruned worktree entries")
-        except Exception as prune_error:
-            logger.info(f"remove_worktree: Could not prune worktree entries. error={prune_error}")
+        except Exception:
+            pass
 
         # Manually remove the directory
         _manual_cleanup_worktree_directory(worktree_dir)
 
-    except Exception as e:
-        logger.error(
-            f"remove_worktree: Failed to cleanup worktree directory after all attempts. "
-            f"worktree_dir={worktree_dir}, error={e}"
-        )
+    except Exception:
+        pass
 
 
 def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
@@ -210,16 +176,11 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
 
     """
     if not worktree_dir or not worktree_dir.exists():
-        logger.info(
-            f"_manual_cleanup_worktree_directory: Directory does not exist, skipping. worktree_dir={worktree_dir}"
-        )
         return
 
     # Validate paths for safety
     if not _validate_worktree_path_safety(worktree_dir):
         return
-
-    logger.info(f"_manual_cleanup_worktree_directory: Starting manual directory removal. worktree_dir={worktree_dir}")
 
     # Attempt removal with retries on Windows
     is_windows = sys.platform == "win32"
@@ -229,12 +190,7 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
     for attempt in range(max_retries):
         attempt_num = attempt + 1
 
-        # Log retry attempts
         if attempt_num > 1:
-            logger.info(
-                f"_manual_cleanup_worktree_directory: Retrying directory removal. "
-                f"attempt={attempt_num}, retry_delay={retry_delay}, worktree_dir={worktree_dir}"
-            )
             time.sleep(retry_delay)
             retry_delay *= 2  # Exponential backoff
 
@@ -255,35 +211,10 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
 
             # Check if removal was successful
             if not worktree_dir.exists():
-                logger.info(
-                    f"_manual_cleanup_worktree_directory: Successfully removed directory. worktree_dir={worktree_dir}"
-                )
                 return
 
-            # Directory still exists
-            if attempt_num < max_retries:
-                logger.info(
-                    f"_manual_cleanup_worktree_directory: Directory still exists, will retry. "
-                    f"attempt={attempt_num}, worktree_dir={worktree_dir}"
-                )
-            else:
-                logger.warning(
-                    f"_manual_cleanup_worktree_directory: Directory still exists after all attempts. "
-                    f"attempts={attempt_num}, worktree_dir={worktree_dir}. "
-                    f"Files may be locked and will be cleaned up later."
-                )
-
-        except Exception as e:
-            if attempt_num < max_retries:
-                logger.info(
-                    f"_manual_cleanup_worktree_directory: Exception during removal, will retry. "
-                    f"attempt={attempt_num}, error={e}"
-                )
-            else:
-                logger.error(
-                    f"_manual_cleanup_worktree_directory: Failed after all attempts. "
-                    f"attempts={attempt_num}, worktree_dir={worktree_dir}, error={e}"
-                )
+        except Exception:
+            pass
 
 
 def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
@@ -300,11 +231,7 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
     try:
         worktree_dir_resolved = worktree_dir.resolve()
         worktree_dirs_resolved = worktree_dirs.resolve()
-    except (OSError, ValueError) as e:
-        logger.error(
-            f"_validate_worktree_path_safety: Failed to resolve paths, aborting for safety. "
-            f"worktree_dir={worktree_dir}, error={e}"
-        )
+    except (OSError, ValueError):
         return False
 
     # SAFETY CHECK 2: Ensure worktree_dir is a subdirectory of worktree_dirs
@@ -312,18 +239,10 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
         # Use relative_to to check if path is under worktree_dirs
         worktree_dir_resolved.relative_to(worktree_dirs_resolved)
     except ValueError:
-        logger.error(
-            f"_validate_worktree_path_safety: Path is not under worktree_dirs, aborting for safety. "
-            f"worktree_dir={worktree_dir_resolved}, worktree_dirs={worktree_dirs_resolved}"
-        )
         return False
 
     # SAFETY CHECK 3: Ensure it's not the worktree_dirs root itself
     if worktree_dir_resolved == worktree_dirs_resolved:
-        logger.error(
-            f"_validate_worktree_path_safety: Attempted to delete worktree_dirs root, aborting for safety. "
-            f"worktree_dir={worktree_dir_resolved}"
-        )
         return False
 
     return True
@@ -361,11 +280,9 @@ def _create_windows_rmtree_error_handler() -> Callable[
             Path(path).chmod(0o777)
             # Retry the failed operation
             func(path)
-        except Exception as e:
-            # If it still fails, log and ignore (file is truly locked)
-            logger.debug(
-                f"_create_windows_rmtree_error_handler: Failed to remove file after permission change. path={path}, error={e}"
-            )
+        except Exception:
+            # If it still fails, silently ignore (file is truly locked)
+            pass
 
     return handle_remove_error
 
@@ -377,7 +294,6 @@ def create_diff_patch_from_worktree(
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
 
     if not uni_diff_text:
-        logger.warning("No changes found in worktree.")
         return None
 
     if not uni_diff_text.endswith("\n"):
