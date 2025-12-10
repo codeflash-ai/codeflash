@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import os
 import re
 import subprocess
@@ -60,7 +59,6 @@ class CLISetupInfo:
     module_root: str
     tests_root: str
     benchmarks_root: Union[str, None]
-    test_framework: str
     ignore_paths: list[str]
     formatter: Union[str, list[str]]
     git_remote: str
@@ -71,7 +69,6 @@ class CLISetupInfo:
 class VsCodeSetupInfo:
     module_root: str
     tests_root: str
-    test_framework: str
     formatter: Union[str, list[str]]
 
 
@@ -257,7 +254,6 @@ class CodeflashTheme(inquirer.themes.Default):
 class CommonSections(Enum):
     module_root = "module_root"
     tests_root = "tests_root"
-    test_framework = "test_framework"
     formatter_cmds = "formatter_cmds"
 
     def get_toml_key(self) -> str:
@@ -293,9 +289,6 @@ def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
     if section == CommonSections.tests_root:
         default = "tests" if "tests" in valid_subdirs else None
         return valid_subdirs, default
-    if section == CommonSections.test_framework:
-        auto_detected = detect_test_framework_from_config_files(Path.cwd())
-        return ["pytest", "unittest"], auto_detected
     if section == CommonSections.formatter_cmds:
         return ["disabled", "ruff", "black"], "disabled"
     msg = f"Unknown section: {section}"
@@ -480,43 +473,6 @@ def collect_setup_info() -> CLISetupInfo:
 
     ph("cli-tests-root-provided")
 
-    test_framework_choices, detected_framework = get_suggestions(CommonSections.test_framework)
-    autodetected_test_framework = detected_framework or detect_test_framework_from_test_files(tests_root)
-
-    framework_message = "⚗️ Let's configure your test framework.\n\n"
-    if autodetected_test_framework:
-        framework_message += f"I detected that you're using {autodetected_test_framework}. "
-    framework_message += "Please confirm or select a different one."
-
-    framework_panel = Panel(Text(framework_message, style="blue"), title="⚗️ Test Framework", border_style="bright_blue")
-    console.print(framework_panel)
-    console.print()
-
-    framework_choices = []
-    # add icons based on the detected framework
-    for choice in test_framework_choices:
-        if choice == "pytest":
-            framework_choices.append(("🧪 pytest", "pytest"))
-        elif choice == "unittest":
-            framework_choices.append(("🐍 unittest", "unittest"))
-
-    framework_questions = [
-        inquirer.List(
-            "test_framework",
-            message="Which test framework do you use?",
-            choices=framework_choices,
-            default=autodetected_test_framework or "pytest",
-            carousel=True,
-        )
-    ]
-
-    framework_answers = inquirer.prompt(framework_questions, theme=CodeflashTheme())
-    if not framework_answers:
-        apologize_and_exit()
-    test_framework = framework_answers["test_framework"]
-
-    ph("cli-test-framework-provided", {"test_framework": test_framework})
-
     benchmarks_root = None
 
     # TODO: Implement other benchmark framework options
@@ -613,58 +569,11 @@ def collect_setup_info() -> CLISetupInfo:
         module_root=str(module_root),
         tests_root=str(tests_root),
         benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
-        test_framework=cast("str", test_framework),
         ignore_paths=ignore_paths,
         formatter=cast("str", formatter),
         git_remote=str(git_remote),
         enable_telemetry=enable_telemetry,
     )
-
-
-def detect_test_framework_from_config_files(curdir: Path) -> Optional[str]:
-    test_framework = None
-    pytest_files = ["pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg"]
-    pytest_config_patterns = {
-        "pytest.ini": "[pytest]",
-        "pyproject.toml": "[tool.pytest.ini_options]",
-        "tox.ini": "[pytest]",
-        "setup.cfg": "[tool:pytest]",
-    }
-    for pytest_file in pytest_files:
-        file_path = curdir / pytest_file
-        if file_path.exists():
-            with file_path.open(encoding="utf8") as file:
-                contents = file.read()
-                if pytest_config_patterns[pytest_file] in contents:
-                    test_framework = "pytest"
-                    break
-        test_framework = "pytest"
-    return test_framework
-
-
-def detect_test_framework_from_test_files(tests_root: Path) -> Optional[str]:
-    test_framework = None
-    # Check if any python files contain a class that inherits from unittest.TestCase
-    for filename in tests_root.iterdir():
-        if filename.suffix == ".py":
-            with filename.open(encoding="utf8") as file:
-                contents = file.read()
-                try:
-                    node = ast.parse(contents)
-                except SyntaxError:
-                    continue
-                if any(
-                    isinstance(item, ast.ClassDef)
-                    and any(
-                        (isinstance(base, ast.Attribute) and base.attr == "TestCase")
-                        or (isinstance(base, ast.Name) and base.id == "TestCase")
-                        for base in item.bases
-                    )
-                    for item in node.body
-                ):
-                    test_framework = "unittest"
-                    break
-    return test_framework
 
 
 def check_for_toml_or_setup_file() -> str | None:
@@ -1085,7 +994,6 @@ def configure_pyproject_toml(
     else:
         codeflash_section["module-root"] = setup_info.module_root
         codeflash_section["tests-root"] = setup_info.tests_root
-        codeflash_section["test-framework"] = setup_info.test_framework
         codeflash_section["ignore-paths"] = setup_info.ignore_paths
         if not setup_info.enable_telemetry:
             codeflash_section["disable-telemetry"] = not setup_info.enable_telemetry
@@ -1350,26 +1258,8 @@ def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
                 arr[j + 1] = temp
     return arr
 """
-    if args.test_framework == "unittest":
-        bubble_sort_test_content = f"""import unittest
-from {os.path.basename(args.module_root)}.bubble_sort import sorter # Keep usage of os.path.basename to avoid pathlib potential incompatibility https://github.com/codeflash-ai/codeflash/pull/1066#discussion_r1801628022
-
-class TestBubbleSort(unittest.TestCase):
-    def test_sort(self):
-        input = [5, 4, 3, 2, 1, 0]
-        output = sorter(input)
-        self.assertEqual(output, [0, 1, 2, 3, 4, 5])
-
-        input = [5.0, 4.0, 3.0, 2.0, 1.0, 0.0]
-        output = sorter(input)
-        self.assertEqual(output, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
-
-        input = list(reversed(range(100)))
-        output = sorter(input)
-        self.assertEqual(output, list(range(100)))
-"""  # noqa: PTH119
-    elif args.test_framework == "pytest":
-        bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
+    # Always use pytest for tests
+    bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
 def test_sort():
     input = [5, 4, 3, 2, 1, 0]

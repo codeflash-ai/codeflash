@@ -225,7 +225,6 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
     setup_info = VsCodeSetupInfo(
         module_root=module_root,
         tests_root=tests_root,
-        test_framework=get_config_value("test_framework", "pytest"),
         formatter=get_formatter_cmds(get_config_value("formatter_cmds", "disabled")),
     )
 
@@ -241,7 +240,6 @@ def write_config(params: WriteConfigParams) -> dict[str, any]:
 def get_config_suggestions(_params: any) -> dict[str, any]:
     module_root_suggestions, default_module_root = get_suggestions(CommonSections.module_root)
     tests_root_suggestions, default_tests_root = get_suggestions(CommonSections.tests_root)
-    test_framework_suggestions, default_test_framework = get_suggestions(CommonSections.test_framework)
     formatter_suggestions, default_formatter = get_suggestions(CommonSections.formatter_cmds)
     get_valid_subdirs.cache_clear()
 
@@ -276,7 +274,6 @@ def get_config_suggestions(_params: any) -> dict[str, any]:
     return {
         "module_root": {"choices": module_root_suggestions, "default": default_module_root},
         "tests_root": {"choices": tests_root_suggestions, "default": default_tests_root},
-        "test_framework": {"choices": test_framework_suggestions, "default": default_test_framework},
         "formatter_cmds": {"choices": formatter_suggestions, "default": default_formatter},
     }
 
