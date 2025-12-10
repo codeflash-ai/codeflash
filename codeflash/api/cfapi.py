@@ -243,18 +243,6 @@ def create_pr(
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
-def check_workflow_file_exists(owner: str, repo: str, base_branch: str) -> Response:
-    """Check if the GitHub Actions workflow file exists on the repository.
-
-    :param owner: Repository owner (username or organization)
-    :param repo: Repository name
-    :param base_branch: Base branch to check (e.g., "main", "master")
-    :return: Response object with exists (bool) and content (str | None) fields
-    """
-    params = {"owner": owner, "repo": repo, "baseBranch": base_branch}
-    return make_cfapi_request(endpoint="/check-workflow-file-exists", method="GET", params=params)
-
-
 def setup_github_actions(
     owner: str, repo: str, base_branch: str, workflow_content: str, api_key: str | None = None
 ) -> Response:
