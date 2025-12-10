@@ -43,9 +43,11 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
+    MAX_REPAIRS_PER_TRACE,
     N_CANDIDATES_EFFECTIVE,
     N_CANDIDATES_LP_EFFECTIVE,
     N_TESTS_TO_GENERATE_EFFECTIVE,
+    REPAIR_UNMATCHED_PERCENTAGE_LIMIT,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
 )
@@ -282,6 +284,7 @@ class FunctionOptimizer:
         self.ast_code_to_id = {}
         self.future_all_refinements: list[concurrent.futures.Future] = []
         self.future_all_code_repair: list[concurrent.futures.Future] = []
+        self.repair_counter = 0  # track how many repairs we did for each function
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -553,6 +556,7 @@ class FunctionOptimizer:
         optimized_runtimes: dict[str, float | None] = {}
         is_correct = {}
         optimized_line_profiler_results: dict[str, str] = {}
+        self.repair_counter = 0
 
         logger.info(
             f"Determining best optimization candidate (out of {len(candidates)}) for "
@@ -1915,27 +1919,36 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
-                if candidate.source == OptimizedCandidateSource.REPAIR or result_unmatched_perc > 0.5:
-                    # if the test unmatched percentage is greater than 50%, we can't fix it
-                    return self.get_results_not_matched_error()
 
-                ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
-                logger.info("Adding this to the repair queue")
-                self.future_all_code_repair.append(
-                    self.repair_optimization(
-                        original_source_code=code_context.read_writable_code.markdown,
-                        modified_source_code=candidate.source_code.markdown,
-                        test_diffs=diffs,
-                        trace_id=self.function_trace_id[:-4] + exp_type
-                        if self.experiment_id
-                        else self.function_trace_id,
-                        ai_service_client=ai_service_client,
-                        optimization_id=candidate.optimization_id,
-                        executor=self.executor,
+                def repair_if_possible() -> None:
+                    if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
+                        return
+
+                    result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
+                    if (
+                        candidate.source == OptimizedCandidateSource.REPAIR
+                        or result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT
+                    ):
+                        return
+
+                    ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+                    logger.info("Adding this to the repair queue")
+                    self.repair_counter += 1
+                    self.future_all_code_repair.append(
+                        self.repair_optimization(
+                            original_source_code=code_context.read_writable_code.markdown,
+                            modified_source_code=candidate.source_code.markdown,
+                            test_diffs=diffs,
+                            trace_id=self.function_trace_id[:-4] + exp_type
+                            if self.experiment_id
+                            else self.function_trace_id,
+                            ai_service_client=ai_service_client,
+                            optimization_id=candidate.optimization_id,
+                            executor=self.executor,
+                        )
                     )
-                )
 
+                repair_if_possible()
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
