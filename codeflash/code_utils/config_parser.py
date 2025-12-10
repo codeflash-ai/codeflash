@@ -149,10 +149,6 @@ def parse_config_file(
         else:
             config[key] = []
 
-    if config.get("test-framework"):
-        assert config["test-framework"] in {"pytest", "unittest"}, (
-            "In pyproject.toml, Codeflash only supports the 'test-framework' as pytest and unittest."
-        )
     # see if this is happening during GitHub actions setup
     if config.get("formatter-cmds") and len(config.get("formatter-cmds")) > 0 and not override_formatter_check:
         assert config.get("formatter-cmds")[0] != "your-formatter $file", (

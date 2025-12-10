@@ -371,7 +371,7 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(passing_coverage, "pytest") is True
+    assert coverage_critic(passing_coverage) is True
 
     border_coverage = CoverageData(
         file_path=Path("test_file.py"),
@@ -392,7 +392,7 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(border_coverage, "pytest") is True
+    assert coverage_critic(border_coverage) is True
 
     failing_coverage = CoverageData(
         file_path=Path("test_file.py"),
@@ -413,29 +413,7 @@ def test_coverage_critic() -> None:
         status=CoverageStatus.PARSED_SUCCESSFULLY,
     )
 
-    assert coverage_critic(failing_coverage, "pytest") is False
-
-    unittest_coverage = CoverageData(
-        file_path=Path("test_file.py"),
-        coverage=0,
-        function_name="test_function",
-        functions_being_tested=["function1", "function2"],
-        graph={},
-        code_context=mock_code_context,
-        main_func_coverage=FunctionCoverage(
-            name="test_function",
-            coverage=0,
-            executed_lines=[10],
-            unexecuted_lines=[2],
-            executed_branches=[[5]],
-            unexecuted_branches=[[1]],
-        ),
-        dependent_func_coverage=None,
-        status=CoverageStatus.PARSED_SUCCESSFULLY,
-    )
-
-    assert coverage_critic(unittest_coverage, "unittest") is True
-
+    assert coverage_critic(failing_coverage) is False
 
 def test_throughput_gain() -> None:
     """Test throughput_gain calculation."""

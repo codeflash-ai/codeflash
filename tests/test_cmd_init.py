@@ -1,15 +1,17 @@
-import pytest
+import os
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from codeflash.cli_cmds.cmd_init import (
-    is_valid_pyproject_toml,
-    configure_pyproject_toml,
     CLISetupInfo,
-    get_formatter_cmds,
     VsCodeSetupInfo,
+    configure_pyproject_toml,
+    get_formatter_cmds,
     get_valid_subdirs,
+    is_valid_pyproject_toml,
 )
-import os
 
 
 @pytest.fixture
@@ -29,11 +31,12 @@ def test_is_valid_pyproject_toml_with_empty_config(temp_dir: Path) -> None:
         assert not valid
         assert _message == "Missing required field: 'module_root'"
 
+
 def test_is_valid_pyproject_toml_with_incorrect_module_root(temp_dir: Path) -> None:
     with (temp_dir / "pyproject.toml").open(mode="w") as f:
         wrong_module_root = temp_dir / "invalid_directory"
         f.write(
-            f"""[tool.codeflash]
+            """[tool.codeflash]
 module-root = "invalid_directory"
 """
         )
@@ -47,7 +50,7 @@ def test_is_valid_pyproject_toml_with_incorrect_tests_root(temp_dir: Path) -> No
     with (temp_dir / "pyproject.toml").open(mode="w") as f:
         wrong_tests_root = temp_dir / "incorrect_tests_root"
         f.write(
-            f"""[tool.codeflash]
+            """[tool.codeflash]
 module-root = "."
 tests-root = "incorrect_tests_root"
 """
@@ -65,12 +68,12 @@ def test_is_valid_pyproject_toml_with_valid_config(temp_dir: Path) -> None:
             """[tool.codeflash]
 module-root = "."
 tests-root = "tests"
-test-framework = "pytest"
 """
         )
         f.flush()
         valid, config, _message = is_valid_pyproject_toml(temp_dir / "pyproject.toml")
         assert valid
+
 
 def test_get_formatter_cmd(temp_dir: Path) -> None:
     assert get_formatter_cmds("black") == ["black $file"]
@@ -78,8 +81,8 @@ def test_get_formatter_cmd(temp_dir: Path) -> None:
     assert get_formatter_cmds("disabled") == ["disabled"]
     assert get_formatter_cmds("don't use a formatter") == ["disabled"]
 
-def test_configure_pyproject_toml_for_cli(temp_dir: Path) -> None:
 
+def test_configure_pyproject_toml_for_cli(temp_dir: Path) -> None:
     pyproject_path = temp_dir / "pyproject.toml"
 
     with (pyproject_path).open(mode="w") as f:
@@ -90,7 +93,6 @@ def test_configure_pyproject_toml_for_cli(temp_dir: Path) -> None:
             module_root=".",
             tests_root="tests",
             benchmarks_root=None,
-            test_framework="pytest",
             ignore_paths=[],
             formatter="black",
             git_remote="origin",
@@ -101,80 +103,77 @@ def test_configure_pyproject_toml_for_cli(temp_dir: Path) -> None:
         assert success
 
         config_content = pyproject_path.read_text()
-        assert """[tool.codeflash]
+        assert (
+            config_content
+            == """[tool.codeflash]
 # All paths are relative to this pyproject.toml's directory.
 module-root = "."
 tests-root = "tests"
-test-framework = "pytest"
 ignore-paths = []
 disable-telemetry = true
 formatter-cmds = ["black $file"]
-""" == config_content
+"""
+        )
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
 
-def test_configure_pyproject_toml_for_vscode_with_empty_config(temp_dir: Path) -> None:
 
+def test_configure_pyproject_toml_for_vscode_with_empty_config(temp_dir: Path) -> None:
     pyproject_path = temp_dir / "pyproject.toml"
 
     with (pyproject_path).open(mode="w") as f:
         f.write("")
         f.flush()
         os.mkdir(temp_dir / "tests")
-        config = VsCodeSetupInfo(
-            module_root=".",
-            tests_root="tests",
-            test_framework="pytest",
-            formatter="black",
-        )
+        config = VsCodeSetupInfo(module_root=".", tests_root="tests", formatter="black")
 
         success = configure_pyproject_toml(config, pyproject_path)
         assert success
 
         config_content = pyproject_path.read_text()
-        assert """[tool.codeflash]
+        assert (
+            config_content
+            == """[tool.codeflash]
 module-root = "."
 tests-root = "tests"
-test-framework = "pytest"
 formatter-cmds = ["black $file"]
-""" == config_content
+"""
+        )
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
 
+
 def test_configure_pyproject_toml_for_vscode_with_existing_config(temp_dir: Path) -> None:
     pyproject_path = temp_dir / "pyproject.toml"
-    
+
     with (pyproject_path).open(mode="w") as f:
         f.write("""[tool.codeflash]
 module-root = "codeflash"
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
-test-framework = "pytest"
 formatter-cmds = ["disabled"]
 """)
         f.flush()
         os.mkdir(temp_dir / "tests")
-        config = VsCodeSetupInfo(
-            module_root=".",
-            tests_root="tests",
-            test_framework="pytest",
-            formatter="disabled",
-        )
+        config = VsCodeSetupInfo(module_root=".", tests_root="tests", formatter="disabled")
 
         success = configure_pyproject_toml(config, pyproject_path)
         assert success
 
         config_content = pyproject_path.read_text()
         # the benchmarks-root shouldn't get overwritten
-        assert """[tool.codeflash]
+        assert (
+            config_content
+            == """[tool.codeflash]
 module-root = "."
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
-test-framework = "pytest"
 formatter-cmds = ["disabled"]
-""" == config_content
+"""
+        )
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
+
 
 def test_get_valid_subdirs(temp_dir: Path) -> None:
     os.mkdir(temp_dir / "dir1")

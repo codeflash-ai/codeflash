@@ -70,7 +70,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -79,7 +78,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
@@ -475,7 +473,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -484,7 +481,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         self.did_instrument = False
         # Track function call count per test function
@@ -639,7 +635,6 @@ def inject_async_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     """Inject profiling for async function calls by setting environment variables before each call."""
@@ -657,7 +652,7 @@ def inject_async_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, test_framework, call_positions, mode=mode)
+    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, call_positions, mode=mode)
     tree = async_instrumenter.visit(tree)
 
     if not async_instrumenter.did_instrument:
@@ -675,12 +670,11 @@ def inject_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, test_framework, mode
+            test_path, call_positions, function_to_optimize, tests_project_root, mode
         )
 
     with test_path.open(encoding="utf8") as f:
@@ -696,7 +690,7 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
+    tree = InjectPerfOnly(func, test_module_path, call_positions, mode=mode).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),

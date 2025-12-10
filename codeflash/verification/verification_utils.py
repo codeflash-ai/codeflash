@@ -69,11 +69,14 @@ class ModifyInspiredTests(ast.NodeTransformer):
 class TestConfig:
     tests_root: Path
     project_root_path: Path
-    test_framework: str
     tests_project_rootdir: Path
-    # tests_project_rootdir corresponds to pytest rootdir,
-    # or for unittest - project_root_from_module_root(args.tests_root, pyproject_file_path)
+    # tests_project_rootdir corresponds to pytest rootdir
     concolic_test_root_dir: Optional[Path] = None
     pytest_cmd: str = "pytest"
     benchmark_tests_root: Optional[Path] = None
     use_cache: bool = True
+
+    @property
+    def test_framework(self) -> str:
+        """Always returns 'pytest' as we use pytest for all tests."""
+        return "pytest"

@@ -8,7 +8,6 @@ def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="bubble_sort.py",
         function_name="sorter",
-        test_framework="pytest",
         min_improvement_x=0.70,
         coverage_expectations=[
             CoverageExpectation(

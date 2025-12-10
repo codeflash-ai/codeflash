@@ -354,7 +354,6 @@ def test_run_and_parse_picklepatch() -> None:
             [CodePosition(17, 15)],
             func,
             project_root,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
@@ -367,7 +366,6 @@ def test_run_and_parse_picklepatch() -> None:
                 project_root=project_root,
                 disable_telemetry=True,
                 tests_root=tests_root,
-                test_framework="pytest",
                 pytest_cmd="pytest",
                 experiment_id=None,
                 test_project_root=project_root,
@@ -439,7 +437,6 @@ def bubble_sort_with_unused_socket(data_container):
             [CodePosition(23,15)],
             func,
             project_root,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
