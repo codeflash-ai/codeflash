@@ -19,7 +19,7 @@ def trace_benchmarks_pytest(
         benchmark_env["PYTHONPATH"] = str(project_root)
     else:
         benchmark_env["PYTHONPATH"] += os.pathsep + str(project_root)
-    
+
     is_windows = sys.platform == "win32"
     cmd_list = [
         SAFE_SYS_EXECUTABLE,
@@ -28,7 +28,7 @@ def trace_benchmarks_pytest(
         tests_root,
         trace_file,
     ]
-    
+
     if is_windows:
         # Use Windows-safe subprocess handling to avoid file locking issues
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -49,19 +49,11 @@ def trace_benchmarks_pytest(
             with contextlib.suppress(OSError):
                 process.kill()
             stdout_content, stderr_content = process.communicate(timeout=5)
-            raise subprocess.TimeoutExpired(
-                cmd_list, timeout, output=stdout_content, stderr=stderr_content
-            ) from None
+            raise subprocess.TimeoutExpired(cmd_list, timeout, output=stdout_content, stderr=stderr_content) from None
         result = subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
     else:
         result = subprocess.run(
-            cmd_list,
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True,
-            env=benchmark_env,
-            timeout=timeout,
+            cmd_list, cwd=project_root, check=False, capture_output=True, text=True, env=benchmark_env, timeout=timeout
         )
     if result.returncode != 0:
         if "ERROR collecting" in result.stdout:
