@@ -87,17 +87,12 @@ class AiServiceClient:
         return response
 
     def _get_valid_candidates(self, optimizations_json: list[dict[str, Any]]) -> list[OptimizedCandidate]:
-        candidates: list[OptimizedCandidate] = []
-        for opt in optimizations_json:
-            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
-            if not code.code_strings:
-                continue
-            candidates.append(
-                OptimizedCandidate(
-                    source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
-                )
-            )
-        return candidates
+        # This loop dominates profile -- list comprehension faster, only if parse_markdown_code is exception-free
+        return [
+            OptimizedCandidate(source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"])
+            for opt in optimizations_json
+            if (code := CodeStringsMarkdown.parse_markdown_code(opt["source_code"])).code_strings
+        ]
 
     def optimize_python_code(  # noqa: D417
         self,
