@@ -22,8 +22,7 @@ from rich.table import Table
 from rich.text import Text
 
 from codeflash.api.aiservice import AiServiceClient
-from codeflash.api.cfapi import is_github_app_installed_on_repo, setup_github_actions
-from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
+from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo, setup_github_actions
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -686,7 +685,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                     .read_text(encoding="utf-8")
                 )
                 materialized_optimize_yml_content = generate_dynamic_workflow_content(
-                    optimize_yml_content, config, git_root, False
+                    optimize_yml_content, config, git_root, benchmark_mode=False
                 )
 
                 logger.info(
@@ -1241,10 +1240,12 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
     # Also collect GitHub workflows
     workflows_path = git_root / ".github" / "workflows"
     if workflows_path.exists():
-        for workflow_file in workflows_path.glob("*.yml"):
-            important_files.append(str(workflow_file.relative_to(git_root)))
-        for workflow_file in workflows_path.glob("*.yaml"):
-            important_files.append(str(workflow_file.relative_to(git_root)))
+        important_files.extend(
+            str(workflow_file.relative_to(git_root)) for workflow_file in workflows_path.glob("*.yml")
+        )
+        important_files.extend(
+            str(workflow_file.relative_to(git_root)) for workflow_file in workflows_path.glob("*.yaml")
+        )
 
     files_dict: dict[str, str] = {}
     max_file_size = 8 * 1024  # 8KB limit per file
@@ -1402,10 +1403,7 @@ def generate_dynamic_workflow_content(
                 indented_steps.append(codeflash_step)
 
                 # Reconstruct the workflow
-                new_lines = lines[:steps_start_line] + ["    steps:"] + indented_steps + lines[steps_end_line:]
-                optimize_yml_content = "\n".join(new_lines)
-
-                return optimize_yml_content
+                return "\n".join([*lines[:steps_start_line], "    steps:", *indented_steps, *lines[steps_end_line:]])
             logger.warning("[cmd_init.py:generate_dynamic_workflow_content] Could not find steps section in template")
         else:
             logger.debug(
