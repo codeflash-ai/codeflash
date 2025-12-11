@@ -1989,7 +1989,6 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            # print(type(code_context), type(candidate))
             match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
             if match:
                 logger.info("h3|Test results matched ✅")
