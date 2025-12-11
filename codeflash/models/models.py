@@ -273,10 +273,10 @@ class CodeStringsMarkdown(BaseModel):
         """
         matches = markdown_pattern.findall(markdown_code)
         code_string_list = []
-        for file_path, code in matches:
-            path = file_path.strip()
-            code_string_list.append(CodeString(code=code, file_path=Path(path)))
         try:
+            for file_path, code in matches:
+                path = file_path.strip()
+                code_string_list.append(CodeString(code=code, file_path=Path(path)))
             return CodeStringsMarkdown(code_strings=code_string_list)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context

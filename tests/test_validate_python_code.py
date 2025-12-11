@@ -69,3 +69,5 @@ print('Hello, World!')
     ]
     candidates = ai_service._get_valid_candidates(mock_generate_candidates, OptimizedCandidateSource.OPTIMIZE)
     assert len(candidates) == 1
+    assert candidates[0].source_code.code_strings[0].code == "print('Hello, World!')"
+    assert candidates[0].source_code.code_strings[0].file_path.as_posix() == "file.py"
