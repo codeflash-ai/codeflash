@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import reprlib
 import sys
 from typing import TYPE_CHECKING
 
@@ -70,8 +71,8 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
         test_diff = TestDiff(
             scope=TestDiffScope.RETURN_VALUE,
-            original_value=repr(original_test_result.return_value),
-            candidate_value=repr(cdd_test_result.return_value),
+            original_value=reprlib.repr(original_test_result.return_value),
+            candidate_value=reprlib.repr(cdd_test_result.return_value),
             test_src_code=test_src_code,
             candidate_pytest_error=cdd_pytest_error,
             original_pass=original_test_result.did_pass,
