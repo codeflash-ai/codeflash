@@ -22,6 +22,7 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.concolic_utils import clean_concolic_tests
 from codeflash.code_utils.coverage_utils import extract_dependent_function, generate_candidates, prepare_coverage_files
 from codeflash.models.models import CodeStringsMarkdown
+from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
 
 
 @pytest.fixture
@@ -495,6 +496,134 @@ def test_partial_module_name(base_dir: Path) -> None:
 def test_partial_module_name2(base_dir: Path) -> None:
     result = file_name_from_test_module_name("subdir.test_submodule.TestClass.TestClass2", base_dir)
     assert result == base_dir / "subdir" / "test_submodule.py"
+
+
+def test_pytest_unittest_path_resolution_with_prefix(tmp_path: Path) -> None:
+    """Test path resolution when pytest includes parent directory in classname.
+    
+    This handles the case where pytest's base_dir is /path/to/tests but the
+    classname includes the parent directory like "project.tests.unittest.test_file.TestClass".
+    """
+    # Setup directory structure: /tmp/code_to_optimize/tests/unittest/
+    project_root = tmp_path / "code_to_optimize"
+    tests_root = project_root / "tests"
+    unittest_dir = tests_root / "unittest"
+    unittest_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create test files
+    test_file = unittest_dir / "test_bubble_sort.py"
+    test_file.touch()
+    
+    generated_test = unittest_dir / "test_sorter__unit_test_0.py"
+    generated_test.touch()
+    
+    # Case 1: pytest reports classname with full path including "code_to_optimize.tests"
+    # but base_dir is .../tests (not the project root)
+    result = resolve_test_file_from_class_path(
+        "code_to_optimize.tests.unittest.test_bubble_sort.TestPigLatin",
+        tests_root
+    )
+    assert result == test_file
+    
+    # Case 2: Generated test file with class name
+    result = resolve_test_file_from_class_path(
+        "code_to_optimize.tests.unittest.test_sorter__unit_test_0.TestSorter",
+        tests_root
+    )
+    assert result == generated_test
+    
+    # Case 3: Without the class name (just the module path)
+    result = resolve_test_file_from_class_path(
+        "code_to_optimize.tests.unittest.test_bubble_sort",
+        tests_root
+    )
+    assert result == test_file
+
+
+def test_pytest_unittest_multiple_prefix_levels(tmp_path: Path) -> None:
+    """Test path resolution with multiple levels of prefix stripping."""
+    # Setup: /tmp/org/project/src/tests/unit/
+    base = tmp_path / "org" / "project" / "src" / "tests"
+    unit_dir = base / "unit"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    
+    test_file = unit_dir / "test_example.py"
+    test_file.touch()
+    
+    # pytest might report: org.project.src.tests.unit.test_example.TestClass
+    # with base_dir being .../src/tests or .../tests
+    result = resolve_test_file_from_class_path(
+        "org.project.src.tests.unit.test_example.TestClass",
+        base
+    )
+    assert result == test_file
+    
+    # Also test with base_dir at different level
+    result = resolve_test_file_from_class_path(
+        "project.src.tests.unit.test_example.TestClass",
+        base
+    )
+    assert result == test_file
+
+
+def test_pytest_unittest_instrumented_files(tmp_path: Path) -> None:
+    """Test path resolution for instrumented test files."""
+    tests_root = tmp_path / "tests" / "unittest"
+    tests_root.mkdir(parents=True, exist_ok=True)
+    
+    # Create instrumented test file
+    instrumented_file = tests_root / "test_bubble_sort__perfinstrumented.py"
+    instrumented_file.touch()
+    
+    # pytest classname includes parent directories
+    result = resolve_test_file_from_class_path(
+        "code_to_optimize.tests.unittest.test_bubble_sort__perfinstrumented.TestPigLatin",
+        tmp_path / "tests"
+    )
+    assert result == instrumented_file
+
+
+def test_pytest_unittest_nested_classes(tmp_path: Path) -> None:
+    """Test path resolution with nested class names."""
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir(parents=True, exist_ok=True)
+    
+    test_file = tests_root / "test_nested.py"
+    test_file.touch()
+    
+    # Some unittest frameworks use nested classes
+    result = resolve_test_file_from_class_path(
+        "project.tests.test_nested.OuterClass.InnerClass",
+        tests_root
+    )
+    assert result == test_file
+
+
+def test_pytest_unittest_no_match_returns_none(tmp_path: Path) -> None:
+    """Test that non-existent files return None even with prefix stripping."""
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir(parents=True, exist_ok=True)
+    
+    # File doesn't exist
+    result = resolve_test_file_from_class_path(
+        "code_to_optimize.tests.unittest.nonexistent_test.TestClass",
+        tests_root
+    )
+    assert result is None
+
+
+def test_pytest_unittest_single_component(tmp_path: Path) -> None:
+    """Test that single-component paths still work."""
+    base_dir = tmp_path
+    test_file = base_dir / "test_simple.py"
+    test_file.touch()
+    
+    result = file_name_from_test_module_name("test_simple", base_dir)
+    assert result == test_file
+    
+    # With class name
+    result = file_name_from_test_module_name("test_simple.TestClass", base_dir)
+    assert result == test_file
 
 
 def test_cleanup_paths(multiple_existing_and_non_existing_files: list[Path]) -> None:

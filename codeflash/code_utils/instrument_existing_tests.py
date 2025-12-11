@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -71,7 +70,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -80,7 +78,6 @@ class InjectPerfOnly(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         if len(function.parents) == 1 and function.parents[0].type == "ClassDef":
             self.class_name = function.top_level_parent_name
@@ -329,17 +326,6 @@ class InjectPerfOnly(ast.NodeTransformer):
     def visit_FunctionDef(self, node: ast.FunctionDef, test_class_name: str | None = None) -> ast.FunctionDef:
         if node.name.startswith("test_"):
             did_update = False
-            if self.test_framework == "unittest" and platform.system() != "Windows":
-                # Only add timeout decorator on non-Windows platforms
-                # Windows doesn't support SIGALRM signal required by timeout_decorator
-
-                node.decorator_list.append(
-                    ast.Call(
-                        func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                        args=[ast.Constant(value=15)],
-                        keywords=[],
-                    )
-                )
             i = len(node.body) - 1
             while i >= 0:
                 line_node = node.body[i]
@@ -487,7 +473,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self,
         function: FunctionToOptimize,
         module_path: str,
-        test_framework: str,
         call_positions: list[CodePosition],
         mode: TestingMode = TestingMode.BEHAVIOR,
     ) -> None:
@@ -496,7 +481,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
         self.class_name = None
         self.only_function_name = function.function_name
         self.module_path = module_path
-        self.test_framework = test_framework
         self.call_positions = call_positions
         self.did_instrument = False
         # Track function call count per test function
@@ -505,25 +489,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
             self.class_name = function.top_level_parent_name
 
     def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        # Add timeout decorator for unittest test classes if needed
-        if self.test_framework == "unittest":
-            timeout_decorator = ast.Call(
-                func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                args=[ast.Constant(value=15)],
-                keywords=[],
-            )
-            for item in node.body:
-                if (
-                    isinstance(item, ast.FunctionDef)
-                    and item.name.startswith("test_")
-                    and not any(
-                        isinstance(d, ast.Call)
-                        and isinstance(d.func, ast.Name)
-                        and d.func.id == "timeout_decorator.timeout"
-                        for d in item.decorator_list
-                    )
-                ):
-                    item.decorator_list.append(timeout_decorator)
         return self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
@@ -542,25 +507,6 @@ class AsyncCallInstrumenter(ast.NodeTransformer):
     def _process_test_function(
         self, node: ast.AsyncFunctionDef | ast.FunctionDef
     ) -> ast.AsyncFunctionDef | ast.FunctionDef:
-        # Optimize the search for decorator presence
-        if self.test_framework == "unittest":
-            found_timeout = False
-            for d in node.decorator_list:
-                # Avoid isinstance(d.func, ast.Name) if d is not ast.Call
-                if isinstance(d, ast.Call):
-                    f = d.func
-                    # Avoid attribute lookup if f is not ast.Name
-                    if isinstance(f, ast.Name) and f.id == "timeout_decorator.timeout":
-                        found_timeout = True
-                        break
-            if not found_timeout:
-                timeout_decorator = ast.Call(
-                    func=ast.Name(id="timeout_decorator.timeout", ctx=ast.Load()),
-                    args=[ast.Constant(value=15)],
-                    keywords=[],
-                )
-                node.decorator_list.append(timeout_decorator)
-
         # Initialize counter for this test function
         if node.name not in self.async_call_counter:
             self.async_call_counter[node.name] = 0
@@ -689,7 +635,6 @@ def inject_async_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     """Inject profiling for async function calls by setting environment variables before each call."""
@@ -707,7 +652,7 @@ def inject_async_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, test_framework, call_positions, mode=mode)
+    async_instrumenter = AsyncCallInstrumenter(func, test_module_path, call_positions, mode=mode)
     tree = async_instrumenter.visit(tree)
 
     if not async_instrumenter.did_instrument:
@@ -715,8 +660,6 @@ def inject_async_profiling_into_existing_test(
 
     # Add necessary imports
     new_imports = [ast.Import(names=[ast.alias(name="os")])]
-    if test_framework == "unittest":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
 
     tree.body = [*new_imports, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
@@ -727,12 +670,11 @@ def inject_profiling_into_existing_test(
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
-    test_framework: str,
     mode: TestingMode = TestingMode.BEHAVIOR,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
-            test_path, call_positions, function_to_optimize, tests_project_root, test_framework, mode
+            test_path, call_positions, function_to_optimize, tests_project_root, mode
         )
 
     with test_path.open(encoding="utf8") as f:
@@ -748,7 +690,7 @@ def inject_profiling_into_existing_test(
     import_visitor.visit(tree)
     func = import_visitor.imported_as
 
-    tree = InjectPerfOnly(func, test_module_path, test_framework, call_positions, mode=mode).visit(tree)
+    tree = InjectPerfOnly(func, test_module_path, call_positions, mode=mode).visit(tree)
     new_imports = [
         ast.Import(names=[ast.alias(name="time")]),
         ast.Import(names=[ast.alias(name="gc")]),
@@ -762,8 +704,6 @@ def inject_profiling_into_existing_test(
                 ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
             ]
         )
-    if test_framework == "unittest" and platform.system() != "Windows":
-        new_imports.append(ast.Import(names=[ast.alias(name="timeout_decorator")]))
     additional_functions = [create_wrapper_function(mode)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]

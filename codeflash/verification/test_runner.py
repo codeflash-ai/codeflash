@@ -36,21 +36,21 @@ def run_behavioral_tests(
     *,
     pytest_timeout: int | None = None,
     pytest_cmd: str = "pytest",
-    verbose: bool = False,
-    pytest_target_runtime_seconds: int = TOTAL_LOOPING_TIME_EFFECTIVE,
+    pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
-                # TODO: Does this work for unittest framework?
-                test_files.extend(
-                    [
-                        str(file.instrumented_behavior_file_path) + "::" + test.test_function
-                        for test in file.tests_in_file
-                    ]
-                )
+                # Replay tests need specific test targeting because one file contains tests for multiple functions
+                if file.tests_in_file:
+                    test_files.extend(
+                        [
+                            str(file.instrumented_behavior_file_path) + "::" + test.test_function
+                            for test in file.tests_in_file
+                        ]
+                    )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
         pytest_cmd_list = (
@@ -61,13 +61,14 @@ def run_behavioral_tests(
         test_files = list(set(test_files))  # remove multiple calls in the same test function
         common_pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            common_pytest_args.append(f"--timeout={pytest_timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
@@ -120,18 +121,6 @@ def run_behavioral_tests(
             logger.debug(
                 f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
-    elif test_framework == "unittest":
-        if enable_coverage:
-            msg = "Coverage is not supported yet for unittest framework"
-            raise ValueError(msg)
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
-        test_files = [file.instrumented_behavior_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
-        )
-        logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -152,42 +141,30 @@ def run_line_profile_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
-    verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
     pytest_max_loops: int = 100_000,  # noqa: ARG001
-    line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
+        # Always use file path - pytest discovers all tests including parametrized ones
+        test_files: list[str] = list(
+            {str(file.benchmarking_file_path) for file in test_paths.test_files}
+        )  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
             "--codeflash_max_loops=1",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            pytest_args.append(f"--timeout={pytest_timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
@@ -200,34 +177,10 @@ def run_line_profile_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-    elif test_framework == "unittest":
-        test_env["CODEFLASH_LOOP_INDEX"] = "1"
-        test_env["LINE_PROFILE"] = "1"
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
-        line_profiler_output_file, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=[Path(file) for file in test_files], test_env=test_env, cwd=cwd
-        )
-        logger.debug(
-            f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-    return line_profiler_output_file, results
+    return result_file_path, results
 
 
 def run_benchmarking_tests(
@@ -238,41 +191,31 @@ def run_benchmarking_tests(
     test_framework: str,
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
-    verbose: bool = False,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework == "pytest":
+    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )
-        test_files: list[str] = []
-        for file in test_paths.test_files:
-            if file.test_type in {TestType.REPLAY_TEST, TestType.EXISTING_UNIT_TEST} and file.tests_in_file:
-                test_files.extend(
-                    [
-                        str(file.benchmarking_file_path)
-                        + "::"
-                        + (test.test_class + "::" if test.test_class else "")
-                        + (test.test_function.split("[", 1)[0] if "[" in test.test_function else test.test_function)
-                        for test in file.tests_in_file
-                    ]
-                )
-            else:
-                test_files.append(str(file.benchmarking_file_path))
-        test_files = list(set(test_files))  # remove multiple calls in the same test function
+        # Always use file path - pytest discovers all tests including parametrized ones
+        test_files: list[str] = list(
+            {str(file.benchmarking_file_path) for file in test_paths.test_files}
+        )  # remove multiple calls in the same test function
         pytest_args = [
             "--capture=tee-sys",
-            f"--timeout={pytest_timeout}",
             "-q",
             "--codeflash_loops_scope=session",
             f"--codeflash_min_loops={pytest_min_loops}",
             f"--codeflash_max_loops={pytest_max_loops}",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
         ]
+        if pytest_timeout is not None:
+            pytest_args.append(f"--timeout={pytest_timeout}")
+
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
@@ -284,26 +227,7 @@ def run_benchmarking_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-    elif test_framework == "unittest":
-        test_files = [file.benchmarking_file_path for file in test_paths.test_files]
-        result_file_path, results = run_unittest_tests(
-            verbose=verbose, test_file_paths=test_files, test_env=test_env, cwd=cwd
-        )
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
-    return result_file_path, results
-
-
-def run_unittest_tests(
-    *, verbose: bool, test_file_paths: list[Path], test_env: dict[str, str], cwd: Path
-) -> tuple[Path, subprocess.CompletedProcess]:
-    result_file_path = get_run_tmp_file(Path("unittest_results.xml"))
-    unittest_cmd_list = [SAFE_SYS_EXECUTABLE, "-m", "xmlrunner"]
-    log_level = ["-v"] if verbose else []
-    files = [str(file) for file in test_file_paths]
-    output_file = ["--output-file", str(result_file_path)]
-    results = execute_test_subprocess(
-        unittest_cmd_list + log_level + files + output_file, cwd=cwd, env=test_env, timeout=600
-    )
     return result_file_path, results

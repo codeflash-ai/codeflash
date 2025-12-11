@@ -21,10 +21,8 @@ dependencies = [
     "gitpython>=3.1.31",
     "libcst>=1.0.1",
     "jedi>=0.19.1",
-    "timeout-decorator>=0.5.0",
     "pytest-timeout>=2.1.0",
     "tomlkit>=0.11.7",
-    "unittest-xml-reporting>=3.2.0",
     "junitparser>=3.1.0",
     "pydantic>=1.10.1",
     "humanize>=4.0.0",
@@ -305,7 +303,6 @@ __version__ = "{version}"
 module-root = "codeflash"
 tests-root = "tests"
 benchmarks-root = "tests/benchmarks"
-test-framework = "pytest"
 formatter-cmds = [
     "uvx ruff check --exit-zero --fix $file",
     "uvx ruff format $file",
