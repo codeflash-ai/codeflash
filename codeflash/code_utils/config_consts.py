@@ -21,7 +21,7 @@ TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in incre
 N_CANDIDATES_LP_LSP = 3
 
 # Code repair
-REPAIR_UNMATCHED_PERCENTAGE_LIMIT = 0.35  # if the percentage of unmatched tests is greater than this, we won't fix it
+REPAIR_UNMATCHED_PERCENTAGE_LIMIT = 0.4  # if the percentage of unmatched tests is greater than this, we won't fix it (lowering this value makes the repair more stricted)
 MAX_REPAIRS_PER_TRACE = 3  # maximum number of repairs we will do for each function
 
 MAX_N_CANDIDATES = 5

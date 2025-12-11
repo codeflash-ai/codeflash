@@ -1854,6 +1854,46 @@ class FunctionOptimizer:
         console.rule()
         return Failure("Test results did not match the test results of the original code.")
 
+    def repair_if_possible(
+        self,
+        candidate: OptimizedCandidate,
+        diffs: list[TestDiff],
+        code_context: CodeOptimizationContext,
+        test_results_count: int,
+        exp_type: str,
+    ) -> None:
+        if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
+            logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
+            return
+        if candidate.source == OptimizedCandidateSource.REPAIR:
+            logger.debug("Candidate is already a repair, skipping repair")
+            return
+        if not diffs:
+            logger.debug("No diffs found, skipping repair")
+            return
+        result_unmatched_perc = len(diffs) / test_results_count
+        if result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT:
+            logger.debug(f"Result unmatched percentage is {result_unmatched_perc * 100}%, skipping repair")
+            return
+
+        logger.debug(
+            f"Adding a candidate for repair, with {len(diffs)} diffs, ({result_unmatched_perc * 100}% unmatched)"
+        )
+        # start repairing
+        ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+        self.repair_counter += 1
+        self.future_all_code_repair.append(
+            self.repair_optimization(
+                original_source_code=code_context.read_writable_code.markdown,
+                modified_source_code=candidate.source_code.markdown,
+                test_diffs=diffs,
+                trace_id=self.function_trace_id[:-4] + exp_type if self.experiment_id else self.function_trace_id,
+                ai_service_client=ai_service_client,
+                optimization_id=candidate.optimization_id,
+                executor=self.executor,
+            )
+        )
+
     def run_optimized_candidate(
         self,
         *,
@@ -1919,36 +1959,7 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-
-                def repair_if_possible() -> None:
-                    if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
-                        return
-
-                    result_unmatched_perc = len(diffs) / len(candidate_behavior_results)
-                    if (
-                        candidate.source == OptimizedCandidateSource.REPAIR
-                        or result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT
-                    ):
-                        return
-
-                    ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
-                    logger.info("Adding this to the repair queue")
-                    self.repair_counter += 1
-                    self.future_all_code_repair.append(
-                        self.repair_optimization(
-                            original_source_code=code_context.read_writable_code.markdown,
-                            modified_source_code=candidate.source_code.markdown,
-                            test_diffs=diffs,
-                            trace_id=self.function_trace_id[:-4] + exp_type
-                            if self.experiment_id
-                            else self.function_trace_id,
-                            ai_service_client=ai_service_client,
-                            optimization_id=candidate.optimization_id,
-                            executor=self.executor,
-                        )
-                    )
-
-                repair_if_possible()
+                self.repair_if_possible(candidate, diffs, code_context, len(candidate_behavior_results), exp_type)
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")

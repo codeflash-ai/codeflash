@@ -63,20 +63,19 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             else ""
         )
 
-        test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
-        test_diff = TestDiff(
-            scope=TestDiffScope.RETURN_VALUE,
-            original_value=repr(original_test_result.return_value),
-            candidate_value=repr(cdd_test_result.return_value),
-            test_src_code=test_src_code,
-            candidate_pytest_error=cdd_pytest_error,
-            original_pass=original_test_result.did_pass,
-            candidate_pass=cdd_test_result.did_pass,
-            original_pytest_error=original_pytest_error,
-        )
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
-            test_diff.scope = TestDiffScope.RETURN_VALUE
-            test_diffs.append(test_diff)
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.RETURN_VALUE,
+                    original_value=repr(original_test_result.return_value),
+                    candidate_value=repr(cdd_test_result.return_value),
+                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
 
             try:
                 logger.debug(
@@ -92,10 +91,18 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         elif (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
             original_test_result.stdout, cdd_test_result.stdout
         ):
-            test_diff.scope = TestDiffScope.STDOUT
-            test_diff.original_value = str(original_test_result.stdout)
-            test_diff.candidate_value = str(cdd_test_result.stdout)
-            test_diffs.append(test_diff)
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.STDOUT,
+                    original_value=str(original_test_result.stdout),
+                    candidate_value=str(cdd_test_result.stdout),
+                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
 
         elif original_test_result.test_type in {
             TestType.EXISTING_UNIT_TEST,
@@ -103,10 +110,18 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
             TestType.GENERATED_REGRESSION,
             TestType.REPLAY_TEST,
         } and (cdd_test_result.did_pass != original_test_result.did_pass):
-            test_diff.scope = TestDiffScope.DID_PASS
-            test_diff.original_value = str(original_test_result.did_pass)
-            test_diff.candidate_value = str(cdd_test_result.did_pass)
-            test_diffs.append(test_diff)
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.DID_PASS,
+                    original_value=str(original_test_result.did_pass),
+                    candidate_value=str(cdd_test_result.did_pass),
+                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
 
     sys.setrecursionlimit(original_recursion_limit)
     if did_all_timeout:
