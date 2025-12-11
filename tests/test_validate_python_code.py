@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from codeflash.api.aiservice import AiServiceClient
-from codeflash.models.models import CodeString
+from codeflash.models.models import CodeString, OptimizedCandidateSource
 
 
 def test_python_string():
@@ -55,7 +55,7 @@ print name
             "optimization_id": ""
         }
     ]
-    candidates = ai_service._get_valid_candidates(mock_generate_candidates)
+    candidates = ai_service._get_valid_candidates(mock_generate_candidates, OptimizedCandidateSource.OPTIMIZE)
     assert len(candidates) == 0
     code = """```python:file.py
 print('Hello, World!')
@@ -67,5 +67,5 @@ print('Hello, World!')
             "optimization_id": ""
         }
     ]
-    candidates = ai_service._get_valid_candidates(mock_generate_candidates)
+    candidates = ai_service._get_valid_candidates(mock_generate_candidates, OptimizedCandidateSource.OPTIMIZE)
     assert len(candidates) == 1
