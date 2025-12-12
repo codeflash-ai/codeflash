@@ -345,7 +345,6 @@ class PytestLoops:
                 else:
                     consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
                 if consistent:
-                    Path(f"/home/mohammed/Documents/test-results/break-{session.name}.txt").write_text(str(count))
                     break
 
             if self._timed_out(session, start_time, count):
