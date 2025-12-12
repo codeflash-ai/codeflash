@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import os
 import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
@@ -661,34 +660,93 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    tests_root_str = str(tests_root)
-    module_root_str = str(module_root)
+
+    def _resolve_path(path: Path | str) -> Path:
+        # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
+        return Path(path).resolve(strict=False)
+
+    def _resolve_path_consistent(path: Path | str) -> Path:
+        """Resolve path consistently: use strict resolution if path exists, otherwise non-strict."""
+        path_obj = Path(path)
+        if path_obj.exists():
+            try:
+                return path_obj.resolve()
+            except (OSError, RuntimeError):
+                return _resolve_path(path)
+        return _resolve_path(path)
+
+    # Resolve all root paths to absolute paths for consistent comparison
+    # Use consistent resolution: strict for existing paths, non-strict for non-existent
+    tests_root_resolved = _resolve_path_consistent(tests_root)
+    module_root_resolved = _resolve_path_consistent(module_root)
+
+    # Resolve ignore paths and submodule paths
+    ignore_paths_resolved = [_resolve_path_consistent(p) for p in ignore_paths]
+    submodule_paths_resolved = [_resolve_path_consistent(p) for p in submodule_paths]
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
-        file_path = str(file_path_path)
-        if file_path.startswith(tests_root_str + os.sep):
+        # Resolve file path to absolute path
+        # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
+        file_path_obj = Path(file_path_path)
+        # Use consistent resolution: try strict first (for existing files), fall back to non-strict
+        if file_path_obj.exists():
+            try:
+                file_path_resolved = file_path_obj.resolve()
+            except (OSError, RuntimeError):
+                file_path_resolved = _resolve_path(file_path_path)
+        else:
+            file_path_resolved = _resolve_path(file_path_path)
+
+        file_path = str(file_path_obj)
+
+        # Check if file is in tests root using resolved paths
+        try:
+            file_path_resolved.relative_to(tests_root_resolved)
             test_functions_removed_count += len(_functions)
             continue
-        if file_path in ignore_paths or any(
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
-        ):
+        except ValueError:
+            pass  # File is not in tests root, continue checking
+
+        # Check if file is in ignore paths using resolved paths
+        is_ignored = False
+        for ignore_path_resolved in ignore_paths_resolved:
+            try:
+                file_path_resolved.relative_to(ignore_path_resolved)
+                is_ignored = True
+                break
+            except ValueError:
+                pass
+        if is_ignored:
             ignore_paths_removed_count += 1
             continue
-        if file_path in submodule_paths or any(
-            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
-        ):
+
+        # Check if file is in submodule paths using resolved paths
+        is_in_submodule = False
+        for submodule_path_resolved in submodule_paths_resolved:
+            try:
+                file_path_resolved.relative_to(submodule_path_resolved)
+                is_in_submodule = True
+                break
+            except ValueError:
+                pass
+        if is_in_submodule:
             submodule_ignored_paths_count += 1
             continue
-        if path_belongs_to_site_packages(Path(file_path)):
+
+        if path_belongs_to_site_packages(file_path_resolved):
             site_packages_removed_count += len(_functions)
             continue
-        if not file_path.startswith(module_root_str + os.sep):
+
+        # Check if file is in module root using resolved paths
+        try:
+            file_path_resolved.relative_to(module_root_resolved)
+        except ValueError:
             non_modules_removed_count += len(_functions)
             continue
         try:
-            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+            ast.parse(f"import {module_name_from_file_path(file_path_resolved, project_root)}")
         except SyntaxError:
             malformed_paths_count += 1
             continue
