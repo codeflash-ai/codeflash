@@ -70,18 +70,21 @@ class TestGitUtils(unittest.TestCase):
         mock_repo_instance.active_branch.name = "test-branch"
         mock_repo_instance.refs = []
 
-        mock_origin = mock_repo_instance.remote.return_value
-        mock_origin.push.return_value = None
+        # Mock remotes to return a list with 'origin'
+        mock_remote_obj = mock_repo_instance.remote.return_value
+        mock_remote_obj.name = "origin"
+        mock_remote_obj.push.return_value = None
+        mock_repo_instance.remotes = [mock_remote_obj]
 
         assert check_and_push_branch(mock_repo_instance)
-        mock_origin.push.assert_called_once_with(mock_repo_instance.active_branch)
-        mock_origin.push.reset_mock()
+        mock_remote_obj.push.assert_called_once_with(mock_repo_instance.active_branch)
+        mock_remote_obj.push.reset_mock()
 
         # Test when branch is already pushed
         mock_repo_instance.refs = [f"origin/{mock_repo_instance.active_branch.name}"]
         assert check_and_push_branch(mock_repo_instance)
-        mock_origin.push.assert_not_called()
-        mock_origin.push.reset_mock()
+        mock_remote_obj.push.assert_not_called()
+        mock_remote_obj.push.reset_mock()
 
     @patch("codeflash.code_utils.git_utils.git.Repo")
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=False)
@@ -90,12 +93,15 @@ class TestGitUtils(unittest.TestCase):
         mock_repo_instance.active_branch.name = "test-branch"
         mock_repo_instance.refs = []
 
-        mock_origin = mock_repo_instance.remote.return_value
-        mock_origin.push.return_value = None
+        # Mock remotes to return a list with 'origin'
+        mock_remote_obj = mock_repo_instance.remote.return_value
+        mock_remote_obj.name = "origin"
+        mock_remote_obj.push.return_value = None
+        mock_repo_instance.remotes = [mock_remote_obj]
 
         assert not check_and_push_branch(mock_repo_instance)
-        mock_origin.push.assert_not_called()
-        mock_origin.push.reset_mock()
+        mock_remote_obj.push.assert_not_called()
+        mock_remote_obj.push.reset_mock()
 
 
 if __name__ == "__main__":
