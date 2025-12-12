@@ -181,9 +181,9 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         return False
 
     if config.expected_unit_tests is not None:
-        # Match the per-function test file discovery message from function_optimizer.py
-        # Format: "Discovered X existing unit test file(s), Y replay test file(s), and Z concolic coverage test file(s) for function.name"
-        unit_test_match = re.search(r"Discovered (\d+) existing unit test files?, \d+ replay test files?, and", stdout)
+        # Match the global test discovery message from optimizer.py which counts test invocations
+        # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
+        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout)
         if not unit_test_match:
             logging.error("Could not find unit test count")
             return False
