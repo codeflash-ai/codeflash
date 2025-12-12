@@ -6,6 +6,7 @@ import platform
 import time
 from typing import TYPE_CHECKING, Any, cast
 
+import git
 import requests
 from pydantic.json import pydantic_encoder
 
@@ -637,7 +638,14 @@ class LocalAiServiceClient(AiServiceClient):
 def safe_get_repo_owner_and_name() -> tuple[str | None, str | None]:
     try:
         git_repo_owner, git_repo_name = get_repo_owner_and_name()
+    except (ValueError, git.exc.InvalidGitRepositoryError):
+        # Expected errors when:
+        # - No remotes are configured (e.g., local-only repos) -> ValueError
+        # - Not in a git repository -> InvalidGitRepositoryError
+        # These are normal and shouldn't be logged as warnings
+        git_repo_owner, git_repo_name = None, None
     except Exception as e:
+        # Unexpected errors should still be logged
         logger.warning(f"Could not determine repo owner and name: {e}")
         git_repo_owner, git_repo_name = None, None
     return git_repo_owner, git_repo_name
