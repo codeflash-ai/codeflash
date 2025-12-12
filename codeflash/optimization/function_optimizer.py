@@ -535,9 +535,11 @@ class FunctionOptimizer:
 
         Returns the BestOptimization and optional benchmark tree.
         """
-        line_profile_test_results = self.line_profiler_step(
-            code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
-        )
+        with progress_bar("Running line-by-line profiling"):
+            line_profile_test_results = self.line_profiler_step(
+                code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
+            )
+
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
 
         replay_perf_gain = {}
