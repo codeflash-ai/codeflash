@@ -1804,7 +1804,6 @@ class FunctionOptimizer:
                 benchmarking_results, self.function_to_optimize.function_name
             )
             logger.debug(f"Original async function throughput: {async_throughput} calls/second")
-            console.rule()
 
         if self.args.benchmark:
             replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(

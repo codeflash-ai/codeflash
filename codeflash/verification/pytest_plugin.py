@@ -338,7 +338,7 @@ class PytestLoops:
                 durations.clear()
 
             # Consistency check
-            if len(durations) == CONSISTENT_LOOP_COUNT:
+            if len(durations) == CONSISTENT_LOOP_COUNT and count >= session.config.option.codeflash_min_loops:
                 avg = statistics.median(durations)
                 if avg == 0:
                     consistent = all(d == 0 for d in durations)
