@@ -8,7 +8,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 import contextlib
-import tomllib
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 
 @dataclass
