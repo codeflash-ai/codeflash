@@ -181,7 +181,9 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         return False
 
     if config.expected_unit_tests is not None:
-        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and", stdout)
+        # Match the global test discovery message from optimizer.py
+        # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
+        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in", stdout)
         if not unit_test_match:
             logging.error("Could not find unit test count")
             return False
