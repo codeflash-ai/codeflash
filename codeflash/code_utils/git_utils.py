@@ -82,9 +82,10 @@ def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") 
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
     available_remotes = get_git_remotes(repository)
     if not available_remotes:
-        raise ValueError(f"No git remotes configured in this repository")
+        raise ValueError("No git remotes configured in this repository")
     if git_remote not in available_remotes:
-        raise ValueError(f"Git remote '{git_remote}' does not exist. Available remotes: {', '.join(available_remotes)}")
+        msg = f"Git remote '{git_remote}' does not exist. Available remotes: {', '.join(available_remotes)}"
+        raise ValueError(msg)
     return repository.remote(name=git_remote).url
 
 
@@ -144,7 +145,7 @@ def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, 
             f"Alternatively, you can run codeflash with the '--no-pr' flag to optimize locally without creating PRs."
         )
         return False
-    
+
     # Check if the specified remote exists
     if git_remote not in available_remotes:
         logger.error(
@@ -156,7 +157,7 @@ def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, 
             f"  3. Run codeflash with '--no-pr' to optimize locally without creating PRs."
         )
         return False
-    
+
     remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed
