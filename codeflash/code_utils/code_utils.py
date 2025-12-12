@@ -19,31 +19,6 @@ from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 from codeflash.lsp.helpers import is_LSP_enabled
 
-_DANGEROUS_PATTERNS = [
-    "cd ",
-    "ls ",
-    "rm ",
-    "mkdir ",
-    "rmdir ",
-    "del ",
-    "dir ",
-    "type ",
-    "cat ",
-    "echo ",
-    "&&",
-    "||",
-    ";",
-    "|",
-    ">",
-    "<",
-    "$",
-    "`",
-]
-
-_DANGEROUS_PATTERNS_SET = set(_DANGEROUS_PATTERNS)
-
-_DANGEROUS_PATTERNS_LOWER = tuple(pat.lower() for pat in _DANGEROUS_PATTERNS)
-
 _INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
 
 _INVALID_CHARS_UNIX = {"\0"}
@@ -427,11 +402,6 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
 
     # Normalize whitespace
     path = path.strip()
-    path_lower = path.lower()
-    # Instead of for-loop, use generator with next() for early exit
-    found_pattern = next((pattern for pattern in _DANGEROUS_PATTERNS_LOWER if pattern in path_lower), None)
-    if found_pattern is not None:
-        return False, f"Path contains invalid characters or commands: {found_pattern.strip()}"
 
     # Check for path traversal attempts (cross-platform)
     # Normalize path separators for checking
