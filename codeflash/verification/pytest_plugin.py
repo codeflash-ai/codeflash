@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-
-# System Imports
 import logging
 import os
 import platform
@@ -13,6 +11,8 @@ import sys
 import time as _time_module
 import warnings
 from collections import deque
+
+# System Imports
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
@@ -21,7 +21,7 @@ from unittest import TestCase
 import pytest
 from pluggy import HookspecMarker
 
-from codeflash.code_utils.config_consts import CONSISTENT_DURATION_TOLERANCE, CONSISTENT_LOOP_COUNT
+from codeflash.code_utils.config_consts import CONSISTENT_LOOP_COUNT
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -272,21 +272,25 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
+        self.current_loop_durations_in_seconds: list[float] = []
 
     def dynamic_tolerance(self, avg: float) -> float:
-        # (< 0.1 ms)
-        if avg < 0.0001:
-            return 0.7  # 70%
+        if avg < 0.0001:  # < 100 µs
+            return 0.7
+        if avg < 0.0005:  # < 500 µs
+            return 0.5
+        if avg < 0.001:  # < 1 ms
+            return 0.4
+        if avg < 0.01:  # < 10 ms
+            return 0.2
+        if avg < 0.1:  # < 100 ms
+            return 0.1
+        return 0.03  # > 0.1 s
 
-        # (< 0.5 ms)
-        if avg < 0.0005:
-            return 0.4  # 40%
-
-        # (< 1 ms)
-        if avg < 0.001:
-            return 0.2  # 20%
-
-        return CONSISTENT_DURATION_TOLERANCE
+    @pytest.hookimpl
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.when == "call" and report.outcome == "passed":
+            self.current_loop_durations_in_seconds.append(report.duration)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -307,7 +311,7 @@ class PytestLoops:
 
         while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
-            loop_start = _ORIGINAL_TIME_TIME()
+            self.current_loop_durations_in_seconds.clear()
 
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
@@ -326,9 +330,12 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            loop_end = _ORIGINAL_TIME_TIME()
-            loop_duration = loop_end - loop_start
-            durations.append(loop_duration)
+            total_duration_in_seconds = sum(self.current_loop_durations_in_seconds)
+
+            if total_duration_in_seconds > 0:
+                durations.append(total_duration_in_seconds)
+            else:
+                durations.clear()
 
             # Consistency check
             if len(durations) == CONSISTENT_LOOP_COUNT:
@@ -338,6 +345,7 @@ class PytestLoops:
                 else:
                     consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
                 if consistent:
+                    Path(f"/home/mohammed/Documents/test-results/break-{session.name}.txt").write_text(str(count))
                     break
 
             if self._timed_out(session, start_time, count):
