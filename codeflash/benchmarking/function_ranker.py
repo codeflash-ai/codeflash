@@ -79,7 +79,7 @@ class FunctionRanker:
             logger.warning(f"Failed to process function stats from trace file {self.trace_file_path}: {e}")
             self._function_stats = {}
 
-    def _get_function_stats(self, function_to_optimize: FunctionToOptimize) -> dict | None:
+    def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
         target_filename = function_to_optimize.file_path.name
         for key, stats in self._function_stats.items():
             if stats.get("function_name") == function_to_optimize.function_name and (
@@ -93,66 +93,58 @@ class FunctionRanker:
         return None
 
     def get_function_ttx_score(self, function_to_optimize: FunctionToOptimize) -> float:
-        stats = self._get_function_stats(function_to_optimize)
+        stats = self.get_function_stats_summary(function_to_optimize)
         return stats["ttx_score"] if stats else 0.0
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        ranked = sorted(functions_to_optimize, key=self.get_function_ttx_score, reverse=True)
-        logger.debug(
-            f"Function ranking order: {[f'{func.function_name} (ttX={self.get_function_ttx_score(func):.2f})' for func in ranked]}"
-        )
-        return ranked
+        """Ranks and filters functions based on their ttX score and importance.
 
-    def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
-        return self._get_function_stats(function_to_optimize)
+        Filters out functions whose own_time is less than DEFAULT_IMPORTANCE_THRESHOLD
+        of total runtime, then ranks the remaining functions by ttX score.
 
-    def rerank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        """Ranks functions based on their ttX score.
+        The ttX score prioritizes functions that are computationally heavy themselves
+        or that make expensive calls to other functions.
 
-        This method calculates the ttX score for each function and returns
-        the functions sorted in descending order of their ttX score.
+        Args:
+            functions_to_optimize: List of functions to rank.
+
+        Returns:
+            Important functions sorted in descending order of their ttX score.
+
         """
         if not self._function_stats:
             logger.warning("No function stats available to rank functions.")
             return []
 
-        return self.rank_functions(functions_to_optimize)
-
-    def rerank_and_filter_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        """Reranks and filters functions based on their impact on total runtime.
-
-        This method first calculates the total runtime of all profiled functions.
-        It then filters out functions whose own_time is less than a specified
-        percentage of the total runtime (importance_threshold).
-
-        The remaining 'important' functions are then ranked by their ttX score.
-        """
-        stats_map = self._function_stats
-        if not stats_map:
-            return []
-
-        total_program_time = sum(s["own_time_ns"] for s in stats_map.values() if s.get("own_time_ns", 0) > 0)
+        total_program_time = sum(
+            s["own_time_ns"] for s in self._function_stats.values() if s.get("own_time_ns", 0) > 0
+        )
 
         if total_program_time == 0:
             logger.warning("Total program time is zero, cannot determine function importance.")
-            return self.rank_functions(functions_to_optimize)
+            functions_to_rank = functions_to_optimize
+        else:
+            functions_to_rank = []
+            for func in functions_to_optimize:
+                func_stats = self.get_function_stats_summary(func)
+                if func_stats and func_stats.get("own_time_ns", 0) > 0:
+                    importance = func_stats["own_time_ns"] / total_program_time
+                    if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
+                        functions_to_rank.append(func)
+                    else:
+                        logger.debug(
+                            f"Filtering out function {func.qualified_name} with importance "
+                            f"{importance:.2%} (below threshold {DEFAULT_IMPORTANCE_THRESHOLD:.2%})"
+                        )
 
-        important_functions = []
-        for func in functions_to_optimize:
-            func_stats = self._get_function_stats(func)
-            if func_stats and func_stats.get("own_time_ns", 0) > 0:
-                importance = func_stats["own_time_ns"] / total_program_time
-                if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
-                    important_functions.append(func)
-                else:
-                    logger.debug(
-                        f"Filtering out function {func.qualified_name} with importance "
-                        f"{importance:.2%} (below threshold {DEFAULT_IMPORTANCE_THRESHOLD:.2%})"
-                    )
+            logger.info(
+                f"Filtered down to {len(functions_to_rank)} important functions "
+                f"from {len(functions_to_optimize)} total functions"
+            )
+            console.rule()
 
-        logger.info(
-            f"Filtered down to {len(important_functions)} important functions from {len(functions_to_optimize)} total functions"
+        ranked = sorted(functions_to_rank, key=self.get_function_ttx_score, reverse=True)
+        logger.debug(
+            f"Function ranking order: {[f'{func.function_name} (ttX={self.get_function_ttx_score(func):.2f})' for func in ranked]}"
         )
-        console.rule()
-
-        return self.rank_functions(important_functions)
+        return ranked

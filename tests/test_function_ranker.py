@@ -80,24 +80,19 @@ def test_get_function_ttx_score(function_ranker, workload_functions):
 def test_rank_functions(function_ranker, workload_functions):
     ranked_functions = function_ranker.rank_functions(workload_functions)
     
-    assert len(ranked_functions) == len(workload_functions)
+    # Should filter out functions below importance threshold and sort by ttX score
+    assert len(ranked_functions) <= len(workload_functions)
+    assert len(ranked_functions) > 0  # At least some functions should pass the threshold
+    
+    # funcA should pass the importance threshold
+    func_a_in_results = any(f.function_name == "funcA" for f in ranked_functions)
+    assert func_a_in_results
     
     # Verify functions are sorted by ttX score in descending order
     for i in range(len(ranked_functions) - 1):
         current_score = function_ranker.get_function_ttx_score(ranked_functions[i])
         next_score = function_ranker.get_function_ttx_score(ranked_functions[i + 1])
         assert current_score >= next_score
-
-
-def test_rerank_and_filter_functions(function_ranker, workload_functions):
-    filtered_ranked = function_ranker.rerank_and_filter_functions(workload_functions)
-    
-    # Should filter out functions below importance threshold
-    assert len(filtered_ranked) <= len(workload_functions)
-    
-    # funcA should pass the importance threshold (0.33% > 0.1%)
-    func_a_in_results = any(f.function_name == "funcA" for f in filtered_ranked)
-    assert func_a_in_results
 
 
 def test_get_function_stats_summary(function_ranker, workload_functions):
