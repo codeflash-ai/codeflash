@@ -7,6 +7,8 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+import contextlib
+import tomllib
 
 
 @dataclass
@@ -82,7 +84,6 @@ def run_codeflash_command(
     logging.basicConfig(level=logging.INFO)
     if config.trace_mode:
         return run_trace_test(cwd, config, expected_improvement_pct)
-
     path_to_file = cwd / config.file_path
     file_contents = path_to_file.read_text("utf-8")
     pytest_dir = cwd / "tests" / "pytest"
@@ -102,7 +103,6 @@ def run_codeflash_command(
 
     return_code = process.wait()
     stdout = "".join(output)
-
     validated = validate_output(stdout, return_code, expected_improvement_pct, config)
     if not validated:
         # Write original file contents back to file
@@ -129,7 +129,20 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+    
+    # Check if pyproject.toml exists with codeflash config - if so, don't override it
+    pyproject_path = cwd / "pyproject.toml"
+    has_codeflash_config = False
+    if pyproject_path.exists():
+        with contextlib.suppress(Exception):
+            with open(pyproject_path, "rb") as f:
+                pyproject_data = tomllib.load(f)
+                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+    
+    # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
+    if not has_codeflash_config:
+        base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+    
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
