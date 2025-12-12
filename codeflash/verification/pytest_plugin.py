@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-
-# System Imports
 import logging
 import os
 import platform
 import re
+import statistics
 import sys
 import time as _time_module
 import warnings
+from collections import deque
+
+# System Imports
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest import TestCase
@@ -18,6 +20,8 @@ from unittest import TestCase
 # PyTest Imports
 import pytest
 from pluggy import HookspecMarker
+
+from codeflash.code_utils.config_consts import CONSISTENT_LOOP_COUNT
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -268,9 +272,30 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
+        self.current_loop_durations_in_seconds: list[float] = []
+
+    def dynamic_tolerance(self, avg: float) -> float:
+        if avg < 0.0001:  # < 100 µs
+            return 0.7
+        if avg < 0.0005:  # < 500 µs
+            return 0.5
+        if avg < 0.001:  # < 1 ms
+            return 0.4
+        if avg < 0.01:  # < 10 ms
+            return 0.2
+        if avg < 0.1:  # < 100 ms
+            return 0.1
+        return 0.03  # > 0.1 s
+
+    @pytest.hookimpl
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.when == "call" and report.outcome == "passed":
+            self.current_loop_durations_in_seconds.append(report.duration)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
+        durations = deque(maxlen=CONSISTENT_LOOP_COUNT)
+
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
@@ -284,9 +309,9 @@ class PytestLoops:
 
         count: int = 0
 
-        while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
+        while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
-            total_time = self._get_total_time(session)
+            self.current_loop_durations_in_seconds.clear()
 
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
@@ -304,8 +329,27 @@ class PytestLoops:
                     raise session.Failed(session.shouldfail)
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
+
+            total_duration_in_seconds = sum(self.current_loop_durations_in_seconds)
+
+            if total_duration_in_seconds > 0:
+                durations.append(total_duration_in_seconds)
+            else:
+                durations.clear()
+
+            # Consistency check
+            if len(durations) == CONSISTENT_LOOP_COUNT:
+                avg = statistics.median(durations)
+                if avg == 0:
+                    consistent = all(d == 0 for d in durations)
+                else:
+                    consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
+                if consistent:
+                    break
+
             if self._timed_out(session, start_time, count):
-                break  # exit loop
+                break
+
             _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
         return True
 
