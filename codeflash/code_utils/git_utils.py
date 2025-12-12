@@ -80,6 +80,11 @@ def get_current_branch(repo: Repo | None = None) -> str:
 
 def get_remote_url(repo: Repo | None = None, git_remote: str | None = "origin") -> str:
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
+    available_remotes = get_git_remotes(repository)
+    if not available_remotes:
+        raise ValueError(f"No git remotes configured in this repository")
+    if git_remote not in available_remotes:
+        raise ValueError(f"Git remote '{git_remote}' does not exist. Available remotes: {', '.join(available_remotes)}")
     return repository.remote(name=git_remote).url
 
 
@@ -128,6 +133,30 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
 def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, wait_for_push: bool = False) -> bool:
     current_branch = repo.active_branch
     current_branch_name = current_branch.name
+    available_remotes = get_git_remotes(repo)
+    if not available_remotes:
+        logger.error(
+            f"❌ No git remotes configured in this repository.\n"
+            f"This appears to be a local-only git repository. To use codeflash with PR features, you need to:\n"
+            f"  1. Create a repository on GitHub (or another git hosting service)\n"
+            f"  2. Add it as a remote: git remote add origin <repository-url>\n"
+            f"  3. Push your branch: git push -u origin {current_branch_name}\n\n"
+            f"Alternatively, you can run codeflash with the '--no-pr' flag to optimize locally without creating PRs."
+        )
+        return False
+    
+    # Check if the specified remote exists
+    if git_remote not in available_remotes:
+        logger.error(
+            f"❌ Git remote '{git_remote}' does not exist in this repository.\n"
+            f"Available remotes: {', '.join(available_remotes)}\n\n"
+            f"You can either:\n"
+            f"  1. Use one of the existing remotes by setting 'git-remote' in pyproject.toml\n"
+            f"  2. Add the '{git_remote}' remote: git remote add {git_remote} <repository-url>\n"
+            f"  3. Run codeflash with '--no-pr' to optimize locally without creating PRs."
+        )
+        return False
+    
     remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed

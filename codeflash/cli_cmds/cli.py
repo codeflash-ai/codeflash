@@ -143,8 +143,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             exit_with_message(f"File {args.file} does not exist", error_on_exit=True)
         args.file = Path(args.file).resolve()
         if not args.no_pr:
-            owner, repo = get_repo_owner_and_name()
-            require_github_app_or_exit(owner, repo)
+            try:
+                owner, repo = get_repo_owner_and_name()
+                require_github_app_or_exit(owner, repo)
+            except ValueError as e:
+                exit_with_message(
+                    f"Cannot determine repository information: {e}\n"
+                    f"Please ensure your git repository has a remote configured, or use '--no-pr' to optimize locally.",
+                    error_on_exit=True
+                )
     if args.replay_test:
         for test_path in args.replay_test:
             if not Path(test_path).is_file():
@@ -265,9 +272,16 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 apologize_and_exit()
             git_remote = getattr(args, "git_remote", None)
             if not check_and_push_branch(git_repo, git_remote=git_remote):
-                exit_with_message("Branch is not pushed...", error_on_exit=True)
-            owner, repo = get_repo_owner_and_name(git_repo)
-            require_github_app_or_exit(owner, repo)
+                exit_with_message("Cannot proceed without a valid git remote configuration. See error message above.", error_on_exit=True)
+            try:
+                owner, repo = get_repo_owner_and_name(git_repo)
+                require_github_app_or_exit(owner, repo)
+            except ValueError as e:
+                exit_with_message(
+                    f"Cannot determine repository information: {e}\n"
+                    f"Please ensure your git repository has a remote configured, or use '--no-pr' to optimize locally.",
+                    error_on_exit=True
+                )
     if not hasattr(args, "all"):
         args.all = None
     elif args.all == "":
