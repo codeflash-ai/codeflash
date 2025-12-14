@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeflash.cli_cmds.console import console, logger
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import DEFAULT_IMPORTANCE_THRESHOLD
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.tracing.profile_stats import ProfileStats
@@ -128,7 +128,8 @@ class FunctionRanker:
             total_program_time = sum(
                 s["own_time_ns"]
                 for s in self._function_stats.values()
-                if s.get("own_time_ns", 0) > 0 and any(
+                if s.get("own_time_ns", 0) > 0
+                and any(
                     str(s.get("filename", "")).endswith("/" + target_file) or s.get("filename") == target_file
                     for target_file in target_files
                 )

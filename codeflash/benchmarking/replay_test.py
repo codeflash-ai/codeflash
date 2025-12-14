@@ -64,9 +64,7 @@ def get_unique_test_name(module: str, function_name: str, benchmark_name: str, c
 
 
 def create_trace_replay_test_code(
-    trace_file: str,
-    functions_data: list[dict[str, Any]],
-    max_run_count: int = 256,
+    trace_file: str, functions_data: list[dict[str, Any]], max_run_count: int = 256
 ) -> str:
     """Create a replay test for functions based on trace data.
 
@@ -220,9 +218,7 @@ trace_file_path = r"{trace_file}"
     return imports + "\n" + metadata + "\n" + test_template
 
 
-def generate_replay_test(
-    trace_file_path: Path, output_dir: Path, max_run_count: int = 100
-) -> int:
+def generate_replay_test(trace_file_path: Path, output_dir: Path, max_run_count: int = 100) -> int:
     """Generate multiple replay tests from the traced function calls, grouped by benchmark.
 
     Args:
@@ -280,9 +276,7 @@ def generate_replay_test(
                 continue
             # Generate the test code for this benchmark
             test_code = create_trace_replay_test_code(
-                trace_file=trace_file_path.as_posix(),
-                functions_data=functions_data,
-                max_run_count=max_run_count,
+                trace_file=trace_file_path.as_posix(), functions_data=functions_data, max_run_count=max_run_count
             )
             test_code = sort_imports(code=test_code)
             output_file = get_test_file_path(

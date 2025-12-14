@@ -70,7 +70,6 @@ class Tracer:
         self,
         config: dict,
         result_pickle_file_path: Path,
-        output: str = "codeflash.trace",
         functions: list[str] | None = None,
         disable: bool = False,  # noqa: FBT001, FBT002
         project_root: Path | None = None,
@@ -80,7 +79,6 @@ class Tracer:
     ) -> None:
         """Use this class to trace function calls.
 
-        :param output: The path to the output trace file
         :param functions: List of functions to trace. If None, trace all functions
         :param disable: Disable the tracer if True
         :param max_function_count: Maximum number of times to trace one function
@@ -127,6 +125,7 @@ class Tracer:
         self.sanitized_filename = self.sanitize_to_filename(command)
         # Place trace file next to replay tests in the tests directory
         from codeflash.verification.verification_utils import get_test_file_path
+
         function_path = "_".join(functions) if functions else self.sanitized_filename
         test_file_path = get_test_file_path(
             test_dir=Path(config["tests_root"]), function_name=function_path, test_type="replay"
@@ -279,9 +278,7 @@ class Tracer:
         from codeflash.verification.verification_utils import get_test_file_path
 
         replay_test = create_trace_replay_test(
-            trace_file=self.output_file,
-            functions=self.function_modules,
-            max_run_count=self.max_function_count,
+            trace_file=self.output_file, functions=self.function_modules, max_run_count=self.max_function_count
         )
         function_path = "_".join(self.functions) if self.functions else self.sanitized_filename
         test_file_path = get_test_file_path(

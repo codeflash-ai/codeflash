@@ -43,11 +43,7 @@ def get_function_alias(module: str, function_name: str) -> str:
     return "_".join(module.split(".")) + "_" + function_name
 
 
-def create_trace_replay_test(
-    trace_file: str,
-    functions: list[FunctionModules],
-    max_run_count: int = 100,
-) -> str:
+def create_trace_replay_test(trace_file: str, functions: list[FunctionModules], max_run_count: int = 100) -> str:
     imports = """import dill as pickle
 from codeflash.tracing.replay_test import get_next_arg_and_return
 """
