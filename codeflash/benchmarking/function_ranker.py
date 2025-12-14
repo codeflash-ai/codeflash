@@ -12,6 +12,30 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
+pytest_patterns = {
+    "<frozen",  # Frozen modules like runpy
+    "<string>",  # Dynamically evaluated code
+    "_pytest/",  # Pytest internals
+    "pytest",  # Pytest files
+    "pluggy/",  # Plugin system
+    "_pydev",  # PyDev debugger
+    "runpy.py",  # Python module runner
+}
+pytest_func_patterns = {"pytest_", "_pytest", "runtest"}
+
+def is_pytest_infrastructure(filename: str, function_name: str) -> bool:
+    """Check if a function is part of pytest infrastructure that should be excluded from ranking.
+
+    This filters out pytest internal functions, hooks, and test framework code that
+    would otherwise dominate the ranking but aren't candidates for optimization.
+    """
+    # Check filename patterns
+    for pattern in pytest_patterns:
+        if pattern in filename:
+            return True
+
+    return any(pattern in function_name.lower() for pattern in pytest_func_patterns)
+
 
 class FunctionRanker:
     """Ranks and filters functions based on a ttX score derived from profiling data.
@@ -35,6 +59,7 @@ class FunctionRanker:
 
     def load_function_stats(self) -> None:
         try:
+            pytest_filtered_count = 0
             for (filename, line_number, func_name), (
                 call_count,
                 _num_callers,
@@ -43,6 +68,10 @@ class FunctionRanker:
                 _callers,
             ) in self._profile_stats.stats.items():
                 if call_count <= 0:
+                    continue
+
+                if is_pytest_infrastructure(filename, func_name):
+                    pytest_filtered_count += 1
                     continue
 
                 # Parse function name to handle methods within classes
@@ -73,7 +102,10 @@ class FunctionRanker:
                     "ttx_score": ttx_score,
                 }
 
-            logger.debug(f"Loaded timing stats for {len(self._function_stats)} functions from trace using ProfileStats")
+            logger.debug(
+                f"Loaded timing stats for {len(self._function_stats)} functions from trace using ProfileStats "
+                f"(filtered {pytest_filtered_count} pytest infrastructure functions)"
+            )
 
         except Exception as e:
             logger.warning(f"Failed to process function stats from trace file {self.trace_file_path}: {e}")
