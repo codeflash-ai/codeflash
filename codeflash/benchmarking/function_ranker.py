@@ -23,6 +23,7 @@ pytest_patterns = {
 }
 pytest_func_patterns = {"pytest_", "_pytest", "runtest"}
 
+
 def is_pytest_infrastructure(filename: str, function_name: str) -> bool:
     """Check if a function is part of pytest infrastructure that should be excluded from ranking.
 

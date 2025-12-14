@@ -373,21 +373,23 @@ class Optimizer:
                 file_path = func_to_file_map.get(key)
                 if file_path:
                     globally_ranked.append((file_path, func))
+
             console.rule()
             logger.info(
                 f"Globally ranked {len(ranked_functions)} functions by ttX score "
                 f"(filtered {len(functions_only) - len(ranked_functions)} low-importance functions)"
             )
 
+            # Display ranking table for user visibility
             self.display_global_ranking(globally_ranked, ranker)
             console.rule()
-
-            return globally_ranked
 
         except Exception as e:
             logger.warning(f"Could not perform global ranking: {e}")
             logger.debug("Falling back to original function order")
             return all_functions
+        else:
+            return globally_ranked
 
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
@@ -494,7 +496,7 @@ class Optimizer:
                             )
                             self.patch_files.append(patch_path)
                             if i < len(globally_ranked_functions) - 1:
-                                next_file, next_func = globally_ranked_functions[i + 1]
+                                _, next_func = globally_ranked_functions[i + 1]
                                 create_worktree_snapshot_commit(
                                     self.current_worktree, f"Optimizing {next_func.qualified_name}"
                                 )
