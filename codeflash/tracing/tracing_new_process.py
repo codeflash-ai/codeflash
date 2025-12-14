@@ -859,7 +859,6 @@ if __name__ == "__main__":
     args_dict["config"]["tests_root"] = Path(args_dict["config"]["tests_root"])
     tracer = Tracer(
         config=args_dict["config"],
-        output=Path(args_dict["output"]),
         functions=args_dict["functions"],
         max_function_count=args_dict["max_function_count"],
         timeout=args_dict["timeout"],
