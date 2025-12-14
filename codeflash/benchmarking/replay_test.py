@@ -66,8 +66,7 @@ def get_unique_test_name(module: str, function_name: str, benchmark_name: str, c
 def create_trace_replay_test_code(
     trace_file: str,
     functions_data: list[dict[str, Any]],
-    test_framework: str = "pytest",
-    max_run_count=256,  # noqa: ANN001
+    max_run_count: int = 256,
 ) -> str:
     """Create a replay test for functions based on trace data.
 
@@ -75,7 +74,6 @@ def create_trace_replay_test_code(
     ----
         trace_file: Path to the SQLite database file
         functions_data: List of dictionaries with function info extracted from DB
-        test_framework: 'pytest' or 'unittest'
         max_run_count: Maximum number of runs to include in the test
 
     Returns:
@@ -83,11 +81,8 @@ def create_trace_replay_test_code(
         A string containing the test code
 
     """
-    assert test_framework in ["pytest", "unittest"]
-
     # Create Imports
-    imports = f"""from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
-{"import unittest" if test_framework == "unittest" else ""}
+    imports = """from codeflash.picklepatch.pickle_patcher import PicklePatcher as pickle
 from codeflash.benchmarking.replay_test import get_next_arg_and_return
 """
 
@@ -158,13 +153,7 @@ trace_file_path = r"{trace_file}"
     )
 
     # Create main body
-
-    if test_framework == "unittest":
-        self = "self"
-        test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
-    else:
-        test_template = ""
-        self = ""
+    test_template = ""
 
     for func in functions_data:
         module_name = func.get("module_name")
@@ -223,17 +212,16 @@ trace_file_path = r"{trace_file}"
                     filter_variables=filter_variables,
                 )
 
-        formatted_test_body = textwrap.indent(test_body, "        " if test_framework == "unittest" else "    ")
+        formatted_test_body = textwrap.indent(test_body, "    ")
 
-        test_template += "    " if test_framework == "unittest" else ""
         unique_test_name = get_unique_test_name(module_name, function_name, benchmark_function_name, class_name)
-        test_template += f"def test_{unique_test_name}({self}):\n{formatted_test_body}\n"
+        test_template += f"def test_{unique_test_name}():\n{formatted_test_body}\n"
 
     return imports + "\n" + metadata + "\n" + test_template
 
 
 def generate_replay_test(
-    trace_file_path: Path, output_dir: Path, test_framework: str = "pytest", max_run_count: int = 100
+    trace_file_path: Path, output_dir: Path, max_run_count: int = 100
 ) -> int:
     """Generate multiple replay tests from the traced function calls, grouped by benchmark.
 
@@ -241,12 +229,11 @@ def generate_replay_test(
     ----
         trace_file_path: Path to the SQLite database file
         output_dir: Directory to write the generated tests (if None, only returns the code)
-        test_framework: 'pytest' or 'unittest'
         max_run_count: Maximum number of runs to include per function
 
     Returns:
     -------
-        Dictionary mapping benchmark names to generated test code
+        The number of replay tests generated
 
     """
     count = 0
@@ -295,7 +282,6 @@ def generate_replay_test(
             test_code = create_trace_replay_test_code(
                 trace_file=trace_file_path.as_posix(),
                 functions_data=functions_data,
-                test_framework=test_framework,
                 max_run_count=max_run_count,
             )
             test_code = sort_imports(code=test_code)

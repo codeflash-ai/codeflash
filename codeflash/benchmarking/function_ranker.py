@@ -100,7 +100,11 @@ class FunctionRanker:
         """Ranks and filters functions based on their ttX score and importance.
 
         Filters out functions whose own_time is less than DEFAULT_IMPORTANCE_THRESHOLD
-        of total runtime, then ranks the remaining functions by ttX score.
+        of file-relative runtime, then ranks the remaining functions by ttX score.
+
+        Importance is calculated relative to functions in the same file(s) rather than
+        total program time. This avoids filtering out functions due to test infrastructure
+        overhead.
 
         The ttX score prioritizes functions that are computationally heavy themselves
         or that make expensive calls to other functions.
@@ -116,9 +120,24 @@ class FunctionRanker:
             logger.warning("No function stats available to rank functions.")
             return []
 
-        total_program_time = sum(
-            s["own_time_ns"] for s in self._function_stats.values() if s.get("own_time_ns", 0) > 0
-        )
+        # Calculate total time from functions in the same file(s) as functions to optimize
+        if functions_to_optimize:
+            # Get unique files from functions to optimize
+            target_files = {func.file_path.name for func in functions_to_optimize}
+            # Calculate total time only from functions in these files
+            total_program_time = sum(
+                s["own_time_ns"]
+                for s in self._function_stats.values()
+                if s.get("own_time_ns", 0) > 0 and any(target_file in s["filename"] for target_file in target_files)
+            )
+            logger.debug(
+                f"Using file-relative importance for {len(target_files)} file(s): {target_files}. "
+                f"Total file time: {total_program_time:,} ns"
+            )
+        else:
+            total_program_time = sum(
+                s["own_time_ns"] for s in self._function_stats.values() if s.get("own_time_ns", 0) > 0
+            )
 
         if total_program_time == 0:
             logger.warning("Total program time is zero, cannot determine function importance.")

@@ -110,7 +110,6 @@ class Tracer:
         self._db_lock = threading.Lock()
 
         self.con = None
-        self.output_file = Path(output).resolve()
         self.functions = functions
         self.function_modules: list[FunctionModules] = []
         self.function_count = defaultdict(int)
@@ -126,6 +125,14 @@ class Tracer:
         self.ignored_functions = {"<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>", "<lambda>", "<module>"}
 
         self.sanitized_filename = self.sanitize_to_filename(command)
+        # Place trace file next to replay tests in the tests directory
+        from codeflash.verification.verification_utils import get_test_file_path
+        function_path = "_".join(functions) if functions else self.sanitized_filename
+        test_file_path = get_test_file_path(
+            test_dir=Path(config["tests_root"]), function_name=function_path, test_type="replay"
+        )
+        trace_filename = test_file_path.stem + ".trace"
+        self.output_file = test_file_path.parent / trace_filename
         self.result_pickle_file_path = result_pickle_file_path
 
         assert timeout is None or timeout > 0, "Timeout should be greater than 0"
@@ -142,7 +149,6 @@ class Tracer:
         self.timer = time.process_time_ns
         self.total_tt = 0
         self.simulate_call("profiler")
-        assert "test_framework" in self.config, "Please specify 'test-framework' in pyproject.toml config file"
         self.t = self.timer()
 
         # Store command information for metadata table
@@ -275,7 +281,6 @@ class Tracer:
         replay_test = create_trace_replay_test(
             trace_file=self.output_file,
             functions=self.function_modules,
-            test_framework=self.config["test_framework"],
             max_run_count=self.max_function_count,
         )
         function_path = "_".join(self.functions) if self.functions else self.sanitized_filename
@@ -770,11 +775,11 @@ class Tracer:
         self.files = []
         self.top_level = []
         new_stats = {}
-        for func, (cc, ns, tt, ct, callers) in self.stats.items():
+        for func, (cc, ns, tt, ct, callers) in list(self.stats.items()):
             new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
             new_stats[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
         new_timings = {}
-        for func, (cc, ns, tt, ct, callers) in self.timings.items():
+        for func, (cc, ns, tt, ct, callers) in list(self.timings.items()):
             new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
             new_timings[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
         self.stats = new_stats
