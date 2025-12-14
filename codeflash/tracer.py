@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 def main(args: Namespace | None = None) -> ArgumentParser:
     parser = ArgumentParser(allow_abbrev=False)
-    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
+    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.sqlite3")
     parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
     parser.add_argument(
         "--max-function-count",
@@ -59,7 +59,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
     if args is not None:
         parsed_args = args
-        parsed_args.outfile = getattr(args, "output", "codeflash.trace")
+        parsed_args.outfile = getattr(args, "output", "codeflash.sqlite3")
         parsed_args.only_functions = getattr(args, "only_functions", None)
         parsed_args.max_function_count = getattr(args, "max_function_count", 100)
         parsed_args.tracer_timeout = getattr(args, "timeout", None)

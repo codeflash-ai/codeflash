@@ -130,7 +130,7 @@ class Tracer:
         test_file_path = get_test_file_path(
             test_dir=Path(config["tests_root"]), function_name=function_path, test_type="replay"
         )
-        trace_filename = test_file_path.stem + ".trace"
+        trace_filename = test_file_path.stem + ".sqlite3"
         self.output_file = test_file_path.parent / trace_filename
         self.result_pickle_file_path = result_pickle_file_path
 
