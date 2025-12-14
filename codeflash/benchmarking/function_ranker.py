@@ -56,7 +56,14 @@ class FunctionRanker:
         self.trace_file_path = trace_file_path
         self._profile_stats = ProfileStats(trace_file_path.as_posix())
         self._function_stats: dict[str, dict] = {}
+        self._function_stats_by_name: dict[str, list[tuple[str, dict]]] = {}
         self.load_function_stats()
+
+        # Build index for faster lookups: map function_name to list of (key, stats)
+        for key, stats in self._function_stats.items():
+            func_name = stats.get("function_name")
+            if func_name:
+                self._function_stats_by_name.setdefault(func_name, []).append((key, stats))
 
     def load_function_stats(self) -> None:
         try:
@@ -114,10 +121,16 @@ class FunctionRanker:
 
     def get_function_stats_summary(self, function_to_optimize: FunctionToOptimize) -> dict | None:
         target_filename = function_to_optimize.file_path.name
-        for key, stats in self._function_stats.items():
-            if stats.get("function_name") == function_to_optimize.function_name and (
-                key.endswith(f"/{target_filename}") or target_filename in key
-            ):
+        candidates = self._function_stats_by_name.get(function_to_optimize.function_name)
+        if not candidates:
+            logger.debug(
+                f"Could not find stats for function {function_to_optimize.function_name} in file {target_filename}"
+            )
+            return None
+
+        for key, stats in candidates:
+            # The check preserves exact logic: "key.endswith(f"/{target_filename}") or target_filename in key"
+            if key.endswith(f"/{target_filename}") or target_filename in key:
                 return stats
 
         logger.debug(
