@@ -128,7 +128,10 @@ class FunctionRanker:
             total_program_time = sum(
                 s["own_time_ns"]
                 for s in self._function_stats.values()
-                if s.get("own_time_ns", 0) > 0 and any(target_file in s["filename"] for target_file in target_files)
+                if s.get("own_time_ns", 0) > 0 and any(
+                    str(s.get("filename", "")).endswith("/" + target_file) or s.get("filename") == target_file
+                    for target_file in target_files
+                )
             )
             logger.debug(
                 f"Using file-relative importance for {len(target_files)} file(s): {target_files}. "
@@ -160,7 +163,6 @@ class FunctionRanker:
                 f"Filtered down to {len(functions_to_rank)} important functions "
                 f"from {len(functions_to_optimize)} total functions"
             )
-            console.rule()
 
         ranked = sorted(functions_to_rank, key=self.get_function_ttx_score, reverse=True)
         logger.debug(
