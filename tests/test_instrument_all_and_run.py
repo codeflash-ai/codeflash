@@ -120,7 +120,6 @@ def test_sort():
             [CodePosition(6, 13), CodePosition(10, 13)],
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
@@ -292,7 +291,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent, "pytest"
+            tmp_test_path, [CodePosition(7, 13), CodePosition(12, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -560,7 +559,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent, "pytest"
+            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(
@@ -726,7 +725,7 @@ def test_sort():
         tmp_test_path.write_text(code, encoding="utf-8")
 
         success, new_test = inject_profiling_into_existing_test(
-            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent, "pytest"
+            tmp_test_path, [CodePosition(6, 13), CodePosition(10, 13)], fto, tmp_test_path.parent
         )
     assert success
     assert new_test.replace('"', "'") == expected.format(

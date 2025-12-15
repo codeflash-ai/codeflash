@@ -98,8 +98,7 @@ import time
 import unittest
 
 import dill as pickle"""
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # timeout_decorator no longer used since pytest handles timeouts
     if extra_imports:
         imports += "\n" + extra_imports
     return imports
@@ -148,15 +147,14 @@ import time
 import unittest
 
 import dill as pickle"""
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # timeout_decorator no longer used since pytest handles timeouts
 
     imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
     wrapper_func = codeflash_wrap_string
     
     test_class_header = "class TestPigLatin(unittest.TestCase):"
-    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator = ""  # pytest-timeout handles timeouts now, not timeout_decorator
     
     expected = imports + "\n\n\n" + wrapper_func + "\n" + test_class_header + "\n\n"
     if test_decorator:
@@ -196,7 +194,6 @@ import dill as pickle"""
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             Path(f.name).parent,
-            "unittest",
         )
         os.chdir(original_cwd)
     assert success
@@ -295,7 +292,7 @@ def test_prepare_image_for_yolo():
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent, "pytest"
+            Path(f.name), [CodePosition(10, 14)], func, Path(f.name).parent
         )
         os.chdir(original_cwd)
     assert success
@@ -404,7 +401,6 @@ def test_sort():
             [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.BEHAVIOR,
         )
         os.chdir(original_cwd)
@@ -420,7 +416,6 @@ tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
             [CodePosition(8, 14), CodePosition(12, 14)],
             func,
             project_root_path,
-            "pytest",
             mode=TestingMode.PERFORMANCE,
         )
         assert success
@@ -658,11 +653,11 @@ def test_sort_parametrized(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -935,11 +930,11 @@ def test_sort_parametrized_loop(input, expected_output):
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(15, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(15, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -1295,11 +1290,11 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(str(run_cwd))
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(11, 17)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(11, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -1585,7 +1580,6 @@ import time
 import unittest
 
 import dill as pickle
-import timeout_decorator
 
 from code_to_optimize.bubble_sort import sorter
 
@@ -1595,7 +1589,6 @@ from code_to_optimize.bubble_sort import sorter
             + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         codeflash_iteration = os.environ['CODEFLASH_TEST_ITERATION']
@@ -1626,8 +1619,6 @@ import os
 import time
 import unittest
 
-import timeout_decorator
-
 from code_to_optimize.bubble_sort import sorter
 
 
@@ -1636,7 +1627,6 @@ from code_to_optimize.bubble_sort import sorter
             + """
 class TestPigLatin(unittest.TestCase):
 
-    @timeout_decorator.timeout(15)
     def test_sort(self):
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         input = [5, 4, 3, 2, 1, 0]
@@ -1679,7 +1669,6 @@ class TestPigLatin(unittest.TestCase):
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
-            "unittest",
             mode=TestingMode.BEHAVIOR,
         )
         assert success
@@ -1688,7 +1677,6 @@ class TestPigLatin(unittest.TestCase):
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
             project_root_path,
-            "unittest",
             mode=TestingMode.PERFORMANCE,
         )
         os.chdir(original_cwd)
@@ -1865,7 +1853,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1892,11 +1880,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -1934,11 +1921,11 @@ import unittest
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(16, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(16, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
 
         os.chdir(original_cwd)
@@ -2116,7 +2103,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports()
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
 """
@@ -2148,13 +2135,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
-        imports_perf += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    else:
-        imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
+    imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
 """
@@ -2197,11 +2181,11 @@ import unittest
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         assert success
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(14, 21)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(14, 21)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -2378,7 +2362,7 @@ class TestPigLatin(unittest.TestCase):
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_behavior = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -2406,11 +2390,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports_perf += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
     
-    test_decorator_perf = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([([5, 4, 3, 2, 1, 0], [0, 1, 2, 3, 4, 5]), ([5.0, 4.0, 3.0, 2.0, 1.0, 0.0], [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]), (list(reversed(range(50))), list(range(50)))])
@@ -2449,10 +2432,10 @@ import unittest
         f = FunctionToOptimize(function_name="sorter", file_path=code_path, parents=[])
         os.chdir(run_cwd)
         success, new_test_behavior = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.BEHAVIOR
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.BEHAVIOR
         )
         success, new_test_perf = inject_profiling_into_existing_test(
-            test_path, [CodePosition(17, 21)], f, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(17, 21)], f, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
         assert success
@@ -2755,7 +2738,7 @@ def test_class_name_A_function_name():
         )
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(4, 23)], func, project_root_path, "pytest"
+            test_path, [CodePosition(4, 23)], func, project_root_path
         )
         os.chdir(original_cwd)
     finally:
@@ -2832,7 +2815,7 @@ def test_common_tags_1():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path, "pytest"
+            test_path, [CodePosition(7, 11), CodePosition(11, 11)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -2898,7 +2881,7 @@ def test_sort():
 
         os.chdir(str(run_cwd))
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(7, 15)], func, project_root_path, "pytest"
+            test_path, [CodePosition(7, 15)], func, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -2981,7 +2964,7 @@ def test_sort():
 
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path, "pytest"
+            test_path, [CodePosition(6, 26), CodePosition(10, 26)], function_to_optimize, project_root_path
         )
         os.chdir(original_cwd)
         assert success
@@ -3082,7 +3065,7 @@ def test_code_replacement10() -> None:
     run_cwd = Path(__file__).parent.parent.resolve()
     os.chdir(run_cwd)
     success, new_test = inject_profiling_into_existing_test(
-        test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent, "pytest"
+        test_file_path, [CodePosition(22, 28), CodePosition(28, 28)], func, test_file_path.parent
     )
     os.chdir(original_cwd)
     assert success
@@ -3140,7 +3123,7 @@ def test_sleepfunc_sequence_short(n, expected_total_sleep_time):
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(8, 13)], func, project_root_path, "pytest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(8, 13)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3225,11 +3208,10 @@ import os
 import time
 import unittest
 """
-    if platform.system() != "Windows":
-        imports += "\nimport timeout_decorator"
+    # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.sleeptime import accurate_sleepfunc"
     
-    test_decorator = "    @timeout_decorator.timeout(15)" if platform.system() != "Windows" else ""
+    test_decorator = ""  # pytest-timeout handles timeouts now
     test_class = """class TestPigLatin(unittest.TestCase):
 
     @parameterized.expand([(0.01, 0.01), (0.02, 0.02)])
@@ -3258,7 +3240,7 @@ import unittest
         func = FunctionToOptimize(function_name="accurate_sleepfunc", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path, [CodePosition(12, 17)], func, project_root_path, "unittest", mode=TestingMode.PERFORMANCE
+            test_path, [CodePosition(12, 17)], func, project_root_path, mode=TestingMode.PERFORMANCE
         )
         os.chdir(original_cwd)
 
@@ -3307,6 +3289,8 @@ import unittest
             test_env=test_env,
             test_files=test_files,
             optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
             testing_time=0.1,
         )
 

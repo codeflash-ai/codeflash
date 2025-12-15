@@ -22,6 +22,7 @@ from codeflash.code_utils.git_worktree_utils import (
     create_worktree_snapshot_commit,
     remove_worktree,
 )
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
@@ -44,8 +45,7 @@ class Optimizer:
             tests_root=args.tests_root,
             tests_project_rootdir=args.test_project_root,
             project_root_path=args.project_root,
-            test_framework=args.test_framework,
-            pytest_cmd=args.pytest_cmd,
+            pytest_cmd=args.pytest_cmd if hasattr(args, "pytest_cmd") and args.pytest_cmd else "pytest",
             benchmark_tests_root=args.benchmarks_root if "benchmark" in args and "benchmarks_root" in args else None,
         )
 
@@ -270,14 +270,23 @@ class Optimizer:
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
+        if self.args.all:
+            three_min_in_ns = int(1.8e11)
+            console.rule()
+            pr_message = (
+                "\nCodeflash will keep opening pull requests as it finds optimizations." if not self.args.no_pr else ""
+            )
+            logger.info(
+                f"It might take about {humanize_runtime(num_optimizable_functions * three_min_in_ns)} to fully optimize this project.{pr_message}"
+            )
+
         function_benchmark_timings, total_benchmark_timings = self.run_benchmarks(
             file_to_funcs_to_optimize, num_optimizable_functions
         )
         optimizations_found: int = 0
-        if self.args.test_framework == "pytest":
-            self.test_cfg.concolic_test_root_dir = Path(
-                tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
-            )
+        self.test_cfg.concolic_test_root_dir = Path(
+            tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
+        )
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
