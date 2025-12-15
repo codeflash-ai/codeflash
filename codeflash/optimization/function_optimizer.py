@@ -872,6 +872,7 @@ class FunctionOptimizer:
         eval_ctx = CandidateEvaluationContext()
         self.future_all_refinements.clear()
         self.future_all_code_repair.clear()
+        self.repair_counter = 0
 
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
@@ -992,7 +993,7 @@ class FunctionOptimizer:
             test_diffs=test_diffs,
             trace_id=trace_id,
         )
-        return executor.submit(ai_service_client.optimize_python_code_repair, request=request)
+        return executor.submit(ai_service_client.code_repair, request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
@@ -1903,8 +1904,9 @@ class FunctionOptimizer:
         if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
             logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
             return
-        if candidate.source == OptimizedCandidateSource.REPAIR:
-            logger.debug("Candidate is already a repair, skipping repair")
+        if candidate.source not in (OptimizedCandidateSource.OPTIMIZE, OptimizedCandidateSource.OPTIMIZE_LP):
+            # only repair the first pass of the candidates for now
+            logger.debug(f"Candidate is a result of {candidate.source.value}, skipping repair")
             return
         if not diffs:
             logger.debug("No diffs found, skipping repair")

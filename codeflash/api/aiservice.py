@@ -296,15 +296,15 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+    def code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
+        """Repair the optimization candidate that is not matching the test result of the original code.
 
         Args:
-        request: optimization candidate details for refinement
+        request: candidate details for repair
 
         Returns:
         -------
-        - OptimizationCandidate: new fixed candidate.
+        - OptimizedCandidate: new fixed candidate.
 
         """
         console.rule()

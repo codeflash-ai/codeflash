@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 
 INCREASED_RECURSION_LIMIT = 5000
 
+reprlib_repr = reprlib.Repr(maxstring=1500)
+test_diff_repr = reprlib_repr.repr
+
 
 def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
@@ -68,27 +71,13 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         )
         if original_pytest_error:
             original_pytest_error = shorten_pytest_error(original_pytest_error)
-        test_src_code = original_test_result.id.get_src_code(original_test_result.file_name)
-        test_diff = TestDiff(
-            scope=TestDiffScope.RETURN_VALUE,
-            original_value=reprlib.repr(original_test_result.return_value),
-            candidate_value=reprlib.repr(cdd_test_result.return_value),
-            test_src_code=test_src_code,
-            candidate_pytest_error=cdd_pytest_error,
-            original_pass=original_test_result.did_pass,
-            candidate_pass=cdd_test_result.did_pass,
-            original_pytest_error=original_pytest_error,
-        )
-        if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
-            test_diff.scope = TestDiffScope.RETURN_VALUE
-            test_diffs.append(test_diff)
 
         if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.RETURN_VALUE,
-                    original_value=repr(original_test_result.return_value),
-                    candidate_value=repr(cdd_test_result.return_value),
+                    original_value=test_diff_repr(repr(original_test_result.return_value)),
+                    candidate_value=test_diff_repr(repr(cdd_test_result.return_value)),
                     test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
                     candidate_pytest_error=cdd_pytest_error,
                     original_pass=original_test_result.did_pass,
