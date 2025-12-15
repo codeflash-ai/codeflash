@@ -81,6 +81,7 @@ if platform.system() == "Linux":
 # Store references to original functions before any patching
 _ORIGINAL_TIME_TIME = _time_module.time
 _ORIGINAL_PERF_COUNTER = _time_module.perf_counter
+_ORIGINAL_PERF_COUNTER_NS = _time_module.perf_counter_ns
 _ORIGINAL_TIME_SLEEP = _time_module.sleep
 
 
@@ -272,7 +273,7 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
-        self.current_loop_durations_in_seconds: list[float] = []
+        self.current_loop_durations_in_nano: list[int] = []
 
     def dynamic_tolerance(self, avg: float) -> float:
         if avg < 0.0001:  # < 100 µs
@@ -287,10 +288,31 @@ class PytestLoops:
             return 0.1
         return 0.03  # > 0.1 s
 
-    @pytest.hookimpl
-    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        if report.when == "call" and report.outcome == "passed":
-            self.current_loop_durations_in_seconds.append(report.duration)
+    # @pytest.hookimpl
+    # def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+    #     if report.when == "call" and report.passed:
+    #         self.current_loop_durations_in_nano.append(report.duration)
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_pyfunc_call(self, pyfuncitem: pytest.Function) -> bool:
+        testfunction = pyfuncitem.obj
+        funcargs = pyfuncitem.funcargs
+        testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}  # noqa: SLF001
+
+        start_ns = _ORIGINAL_PERF_COUNTER_NS()
+        result = testfunction(**testargs)
+        duration_ns = _ORIGINAL_PERF_COUNTER_NS() - start_ns
+
+        self.current_loop_durations_in_nano.append(duration_ns)
+
+        # original post-processing
+        if hasattr(result, "__await__") or hasattr(result, "__aiter__"):
+            msg = f"Async test not supported: {pyfuncitem.nodeid}"
+            raise RuntimeError(msg)
+        if result is not None:
+            warnings.warn(f"Test function {pyfuncitem.nodeid} returned {type(result)}, expected None.", stacklevel=2)
+
+        return True
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -308,10 +330,10 @@ class PytestLoops:
         total_time: float = self._get_total_time(session)
 
         count: int = 0
-
+        runtimes = []
         while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
-            self.current_loop_durations_in_seconds.clear()
+            self.current_loop_durations_in_nano.clear()
 
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
@@ -330,10 +352,11 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            total_duration_in_seconds = sum(self.current_loop_durations_in_seconds)
+            runtimes.extend(list(self.current_loop_durations_in_nano))
 
-            if total_duration_in_seconds > 0:
-                durations.append(total_duration_in_seconds)
+            total_duration_in_nano = sum(self.current_loop_durations_in_nano)
+            if total_duration_in_nano > 0:
+                durations.append(total_duration_in_nano)
             else:
                 durations.clear()
 
