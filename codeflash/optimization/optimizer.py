@@ -88,7 +88,7 @@ class Optimizer:
                     file_path_to_source_code[file] = f.read()
             try:
                 instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
-                trace_file = Path(self.args.benchmarks_root) / "benchmarks.sqlite3"
+                trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
                 if trace_file.exists():
                     trace_file.unlink()
 

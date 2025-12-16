@@ -9,7 +9,7 @@ from codeflash.models.models import FunctionParent
 
 @pytest.fixture
 def trace_file():
-    return Path(__file__).parent.parent / "code_to_optimize/code_directories/simple_tracer_e2e/codeflash.sqlite3"
+    return Path(__file__).parent.parent / "code_to_optimize/code_directories/simple_tracer_e2e/codeflash.trace"
 
 
 @pytest.fixture

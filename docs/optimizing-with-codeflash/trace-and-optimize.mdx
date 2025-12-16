@@ -61,7 +61,7 @@ Codeflash script optimizer can be used in three ways:
     ```
     
     The above command should suffice in most situations.
-    To customize the trace file location you can specify it like `codeflash optimize -o trace_file_path.sqlite3`. Otherwise, it defaults to `codeflash.sqlite3` in the current working directory.
+    To customize the trace file location you can specify it like `codeflash optimize -o trace_file_path.trace`. Otherwise, it defaults to `codeflash.trace` in the current working directory.
     
 2. **Trace and optimize as two separate steps**
     
@@ -70,7 +70,7 @@ Codeflash script optimizer can be used in three ways:
     To create just the trace file first, run
     
     ```bash
-    codeflash optimize -o trace_file.sqlite3 --trace-only path/to/your/file.py --your_options
+    codeflash optimize -o trace_file.trace --trace-only path/to/your/file.py --your_options
     ```
     
     This will create a replay test file. To optimize with the replay test, run the 
@@ -89,7 +89,7 @@ Codeflash script optimizer can be used in three ways:
     ```python
     from codeflash.tracer import Tracer
     
-    with Tracer():
+    with Tracer(output="codeflash.trace"):
         model.predict() # Your code here
     ```
     
@@ -106,6 +106,6 @@ Codeflash script optimizer can be used in three ways:
     - `disable`: If set to `True`, the tracer will not trace the code. Default is `False`.
     - `max_function_count`: The maximum number of times to trace a single function. More calls to a function will not be traced. Default is 100.
     - `timeout`: The maximum time in seconds to trace the entire workflow. Default is indefinite. This is useful while tracing really long workflows, to not wait indefinitely.
-    Note: The trace file location is automatically determined and saved as a `.sqlite3` file.
+    - `output`: The file to save the trace to. Default is `codeflash.trace`.
     - `config_file_path`: The path to the `pyproject.toml` file which stores the Codeflash config. This is auto-discovered by default.
     You can also disable the tracer in the code by setting the `disable=True` option in the `Tracer` constructor.

@@ -47,8 +47,8 @@ def parse_args() -> Namespace:
     trace_optimize.add_argument(
         "--output",
         type=str,
-        default="codeflash.sqlite3",
-        help="The file to save the trace to. Default is codeflash.sqlite3.",
+        default="codeflash.trace",
+        help="The file to save the trace to. Default is codeflash.trace.",
     )
     trace_optimize.add_argument(
         "--config-file-path",
