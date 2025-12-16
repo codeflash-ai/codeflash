@@ -407,6 +407,13 @@ class Optimizer:
         if self.args.worktree:
             self.worktree_mode()
 
+        test_root = Path(self.test_cfg.tests_root)
+        if test_root.exists():
+            leftover_trace_files = list(test_root.glob("*.trace"))
+            if leftover_trace_files:
+                logger.debug(f"Cleaning up {len(leftover_trace_files)} leftover trace file(s) from previous runs")
+                cleanup_paths(leftover_trace_files)
+
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
@@ -576,7 +583,15 @@ class Optimizer:
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
+        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir, self.replay_tests_dir]
+        if self.trace_file:
+            paths_to_cleanup.append(self.trace_file)
+        test_root = Path(self.test_cfg.tests_root)
+        if test_root.exists():
+            for trace_file in test_root.glob("*.trace"):
+                if trace_file not in paths_to_cleanup:
+                    paths_to_cleanup.append(trace_file)
+        cleanup_paths(paths_to_cleanup)
 
     def worktree_mode(self) -> None:
         if self.current_worktree:
