@@ -14,7 +14,7 @@ from collections import deque
 
 # System Imports
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
 # PyTest Imports
@@ -265,6 +265,29 @@ def pytest_configure(config: Config) -> None:
     _apply_deterministic_patches()
 
 
+def get_runtime_from_stdout(stdout: str) -> Optional[int]:
+    marker_start = "!######"
+    marker_end = "######!"
+
+    if not stdout:
+        return None
+
+    end = stdout.rfind(marker_end)
+    if end == -1:
+        return None
+
+    start = stdout.rfind(marker_start, 0, end)
+    if start == -1:
+        return None
+
+    payload = stdout[start + len(marker_start) : end]
+    last_colon = payload.rfind(":")
+    if last_colon == -1:
+        return None
+
+    return int(payload[last_colon + 1 :])
+
+
 class PytestLoops:
     name: str = "pytest-loops"
 
@@ -290,22 +313,8 @@ class PytestLoops:
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        if report.when == "call":
-            stdout = report.capstdout
-            i = len(stdout)
-
-            # Skip trailing newlines
-            while i and stdout[i - 1] == "\n":
-                i -= 1
-
-            if i:
-                j = stdout.rfind("\n", 0, i)
-                last_line = stdout[j + 1 : i]
-
-                if last_line[:7] == "!######":
-                    last_colon = last_line.rfind(":", 0, last_line.rfind("######"))
-                    duration = last_line[last_colon + 1 : last_line.rfind("######")]
-                    self.current_loop_durations_in_nano.append(int(duration))
+        if report.when == "call" and (duration_ns := get_runtime_from_stdout(report.capstdout)):
+            self.current_loop_durations_in_nano.append(duration_ns)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -361,6 +370,9 @@ class PytestLoops:
                 else:
                     consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
                 if consistent:
+                    Path(f"/home/mohammed/Documents/test-results/break-{int(_ORIGINAL_TIME_TIME())}.txt").write_text(
+                        f"loops: {count}, runtime: {runtimes}"
+                    )
                     break
 
             if self._timed_out(session, start_time, count):
