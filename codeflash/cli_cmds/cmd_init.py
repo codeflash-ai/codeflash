@@ -669,69 +669,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             console.print(already_exists_panel)
             console.print()
 
-            # Still try to set up secret if API key is available
-            try:
-                api_key = get_codeflash_api_key()
-                git_remote = config.get("git_remote", "origin")
-                owner, repo_name = get_repo_owner_and_name(repo, git_remote)
-                base_branch = get_current_branch(repo) if repo.active_branch else "main"
-
-                # Generate workflow content for secret setup
-                from importlib.resources import files
-
-                optimize_yml_content = (
-                    files("codeflash")
-                    .joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml")
-                    .read_text(encoding="utf-8")
-                )
-                materialized_optimize_yml_content = generate_dynamic_workflow_content(
-                    optimize_yml_content, config, git_root, benchmark_mode=False
-                )
-
-                logger.info(
-                    f"[cmd_init.py:install_github_actions] Workflow exists locally, attempting secret setup for {owner}/{repo_name}"
-                )
-                secret_response = setup_github_actions(
-                    owner=owner,
-                    repo=repo_name,
-                    base_branch=base_branch,
-                    workflow_content=materialized_optimize_yml_content,
-                    api_key=api_key,
-                )
-                if secret_response.status_code == 200:
-                    secret_data = secret_response.json()
-                    secret_setup_success = secret_data.get("secret_setup_success", False)
-                    secret_setup_error = secret_data.get("secret_setup_error")
-
-                    if secret_setup_success:
-                        console.print(
-                            Panel(
-                                Text(
-                                    "✅ Repository secret CODEFLASH_API_KEY configured", style="green", justify="center"
-                                ),
-                                title="✅ Secret Configured",
-                                border_style="bright_green",
-                            )
-                        )
-                        console.print()
-                    elif secret_setup_error:
-                        warning_message = "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
-                        warning_message += f"Error: {secret_setup_error}\n\n"
-                        warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
-
-                        warning_panel = Panel(
-                            Text(warning_message, style="yellow"),
-                            title="⚠️  Manual Secret Setup Required",
-                            border_style="yellow",
-                        )
-                        console.print(warning_panel)
-                        console.print()
-            except Exception as e:
-                logger.debug(
-                    f"[cmd_init.py:install_github_actions] Could not set up secret (workflow exists locally): {e}"
-                )
-                # Secret setup is optional, so we continue
-
             logger.info("[cmd_init.py:install_github_actions] Workflow file already exists locally, skipping setup")
             return
 
@@ -764,13 +701,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
             benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
             benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
-
-        # Get API key for secret setup
-        try:
-            api_key = get_codeflash_api_key()
-        except OSError:
-            api_key = None
-            logger.info("[cmd_init.py:install_github_actions] No API key found, will skip secret setup")
 
         # Show prompt only if workflow doesn't exist locally
         actions_panel = Panel(
@@ -820,8 +750,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         pr_created_via_api = False
         pr_url = None
-        secret_setup_success = False
-        secret_setup_error = None
 
         try:
             owner, repo_name = get_repo_owner_and_name(repo, git_remote)
@@ -857,22 +785,16 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                     repo=repo_name,
                     base_branch=base_branch,
                     workflow_content=materialized_optimize_yml_content,
-                    api_key=api_key,
                 )
 
                 if response.status_code == 200:
                     response_data = response.json()
                     if response_data.get("success"):
                         pr_url = response_data.get("pr_url")
-                        secret_setup_success = response_data.get("secret_setup_success", False)
-                        secret_setup_error = response_data.get("secret_setup_error")
 
                         if pr_url:
                             pr_created_via_api = True
-                            # Build success message with secret status
                             success_message = f"✅ PR created: {pr_url}\n\n"
-                            if secret_setup_success:
-                                success_message += "✅ Repository secret CODEFLASH_API_KEY configured\n\n"
                             success_message += "Your repository is now configured for continuous optimization!"
 
                             workflow_success_panel = Panel(
@@ -883,32 +805,13 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             console.print(workflow_success_panel)
                             console.print()
 
-                            # Show warning if secret setup failed
-                            if not secret_setup_success and api_key:
-                                warning_message = (
-                                    "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
-                                )
-                                if secret_setup_error:
-                                    warning_message += f"Error: {secret_setup_error}\n\n"
-                                warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
-
-                                warning_panel = Panel(
-                                    Text(warning_message, style="yellow"),
-                                    title="⚠️  Manual Secret Setup Required",
-                                    border_style="yellow",
-                                )
-                                console.print(warning_panel)
-                                console.print()
-
                             logger.info(
-                                f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}, secret_setup_success={secret_setup_success}"
+                                f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}"
                             )
                         else:
                             # File already exists with same content
                             pr_created_via_api = True  # Mark as handled (no PR needed)
                             already_exists_message = "✅ Workflow file already exists with the same content.\n\n"
-                            if secret_setup_success:
-                                already_exists_message += "✅ Repository secret CODEFLASH_API_KEY configured\n\n"
                             already_exists_message += "No changes needed - your repository is already configured!"
 
                             already_exists_panel = Panel(
@@ -918,23 +821,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                             )
                             console.print(already_exists_panel)
                             console.print()
-
-                            # Show warning if secret setup failed
-                            if not secret_setup_success and api_key:
-                                warning_message = (
-                                    "⚠️  Secret setup failed. You'll need to add CODEFLASH_API_KEY manually.\n\n"
-                                )
-                                if secret_setup_error:
-                                    warning_message += f"Error: {secret_setup_error}\n\n"
-                                warning_message += f"📍 Add secret at: {get_github_secrets_page_url(repo)}"
-
-                                warning_panel = Panel(
-                                    Text(warning_message, style="yellow"),
-                                    title="⚠️  Manual Secret Setup Required",
-                                    border_style="yellow",
-                                )
-                                console.print(warning_panel)
-                                console.print()
                     else:
                         # API returned success=false, extract error details
                         error_data = response_data
@@ -1054,30 +940,18 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                 console.print(workflow_success_panel)
                 console.print()
 
-        # Show appropriate message based on whether PR was created via API and secret setup status
+        # Show appropriate message based on whether PR was created via API
         if pr_created_via_api:
             if pr_url:
-                if secret_setup_success:
-                    click.echo(
-                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                        f"Once you merge the PR, the workflow will be active.{LF}"
-                    )
-                else:
-                    # PR created but secret setup failed or skipped
-                    click.echo(
-                        f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                        f"Once you merge the PR and add the secret, the workflow will be active.{LF}"
-                    )
-            # File already exists
-            elif secret_setup_success:
+                click.echo(
+                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+                    f"Once you merge the PR, the workflow will be active.{LF}"
+                )
+            else:
+                # File already exists
                 click.echo(
                     f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
                     f"The workflow is ready to use.{LF}"
-                )
-            else:
-                click.echo(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                    f"Just add the secret and the workflow will be active.{LF}"
                 )
         else:
             # Fell back to local file creation - show manual secret setup

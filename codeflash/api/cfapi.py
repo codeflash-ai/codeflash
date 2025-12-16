@@ -243,24 +243,18 @@ def create_pr(
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
-def setup_github_actions(
-    owner: str, repo: str, base_branch: str, workflow_content: str, api_key: str | None = None
-) -> Response:
-    """Set up GitHub Actions workflow by creating a PR with the workflow file and optionally setting up the repository secret.
+def setup_github_actions(owner: str, repo: str, base_branch: str, workflow_content: str) -> Response:
+    """Set up GitHub Actions workflow by creating a PR with the workflow file.
 
     :param owner: Repository owner (username or organization)
     :param repo: Repository name
     :param base_branch: Base branch to create PR against (e.g., "main", "master")
     :param workflow_content: Content of the GitHub Actions workflow file (YAML)
-    :param api_key: API key to store as repository secret (if provided, will attempt to set up secret automatically)
-    :return: Response object with pr_url, pr_number, secret_setup_success, and secret_setup_error on success
+    :return: Response object with pr_url and pr_number on success
     """
     payload = {"owner": owner, "repo": repo, "baseBranch": base_branch, "workflowContent": workflow_content}
-    # Include apiKey in payload if provided - this will be encrypted and stored as a repository secret
-    if api_key:
-        payload["apiKey"] = api_key
 
-    return make_cfapi_request(endpoint="/setup-github-actions", method="POST", payload=payload, api_key=api_key)
+    return make_cfapi_request(endpoint="/setup-github-actions", method="POST", payload=payload)
 
 
 def create_staging(
