@@ -274,12 +274,12 @@ class Optimizer:
         table.add_column("Priority", style="bold yellow", justify="center", width=8)
         table.add_column("Function", style="cyan", width=40)
         table.add_column("File", style="dim", width=25)
-        table.add_column("ttX Score", justify="right", style="green", width=12)
+        table.add_column("Addressable Time", justify="right", style="green", width=12)
         table.add_column("Impact", justify="center", style="bold", width=8)
 
-        # Get ttX scores for display
+        # Get addressable time for display
         for i, (file_path, func) in enumerate(globally_ranked[:display_count], 1):
-            ttx_score = ranker.get_function_ttx_score(func)
+            addressable_time = ranker.get_function_addressable_time(func)
 
             # Format function name
             func_name = func.qualified_name
@@ -291,15 +291,15 @@ class Optimizer:
             if len(file_name) > 23:
                 file_name = "..." + file_name[-20:]
 
-            # Format ttX score
-            if ttx_score >= 1e9:
-                ttx_display = f"{ttx_score / 1e9:.2f}s"
-            elif ttx_score >= 1e6:
-                ttx_display = f"{ttx_score / 1e6:.1f}ms"
-            elif ttx_score >= 1e3:
-                ttx_display = f"{ttx_score / 1e3:.1f}µs"
+            # Format addressable time
+            if addressable_time >= 1e9:
+                time_display = f"{addressable_time / 1e9:.2f}s"
+            elif addressable_time >= 1e6:
+                time_display = f"{addressable_time / 1e6:.1f}ms"
+            elif addressable_time >= 1e3:
+                time_display = f"{addressable_time / 1e3:.1f}µs"
             else:
-                ttx_display = f"{ttx_score:.0f}ns"
+                time_display = f"{addressable_time:.0f}ns"
 
             # Impact indicator
             if i <= 5:
@@ -312,7 +312,7 @@ class Optimizer:
                 impact = "💡"
                 impact_style = "bold blue"
 
-            table.add_row(f"#{i}", func_name, file_name, ttx_display, impact, style=impact_style if i <= 5 else None)
+            table.add_row(f"#{i}", func_name, file_name, time_display, impact, style=impact_style if i <= 5 else None)
 
         console.print(table)
 
@@ -332,7 +332,7 @@ class Optimizer:
             trace_file_path: Path to trace file with performance data
 
         Returns:
-            List of (file_path, function) tuples in globally ranked order by ttX score.
+            List of (file_path, function) tuples in globally ranked order by addressable time.
             If no trace file or ranking fails, returns functions in original file order.
 
         """
@@ -377,7 +377,7 @@ class Optimizer:
 
             console.rule()
             logger.info(
-                f"Globally ranked {len(ranked_functions)} functions by ttX score "
+                f"Globally ranked {len(ranked_functions)} functions by addressable time "
                 f"(filtered {len(functions_only) - len(ranked_functions)} low-importance functions)"
             )
 

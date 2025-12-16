@@ -39,16 +39,17 @@ def is_pytest_infrastructure(filename: str, function_name: str) -> bool:
 
 
 class FunctionRanker:
-    """Ranks and filters functions based on a ttX score derived from profiling data.
+    """Ranks and filters functions based on % of addressable time derived from profiling data.
 
-    The ttX score is calculated as:
-        ttX = own_time + (time_spent_in_callees / call_count)
+    The % of addressable time is calculated as:
+        addressable_time = own_time + (time_spent_in_callees / call_count)
 
-    This score prioritizes functions that are computationally heavy themselves (high `own_time`)
-    or that make expensive calls to other functions (high average `time_spent_in_callees`).
+    This represents the runtime of a function plus the runtime of its immediate dependent functions,
+    as a fraction of overall runtime. It prioritizes functions that are computationally heavy themselves
+    (high `own_time`) or that make expensive calls to other functions (high average `time_spent_in_callees`).
 
     Functions are first filtered by an importance threshold based on their `own_time` as a
-    fraction of the total runtime. The remaining functions are then ranked by their ttX score
+    fraction of the total runtime. The remaining functions are then ranked by their % of addressable time
     to identify the best candidates for optimization.
     """
 
@@ -93,8 +94,8 @@ class FunctionRanker:
                 own_time_ns = total_time_ns
                 time_in_callees_ns = cumulative_time_ns - total_time_ns
 
-                # Calculate ttX score
-                ttx_score = own_time_ns + (time_in_callees_ns / call_count)
+                # Calculate addressable time (own time + avg time in immediate callees)
+                addressable_time_ns = own_time_ns + (time_in_callees_ns / call_count)
 
                 function_key = f"{filename}:{qualified_name}"
                 self._function_stats[function_key] = {
@@ -107,7 +108,7 @@ class FunctionRanker:
                     "own_time_ns": own_time_ns,
                     "cumulative_time_ns": cumulative_time_ns,
                     "time_in_callees_ns": time_in_callees_ns,
-                    "ttx_score": ttx_score,
+                    "addressable_time_ns": addressable_time_ns,
                 }
 
             logger.debug(
@@ -138,28 +139,34 @@ class FunctionRanker:
         )
         return None
 
-    def get_function_ttx_score(self, function_to_optimize: FunctionToOptimize) -> float:
+    def get_function_addressable_time(self, function_to_optimize: FunctionToOptimize) -> float:
+        """Get the addressable time in nanoseconds for a function.
+        
+        Addressable time = own_time + (time_in_callees / call_count)
+        This represents the runtime of the function plus runtime of immediate dependent functions.
+        """
         stats = self.get_function_stats_summary(function_to_optimize)
-        return stats["ttx_score"] if stats else 0.0
+        return stats["addressable_time_ns"] if stats else 0.0
 
     def rank_functions(self, functions_to_optimize: list[FunctionToOptimize]) -> list[FunctionToOptimize]:
-        """Ranks and filters functions based on their ttX score and importance.
+        """Ranks and filters functions based on their % of addressable time and importance.
 
         Filters out functions whose own_time is less than DEFAULT_IMPORTANCE_THRESHOLD
-        of file-relative runtime, then ranks the remaining functions by ttX score.
+        of file-relative runtime, then ranks the remaining functions by addressable time.
 
         Importance is calculated relative to functions in the same file(s) rather than
         total program time. This avoids filtering out functions due to test infrastructure
         overhead.
 
-        The ttX score prioritizes functions that are computationally heavy themselves
-        or that make expensive calls to other functions.
+        The addressable time metric (own_time + avg time in immediate callees) prioritizes
+        functions that are computationally heavy themselves or that make expensive calls
+        to other functions.
 
         Args:
             functions_to_optimize: List of functions to rank.
 
         Returns:
-            Important functions sorted in descending order of their ttX score.
+            Important functions sorted in descending order of their addressable time.
 
         """
         if not self._function_stats:
@@ -211,8 +218,8 @@ class FunctionRanker:
                 f"from {len(functions_to_optimize)} total functions"
             )
 
-        ranked = sorted(functions_to_rank, key=self.get_function_ttx_score, reverse=True)
+        ranked = sorted(functions_to_rank, key=self.get_function_addressable_time, reverse=True)
         logger.debug(
-            f"Function ranking order: {[f'{func.function_name} (ttX={self.get_function_ttx_score(func):.2f})' for func in ranked]}"
+            f"Function ranking order: {[f'{func.function_name} (addressable_time={self.get_function_addressable_time(func):.2f}ns)' for func in ranked]}"
         )
         return ranked

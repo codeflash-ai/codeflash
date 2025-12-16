@@ -51,7 +51,7 @@ def test_load_function_stats(function_ranker):
     expected_keys = {
         "filename", "function_name", "qualified_name", "class_name", 
         "line_number", "call_count", "own_time_ns", "cumulative_time_ns", 
-        "time_in_callees_ns", "ttx_score"
+        "time_in_callees_ns", "addressable_time_ns"
     }
     assert set(func_a_stats.keys()) == expected_keys
     
@@ -62,7 +62,7 @@ def test_load_function_stats(function_ranker):
     assert func_a_stats["cumulative_time_ns"] == 5443000
 
 
-def test_get_function_ttx_score(function_ranker, workload_functions):
+def test_get_function_addressable_time(function_ranker, workload_functions):
     func_a = None
     for func in workload_functions:
         if func.function_name == "funcA":
@@ -70,17 +70,17 @@ def test_get_function_ttx_score(function_ranker, workload_functions):
             break
     
     assert func_a is not None
-    ttx_score = function_ranker.get_function_ttx_score(func_a)
+    addressable_time = function_ranker.get_function_addressable_time(func_a)
     
-    # Expected ttX score: own_time + (time_in_callees / call_count)
+    # Expected addressable time: own_time + (time_in_callees / call_count)
     # = 63000 + ((5443000 - 63000) / 1) = 5443000
-    assert ttx_score == 5443000
+    assert addressable_time == 5443000
 
 
 def test_rank_functions(function_ranker, workload_functions):
     ranked_functions = function_ranker.rank_functions(workload_functions)
     
-    # Should filter out functions below importance threshold and sort by ttX score
+    # Should filter out functions below importance threshold and sort by addressable time
     assert len(ranked_functions) <= len(workload_functions)
     assert len(ranked_functions) > 0  # At least some functions should pass the threshold
     
@@ -88,11 +88,11 @@ def test_rank_functions(function_ranker, workload_functions):
     func_a_in_results = any(f.function_name == "funcA" for f in ranked_functions)
     assert func_a_in_results
     
-    # Verify functions are sorted by ttX score in descending order
+    # Verify functions are sorted by addressable time in descending order
     for i in range(len(ranked_functions) - 1):
-        current_score = function_ranker.get_function_ttx_score(ranked_functions[i])
-        next_score = function_ranker.get_function_ttx_score(ranked_functions[i + 1])
-        assert current_score >= next_score
+        current_time = function_ranker.get_function_addressable_time(ranked_functions[i])
+        next_time = function_ranker.get_function_addressable_time(ranked_functions[i + 1])
+        assert current_time >= next_time
 
 
 def test_get_function_stats_summary(function_ranker, workload_functions):
@@ -109,7 +109,7 @@ def test_get_function_stats_summary(function_ranker, workload_functions):
     assert stats["function_name"] == "funcA"
     assert stats["own_time_ns"] == 63000
     assert stats["cumulative_time_ns"] == 5443000
-    assert stats["ttx_score"] == 5443000
+    assert stats["addressable_time_ns"] == 5443000
 
 
 
@@ -149,13 +149,13 @@ def test_simple_model_predict_stats(function_ranker, workload_functions):
     assert stats["call_count"] == 1
     assert stats["own_time_ns"] == 2289000
     assert stats["cumulative_time_ns"] == 4017000
-    assert stats["ttx_score"] == 4017000
+    assert stats["addressable_time_ns"] == 4017000
     
-    # Test ttX score calculation
-    ttx_score = function_ranker.get_function_ttx_score(predict_func)
-    # Expected ttX score: own_time + (time_in_callees / call_count)
+    # Test addressable time calculation
+    addressable_time = function_ranker.get_function_addressable_time(predict_func)
+    # Expected addressable time: own_time + (time_in_callees / call_count)
     # = 2289000 + ((4017000 - 2289000) / 1) = 4017000
-    assert ttx_score == 4017000
+    assert addressable_time == 4017000
     
     # Test importance calculation for predict function
     total_program_time = sum(
