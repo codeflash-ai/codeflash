@@ -62,11 +62,11 @@ def choose_weights(**importance: float) -> list[float]:
     return [v / total for v in importance.values()]
 
 
-def normalize(values: list[float]) -> list[float]:
-    mn, mx = min(values), max(values)
-    if mx == mn:
+def normalize_by_max(values: list[float]) -> list[float]:
+    mx = max(values)
+    if mx == 0:
         return [0.0] * len(values)
-    return [(v - mn) / (mx - mn) for v in values]
+    return [v / mx for v in values]
 
 
 def create_score_dictionary_from_metrics(weights: list[float], *metrics: list[float]) -> dict[int, int]:

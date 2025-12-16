@@ -38,7 +38,7 @@ from codeflash.code_utils.code_utils import (
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
-    normalize,
+    normalize_by_max,
     restore_conftest,
     unified_diff_strings,
 )
@@ -198,8 +198,8 @@ class CandidateProcessor:
             runtime_w, diff_w = REFINED_CANDIDATE_RANKING_WEIGHTS
             weights = choose_weights(runtime=runtime_w, diff=diff_w)
 
-            runtime_norm = normalize(runtimes_list)
-            diffs_norm = normalize(diff_lens_list)
+            runtime_norm = normalize_by_max(runtimes_list)
+            diffs_norm = normalize_by_max(diff_lens_list)
             # the lower the better
             score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
             top_n_candidates = int((TOP_N_REFINEMENTS * len(runtimes_list)) + 0.5)
