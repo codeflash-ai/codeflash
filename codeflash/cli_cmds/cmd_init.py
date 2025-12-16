@@ -638,7 +638,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
         apologize_and_exit()
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002, PLR0911
+def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -829,7 +829,39 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         error_help = error_data.get("help", "")
                         installation_url = error_data.get("installation_url")
 
-                        # Show detailed error panel
+                        # For permission errors, don't fall back - show a focused message and abort early
+                        if response.status_code == 403:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
+                            )
+                            # Extract installation_url if available, otherwise use default
+                            installation_url_403 = error_data.get(
+                                "installation_url", "https://github.com/apps/codeflash-ai/installations/select_target"
+                            )
+
+                            permission_error_panel = Panel(
+                                Text(
+                                    "❌ Access Denied\n\n"
+                                    f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
+                                    "💡 To fix this:\n"
+                                    "1. Install the CodeFlash GitHub App on your repository\n"
+                                    "2. Ensure the app has 'Contents: write', 'Workflows: write', and 'Pull requests: write' permissions\n"
+                                    "3. Make sure you have write access to the repository\n\n"
+                                    f"🔗 Install GitHub App: {installation_url_403}",
+                                    style="red",
+                                ),
+                                title="❌ Setup Failed",
+                                border_style="red",
+                            )
+                            console.print(permission_error_panel)
+                            console.print()
+                            click.echo(
+                                f"Please install the CodeFlash GitHub App and ensure it has the required permissions.{LF}"
+                                f"Visit: {installation_url_403}{LF}"
+                            )
+                            apologize_and_exit()
+
+                        # Show detailed error panel for all other errors
                         error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
                         if error_help:
                             error_panel_text += f"\n💡 {error_help}\n"
@@ -851,14 +883,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                                 f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
                                 f"Visit: {installation_url}{LF}"
                             )
-                            return
-
-                        # For permission errors, don't fall back - show clear instructions
-                        if response.status_code == 403:
-                            logger.error(
-                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
-                            )
-                            click.echo(f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}")
                             return
 
                         # For other errors, fall back to local file creation
@@ -872,7 +896,39 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                         error_help = error_data.get("help", "")
                         installation_url = error_data.get("installation_url")
 
-                        # Show detailed error panel
+                        # For permission errors, don't fall back - show a focused message and abort early
+                        if response.status_code == 403:
+                            logger.error(
+                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
+                            )
+                            # Extract installation_url if available, otherwise use default
+                            installation_url_403 = error_data.get(
+                                "installation_url", "https://github.com/apps/codeflash-ai/installations/select_target"
+                            )
+
+                            permission_error_panel = Panel(
+                                Text(
+                                    "❌ Access Denied\n\n"
+                                    f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
+                                    "💡 To fix this:\n"
+                                    "1. Install the CodeFlash GitHub App on your repository\n"
+                                    "2. Ensure the app has 'Contents: write', 'Workflows: write', and 'Pull requests: write' permissions\n"
+                                    "3. Make sure you have write access to the repository\n\n"
+                                    f"🔗 Install GitHub App: {installation_url_403}",
+                                    style="red",
+                                ),
+                                title="❌ Setup Failed",
+                                border_style="red",
+                            )
+                            console.print(permission_error_panel)
+                            console.print()
+                            click.echo(
+                                f"Please install the CodeFlash GitHub App and ensure it has the required permissions.{LF}"
+                                f"Visit: {installation_url_403}{LF}"
+                            )
+                            apologize_and_exit()
+
+                        # Show detailed error panel for all other errors
                         error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
                         if error_help:
                             error_panel_text += f"\n💡 {error_help}\n"
@@ -894,14 +950,6 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                                 f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
                                 f"Visit: {installation_url}{LF}"
                             )
-                            return
-
-                        # For permission errors, don't fall back - show clear instructions
-                        if response.status_code == 403:
-                            logger.error(
-                                f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
-                            )
-                            click.echo(f"Please ensure you have write access to {owner}/{repo_name} and try again.{LF}")
                             return
 
                         # For authentication errors, don't fall back

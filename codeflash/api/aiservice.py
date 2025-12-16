@@ -652,7 +652,10 @@ class AiServiceClient:
         try:
             response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
-            logger.warning(f"[aiservice.py:generate_workflow_steps] Request exception: {e}")
+            # AI service unavailable - this is expected, will fall back to static workflow
+            logger.debug(
+                f"[aiservice.py:generate_workflow_steps] Request exception (falling back to static workflow): {e}"
+            )
             return None
 
         if response.status_code == 200:
@@ -663,7 +666,11 @@ class AiServiceClient:
                 f"({len(workflow_steps) if workflow_steps else 0} chars)"
             )
             return workflow_steps
-        logger.warning(f"[aiservice.py:generate_workflow_steps] Failed with status {response.status_code}")
+        # AI service unavailable or endpoint not found - this is expected, will fall back to static workflow
+        logger.debug(
+            f"[aiservice.py:generate_workflow_steps] AI service returned status {response.status_code}, "
+            f"falling back to static workflow generation"
+        )
         try:
             error_response = response.json()
             error = cast("str", error_response.get("error", "Unknown error"))
