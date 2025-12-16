@@ -54,6 +54,7 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
+        self.trace_file: Path | None = None
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
@@ -88,24 +89,24 @@ class Optimizer:
                     file_path_to_source_code[file] = f.read()
             try:
                 instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
-                trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
-                if trace_file.exists():
-                    trace_file.unlink()
+                self.trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
+                if self.trace_file.exists():
+                    self.trace_file.unlink()
 
                 self.replay_tests_dir = Path(
                     tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
                 )
                 trace_benchmarks_pytest(
-                    self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
+                    self.args.benchmarks_root, self.args.tests_root, self.args.project_root, self.trace_file
                 )  # Run all tests that use pytest-benchmark
-                replay_count = generate_replay_test(trace_file, self.replay_tests_dir)
+                replay_count = generate_replay_test(self.trace_file, self.replay_tests_dir)
                 if replay_count == 0:
                     logger.info(
                         f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
                     )
                 else:
-                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
-                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
+                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(self.trace_file)
+                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
                     function_to_results = validate_and_format_benchmark_table(
                         function_benchmark_timings, total_benchmark_timings
                     )
@@ -554,9 +555,15 @@ class Optimizer:
         ]
 
     def cleanup_replay_tests(self) -> None:
+        paths_to_cleanup = []
         if self.replay_tests_dir and self.replay_tests_dir.exists():
             logger.debug(f"Cleaning up replay tests directory: {self.replay_tests_dir}")
-            cleanup_paths([self.replay_tests_dir])
+            paths_to_cleanup.append(self.replay_tests_dir)
+        if self.trace_file and self.trace_file.exists():
+            logger.debug(f"Cleaning up trace file: {self.trace_file}")
+            paths_to_cleanup.append(self.trace_file)
+        if paths_to_cleanup:
+            cleanup_paths(paths_to_cleanup)
 
     def cleanup_temporary_paths(self) -> None:
         if hasattr(get_run_tmp_file, "tmpdir"):
