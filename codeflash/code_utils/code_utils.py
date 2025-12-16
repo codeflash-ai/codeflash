@@ -19,6 +19,10 @@ from codeflash.cli_cmds.console import logger, paneled_text
 from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
 from codeflash.lsp.helpers import is_LSP_enabled
 
+_INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
+
+_INVALID_CHARS_UNIX = {"\0"}
+
 ImportErrorPattern = re.compile(r"ModuleNotFoundError.*$", re.MULTILINE)
 
 BLACKLIST_ADDOPTS = ("--benchmark", "--sugar", "--codespeed", "--cov", "--profile", "--junitxml", "-n")
@@ -376,3 +380,51 @@ def extract_unique_errors(pytest_output: str) -> set[str]:
             unique_errors.add(error_message)
 
     return unique_errors
+
+
+def validate_relative_directory_path(path: str) -> tuple[bool, str]:
+    """Validate that a path is a safe relative directory path.
+
+    Prevents path traversal attacks and invalid paths.
+    Works cross-platform (Windows, Linux, macOS).
+
+    Args:
+        path: The path string to validate
+
+    Returns:
+        tuple[bool, str]: (is_valid, error_message)
+        - is_valid: True if path is valid, False otherwise
+        - error_message: Empty string if valid, error description if invalid
+
+    """
+    if not path or not path.strip():
+        return False, "Path cannot be empty"
+
+    # Normalize whitespace
+    path = path.strip()
+
+    # Check for path traversal attempts (cross-platform)
+    # Normalize path separators for checking
+    normalized = path.replace("\\", "/")
+    if ".." in normalized:
+        return False, "Path cannot contain '..'. Use a relative path like 'tests' or 'src/app' instead"
+
+    # Check for absolute paths, invalid characters, and validate path format
+    error_msg = ""
+    if Path(path).is_absolute():
+        error_msg = "Path must be relative, not absolute"
+    elif os.name == "nt":  # Windows
+        if any(char in _INVALID_CHARS_NT for char in path):
+            error_msg = "Path contains invalid characters for this operating system"
+    elif "\0" in path:  # Unix-like
+        error_msg = "Path contains invalid characters for this operating system"
+    else:
+        # Validate using pathlib to ensure it's a valid path structure
+        try:
+            Path(path)
+        except (ValueError, OSError) as e:
+            error_msg = f"Invalid path format: {e!s}"
+
+    if error_msg:
+        return False, error_msg
+    return True, ""

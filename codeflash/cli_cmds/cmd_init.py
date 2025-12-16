@@ -26,6 +26,7 @@ from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo, se
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
+from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
@@ -350,20 +351,32 @@ def collect_setup_info() -> CLISetupInfo:
         console.print(custom_panel)
         console.print()
 
-        custom_questions = [
-            inquirer.Path(
-                "custom_path",
-                message="Enter the path to your module directory",
-                path_type=inquirer.Path.DIRECTORY,
-                exists=True,
-            )
-        ]
+        # Retry loop for custom module root path
+        module_root = None
+        while module_root is None:
+            custom_questions = [
+                inquirer.Path(
+                    "custom_path",
+                    message="Enter the path to your module directory",
+                    path_type=inquirer.Path.DIRECTORY,
+                    exists=True,
+                )
+            ]
 
-        custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
-        if custom_answers:
-            module_root = Path(custom_answers["custom_path"])
-        else:
-            apologize_and_exit()
+            custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
+            if not custom_answers:
+                apologize_and_exit()
+                return None  # unreachable but satisfies type checker
+
+            custom_path_str = str(custom_answers["custom_path"])
+            # Validate the path is safe
+            is_valid, error_msg = validate_relative_directory_path(custom_path_str)
+            if not is_valid:
+                click.echo(f"❌ Invalid path: {error_msg}")
+                click.echo("Please enter a valid relative directory path.")
+                console.print()  # Add spacing before retry
+                continue  # Retry the prompt
+            module_root = Path(custom_path_str)
     else:
         module_root = module_root_answer
     ph("cli-project-root-provided")
@@ -421,20 +434,32 @@ def collect_setup_info() -> CLISetupInfo:
         console.print(custom_tests_panel)
         console.print()
 
-        custom_tests_questions = [
-            inquirer.Path(
-                "custom_tests_path",
-                message="Enter the path to your tests directory",
-                path_type=inquirer.Path.DIRECTORY,
-                exists=True,
-            )
-        ]
+        # Retry loop for custom tests root path
+        tests_root = None
+        while tests_root is None:
+            custom_tests_questions = [
+                inquirer.Path(
+                    "custom_tests_path",
+                    message="Enter the path to your tests directory",
+                    path_type=inquirer.Path.DIRECTORY,
+                    exists=True,
+                )
+            ]
 
-        custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
-        if custom_tests_answers:
-            tests_root = Path(curdir) / Path(custom_tests_answers["custom_tests_path"])
-        else:
-            apologize_and_exit()
+            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
+            if not custom_tests_answers:
+                apologize_and_exit()
+                return None  # unreachable but satisfies type checker
+
+            custom_tests_path_str = str(custom_tests_answers["custom_tests_path"])
+            # Validate the path is safe
+            is_valid, error_msg = validate_relative_directory_path(custom_tests_path_str)
+            if not is_valid:
+                click.echo(f"❌ Invalid path: {error_msg}")
+                click.echo("Please enter a valid relative directory path.")
+                console.print()  # Add spacing before retry
+                continue  # Retry the prompt
+            tests_root = Path(curdir) / Path(custom_tests_path_str)
     else:
         tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
 
