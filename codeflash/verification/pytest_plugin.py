@@ -288,31 +288,24 @@ class PytestLoops:
             return 0.1
         return 0.03  # > 0.1 s
 
-    # @pytest.hookimpl
-    # def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-    #     if report.when == "call" and report.passed:
-    #         self.current_loop_durations_in_nano.append(report.duration)
+    @pytest.hookimpl
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if report.when == "call":
+            stdout = report.capstdout
+            i = len(stdout)
 
-    @pytest.hookimpl(tryfirst=True)
-    def pytest_pyfunc_call(self, pyfuncitem: pytest.Function) -> bool:
-        testfunction = pyfuncitem.obj
-        funcargs = pyfuncitem.funcargs
-        testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}  # noqa: SLF001
+            # Skip trailing newlines
+            while i and stdout[i - 1] == "\n":
+                i -= 1
 
-        start_ns = _ORIGINAL_PERF_COUNTER_NS()
-        result = testfunction(**testargs)
-        duration_ns = _ORIGINAL_PERF_COUNTER_NS() - start_ns
+            if i:
+                j = stdout.rfind("\n", 0, i)
+                last_line = stdout[j + 1 : i]
 
-        self.current_loop_durations_in_nano.append(duration_ns)
-
-        # original post-processing
-        if hasattr(result, "__await__") or hasattr(result, "__aiter__"):
-            msg = f"Async test not supported: {pyfuncitem.nodeid}"
-            raise RuntimeError(msg)
-        if result is not None:
-            warnings.warn(f"Test function {pyfuncitem.nodeid} returned {type(result)}, expected None.", stacklevel=2)
-
-        return True
+                if last_line[:7] == "!######":
+                    last_colon = last_line.rfind(":", 0, last_line.rfind("######"))
+                    duration = last_line[last_colon + 1 : last_line.rfind("######")]
+                    self.current_loop_durations_in_nano.append(int(duration))
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
