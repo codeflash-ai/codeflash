@@ -774,4 +774,9 @@ def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef)
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    return any(isinstance(node, ast.Name) and node.id == "property" for node in function_node.decorator_list)
+    property_id = "property"
+    ast_name = ast.Name
+    for node in function_node.decorator_list:  # noqa: SIM110
+        if type(node) is ast_name and node.id == property_id:
+            return True
+    return False
