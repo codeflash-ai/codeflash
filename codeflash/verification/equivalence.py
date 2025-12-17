@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 INCREASED_RECURSION_LIMIT = 5000
 
-reprlib_repr = reprlib.Repr(maxstring=1500)
+reprlib_repr = reprlib.Repr()
+reprlib_repr.maxstring = 1500
 test_diff_repr = reprlib_repr.repr
 
 
