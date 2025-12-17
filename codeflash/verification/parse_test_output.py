@@ -556,7 +556,7 @@ FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
 TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
 
 
-def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> TestResults:
+def parse_test_failures_from_stdout(stdout: str) -> dict[str, str]:
     """Extract individual pytest test failures from stdout grouped by test case qualified name, and add them to the test results."""
     lines = stdout.splitlines()
     start = end = None
@@ -567,7 +567,7 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
             break
 
     if start is None:
-        return test_results
+        return {}
 
     for j in range(start + 1, len(lines)):
         stripped = lines[j].strip()
@@ -603,8 +603,7 @@ def parse_test_failures_from_stdout(test_results: TestResults, stdout: str) -> T
     if current_name:
         failures[current_name] = "".join(current_lines)
 
-    test_results.test_failures = failures
-    return test_results
+    return failures
 
 
 def parse_test_results(
@@ -663,7 +662,8 @@ def parse_test_results(
         )
         coverage.log_coverage()
     try:
-        parse_test_failures_from_stdout(results, run_result.stdout)
+        failures = parse_test_failures_from_stdout(run_result.stdout)
+        results.test_failures = failures
     except Exception as e:
         logger.exception(e)
 
