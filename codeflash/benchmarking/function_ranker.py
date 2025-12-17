@@ -141,7 +141,7 @@ class FunctionRanker:
 
     def get_function_addressable_time(self, function_to_optimize: FunctionToOptimize) -> float:
         """Get the addressable time in nanoseconds for a function.
-        
+
         Addressable time = own_time + (time_in_callees / call_count)
         This represents the runtime of the function plus runtime of immediate dependent functions.
         """

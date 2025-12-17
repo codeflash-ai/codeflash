@@ -105,7 +105,9 @@ class Optimizer:
                         f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
                     )
                 else:
-                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(self.trace_file)
+                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(
+                        self.trace_file
+                    )
                     total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
                     function_to_results = validate_and_format_benchmark_table(
                         function_benchmark_timings, total_benchmark_timings
