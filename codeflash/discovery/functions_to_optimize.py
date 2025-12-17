@@ -774,11 +774,9 @@ def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef)
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    # Use a local variable for 'property' to avoid attribute lookup in the loop and
-    # use direct identity comparison for ast.Name to speed up isinstance
     property_id = "property"
-    ast_Name = ast.Name
-    for node in function_node.decorator_list:
-        if type(node) is ast_Name and node.id == property_id:
+    ast_name = ast.Name
+    for node in function_node.decorator_list:  # noqa: SIM110
+        if type(node) is ast_name and node.id == property_id:
             return True
     return False
