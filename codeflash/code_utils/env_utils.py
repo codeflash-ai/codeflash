@@ -155,8 +155,15 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     event_path = os.getenv("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
-    with open(event_path, encoding="utf-8") as f:  # noqa: PTH123
-        return json.load(f)  # type: ignore  # noqa
+    # Use json.load directly without variable assignment for micro-optimization
+    # Read file and load JSON in one step
+    try:
+        with open(event_path, "rb") as f:  # using binary mode for slightly faster reading
+            return json.loads(f.read().decode("utf-8"))  # type: ignore  # noqa
+    except Exception:
+        # Fallback for unexpected file IO/decoding errors as original code does not handle these
+        # Matches behavior: if the file cannot be read or json decoding fails, just let exception propagate
+        raise
 
 
 def is_repo_a_fork() -> bool:
