@@ -765,11 +765,17 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
     stack = [function_node]
+    append = stack.append
+    pop = stack.pop
+    iter_child_nodes = ast.iter_child_nodes
+    Return = ast.Return
     while stack:
-        node = stack.pop()
-        if isinstance(node, ast.Return):
+        node = pop()
+        if isinstance(node, Return):
             return True
-        stack.extend(ast.iter_child_nodes(node))
+        # Slightly faster than extend for this use case
+        for child in iter_child_nodes(node):
+            append(child)
     return False
 
 
