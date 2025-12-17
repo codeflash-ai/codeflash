@@ -6,11 +6,9 @@ import logging
 import os
 import platform
 import re
-import statistics
 import sys
 import time as _time_module
 import warnings
-from collections import deque
 
 # System Imports
 from pathlib import Path
@@ -20,8 +18,6 @@ from unittest import TestCase
 # PyTest Imports
 import pytest
 from pluggy import HookspecMarker
-
-from codeflash.code_utils.config_consts import CONSISTENT_LOOP_COUNT
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -288,6 +284,31 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
     return int(payload[last_colon + 1 :])
 
 
+def should_stop(
+    runtimes: list[int],
+    warmup: int = 3,
+    window: int = 4,
+    min_rel_tol: float = 0.03,  # 3% from min
+    mutual_rel_tol: float = 0.02,  # 2% among themselves
+) -> bool:
+    if len(runtimes) < warmup + window:
+        return False
+
+    recent = runtimes[-window:]
+
+    # Soft min: best seen after warmup
+    current_min = min(runtimes[warmup:])
+
+    # 1) recent runs close to min
+    close_to_min = all(abs(r - current_min) / current_min <= min_rel_tol for r in recent)
+
+    # 2) recent runs close to each other
+    r_min, r_max = min(recent), max(recent)
+    close_together = (r_max - r_min) / r_min <= mutual_rel_tol
+
+    return close_to_min and close_together
+
+
 class PytestLoops:
     name: str = "pytest-loops"
 
@@ -298,18 +319,22 @@ class PytestLoops:
         self.logger = logging.getLogger(self.name)
         self.current_loop_durations_in_nano: list[int] = []
 
-    def dynamic_tolerance(self, avg: float) -> float:
-        if avg < 0.0001:  # < 100 µs
-            return 0.7
-        if avg < 0.0005:  # < 500 µs
-            return 0.5
-        if avg < 0.001:  # < 1 ms
-            return 0.4
-        if avg < 0.01:  # < 10 ms
-            return 0.2
-        if avg < 0.1:  # < 100 ms
-            return 0.1
-        return 0.03  # > 0.1 s
+    def dynamic_tolerance(self, avg_ns: float) -> float:  # noqa: PLR0911
+        if avg_ns < 200_000:  # < 0.2 ms
+            return 0.80  # 80%
+        if avg_ns < 500_000:  # < 0.5 ms
+            return 0.60  # 60%
+        if avg_ns < 1_000_000:  # < 1 ms
+            return 0.45  # 45%
+        if avg_ns < 2_000_000:  # < 2 ms
+            return 0.30  # 30%
+        if avg_ns < 5_000_000:  # < 5 ms
+            return 0.20  # 20%
+        if avg_ns < 20_000_000:  # < 20 ms
+            return 0.12  # 12%
+        if avg_ns < 100_000_000:  # < 100 ms
+            return 0.07  # 7%
+        return 0.05  # ≥ 100 ms
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -318,8 +343,6 @@ class PytestLoops:
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
-        durations = deque(maxlen=CONSISTENT_LOOP_COUNT)
-
         """Reimplement the test loop but loop for the user defined amount of time."""
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
@@ -354,26 +377,14 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            runtimes.extend(list(self.current_loop_durations_in_nano))
-
             total_duration_in_nano = sum(self.current_loop_durations_in_nano)
-            if total_duration_in_nano > 0:
-                durations.append(total_duration_in_nano)
-            else:
-                durations.clear()
+            runtimes.append(total_duration_in_nano)
 
-            # Consistency check
-            if len(durations) == CONSISTENT_LOOP_COUNT and count >= session.config.option.codeflash_min_loops:
-                avg = statistics.median(durations)
-                if avg == 0:
-                    consistent = all(d == 0 for d in durations)
-                else:
-                    consistent = all(abs(d - avg) / avg <= self.dynamic_tolerance(avg) for d in durations)
-                if consistent:
-                    Path(f"/home/mohammed/Documents/test-results/break-{int(_ORIGINAL_TIME_TIME())}.txt").write_text(
-                        f"loops: {count}, runtime: {runtimes}"
-                    )
-                    break
+            if should_stop(runtimes):
+                Path(f"/home/mohammed/Documents/test-results/break-{int(_ORIGINAL_TIME_TIME())}.txt").write_text(
+                    f"Break after {count} loops, runtimes: {runtimes}"
+                )
+                break
 
             if self._timed_out(session, start_time, count):
                 break
