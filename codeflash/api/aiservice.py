@@ -12,7 +12,6 @@ from pydantic.json import pydantic_encoder
 from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.code_replacer import is_zero_diff
 from codeflash.code_utils.code_utils import unified_diff_strings
-from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE, N_CANDIDATES_LP_EFFECTIVE
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
@@ -130,7 +129,7 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
-            "num_variants": num_candidates,
+            "n_candidates": num_candidates,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
@@ -138,7 +137,6 @@ class AiServiceClient:
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
-            "n_candidates": N_CANDIDATES_EFFECTIVE,
             "is_async": is_async,
         }
 
@@ -172,7 +170,7 @@ class AiServiceClient:
         dependency_code: str,
         trace_id: str,
         line_profiler_results: str,
-        num_candidates: int = 10,
+        num_candidates: int = 8,
         experiment_metadata: ExperimentMetadata | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
@@ -193,14 +191,13 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
-            "num_variants": num_candidates,
+            "n_candidates_lp": num_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
-            "n_candidates_lp": N_CANDIDATES_LP_EFFECTIVE,
         }
 
         console.rule()

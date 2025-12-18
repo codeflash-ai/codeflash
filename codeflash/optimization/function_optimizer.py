@@ -42,11 +42,9 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    N_CANDIDATES_EFFECTIVE,
-    N_CANDIDATES_LP_EFFECTIVE,
-    N_TESTS_TO_GENERATE_EFFECTIVE,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
+    Effort,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
@@ -239,7 +237,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = Effort.get_number_of_generated_tests(args.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
@@ -287,7 +285,7 @@ class FunctionOptimizer:
         str,
     ]:
         """Generate and instrument tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = Effort.get_number_of_generated_tests(self.args.effort)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -842,7 +840,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=N_CANDIDATES_LP_EFFECTIVE,
+            num_candidates=Effort.get_number_of_optimizer_lp_candidates(self.args.effort),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
@@ -1211,7 +1209,7 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
         """Generate unit tests and concolic tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = Effort.get_number_of_generated_tests(self.args.effort)
         assert len(generated_test_paths) == n_tests
 
         # Submit test generation tasks
@@ -1273,7 +1271,7 @@ class FunctionOptimizer:
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function."""
-        n_candidates = N_CANDIDATES_EFFECTIVE
+        n_candidates = Effort.get_number_of_optimizer_candidates(self.args.effort)
 
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
