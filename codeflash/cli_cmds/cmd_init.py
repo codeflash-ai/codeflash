@@ -699,7 +699,15 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Get repository information for API call
         git_remote = config.get("git_remote", "origin")
-        base_branch = get_current_branch(repo) if repo.active_branch else "main"
+        # get_current_branch handles detached HEAD and other edge cases internally
+        try:
+            base_branch = get_current_branch(repo)
+        except Exception as e:
+            logger.warning(
+                f"[cmd_init.py:install_github_actions] Could not determine current branch: {e}. "
+                "Falling back to 'main'."
+            )
+            base_branch = "main"
 
         # Generate workflow content
         from importlib.resources import files
@@ -1027,54 +1035,56 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                     f"The workflow is ready to use.{LF}"
                 )
         else:
-            # Fell back to local file creation - show manual secret setup
-            try:
-                existing_api_key = get_codeflash_api_key()
-            except OSError:
-                existing_api_key = None
-
-            # GitHub secrets setup panel (only shown when falling back to local file creation)
-            secrets_message = (
-                "🔐 Next Step: Add API Key as GitHub Secret\n\n"
-                "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
-                "📋 Steps:\n"
-                "1. Press Enter to open your repo's secrets page\n"
-                "2. Click 'New repository secret'\n"
-                "3. Add your API key with the variable name CODEFLASH_API_KEY"
-            )
-
-            if existing_api_key:
-                secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
-
-            secrets_panel = Panel(
-                Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
-            )
-            console.print(secrets_panel)
-
-            console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
-            console.input()
-
-            click.launch(get_github_secrets_page_url(repo))
-
-            # Post-launch message panel
-            launch_panel = Panel(
-                Text(
-                    "🐙 I opened your GitHub secrets page!\n\n"
-                    "Note: If you see a 404, you probably don't have access to this repo's secrets. "
-                    "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
-                    "hard-code your API key into the workflow file.",
-                    style="cyan",
-                ),
-                title="🌐 Browser Opened",
-                border_style="bright_cyan",
-            )
-            console.print(launch_panel)
-            click.pause()
-            click.echo()
+            # Fell back to local file creation
             click.echo(
                 f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
                 f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
             )
+
+        # Show GitHub secrets setup panel (needed in both cases - PR created via API or local file)
+        try:
+            existing_api_key = get_codeflash_api_key()
+        except OSError:
+            existing_api_key = None
+
+        # GitHub secrets setup panel - always shown since secrets are required for the workflow to work
+        secrets_message = (
+            "🔐 Next Step: Add API Key as GitHub Secret\n\n"
+            "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
+            "📋 Steps:\n"
+            "1. Press Enter to open your repo's secrets page\n"
+            "2. Click 'New repository secret'\n"
+            "3. Add your API key with the variable name CODEFLASH_API_KEY"
+        )
+
+        if existing_api_key:
+            secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
+
+        secrets_panel = Panel(
+            Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
+        )
+        console.print(secrets_panel)
+
+        console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
+        console.input()
+
+        click.launch(get_github_secrets_page_url(repo))
+
+        # Post-launch message panel
+        launch_panel = Panel(
+            Text(
+                "🐙 I opened your GitHub secrets page!\n\n"
+                "Note: If you see a 404, you probably don't have access to this repo's secrets. "
+                "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
+                "hard-code your API key into the workflow file.",
+                style="cyan",
+            ),
+            title="🌐 Browser Opened",
+            border_style="bright_cyan",
+        )
+        console.print(launch_panel)
+        click.pause()
+        console.print()
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
