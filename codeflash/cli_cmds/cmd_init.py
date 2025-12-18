@@ -704,8 +704,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             base_branch = get_current_branch(repo)
         except Exception as e:
             logger.warning(
-                f"[cmd_init.py:install_github_actions] Could not determine current branch: {e}. "
-                "Falling back to 'main'."
+                f"[cmd_init.py:install_github_actions] Could not determine current branch: {e}. Falling back to 'main'."
             )
             base_branch = "main"
 

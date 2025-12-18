@@ -79,7 +79,7 @@ def get_current_branch(repo: Repo | None = None) -> str:
              the branch cannot be determined.
     """
     repository: Repo = repo if repo else git.Repo(search_parent_directories=True)
-    
+
     # Check if HEAD is detached (active_branch will be None)
     if repository.head.is_detached:
         logger.warning(
@@ -92,11 +92,12 @@ def get_current_branch(repo: Repo | None = None) -> str:
                 if default_branch in repository.branches:
                     logger.info(f"Using '{default_branch}' as fallback branch.")
                     return default_branch
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Error checking for branch '{default_branch}': {e}")
                 continue
         # If no default branch found, return "main" as a safe default
         return "main"
-    
+
     # HEAD is not detached, safe to access active_branch
     try:
         return repository.active_branch.name
@@ -158,11 +159,9 @@ def confirm_proceeding_with_no_git_repo() -> str | bool:
 def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, wait_for_push: bool = False) -> bool:
     # Check if HEAD is detached
     if repo.head.is_detached:
-        logger.warning(
-            "⚠️ HEAD is detached. Cannot push branch. Please check out a branch before creating a PR."
-        )
+        logger.warning("⚠️ HEAD is detached. Cannot push branch. Please check out a branch before creating a PR.")
         return False
-    
+
     # Safe to access active_branch when HEAD is not detached
     try:
         current_branch = repo.active_branch
@@ -170,7 +169,7 @@ def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, 
     except (AttributeError, TypeError) as e:
         logger.warning(f"⚠️ Could not determine active branch: {e}. Cannot push branch.")
         return False
-    
+
     remote = repo.remote(name=git_remote)
 
     # Check if the branch is pushed
