@@ -1838,6 +1838,7 @@ def test_dict_views() -> None:
     i3 = {"a": 1, "b": 2, "c": 4}  # different value
     i4 = {"a": 1, "b": 2, "d": 3}  # different key
     i5 = {"a": 1, "b": 2}  # different length
+    i6 = {"b": 2, "c": 3, "a": 1}  # different order
 
     # dict_items - same items
     assert comparator(i1.items(), i2.items())
@@ -1847,6 +1848,8 @@ def test_dict_views() -> None:
     assert not comparator(i1.items(), i4.items())
     # dict_items - different length
     assert not comparator(i1.items(), i5.items())
+
+    assert comparator(i1.items(), i6.items())
 
     # Test empty dicts
     empty1 = {}

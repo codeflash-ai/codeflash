@@ -127,9 +127,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if isinstance(orig, tf.SparseTensor):
                 if not comparator(orig.dense_shape.numpy(), new.dense_shape.numpy(), superset_obj):
                     return False
-                return (
-                    comparator(orig.indices.numpy(), new.indices.numpy(), superset_obj) and
-                    comparator(orig.values.numpy(), new.values.numpy(), superset_obj)
+                return comparator(orig.indices.numpy(), new.indices.numpy(), superset_obj) and comparator(
+                    orig.values.numpy(), new.values.numpy(), superset_obj
                 )
 
             if isinstance(orig, tf.RaggedTensor):
@@ -182,8 +181,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             # dict_values need element-wise comparison (order matters)
             return comparator(list(orig), list(new))
         if type_name == "dict_items":
-            # dict_items can be compared as sets of tuples (order doesn't matter for items)
-            return comparator(list(orig), list(new))
+            # Convert to dict for order-insensitive comparison (handles unhashable values)
+            return comparator(dict(orig), dict(new), superset_obj)
 
         if HAS_NUMPY:
             import numpy as np  # type: ignore  # noqa: PGH003
