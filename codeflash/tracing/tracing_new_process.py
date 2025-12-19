@@ -130,6 +130,7 @@ class Tracer:
         test_file_path = get_test_file_path(
             test_dir=Path(config["tests_root"]), function_name=function_path, test_type="replay"
         )
+        test_file_path.parent.mkdir(parents=True, exist_ok=True)
         trace_filename = test_file_path.stem + ".trace"
         self.output_file = test_file_path.parent / trace_filename
         self.result_pickle_file_path = result_pickle_file_path
@@ -772,11 +773,11 @@ class Tracer:
         self.files = []
         self.top_level = []
         new_stats = {}
-        for func, (cc, ns, tt, ct, callers) in list(self.stats.items()):
+        for func, (cc, ns, tt, ct, callers) in self.stats.items():
             new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
             new_stats[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
         new_timings = {}
-        for func, (cc, ns, tt, ct, callers) in list(self.timings.items()):
+        for func, (cc, ns, tt, ct, callers) in self.timings.items():
             new_callers = {(k[0], k[1], k[2]): v for k, v in callers.items()}
             new_timings[(func[0], func[1], func[2])] = (cc, ns, tt, ct, new_callers)
         self.stats = new_stats

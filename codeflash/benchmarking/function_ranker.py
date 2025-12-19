@@ -204,7 +204,7 @@ class FunctionRanker:
             for func in functions_to_optimize:
                 func_stats = self.get_function_stats_summary(func)
                 if func_stats and func_stats.get("own_time_ns", 0) > 0:
-                    importance = func_stats["own_time_ns"] / total_program_time
+                    importance = func_stats["addressable_time_ns"] / total_program_time
                     if importance >= DEFAULT_IMPORTANCE_THRESHOLD:
                         functions_to_rank.append(func)
                     else:
