@@ -2205,3 +2205,211 @@ def test_tensorflow_ragged_tensor() -> None:
     k = tf.ragged.constant([[], [], []])
 
     assert comparator(j, k)
+
+
+def test_slice() -> None:
+    """Test comparator support for slice objects."""
+    # Test equal slices
+    a = slice(1, 10, 2)
+    b = slice(1, 10, 2)
+    assert comparator(a, b)
+
+    # Test slices with different start
+    c = slice(2, 10, 2)
+    assert not comparator(a, c)
+
+    # Test slices with different stop
+    d = slice(1, 11, 2)
+    assert not comparator(a, d)
+
+    # Test slices with different step
+    e = slice(1, 10, 3)
+    assert not comparator(a, e)
+
+    # Test slices with None values
+    f = slice(None, 10, 2)
+    g = slice(None, 10, 2)
+    h = slice(1, 10, 2)
+    assert comparator(f, g)
+    assert not comparator(f, h)
+
+    # Test slices with all None (equivalent to [:])
+    i = slice(None, None, None)
+    j = slice(None, None, None)
+    k = slice(None, None, 1)
+    assert comparator(i, j)
+    assert not comparator(i, k)
+
+    # Test slices with only stop
+    l = slice(5)
+    m = slice(5)
+    n = slice(6)
+    assert comparator(l, m)
+    assert not comparator(l, n)
+
+    # Test slices with negative values
+    o = slice(-5, -1, 1)
+    p = slice(-5, -1, 1)
+    q = slice(-5, -2, 1)
+    assert comparator(o, p)
+    assert not comparator(o, q)
+
+    # Test slice is not equal to other types
+    r = slice(1, 10)
+    s = (1, 10)
+    assert not comparator(r, s)
+
+
+def test_numpy_datetime64() -> None:
+    """Test comparator support for numpy datetime64 and timedelta64 types."""
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip("numpy required for this test")
+
+    # Test datetime64 equality
+    a = np.datetime64('2021-01-01')
+    b = np.datetime64('2021-01-01')
+    c = np.datetime64('2021-01-02')
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test datetime64 with different units
+    d = np.datetime64('2021-01-01', 'D')
+    e = np.datetime64('2021-01-01', 'D')
+    f = np.datetime64('2021-01-01', 's')  # Different unit (seconds)
+
+    assert comparator(d, e)
+    # Note: datetime64 with different units but same moment may or may not be equal
+    # depending on numpy version behavior
+
+    # Test datetime64 with time
+    g = np.datetime64('2021-01-01T12:00:00')
+    h = np.datetime64('2021-01-01T12:00:00')
+    i = np.datetime64('2021-01-01T12:00:01')
+
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test timedelta64 equality
+    j = np.timedelta64(1, 'D')
+    k = np.timedelta64(1, 'D')
+    l = np.timedelta64(2, 'D')
+
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test timedelta64 with different units
+    m = np.timedelta64(1, 'h')
+    n = np.timedelta64(1, 'h')
+    o = np.timedelta64(60, 'm')  # Same duration, different unit
+
+    assert comparator(m, n)
+    # 1 hour == 60 minutes, but they have different units
+    # numpy may treat them as equal or not depending on comparison
+
+    # Test NaT (Not a Time) - numpy's equivalent of NaN for datetime
+    p = np.datetime64('NaT')
+    q = np.datetime64('NaT')
+    r = np.datetime64('2021-01-01')
+
+    assert comparator(p, q)  # NaT == NaT should be True
+    assert not comparator(p, r)
+
+    # Test timedelta64 NaT
+    s = np.timedelta64('NaT')
+    t = np.timedelta64('NaT')
+    u = np.timedelta64(1, 'D')
+
+    assert comparator(s, t)  # NaT == NaT should be True
+    assert not comparator(s, u)
+
+    # Test datetime64 is not equal to other types
+    v = np.datetime64('2021-01-01')
+    w = '2021-01-01'
+    assert not comparator(v, w)
+
+    # Test arrays of datetime64
+    x = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64')
+    y = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64')
+    z = np.array(['2021-01-01', '2021-01-03'], dtype='datetime64')
+
+    assert comparator(x, y)
+    assert not comparator(x, z)
+
+
+def test_numpy_0d_array() -> None:
+    """Test comparator handles 0-d numpy arrays without 'iteration over 0-d array' error."""
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip("numpy required for this test")
+
+    # Test 0-d integer array
+    a = np.array(5)
+    b = np.array(5)
+    c = np.array(6)
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test 0-d float array
+    d = np.array(3.14)
+    e = np.array(3.14)
+    f = np.array(2.71)
+
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test 0-d complex array
+    g = np.array(1+2j)
+    h = np.array(1+2j)
+    i = np.array(1+3j)
+
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test 0-d string array
+    j = np.array('hello')
+    k = np.array('hello')
+    l = np.array('world')
+
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test 0-d boolean array
+    m = np.array(True)
+    n = np.array(True)
+    o = np.array(False)
+
+    assert comparator(m, n)
+    assert not comparator(m, o)
+
+    # Test 0-d array with NaN
+    p = np.array(np.nan)
+    q = np.array(np.nan)
+    r = np.array(1.0)
+
+    assert comparator(p, q)  # NaN == NaN should be True
+    assert not comparator(p, r)
+
+    # Test 0-d datetime64 array
+    s = np.array(np.datetime64('2021-01-01'))
+    t = np.array(np.datetime64('2021-01-01'))
+    u = np.array(np.datetime64('2021-01-02'))
+
+    assert comparator(s, t)
+    assert not comparator(s, u)
+
+    # Test 0-d array vs scalar
+    v = np.array(5)
+    w = 5
+    # 0-d array and scalar are different types
+    assert not comparator(v, w)
+
+    # Test 0-d array vs 1-d array with one element
+    x = np.array(5)
+    y = np.array([5])
+    # Different shapes
+    assert not comparator(x, y)

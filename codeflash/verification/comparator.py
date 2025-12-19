@@ -58,6 +58,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 enum.Enum,
                 type,
                 range,
+                slice,
                 OrderedDict,
             ),
         ):
@@ -187,11 +188,25 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         if HAS_NUMPY:
             import numpy as np  # type: ignore  # noqa: PGH003
 
+            if isinstance(orig, (np.datetime64, np.timedelta64)):
+                # Handle NaT (Not a Time) - numpy's equivalent of NaN for datetime
+                if np.isnat(orig) and np.isnat(new):
+                    return True
+                if np.isnat(orig) or np.isnat(new):
+                    return False
+                return orig == new
+
             if isinstance(orig, np.ndarray):
                 if orig.dtype != new.dtype:
                     return False
                 if orig.shape != new.shape:
                     return False
+                # Handle 0-d arrays specially to avoid "iteration over a 0-d array" error
+                if orig.ndim == 0:
+                    try:
+                        return np.allclose(orig, new, equal_nan=True)
+                    except Exception:
+                        return bool(orig == new)
                 try:
                     return np.allclose(orig, new, equal_nan=True)
                 except Exception:
