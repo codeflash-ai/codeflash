@@ -37,10 +37,10 @@ class AIServiceRefinerRequest:
     optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
-    original_code_runtime: str
+    original_code_runtime: int
     optimized_source_code: str
     optimized_explanation: str
-    optimized_code_runtime: str
+    optimized_code_runtime: int
     speedup: str
     trace_id: str
     original_line_profiler_results: str
