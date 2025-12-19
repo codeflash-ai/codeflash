@@ -120,9 +120,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     result_pickle_file_path = get_run_tmp_file(Path(f"tracer_results_file_{i}.pkl"))
                     result_pickle_file_paths.append(result_pickle_file_path)
                     args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
-                    outpath = parsed_args.outfile
-                    outpath = outpath.parent / f"{outpath.stem}_{i}{outpath.suffix}"
-                    args_dict["output"] = str(outpath)
                     updated_sys_argv = []
                     for elem in sys.argv:
                         if elem in test_paths_set:
@@ -164,7 +161,6 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             else:
                 result_pickle_file_path = get_run_tmp_file(Path("tracer_results_file.pkl"))
                 args_dict["result_pickle_file_path"] = str(result_pickle_file_path)
-                args_dict["output"] = str(parsed_args.outfile)
                 args_dict["command"] = " ".join(sys.argv)
 
                 env = os.environ.copy()
