@@ -76,7 +76,6 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
-    AIServiceCodeRepairRequest,
     BestOptimization,
     CandidateEvaluationContext,
     CodeOptimizationContext,
@@ -763,7 +762,6 @@ class FunctionOptimizer:
         file_path_to_helper_classes: dict[Path, set[str]],
         eval_ctx: CandidateEvaluationContext,
         all_refinements_data: list[AIServiceRefinerRequest],
-        ai_service_client: AiServiceClient,
         exp_type: str,
         function_references: str,
     ) -> BestOptimization | None:
@@ -883,9 +881,7 @@ class FunctionOptimizer:
                         optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
                         function_references=function_references,
                     )
-                        original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                        optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-
+                )
         # Display runtime information
         if is_LSP_enabled():
             lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
@@ -939,7 +935,12 @@ class FunctionOptimizer:
         )
 
         processor = CandidateProcessor(
-            candidates, future_line_profile_results, all_refinements_data, self.future_all_code_repair, self.aiservice_client, self.executor
+            candidates,
+            future_line_profile_results,
+            all_refinements_data,
+            self.future_all_code_repair,
+            self.aiservice_client,
+            self.executor,
         )
         candidate_index = 0
 
