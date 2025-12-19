@@ -45,14 +45,11 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_REPAIRS_PER_TRACE,
-    REFINE_ALL_THRESHOLD,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
-    REPAIR_UNMATCHED_PERCENTAGE_LIMIT,
     REPEAT_OPTIMIZATION_PROBABILITY,
-    TOP_N_REFINEMENTS,
     TOTAL_LOOPING_TIME_EFFECTIVE,
-    Effort,
+    EffortKeys,
+    get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
@@ -191,8 +188,16 @@ class CandidateProcessor:
     def _process_refinement_results(self) -> OptimizedCandidate | None:
         """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
         future_refinements: list[concurrent.futures.Future] = []
+        top_n_candidates = int(
+            min(
+                get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.args.effort),
+                len(self.all_refinements_data),
+            )
+        )
 
-        if len(self.all_refinements_data) <= REFINE_ALL_THRESHOLD:
+        if top_n_candidates == len(self.all_refinements_data) or len(self.all_refinements_data) <= get_effort_value(
+            EffortKeys.REFINE_ALL_THRESHOLD, self.args.effort
+        ):
             for data in self.all_refinements_data:
                 future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
         else:
@@ -209,7 +214,6 @@ class CandidateProcessor:
             diffs_norm = normalize_by_max(diff_lens_list)
             # the lower the better
             score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
-            top_n_candidates = int((TOP_N_REFINEMENTS * len(runtimes_list)) + 0.5)
             top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
 
             for idx in top_indecies:
@@ -310,7 +314,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
-        n_tests = Effort.get_number_of_generated_tests(args.effort)
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, args.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
@@ -360,7 +364,7 @@ class FunctionOptimizer:
         str,
     ]:
         """Generate and instrument tests for the function."""
-        n_tests = Effort.get_number_of_generated_tests(self.args.effort)
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.args.effort)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -925,7 +929,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=Effort.get_number_of_optimizer_lp_candidates(self.args.effort),
+            num_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.args.effort),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
@@ -1290,7 +1294,7 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
         """Generate unit tests and concolic tests for the function."""
-        n_tests = Effort.get_number_of_generated_tests(self.args.effort)
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.args.effort)
         assert len(generated_test_paths) == n_tests
 
         # Submit test generation tasks
@@ -1352,7 +1356,7 @@ class FunctionOptimizer:
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function."""
-        n_candidates = Effort.get_number_of_optimizer_candidates(self.args.effort)
+        n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.args.effort)
 
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
@@ -1919,8 +1923,9 @@ class FunctionOptimizer:
         test_results_count: int,
         exp_type: str,
     ) -> None:
-        if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
-            logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
+        max_repairs = get_effort_value(EffortKeys.MAX_CODE_REPAIRS_PER_TRACE, self.args.effort)
+        if self.repair_counter >= max_repairs:
+            logger.debug(f"Repair counter reached {max_repairs}, skipping repair")
             return
         if candidate.source not in (OptimizedCandidateSource.OPTIMIZE, OptimizedCandidateSource.OPTIMIZE_LP):
             # only repair the first pass of the candidates for now
@@ -1930,7 +1935,7 @@ class FunctionOptimizer:
             logger.debug("No diffs found, skipping repair")
             return
         result_unmatched_perc = len(diffs) / test_results_count
-        if result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT:
+        if result_unmatched_perc > get_effort_value(EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT, self.args.effort):
             logger.debug(f"Result unmatched percentage is {result_unmatched_perc * 100}%, skipping repair")
             return
 
