@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING
 
+import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
@@ -45,6 +46,34 @@ class AIServiceRefinerRequest:
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     function_references: str | None = None
+
+
+class TestDiffScope(str, Enum):
+    RETURN_VALUE = "return_value"
+    STDOUT = "stdout"
+    DID_PASS = "did_pass"  # noqa: S105
+
+
+@dataclass
+class TestDiff:
+    scope: TestDiffScope
+    original_pass: bool
+    candidate_pass: bool
+
+    original_value: str | None = None
+    candidate_value: str | None = None
+    test_src_code: Optional[str] = None
+    candidate_pytest_error: Optional[str] = None
+    original_pytest_error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AIServiceCodeRepairRequest:
+    optimization_id: str
+    original_source_code: str
+    modified_source_code: str
+    trace_id: str
+    test_diffs: list[TestDiff]
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -243,12 +272,12 @@ class CodeStringsMarkdown(BaseModel):
 
         """
         matches = markdown_pattern.findall(markdown_code)
-        results = CodeStringsMarkdown()
+        code_string_list = []
         try:
             for file_path, code in matches:
                 path = file_path.strip()
-                results.code_strings.append(CodeString(code=code, file_path=Path(path)))
-            return results  # noqa: TRY300
+                code_string_list.append(CodeString(code=code, file_path=Path(path)))
+            return CodeStringsMarkdown(code_strings=code_string_list)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
             return CodeStringsMarkdown()
@@ -421,11 +450,20 @@ class TestsInFile:
     test_type: TestType
 
 
+class OptimizedCandidateSource(str, Enum):
+    OPTIMIZE = "OPTIMIZE"
+    OPTIMIZE_LP = "OPTIMIZE_LP"
+    REFINE = "REFINE"
+    REPAIR = "REPAIR"
+
+
 @dataclass(frozen=True)
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
     explanation: str
     optimization_id: str
+    source: OptimizedCandidateSource
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -572,6 +610,42 @@ class InvocationId:
             f"{self.function_getting_tested}:{self.iteration_id}"
         )
 
+    # TestSuiteClass.test_function_name
+    def test_fn_qualified_name(self) -> str:
+        # Use f-string with inline conditional to reduce string concatenation operations
+        return (
+            f"{self.test_class_name}.{self.test_function_name}"
+            if self.test_class_name
+            else str(self.test_function_name)
+        )
+
+    def find_func_in_class(self, class_node: cst.ClassDef, func_name: str) -> Optional[cst.FunctionDef]:
+        for stmt in class_node.body.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == func_name:
+                return stmt
+        return None
+
+    def get_src_code(self, test_path: Path) -> Optional[str]:
+        if not test_path.exists():
+            return None
+        test_src = test_path.read_text(encoding="utf-8")
+        module_node = cst.parse_module(test_src)
+
+        if self.test_class_name:
+            for stmt in module_node.body:
+                if isinstance(stmt, cst.ClassDef) and stmt.name.value == self.test_class_name:
+                    func_node = self.find_func_in_class(stmt, self.test_function_name)
+                    if func_node:
+                        return module_node.code_for_node(func_node).strip()
+            # class not found
+            return None
+
+        # Otherwise, look for a top level function
+        for stmt in module_node.body:
+            if isinstance(stmt, cst.FunctionDef) and stmt.name.value == self.test_function_name:
+                return module_node.code_for_node(stmt).strip()
+        return None
+
     @staticmethod
     def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
         components = string_id.split(":")
@@ -616,16 +690,21 @@ class TestResults(BaseModel):  # noqa: PLW1641
     # also we don't support deletion of test results elements - caution is advised
     test_results: list[FunctionTestInvocation] = []
     test_result_idx: dict[str, int] = {}
+
     perf_stdout: Optional[str] = None
+    # mapping between test function name and stdout failure message
+    test_failures: Optional[dict[str, str]] = None
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
-        if unique_id in self.test_result_idx:
+        test_result_idx = self.test_result_idx
+        if unique_id in test_result_idx:
             if DEBUG_MODE:
                 logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
-        self.test_result_idx[unique_id] = len(self.test_results)
-        self.test_results.append(function_test_invocation)
+        test_results = self.test_results
+        test_result_idx[unique_id] = len(test_results)
+        test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
         original_len = len(self.test_results)

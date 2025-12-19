@@ -222,7 +222,8 @@ result: [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 result: [0, 1, 2, 3, 4, 5]
 """
         assert out_str == results2[0].stdout
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
     finally:
         fto_path.write_text(original_code, "utf-8")
         test_path.unlink(missing_ok=True)
@@ -367,7 +368,8 @@ def test_sort():
         assert test_results[1].return_value == ([0, 1, 2, 3, 4, 5],)
         out_str = """codeflash stdout : BubbleSorter.sorter() called\n"""
         assert test_results[1].stdout == out_str
-        assert compare_test_results(test_results, test_results)
+        match, _ = compare_test_results(test_results, test_results)
+        assert match
         assert test_results[2].id.function_getting_tested == "BubbleSorter.__init__"
         assert test_results[2].id.test_function_name == "test_sort"
         assert test_results[2].did_pass
@@ -395,7 +397,8 @@ def test_sort():
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
 
         # Replace with optimized code that mutated instance attribute
         optimized_code = """
@@ -490,7 +493,8 @@ class BubbleSorter:
         )
         assert new_test_results[3].runtime > 0
         assert new_test_results[3].did_pass
-        assert not compare_test_results(test_results, new_test_results)
+        match, _ = compare_test_results(test_results, new_test_results)
+        assert not match
 
     finally:
         fto_path.write_text(original_code, "utf-8")
@@ -629,7 +633,8 @@ def test_sort():
         out_str = """codeflash stdout : BubbleSorter.sorter_classmethod() called
 """
         assert test_results[0].stdout == out_str
-        assert compare_test_results(test_results, test_results)
+        match, _ = compare_test_results(test_results, test_results)
+        assert match
 
         assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter_classmethod"
         assert test_results[1].id.iteration_id == "4_0"
@@ -654,7 +659,8 @@ def test_sort():
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
 
     finally:
         fto_path.write_text(original_code, "utf-8")
@@ -793,7 +799,8 @@ def test_sort():
         out_str = """codeflash stdout : BubbleSorter.sorter_staticmethod() called
 """
         assert test_results[0].stdout == out_str
-        assert compare_test_results(test_results, test_results)
+        match, _ = compare_test_results(test_results, test_results)
+        assert match
 
         assert test_results[1].id.function_getting_tested == "BubbleSorter.sorter_staticmethod"
         assert test_results[1].id.iteration_id == "4_0"
@@ -818,7 +825,8 @@ def test_sort():
             testing_time=0.1,
         )
 
-        assert compare_test_results(test_results, results2)
+        match, _ = compare_test_results(test_results, results2)
+        assert match
 
     finally:
         fto_path.write_text(original_code, "utf-8")

@@ -43,16 +43,8 @@ def get_function_alias(module: str, function_name: str) -> str:
     return "_".join(module.split(".")) + "_" + function_name
 
 
-def create_trace_replay_test(
-    trace_file: str,
-    functions: list[FunctionModules],
-    test_framework: str = "pytest",
-    max_run_count=100,  # noqa: ANN001
-) -> str:
-    assert test_framework in {"pytest", "unittest"}
-
-    imports = f"""import dill as pickle
-{"import unittest" if test_framework == "unittest" else ""}
+def create_trace_replay_test(trace_file: str, functions: list[FunctionModules], max_run_count: int = 100) -> str:
+    imports = """import dill as pickle
 from codeflash.tracing.replay_test import get_next_arg_and_return
 """
 
@@ -112,12 +104,7 @@ trace_file_path = r"{trace_file}"
             ret = {class_name_alias}{method_name}(**args)
             """
     )
-    if test_framework == "unittest":
-        self = "self"
-        test_template = "\nclass TestTracedFunctions(unittest.TestCase):\n"
-    else:
-        test_template = ""
-        self = ""
+    test_template = ""
     for func, func_property in zip(functions, function_properties):
         if func_property is None:
             continue
@@ -167,9 +154,8 @@ trace_file_path = r"{trace_file}"
                 max_run_count=max_run_count,
                 filter_variables=filter_variables,
             )
-        formatted_test_body = textwrap.indent(test_body, "        " if test_framework == "unittest" else "    ")
+        formatted_test_body = textwrap.indent(test_body, "    ")
 
-        test_template += "    " if test_framework == "unittest" else ""
-        test_template += f"def test_{alias}({self}):\n{formatted_test_body}\n"
+        test_template += f"def test_{alias}():\n{formatted_test_body}\n"
 
     return imports + "\n" + metadata + "\n" + test_template
