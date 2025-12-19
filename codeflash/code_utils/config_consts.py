@@ -14,6 +14,11 @@ REPEAT_OPTIMIZATION_PROBABILITY = 0.1
 DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 N_CANDIDATES_LP = 6
 
+# Refinement
+REFINE_ALL_THRESHOLD = 2  # when valid optimizations count is 2 or less, refine all optimizations
+REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more important than diff by a factor of 2
+TOP_N_REFINEMENTS = 0.45  # top 45% of valid optimizations (based on the weighted score) are refined
+
 # LSP-specific
 N_CANDIDATES_LSP = 3
 N_TESTS_TO_GENERATE_LSP = 2

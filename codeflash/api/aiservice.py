@@ -248,11 +248,11 @@ class AiServiceClient:
                 "original_source_code": opt.original_source_code,
                 "read_only_dependency_code": opt.read_only_dependency_code,
                 "original_line_profiler_results": opt.original_line_profiler_results,
-                "original_code_runtime": opt.original_code_runtime,
+                "original_code_runtime": humanize_runtime(opt.original_code_runtime),
                 "optimized_source_code": opt.optimized_source_code,
                 "optimized_explanation": opt.optimized_explanation,
                 "optimized_line_profiler_results": opt.optimized_line_profiler_results,
-                "optimized_code_runtime": opt.optimized_code_runtime,
+                "optimized_code_runtime": humanize_runtime(opt.optimized_code_runtime),
                 "speedup": opt.speedup,
                 "trace_id": opt.trace_id,
                 "function_references": opt.function_references,
@@ -260,8 +260,6 @@ class AiServiceClient:
             }
             for opt in request
         ]
-        logger.debug(f"Refining {len(request)} optimizations…")
-        console.rule()
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
         except requests.exceptions.RequestException as e:
@@ -271,8 +269,6 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            logger.debug(f"Generated {len(refined_optimizations)} candidate refinements.")
-            console.rule()
 
             refinements = self._get_valid_candidates(refined_optimizations)
             return [
