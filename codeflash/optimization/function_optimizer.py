@@ -938,9 +938,9 @@ class FunctionOptimizer:
             candidates,
             future_line_profile_results,
             all_refinements_data,
-            self.future_all_code_repair,
             self.aiservice_client,
             self.executor,
+            self.future_all_code_repair,
         )
         candidate_index = 0
 
