@@ -425,8 +425,8 @@ def bubble_sort_with_unused_socket(data_container):
             testing_time=1.0,
         )
         assert len(optimized_test_results_unused_socket) == 1
-        verification_result = compare_test_results(test_results_unused_socket, optimized_test_results_unused_socket)
-        assert verification_result is True
+        match, _ = compare_test_results(test_results_unused_socket, optimized_test_results_unused_socket)
+        assert match
 
         # Remove the previous instrumentation
         replay_test_path.write_text(original_replay_test_code)
@@ -514,8 +514,8 @@ def bubble_sort_with_used_socket(data_container):
         assert test_results_used_socket.test_results[0].did_pass is False
 
         # Even though tests threw the same error, we reject this as the behavior of the unpickleable object could not be determined.
-        assert compare_test_results(test_results_used_socket, optimized_test_results_used_socket) is False
-
+        match, _ = compare_test_results(test_results_used_socket, optimized_test_results_used_socket)
+        assert not match
     finally:
         # cleanup
         output_file.unlink(missing_ok=True)

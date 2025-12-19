@@ -31,6 +31,7 @@ from codeflash.verification.verification_utils import TestConfig
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from codeflash.benchmarking.function_ranker import FunctionRanker
     from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import BenchmarkKey, FunctionCalledInTest
@@ -53,6 +54,7 @@ class Optimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
+        self.trace_file: Path | None = None
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
@@ -87,24 +89,26 @@ class Optimizer:
                     file_path_to_source_code[file] = f.read()
             try:
                 instrument_codeflash_trace_decorator(file_to_funcs_to_optimize)
-                trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
-                if trace_file.exists():
-                    trace_file.unlink()
+                self.trace_file = Path(self.args.benchmarks_root) / "benchmarks.trace"
+                if self.trace_file.exists():
+                    self.trace_file.unlink()
 
                 self.replay_tests_dir = Path(
                     tempfile.mkdtemp(prefix="codeflash_replay_tests_", dir=self.args.benchmarks_root)
                 )
                 trace_benchmarks_pytest(
-                    self.args.benchmarks_root, self.args.tests_root, self.args.project_root, trace_file
+                    self.args.benchmarks_root, self.args.tests_root, self.args.project_root, self.trace_file
                 )  # Run all tests that use pytest-benchmark
-                replay_count = generate_replay_test(trace_file, self.replay_tests_dir)
+                replay_count = generate_replay_test(self.trace_file, self.replay_tests_dir)
                 if replay_count == 0:
                     logger.info(
                         f"No valid benchmarks found in {self.args.benchmarks_root} for functions to optimize, continuing optimization"
                     )
                 else:
-                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(trace_file)
-                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(trace_file)
+                    function_benchmark_timings = CodeFlashBenchmarkPlugin.get_function_benchmark_timings(
+                        self.trace_file
+                    )
+                    total_benchmark_timings = CodeFlashBenchmarkPlugin.get_benchmark_timings(self.trace_file)
                     function_to_results = validate_and_format_benchmark_table(
                         function_benchmark_timings, total_benchmark_timings
                     )
@@ -251,6 +255,145 @@ class Optimizer:
         ph("cli-optimize-discovered-tests", {"num_tests": num_discovered_tests})
         return function_to_tests, num_discovered_tests
 
+    def display_global_ranking(
+        self, globally_ranked: list[tuple[Path, FunctionToOptimize]], ranker: FunctionRanker, show_top_n: int = 15
+    ) -> None:
+        from rich.table import Table
+
+        if not globally_ranked:
+            return
+
+        # Show top N functions
+        display_count = min(show_top_n, len(globally_ranked))
+
+        table = Table(
+            title=f"Function Ranking (Top {display_count} of {len(globally_ranked)})",
+            title_style="bold cyan",
+            border_style="cyan",
+            show_lines=False,
+        )
+
+        table.add_column("Priority", style="bold yellow", justify="center", width=8)
+        table.add_column("Function", style="cyan", width=40)
+        table.add_column("File", style="dim", width=25)
+        table.add_column("Addressable Time", justify="right", style="green", width=12)
+        table.add_column("Impact", justify="center", style="bold", width=8)
+
+        # Get addressable time for display
+        for i, (file_path, func) in enumerate(globally_ranked[:display_count], 1):
+            addressable_time = ranker.get_function_addressable_time(func)
+
+            # Format function name
+            func_name = func.qualified_name
+            if len(func_name) > 38:
+                func_name = func_name[:35] + "..."
+
+            # Format file name
+            file_name = file_path.name
+            if len(file_name) > 23:
+                file_name = "..." + file_name[-20:]
+
+            # Format addressable time
+            if addressable_time >= 1e9:
+                time_display = f"{addressable_time / 1e9:.2f}s"
+            elif addressable_time >= 1e6:
+                time_display = f"{addressable_time / 1e6:.1f}ms"
+            elif addressable_time >= 1e3:
+                time_display = f"{addressable_time / 1e3:.1f}µs"
+            else:
+                time_display = f"{addressable_time:.0f}ns"
+
+            # Impact indicator
+            if i <= 5:
+                impact = "🔥"
+                impact_style = "bold red"
+            elif i <= 10:
+                impact = "⚡"
+                impact_style = "bold yellow"
+            else:
+                impact = "💡"
+                impact_style = "bold blue"
+
+            table.add_row(f"#{i}", func_name, file_name, time_display, impact, style=impact_style if i <= 5 else None)
+
+        console.print(table)
+
+        if len(globally_ranked) > display_count:
+            console.print(f"[dim]... and {len(globally_ranked) - display_count} more functions[/dim]")
+
+    def rank_all_functions_globally(
+        self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], trace_file_path: Path | None
+    ) -> list[tuple[Path, FunctionToOptimize]]:
+        """Rank all functions globally across all files based on trace data.
+
+        This performs global ranking instead of per-file ranking, ensuring that
+        high-impact functions are optimized first regardless of which file they're in.
+
+        Args:
+            file_to_funcs_to_optimize: Mapping of file paths to functions to optimize
+            trace_file_path: Path to trace file with performance data
+
+        Returns:
+            List of (file_path, function) tuples in globally ranked order by addressable time.
+            If no trace file or ranking fails, returns functions in original file order.
+
+        """
+        all_functions: list[tuple[Path, FunctionToOptimize]] = []
+        for file_path, functions in file_to_funcs_to_optimize.items():
+            all_functions.extend((file_path, func) for func in functions)
+
+        # If no trace file, return in original order
+        if not trace_file_path or not trace_file_path.exists():
+            logger.debug("No trace file available, using original function order")
+            return all_functions
+
+        try:
+            from codeflash.benchmarking.function_ranker import FunctionRanker
+
+            console.rule()
+            logger.info("loading|Ranking functions globally by performance impact...")
+            console.rule()
+            # Create ranker with trace data
+            ranker = FunctionRanker(trace_file_path)
+
+            # Extract just the functions for ranking (without file paths)
+            functions_only = [func for _, func in all_functions]
+
+            # Rank globally
+            ranked_functions = ranker.rank_functions(functions_only)
+
+            # Reconstruct with file paths by looking up original file for each ranked function
+            # Build reverse mapping: function -> file path
+            # Since FunctionToOptimize is unhashable (contains list), we compare by identity
+            func_to_file_map = {}
+            for file_path, func in all_functions:
+                # Use a tuple of unique identifiers as the key
+                key: tuple[Path, str, int | None] = (func.file_path, func.qualified_name, func.starting_line)
+                func_to_file_map[key] = file_path
+            globally_ranked = []
+            for func in ranked_functions:
+                key = (func.file_path, func.qualified_name, func.starting_line)
+                file_path = func_to_file_map.get(key)
+                if file_path:
+                    globally_ranked.append((file_path, func))
+
+            console.rule()
+            logger.info(
+                f"Globally ranked {len(ranked_functions)} functions by addressable time "
+                f"(filtered {len(functions_only) - len(ranked_functions)} low-importance functions)"
+            )
+
+            # Display ranking table for user visibility
+            self.display_global_ranking(globally_ranked, ranker)
+            console.rule()
+
+        except Exception as e:
+            logger.warning(f"Could not perform global ranking: {e}")
+            logger.debug("Falling back to original function order")
+            return all_functions
+        else:
+            return globally_ranked
+
     def run(self) -> None:
         from codeflash.code_utils.checkpoint import CodeflashRunCheckpoint
 
@@ -265,6 +408,12 @@ class Optimizer:
 
         if self.args.worktree:
             self.worktree_mode()
+
+        if not self.args.replay_test and self.test_cfg.tests_root.exists():
+            leftover_trace_files = list(self.test_cfg.tests_root.glob("*.trace"))
+            if leftover_trace_files:
+                logger.debug(f"Cleaning up {len(leftover_trace_files)} leftover trace file(s) from previous runs")
+                cleanup_paths(leftover_trace_files)
 
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
@@ -297,84 +446,77 @@ class Optimizer:
             if self.args.all:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
-            for original_module_path in file_to_funcs_to_optimize:
-                module_prep_result = self.prepare_module_for_optimization(original_module_path)
-                if module_prep_result is None:
-                    continue
+            # GLOBAL RANKING: Rank all functions together before optimizing
+            globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
+            # Cache for module preparation (avoid re-parsing same files)
+            prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module]] = {}
 
-                validated_original_code, original_module_ast = module_prep_result
+            # Optimize functions in globally ranked order
+            for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
+                # Prepare module if not already cached
+                if original_module_path not in prepared_modules:
+                    module_prep_result = self.prepare_module_for_optimization(original_module_path)
+                    if module_prep_result is None:
+                        logger.warning(f"Skipping functions in {original_module_path} due to preparation error")
+                        continue
+                    prepared_modules[original_module_path] = module_prep_result
 
-                functions_to_optimize = file_to_funcs_to_optimize[original_module_path]
-                if trace_file_path and trace_file_path.exists() and len(functions_to_optimize) > 1:
-                    try:
-                        from codeflash.benchmarking.function_ranker import FunctionRanker
+                validated_original_code, original_module_ast = prepared_modules[original_module_path]
 
-                        ranker = FunctionRanker(trace_file_path)
-                        functions_to_optimize = ranker.rank_functions(functions_to_optimize)
-                        logger.info(
-                            f"Ranked {len(functions_to_optimize)} functions by performance impact in {original_module_path}"
-                        )
-                        console.rule()
-                    except Exception as e:
-                        logger.debug(f"Could not rank functions in {original_module_path}: {e}")
-
-                for i, function_to_optimize in enumerate(functions_to_optimize):
-                    function_iterator_count = i + 1
-                    logger.info(
-                        f"Optimizing function {function_iterator_count} of {num_optimizable_functions}: "
-                        f"{function_to_optimize.qualified_name}"
+                function_iterator_count = i + 1
+                logger.info(
+                    f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "
+                    f"{function_to_optimize.qualified_name} (in {original_module_path.name})"
+                )
+                console.rule()
+                function_optimizer = None
+                try:
+                    function_optimizer = self.create_function_optimizer(
+                        function_to_optimize,
+                        function_to_tests=function_to_tests,
+                        function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
+                        function_benchmark_timings=function_benchmark_timings,
+                        total_benchmark_timings=total_benchmark_timings,
+                        original_module_ast=original_module_ast,
+                        original_module_path=original_module_path,
                     )
-                    console.rule()
-                    function_optimizer = None
-                    try:
-                        function_optimizer = self.create_function_optimizer(
-                            function_to_optimize,
-                            function_to_tests=function_to_tests,
-                            function_to_optimize_source_code=validated_original_code[original_module_path].source_code,
-                            function_benchmark_timings=function_benchmark_timings,
-                            total_benchmark_timings=total_benchmark_timings,
-                            original_module_ast=original_module_ast,
-                            original_module_path=original_module_path,
-                        )
-                        if function_optimizer is None:
-                            continue
+                    if function_optimizer is None:
+                        continue
 
-                        self.current_function_optimizer = (
-                            function_optimizer  # needed to clean up from the outside of this function
+                    self.current_function_optimizer = (
+                        function_optimizer  # needed to clean up from the outside of this function
+                    )
+                    best_optimization = function_optimizer.optimize_function()
+                    if self.functions_checkpoint:
+                        self.functions_checkpoint.add_function_to_checkpoint(
+                            function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
                         )
-                        best_optimization = function_optimizer.optimize_function()
-                        if self.functions_checkpoint:
-                            self.functions_checkpoint.add_function_to_checkpoint(
-                                function_to_optimize.qualified_name_with_modules_from_root(self.args.project_root)
+                    if is_successful(best_optimization):
+                        optimizations_found += 1
+                        # create a diff patch for successful optimization
+                        if self.current_worktree:
+                            best_opt = best_optimization.unwrap()
+                            read_writable_code = best_opt.code_context.read_writable_code
+                            relative_file_paths = [
+                                code_string.file_path for code_string in read_writable_code.code_strings
+                            ]
+                            patch_path = create_diff_patch_from_worktree(
+                                self.current_worktree, relative_file_paths, fto_name=function_to_optimize.qualified_name
                             )
-                        if is_successful(best_optimization):
-                            optimizations_found += 1
-                            # create a diff patch for successful optimization
-                            if self.current_worktree:
-                                best_opt = best_optimization.unwrap()
-                                read_writable_code = best_opt.code_context.read_writable_code
-                                relative_file_paths = [
-                                    code_string.file_path for code_string in read_writable_code.code_strings
-                                ]
-                                patch_path = create_diff_patch_from_worktree(
-                                    self.current_worktree,
-                                    relative_file_paths,
-                                    fto_name=function_to_optimize.qualified_name,
+                            self.patch_files.append(patch_path)
+                            if i < len(globally_ranked_functions) - 1:
+                                _, next_func = globally_ranked_functions[i + 1]
+                                create_worktree_snapshot_commit(
+                                    self.current_worktree, f"Optimizing {next_func.qualified_name}"
                                 )
-                                self.patch_files.append(patch_path)
-                                if i < len(functions_to_optimize) - 1:
-                                    create_worktree_snapshot_commit(
-                                        self.current_worktree,
-                                        f"Optimizing {functions_to_optimize[i + 1].qualified_name}",
-                                    )
-                        else:
-                            logger.warning(best_optimization.failure())
-                            console.rule()
-                            continue
-                    finally:
-                        if function_optimizer is not None:
-                            function_optimizer.executor.shutdown(wait=True)
-                            function_optimizer.cleanup_generated_files()
+                    else:
+                        logger.warning(best_optimization.failure())
+                        console.rule()
+                        continue
+                finally:
+                    if function_optimizer is not None:
+                        function_optimizer.executor.shutdown(wait=True)
+                        function_optimizer.cleanup_generated_files()
 
             ph("cli-optimize-run-finished", {"optimizations_found": optimizations_found})
             if len(self.patch_files) > 0:
@@ -421,9 +563,15 @@ class Optimizer:
         ]
 
     def cleanup_replay_tests(self) -> None:
+        paths_to_cleanup = []
         if self.replay_tests_dir and self.replay_tests_dir.exists():
             logger.debug(f"Cleaning up replay tests directory: {self.replay_tests_dir}")
-            cleanup_paths([self.replay_tests_dir])
+            paths_to_cleanup.append(self.replay_tests_dir)
+        if self.trace_file and self.trace_file.exists():
+            logger.debug(f"Cleaning up trace file: {self.trace_file}")
+            paths_to_cleanup.append(self.trace_file)
+        if paths_to_cleanup:
+            cleanup_paths(paths_to_cleanup)
 
     def cleanup_temporary_paths(self) -> None:
         if hasattr(get_run_tmp_file, "tmpdir"):
@@ -436,7 +584,14 @@ class Optimizer:
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-        cleanup_paths([self.test_cfg.concolic_test_root_dir, self.replay_tests_dir])
+        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir, self.replay_tests_dir]
+        if self.trace_file:
+            paths_to_cleanup.append(self.trace_file)
+        if self.test_cfg.tests_root.exists():
+            for trace_file in self.test_cfg.tests_root.glob("*.trace"):
+                if trace_file not in paths_to_cleanup:
+                    paths_to_cleanup.append(trace_file)
+        cleanup_paths(paths_to_cleanup)
 
     def worktree_mode(self) -> None:
         if self.current_worktree:
