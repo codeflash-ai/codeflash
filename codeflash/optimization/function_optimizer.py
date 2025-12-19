@@ -134,6 +134,7 @@ class CandidateProcessor:
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
         future_all_code_repair: list[concurrent.futures.Future],
+        effort: str,
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
@@ -141,6 +142,7 @@ class CandidateProcessor:
         self.candidate_len = len(initial_candidates)
         self.ai_service_client = ai_service_client
         self.executor = executor
+        self.effort = effort
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
@@ -190,13 +192,13 @@ class CandidateProcessor:
         future_refinements: list[concurrent.futures.Future] = []
         top_n_candidates = int(
             min(
-                get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.args.effort),
+                get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort),
                 len(self.all_refinements_data),
             )
         )
 
         if top_n_candidates == len(self.all_refinements_data) or len(self.all_refinements_data) <= get_effort_value(
-            EffortKeys.REFINE_ALL_THRESHOLD, self.args.effort
+            EffortKeys.REFINE_ALL_THRESHOLD, self.effort
         ):
             for data in self.all_refinements_data:
                 future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
@@ -944,6 +946,7 @@ class FunctionOptimizer:
             self.aiservice_client,
             self.executor,
             self.future_all_code_repair,
+            self.args.effort,
         )
         candidate_index = 0
 

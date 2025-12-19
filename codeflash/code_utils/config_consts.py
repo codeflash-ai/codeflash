@@ -62,7 +62,7 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
     },
     # when valid optimizations count is N or less, refine all optimizations
     EffortKeys.REFINE_ALL_THRESHOLD.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
-    # Top valid candidates percentage for refinements
+    # Top valid candidates for refinements
     EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
 }
 
