@@ -599,7 +599,7 @@ def was_function_previously_optimized(
     try:
         owner, repo = get_repo_owner_and_name()
     except (git.exc.InvalidGitRepositoryError, ValueError) as e:
-        logger.debug(f"Cannot get repository info: {e}")
+        logger.debug(f"Cannot get git repository info: {e}")
         owner, repo = None, None
     pr_number = get_pr_number()
 
