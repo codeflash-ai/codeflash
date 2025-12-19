@@ -17,7 +17,12 @@ from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, 
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
-from codeflash.models.models import AIServiceRefinerRequest, CodeStringsMarkdown, OptimizedCandidate
+from codeflash.models.models import (
+    AIServiceRefinerRequest,
+    CodeStringsMarkdown,
+    OptimizedCandidate,
+    OptimizedCandidateSource,
+)
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -26,7 +31,7 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
-    from codeflash.models.models import AIServiceRefinerRequest
+    from codeflash.models.models import AIServiceCodeRepairRequest, AIServiceRefinerRequest
     from codeflash.result.explanation import Explanation
 
 
@@ -85,7 +90,9 @@ class AiServiceClient:
         # response.raise_for_status()  # Will raise an HTTPError if the HTTP request returned an unsuccessful status code
         return response
 
-    def _get_valid_candidates(self, optimizations_json: list[dict[str, Any]]) -> list[OptimizedCandidate]:
+    def _get_valid_candidates(
+        self, optimizations_json: list[dict[str, Any]], source: OptimizedCandidateSource
+    ) -> list[OptimizedCandidate]:
         candidates: list[OptimizedCandidate] = []
         for opt in optimizations_json:
             code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
@@ -93,7 +100,11 @@ class AiServiceClient:
                 continue
             candidates.append(
                 OptimizedCandidate(
-                    source_code=code, explanation=opt["explanation"], optimization_id=opt["optimization_id"]
+                    source_code=code,
+                    explanation=opt["explanation"],
+                    optimization_id=opt["optimization_id"],
+                    source=source,
+                    parent_id=opt.get("parent_id", None),
                 )
             )
         return candidates
@@ -154,7 +165,7 @@ class AiServiceClient:
             console.rule()
             end_time = time.perf_counter()
             logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
-            return self._get_valid_candidates(optimizations_json)
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
         try:
             error = response.json()["error"]
         except Exception:
@@ -218,7 +229,7 @@ class AiServiceClient:
                 f"!lsp|Generated {len(optimizations_json)} candidate optimizations using line profiler information."
             )
             console.rule()
-            return self._get_valid_candidates(optimizations_json)
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE_LP)
         try:
             error = response.json()["error"]
         except Exception:
@@ -267,15 +278,7 @@ class AiServiceClient:
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
 
-            refinements = self._get_valid_candidates(refined_optimizations)
-            return [
-                OptimizedCandidate(
-                    source_code=c.source_code,
-                    explanation=c.explanation,
-                    optimization_id=c.optimization_id[:-4] + "refi",
-                )
-                for c in refinements
-            ]
+            return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE)
 
         try:
             error = response.json()["error"]
@@ -285,6 +288,52 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
+
+    def code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
+        """Repair the optimization candidate that is not matching the test result of the original code.
+
+        Args:
+        request: candidate details for repair
+
+        Returns:
+        -------
+        - OptimizedCandidate: new fixed candidate.
+
+        """
+        console.rule()
+        try:
+            payload = {
+                "optimization_id": request.optimization_id,
+                "original_source_code": request.original_source_code,
+                "modified_source_code": request.modified_source_code,
+                "trace_id": request.trace_id,
+                "test_diffs": request.test_diffs,
+            }
+            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
+        except (requests.exceptions.RequestException, TypeError) as e:
+            logger.exception(f"Error generating optimization repair: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return None
+
+        if response.status_code == 200:
+            fixed_optimization = response.json()
+            console.rule()
+
+            valid_candidates = self._get_valid_candidates([fixed_optimization], OptimizedCandidateSource.REPAIR)
+            if not valid_candidates:
+                logger.error("Code repair failed to generate a valid candidate.")
+                return None
+
+            return valid_candidates[0]
+
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return None
 
     def get_new_explanation(  # noqa: D417
         self,
