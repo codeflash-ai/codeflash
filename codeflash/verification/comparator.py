@@ -130,6 +130,19 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
             return True
 
+        # Handle dict view types (dict_keys, dict_values, dict_items)
+        # Use type name checking since these are not directly importable types
+        type_name = type(orig).__name__
+        if type_name == "dict_keys":
+            # dict_keys can be compared as sets (order doesn't matter)
+            return comparator(set(orig), set(new))
+        if type_name == "dict_values":
+            # dict_values need element-wise comparison (order matters)
+            return comparator(list(orig), list(new))
+        if type_name == "dict_items":
+            # dict_items can be compared as sets of tuples (order doesn't matter for items)
+            return comparator(list(orig), list(new))
+
         if HAS_NUMPY:
             import numpy as np  # type: ignore  # noqa: PGH003
 
@@ -207,6 +220,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 if orig.device != new.device:
                     return False
                 return torch.allclose(orig, new, equal_nan=True)
+
+            if isinstance(orig, torch.dtype):
+                return orig == new
 
         if HAS_PYRSISTENT:
             import pyrsistent  # type: ignore  # noqa: PGH003

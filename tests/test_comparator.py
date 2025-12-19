@@ -624,6 +624,43 @@ def test_pyrsistent():
     assert not comparator(v, x)
 
 
+def test_torch_dtype():
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    # Test torch.dtype comparisons
+    a = torch.float32
+    b = torch.float32
+    c = torch.float64
+    d = torch.int32
+    assert comparator(a, b)
+    assert not comparator(a, c)
+    assert not comparator(a, d)
+
+    # Test different dtype categories
+    e = torch.int64
+    f = torch.int64
+    g = torch.int32
+    assert comparator(e, f)
+    assert not comparator(e, g)
+
+    # Test complex dtypes
+    h = torch.complex64
+    i = torch.complex64
+    j = torch.complex128
+    assert comparator(h, i)
+    assert not comparator(h, j)
+
+    # Test bool dtype
+    k = torch.bool
+    l = torch.bool
+    m = torch.int8
+    assert comparator(k, l)
+    assert not comparator(k, m)
+
+
 def test_torch():
     try:
         import torch  # type: ignore
@@ -1763,6 +1800,74 @@ def test_attrs():
         
     minimal = MinimalClass("test", 42)
     extended = ExtendedClass("test", 42, "extra", {"key": "value"}, 1000.0)
-    
+
     assert not comparator(minimal, extended)
-    
+
+
+def test_dict_views() -> None:
+    """Test comparator support for dict_keys, dict_values, and dict_items."""
+    # Test dict_keys
+    d1 = {"a": 1, "b": 2, "c": 3}
+    d2 = {"a": 1, "b": 2, "c": 3}
+    d3 = {"a": 1, "b": 2, "d": 3}
+    d4 = {"a": 1, "b": 2}
+
+    # dict_keys - same keys
+    assert comparator(d1.keys(), d2.keys())
+    # dict_keys - different keys
+    assert not comparator(d1.keys(), d3.keys())
+    # dict_keys - different length
+    assert not comparator(d1.keys(), d4.keys())
+
+    # Test dict_values
+    v1 = {"a": 1, "b": 2, "c": 3}
+    v2 = {"x": 1, "y": 2, "z": 3}  # same values, different keys
+    v3 = {"a": 1, "b": 2, "c": 4}  # different value
+    v4 = {"a": 1, "b": 2}  # different length
+
+    # dict_values - same values (order matters for values since they're iterable)
+    assert comparator(v1.values(), v2.values())
+    # dict_values - different values
+    assert not comparator(v1.values(), v3.values())
+    # dict_values - different length
+    assert not comparator(v1.values(), v4.values())
+
+    # Test dict_items
+    i1 = {"a": 1, "b": 2, "c": 3}
+    i2 = {"a": 1, "b": 2, "c": 3}
+    i3 = {"a": 1, "b": 2, "c": 4}  # different value
+    i4 = {"a": 1, "b": 2, "d": 3}  # different key
+    i5 = {"a": 1, "b": 2}  # different length
+
+    # dict_items - same items
+    assert comparator(i1.items(), i2.items())
+    # dict_items - different value
+    assert not comparator(i1.items(), i3.items())
+    # dict_items - different key
+    assert not comparator(i1.items(), i4.items())
+    # dict_items - different length
+    assert not comparator(i1.items(), i5.items())
+
+    # Test empty dicts
+    empty1 = {}
+    empty2 = {}
+    assert comparator(empty1.keys(), empty2.keys())
+    assert comparator(empty1.values(), empty2.values())
+    assert comparator(empty1.items(), empty2.items())
+
+    # Test with nested values
+    nested1 = {"a": [1, 2, 3], "b": {"x": 1}}
+    nested2 = {"a": [1, 2, 3], "b": {"x": 1}}
+    nested3 = {"a": [1, 2, 4], "b": {"x": 1}}
+
+    assert comparator(nested1.values(), nested2.values())
+    assert not comparator(nested1.values(), nested3.values())
+    assert comparator(nested1.items(), nested2.items())
+    assert not comparator(nested1.items(), nested3.items())
+
+    # Test that dict views are not equal to lists/sets
+    d = {"a": 1, "b": 2}
+    assert not comparator(d.keys(), ["a", "b"])
+    assert not comparator(d.keys(), {"a", "b"})
+    assert not comparator(d.values(), [1, 2])
+    assert not comparator(d.items(), [("a", 1), ("b", 2)])
