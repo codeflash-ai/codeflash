@@ -316,3 +316,7 @@ Language Server Protocol support in `codeflash/lsp/` enables IDE integration dur
 - Profile before and after changes
 - Use benchmarks to validate improvements
 - Generate detailed performance reports
+
+# Agent Rules <!-- tessl-managed -->
+
+@.tessl/RULES.md follow the [instructions](.tessl/RULES.md)

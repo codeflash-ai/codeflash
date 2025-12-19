@@ -40,6 +40,10 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 from rich.text import Text
 
+_property_id = "property"
+
+_ast_name = ast.Name
+
 
 @dataclass(frozen=True)
 class FunctionProperties:
@@ -774,4 +778,8 @@ def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef)
 
 
 def function_is_a_property(function_node: FunctionDef | AsyncFunctionDef) -> bool:
-    return any(isinstance(node, ast.Name) and node.id == "property" for node in function_node.decorator_list)
+    for node in function_node.decorator_list:  # noqa: SIM110
+        # Use isinstance rather than type(...) is ... for better performance with single inheritance trees like ast
+        if isinstance(node, _ast_name) and node.id == _property_id:
+            return True
+    return False

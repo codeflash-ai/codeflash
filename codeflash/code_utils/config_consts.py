@@ -13,6 +13,11 @@ MIN_TESTCASE_PASSED_THRESHOLD = 6
 REPEAT_OPTIMIZATION_PROBABILITY = 0.1
 DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 
+# Refinement
+REFINE_ALL_THRESHOLD = 2  # when valid optimizations count is 2 or less, refine all optimizations
+REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more important than diff by a factor of 2
+TOP_N_REFINEMENTS = 0.45  # top 45% of valid optimizations (based on the weighted score) are refined
+
 # LSP-specific
 TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in increase in performance reporting
 

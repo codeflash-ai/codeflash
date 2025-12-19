@@ -36,10 +36,10 @@ class AIServiceRefinerRequest:
     optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
-    original_code_runtime: str
+    original_code_runtime: int
     optimized_source_code: str
     optimized_explanation: str
-    optimized_code_runtime: str
+    optimized_code_runtime: int
     speedup: str
     trace_id: str
     original_line_profiler_results: str
@@ -620,12 +620,14 @@ class TestResults(BaseModel):  # noqa: PLW1641
 
     def add(self, function_test_invocation: FunctionTestInvocation) -> None:
         unique_id = function_test_invocation.unique_invocation_loop_id
-        if unique_id in self.test_result_idx:
+        test_result_idx = self.test_result_idx
+        if unique_id in test_result_idx:
             if DEBUG_MODE:
                 logger.warning(f"Test result with id {unique_id} already exists. SKIPPING")
             return
-        self.test_result_idx[unique_id] = len(self.test_results)
-        self.test_results.append(function_test_invocation)
+        test_results = self.test_results
+        test_result_idx[unique_id] = len(test_results)
+        test_results.append(function_test_invocation)
 
     def merge(self, other: TestResults) -> None:
         original_len = len(self.test_results)
