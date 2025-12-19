@@ -23,6 +23,7 @@ HAS_PYRSISTENT = find_spec("pyrsistent") is not None
 HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
+HAS_TENSORFLOW = find_spec("tensorflow") is not None
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
@@ -96,6 +97,46 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             if isinstance(orig, (xarray.Dataset, xarray.DataArray)):
                 return orig.identical(new)
+
+        # Handle TensorFlow objects early to avoid boolean context errors
+        if HAS_TENSORFLOW:
+            import tensorflow as tf  # type: ignore  # noqa: PGH003
+
+            if isinstance(orig, tf.Tensor):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape != new.shape:
+                    return False
+                # Use numpy conversion for proper NaN handling
+                return comparator(orig.numpy(), new.numpy(), superset_obj)
+
+            if isinstance(orig, tf.Variable):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape != new.shape:
+                    return False
+                return comparator(orig.numpy(), new.numpy(), superset_obj)
+
+            if isinstance(orig, tf.dtypes.DType):
+                return orig == new
+
+            if isinstance(orig, tf.TensorShape):
+                return orig == new
+
+            if isinstance(orig, tf.SparseTensor):
+                if not comparator(orig.dense_shape.numpy(), new.dense_shape.numpy(), superset_obj):
+                    return False
+                return (
+                    comparator(orig.indices.numpy(), new.indices.numpy(), superset_obj) and
+                    comparator(orig.values.numpy(), new.values.numpy(), superset_obj)
+                )
+
+            if isinstance(orig, tf.RaggedTensor):
+                if orig.dtype != new.dtype:
+                    return False
+                if orig.shape.rank != new.shape.rank:
+                    return False
+                return comparator(orig.to_list(), new.to_list(), superset_obj)
 
         if HAS_SQLALCHEMY:
             import sqlalchemy  # type: ignore  # noqa: PGH003

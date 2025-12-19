@@ -1871,3 +1871,337 @@ def test_dict_views() -> None:
     assert not comparator(d.keys(), {"a", "b"})
     assert not comparator(d.values(), [1, 2])
     assert not comparator(d.items(), [("a", 1), ("b", 2)])
+
+
+def test_tensorflow_tensor() -> None:
+    """Test comparator support for TensorFlow Tensor objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test basic 1D tensors
+    a = tf.constant([1, 2, 3])
+    b = tf.constant([1, 2, 3])
+    c = tf.constant([1, 2, 4])
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test 2D tensors
+    d = tf.constant([[1, 2, 3], [4, 5, 6]])
+    e = tf.constant([[1, 2, 3], [4, 5, 6]])
+    f = tf.constant([[1, 2, 3], [4, 5, 7]])
+
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test tensors with different shapes
+    g = tf.constant([1, 2, 3])
+    h = tf.constant([[1, 2, 3]])
+
+    assert not comparator(g, h)
+
+    # Test tensors with different dtypes
+    i = tf.constant([1, 2, 3], dtype=tf.float32)
+    j = tf.constant([1, 2, 3], dtype=tf.float32)
+    k = tf.constant([1, 2, 3], dtype=tf.int32)
+
+    assert comparator(i, j)
+    assert not comparator(i, k)
+
+    # Test 3D tensors
+    l = tf.constant([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    m = tf.constant([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    n = tf.constant([[[1, 2], [3, 4]], [[5, 6], [7, 9]]])
+
+    assert comparator(l, m)
+    assert not comparator(l, n)
+
+    # Test empty tensors
+    o = tf.constant([])
+    p = tf.constant([])
+    q = tf.constant([1.0])
+
+    assert comparator(o, p)
+    assert not comparator(o, q)
+
+    # Test tensors with NaN values
+    r = tf.constant([1.0, float('nan'), 3.0])
+    s = tf.constant([1.0, float('nan'), 3.0])
+    t = tf.constant([1.0, 2.0, 3.0])
+
+    assert comparator(r, s)  # NaN == NaN should be True
+    assert not comparator(r, t)
+
+    # Test tensors with infinity values
+    u = tf.constant([1.0, float('inf'), 3.0])
+    v = tf.constant([1.0, float('inf'), 3.0])
+    w = tf.constant([1.0, float('-inf'), 3.0])
+
+    assert comparator(u, v)
+    assert not comparator(u, w)
+
+    # Test complex tensors
+    x = tf.constant([1+2j, 3+4j])
+    y = tf.constant([1+2j, 3+4j])
+    z = tf.constant([1+2j, 3+5j])
+
+    assert comparator(x, y)
+    assert not comparator(x, z)
+
+    # Test boolean tensors
+    aa = tf.constant([True, False, True])
+    bb = tf.constant([True, False, True])
+    cc = tf.constant([True, True, True])
+
+    assert comparator(aa, bb)
+    assert not comparator(aa, cc)
+
+    # Test string tensors
+    dd = tf.constant(["hello", "world"])
+    ee = tf.constant(["hello", "world"])
+    ff = tf.constant(["hello", "there"])
+
+    assert comparator(dd, ee)
+    assert not comparator(dd, ff)
+
+
+def test_tensorflow_dtype() -> None:
+    """Test comparator support for TensorFlow DType objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test float dtypes
+    a = tf.float32
+    b = tf.float32
+    c = tf.float64
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test integer dtypes
+    d = tf.int32
+    e = tf.int32
+    f = tf.int64
+
+    assert comparator(d, e)
+    assert not comparator(d, f)
+
+    # Test unsigned integer dtypes
+    g = tf.uint8
+    h = tf.uint8
+    i = tf.uint16
+
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test complex dtypes
+    j = tf.complex64
+    k = tf.complex64
+    l = tf.complex128
+
+    assert comparator(j, k)
+    assert not comparator(j, l)
+
+    # Test bool dtype
+    m = tf.bool
+    n = tf.bool
+    o = tf.int8
+
+    assert comparator(m, n)
+    assert not comparator(m, o)
+
+    # Test string dtype
+    p = tf.string
+    q = tf.string
+    r = tf.int32
+
+    assert comparator(p, q)
+    assert not comparator(p, r)
+
+
+def test_tensorflow_variable() -> None:
+    """Test comparator support for TensorFlow Variable objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test basic variables
+    a = tf.Variable([1, 2, 3], dtype=tf.float32)
+    b = tf.Variable([1, 2, 3], dtype=tf.float32)
+    c = tf.Variable([1, 2, 4], dtype=tf.float32)
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test variables with different dtypes
+    d = tf.Variable([1, 2, 3], dtype=tf.float32)
+    e = tf.Variable([1, 2, 3], dtype=tf.float64)
+
+    assert not comparator(d, e)
+
+    # Test 2D variables
+    f = tf.Variable([[1, 2], [3, 4]], dtype=tf.float32)
+    g = tf.Variable([[1, 2], [3, 4]], dtype=tf.float32)
+    h = tf.Variable([[1, 2], [3, 5]], dtype=tf.float32)
+
+    assert comparator(f, g)
+    assert not comparator(f, h)
+
+    # Test variables with different shapes
+    i = tf.Variable([1, 2, 3], dtype=tf.float32)
+    j = tf.Variable([[1, 2, 3]], dtype=tf.float32)
+
+    assert not comparator(i, j)
+
+
+def test_tensorflow_tensor_shape() -> None:
+    """Test comparator support for TensorFlow TensorShape objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test equal shapes
+    a = tf.TensorShape([2, 3, 4])
+    b = tf.TensorShape([2, 3, 4])
+    c = tf.TensorShape([2, 3, 5])
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test different ranks
+    d = tf.TensorShape([2, 3])
+    e = tf.TensorShape([2, 3, 4])
+
+    assert not comparator(d, e)
+
+    # Test scalar shapes
+    f = tf.TensorShape([])
+    g = tf.TensorShape([])
+    h = tf.TensorShape([1])
+
+    assert comparator(f, g)
+    assert not comparator(f, h)
+
+    # Test shapes with None dimensions (unknown dimensions)
+    i = tf.TensorShape([None, 3, 4])
+    j = tf.TensorShape([None, 3, 4])
+    k = tf.TensorShape([2, 3, 4])
+
+    assert comparator(i, j)
+    assert not comparator(i, k)
+
+    # Test fully unknown shapes
+    l = tf.TensorShape(None)
+    m = tf.TensorShape(None)
+    n = tf.TensorShape([1, 2])
+
+    assert comparator(l, m)
+    assert not comparator(l, n)
+
+
+def test_tensorflow_sparse_tensor() -> None:
+    """Test comparator support for TensorFlow SparseTensor objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test equal sparse tensors
+    a = tf.SparseTensor(
+        indices=[[0, 0], [1, 2]],
+        values=[1.0, 2.0],
+        dense_shape=[3, 4]
+    )
+    b = tf.SparseTensor(
+        indices=[[0, 0], [1, 2]],
+        values=[1.0, 2.0],
+        dense_shape=[3, 4]
+    )
+    c = tf.SparseTensor(
+        indices=[[0, 0], [1, 2]],
+        values=[1.0, 3.0],  # Different value
+        dense_shape=[3, 4]
+    )
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test sparse tensors with different indices
+    d = tf.SparseTensor(
+        indices=[[0, 0], [1, 3]],  # Different index
+        values=[1.0, 2.0],
+        dense_shape=[3, 4]
+    )
+
+    assert not comparator(a, d)
+
+    # Test sparse tensors with different shapes
+    e = tf.SparseTensor(
+        indices=[[0, 0], [1, 2]],
+        values=[1.0, 2.0],
+        dense_shape=[4, 5]  # Different shape
+    )
+
+    assert not comparator(a, e)
+
+    # Test empty sparse tensors
+    f = tf.SparseTensor(
+        indices=tf.zeros([0, 2], dtype=tf.int64),
+        values=[],
+        dense_shape=[3, 4]
+    )
+    g = tf.SparseTensor(
+        indices=tf.zeros([0, 2], dtype=tf.int64),
+        values=[],
+        dense_shape=[3, 4]
+    )
+
+    assert comparator(f, g)
+
+
+def test_tensorflow_ragged_tensor() -> None:
+    """Test comparator support for TensorFlow RaggedTensor objects."""
+    try:
+        import tensorflow as tf
+    except ImportError:
+        pytest.skip("tensorflow required for this test")
+
+    # Test equal ragged tensors
+    a = tf.ragged.constant([[1, 2], [3, 4, 5], [6]])
+    b = tf.ragged.constant([[1, 2], [3, 4, 5], [6]])
+    c = tf.ragged.constant([[1, 2], [3, 4, 6], [6]])  # Different value
+
+    assert comparator(a, b)
+    assert not comparator(a, c)
+
+    # Test ragged tensors with different row lengths
+    d = tf.ragged.constant([[1, 2, 3], [4, 5], [6]])  # Different structure
+
+    assert not comparator(a, d)
+
+    # Test ragged tensors with different dtypes
+    e = tf.ragged.constant([[1.0, 2.0], [3.0, 4.0, 5.0], [6.0]])
+    f = tf.ragged.constant([[1.0, 2.0], [3.0, 4.0, 5.0], [6.0]])
+
+    assert comparator(e, f)
+    assert not comparator(a, e)  # int vs float
+
+    # Test nested ragged tensors
+    g = tf.ragged.constant([[[1, 2], [3]], [[4, 5, 6]]])
+    h = tf.ragged.constant([[[1, 2], [3]], [[4, 5, 6]]])
+    i = tf.ragged.constant([[[1, 2], [3]], [[4, 5, 7]]])
+
+    assert comparator(g, h)
+    assert not comparator(g, i)
+
+    # Test empty ragged tensors
+    j = tf.ragged.constant([[], [], []])
+    k = tf.ragged.constant([[], [], []])
+
+    assert comparator(j, k)
