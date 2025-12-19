@@ -552,6 +552,60 @@ def merge_test_results(
     return merged_test_results
 
 
+FAILURES_HEADER_RE = re.compile(r"=+ FAILURES =+")
+TEST_HEADER_RE = re.compile(r"_{3,}\s*(.*?)\s*_{3,}$")
+
+
+def parse_test_failures_from_stdout(stdout: str) -> dict[str, str]:
+    """Extract individual pytest test failures from stdout grouped by test case qualified name, and add them to the test results."""
+    lines = stdout.splitlines()
+    start = end = None
+
+    for i, line in enumerate(lines):
+        if FAILURES_HEADER_RE.search(line.strip()):
+            start = i
+            break
+
+    if start is None:
+        return {}
+
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].strip()
+        if "short test summary info" in stripped:
+            end = j
+            break
+        # any new === section === block
+        if stripped.startswith("=") and stripped.count("=") > 3:
+            end = j
+            break
+
+    # If no clear "end", just grap the rest of the string
+    if end is None:
+        end = len(lines)
+
+    failure_block = lines[start:end]
+
+    failures: dict[str, str] = {}
+    current_name = None
+    current_lines: list[str] = []
+
+    for line in failure_block:
+        m = TEST_HEADER_RE.match(line.strip())
+        if m:
+            if current_name is not None:
+                failures[current_name] = "".join(current_lines)
+
+            current_name = m.group(1)
+            current_lines = []
+        elif current_name:
+            current_lines.append(line + "\n")
+
+    if current_name:
+        failures[current_name] = "".join(current_lines)
+
+    return failures
+
+
 def parse_test_results(
     test_xml_path: Path,
     test_files: TestFiles,
@@ -607,4 +661,10 @@ def parse_test_results(
             function_name=function_name,
         )
         coverage.log_coverage()
+    try:
+        failures = parse_test_failures_from_stdout(run_result.stdout)
+        results.test_failures = failures
+    except Exception as e:
+        logger.exception(e)
+
     return results, coverage if all_args else None
