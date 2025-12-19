@@ -29,13 +29,16 @@ from codeflash.code_utils.code_replacer import (
     replace_function_definitions_in_module,
 )
 from codeflash.code_utils.code_utils import (
+    choose_weights,
     cleanup_paths,
     create_rank_dictionary_compact,
+    create_score_dictionary_from_metrics,
     diff_length,
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
     module_name_from_file_path,
+    normalize_by_max,
     restore_conftest,
     unified_diff_strings,
 )
@@ -45,7 +48,10 @@ from codeflash.code_utils.config_consts import (
     N_CANDIDATES_EFFECTIVE,
     N_CANDIDATES_LP_EFFECTIVE,
     N_TESTS_TO_GENERATE_EFFECTIVE,
+    REFINE_ALL_THRESHOLD,
+    REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
+    TOP_N_REFINEMENTS,
     TOTAL_LOOPING_TIME_EFFECTIVE,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
@@ -124,19 +130,23 @@ class CandidateProcessor:
         self,
         initial_candidates: list,
         future_line_profile_results: concurrent.futures.Future,
-        future_all_refinements: list,
+        all_refinements_data: list[AIServiceRefinerRequest],
+        ai_service_client: AiServiceClient,
+        executor: concurrent.futures.ThreadPoolExecutor,
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
         self.refinement_done = False
         self.candidate_len = len(initial_candidates)
+        self.ai_service_client = ai_service_client
+        self.executor = executor
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
             self.candidate_queue.put(candidate)
 
         self.future_line_profile_results = future_line_profile_results
-        self.future_all_refinements = future_all_refinements
+        self.all_refinements_data = all_refinements_data
 
     def get_next_candidate(self) -> OptimizedCandidate | None:
         """Get the next candidate from the queue, handling async results as needed."""
@@ -168,15 +178,45 @@ class CandidateProcessor:
 
         return self.get_next_candidate()
 
+    def refine_optimizations(self, request: list[AIServiceRefinerRequest]) -> concurrent.futures.Future:
+        return self.executor.submit(self.ai_service_client.optimize_python_code_refinement, request=request)
+
     def _process_refinement_results(self) -> OptimizedCandidate | None:
-        """Process refinement results and add to queue."""
-        if self.future_all_refinements:
+        """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
+        future_refinements: list[concurrent.futures.Future] = []
+
+        if len(self.all_refinements_data) <= REFINE_ALL_THRESHOLD:
+            for data in self.all_refinements_data:
+                future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
+        else:
+            diff_lens_list = []
+            runtimes_list = []
+            for c in self.all_refinements_data:
+                diff_lens_list.append(diff_length(c.original_source_code, c.optimized_source_code))
+                runtimes_list.append(c.optimized_code_runtime)
+
+            runtime_w, diff_w = REFINED_CANDIDATE_RANKING_WEIGHTS
+            weights = choose_weights(runtime=runtime_w, diff=diff_w)
+
+            runtime_norm = normalize_by_max(runtimes_list)
+            diffs_norm = normalize_by_max(diff_lens_list)
+            # the lower the better
+            score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
+            top_n_candidates = int((TOP_N_REFINEMENTS * len(runtimes_list)) + 0.5)
+            top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
+
+            for idx in top_indecies:
+                data = self.all_refinements_data[idx]
+                future_refinements.append(self.refine_optimizations([data]))
+
+        if future_refinements:
             logger.info("loading|Refining generated code for improved quality and performance...")
-        concurrent.futures.wait(self.future_all_refinements)
+
+        concurrent.futures.wait(future_refinements)
         refinement_response = []
 
-        for future_refinement in self.future_all_refinements:
-            possible_refinement = future_refinement.result()
+        for f in future_refinements:
+            possible_refinement = f.result()
             if len(possible_refinement) > 0:
                 refinement_response.append(possible_refinement[0])
 
@@ -686,15 +726,14 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
         eval_ctx: CandidateEvaluationContext,
-        future_all_refinements: list[concurrent.futures.Future],
-        ai_service_client: AiServiceClient,
+        all_refinements_data: list[AIServiceRefinerRequest],
         exp_type: str,
         function_references: str,
     ) -> BestOptimization | None:
         """Process a single optimization candidate.
 
         Returns the BestOptimization if the candidate is successful, None otherwise.
-        Updates eval_ctx with results and may append to future_all_refinements.
+        Updates eval_ctx with results and may append to all_refinements_data.
         """
         # Cleanup temp files
         get_run_tmp_file(Path(f"test_return_values_{candidate_index}.bin")).unlink(missing_ok=True)
@@ -789,14 +828,19 @@ class FunctionOptimizer:
 
             # Queue refinement for non-refined candidates
             if not candidate.optimization_id.endswith("refi"):
-                future_all_refinements.append(
-                    self.refine_optimizations(
-                        valid_optimizations=[best_optimization],
-                        original_code_baseline=original_code_baseline,
-                        code_context=code_context,
+                all_refinements_data.append(
+                    AIServiceRefinerRequest(
+                        optimization_id=best_optimization.candidate.optimization_id,
+                        original_source_code=code_context.read_writable_code.markdown,
+                        read_only_dependency_code=code_context.read_only_context_code,
+                        original_code_runtime=original_code_baseline.runtime,
+                        optimized_source_code=best_optimization.candidate.source_code.markdown,
+                        optimized_explanation=best_optimization.candidate.explanation,
+                        optimized_code_runtime=best_optimization.runtime,
+                        speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
                         trace_id=self.get_trace_id(exp_type),
-                        ai_service_client=ai_service_client,
-                        executor=self.executor,
+                        original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                        optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
                         function_references=function_references,
                     )
                 )
@@ -832,7 +876,7 @@ class FunctionOptimizer:
 
         # Initialize evaluation context and async tasks
         eval_ctx = CandidateEvaluationContext()
-        future_all_refinements: list[concurrent.futures.Future] = []
+        all_refinements_data: list[AIServiceRefinerRequest] = []
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
 
@@ -850,7 +894,9 @@ class FunctionOptimizer:
             else None,
         )
 
-        processor = CandidateProcessor(candidates, future_line_profile_results, future_all_refinements)
+        processor = CandidateProcessor(
+            candidates, future_line_profile_results, all_refinements_data, self.aiservice_client, self.executor
+        )
         candidate_index = 0
 
         # Process candidates using queue-based approach
@@ -871,8 +917,7 @@ class FunctionOptimizer:
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
                     eval_ctx=eval_ctx,
-                    future_all_refinements=future_all_refinements,
-                    ai_service_client=ai_service_client,
+                    all_refinements_data=all_refinements_data,
                     exp_type=exp_type,
                     function_references=function_references,
                 )
@@ -904,35 +949,6 @@ class FunctionOptimizer:
             )
 
         return best_optimization
-
-    def refine_optimizations(
-        self,
-        valid_optimizations: list[BestOptimization],
-        original_code_baseline: OriginalCodeBaseline,
-        code_context: CodeOptimizationContext,
-        trace_id: str,
-        ai_service_client: AiServiceClient,
-        executor: concurrent.futures.ThreadPoolExecutor,
-        function_references: str | None = None,
-    ) -> concurrent.futures.Future:
-        request = [
-            AIServiceRefinerRequest(
-                optimization_id=opt.candidate.optimization_id,
-                original_source_code=code_context.read_writable_code.markdown,
-                read_only_dependency_code=code_context.read_only_context_code,
-                original_code_runtime=humanize_runtime(original_code_baseline.runtime),
-                optimized_source_code=opt.candidate.source_code.markdown,
-                optimized_explanation=opt.candidate.explanation,
-                optimized_code_runtime=humanize_runtime(opt.runtime),
-                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=opt.runtime) * 100)}%",
-                trace_id=trace_id,
-                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                optimized_line_profiler_results=opt.line_profiler_test_results["str_out"],
-                function_references=function_references,
-            )
-            for opt in valid_optimizations
-        ]
-        return executor.submit(ai_service_client.optimize_python_code_refinement, request=request)
 
     def log_successful_optimization(
         self, explanation: Explanation, generated_tests: GeneratedTestsList, exp_type: str
