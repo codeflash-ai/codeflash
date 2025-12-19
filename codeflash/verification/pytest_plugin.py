@@ -12,6 +12,7 @@ import warnings
 
 # System Imports
 from pathlib import Path
+from statistics import mean, median
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
@@ -287,26 +288,32 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
 def should_stop(
     runtimes: list[int],
     warmup: int = 3,
-    window: int = 4,
-    min_rel_tol: float = 0.03,  # 3% from min
-    mutual_rel_tol: float = 0.02,  # 2% among themselves
+    window: int = 3,
+    center_rel_tol: float = 0.01,  # ±1% around median
+    spread_rel_tol: float = 0.02,  # 2% window spread
+    slope_rel_tol: float = 0.01,  # 1% improvement allowed
 ) -> bool:
     if len(runtimes) < warmup + window:
         return False
 
     recent = runtimes[-window:]
+    m = median(recent)
 
-    # Soft min: best seen after warmup
-    current_min = min(runtimes[warmup:])
+    # 1) All recent points close to the median
+    centered = all(abs(r - m) / m <= center_rel_tol for r in recent)
 
-    # 1) recent runs close to min
-    close_to_min = all(abs(r - current_min) / current_min <= min_rel_tol for r in recent)
-
-    # 2) recent runs close to each other
+    # 2) Window spread is small
     r_min, r_max = min(recent), max(recent)
-    close_together = (r_max - r_min) / r_min <= mutual_rel_tol
+    spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
 
-    return close_to_min and close_together
+    # 3) No strong downward trend (still improving)
+    # Compare first half vs second half
+    half = window // 2
+    first = mean(recent[:half])
+    second = mean(recent[half:])
+    slope_ok = (first - second) / first <= slope_rel_tol
+
+    return centered and spread_ok and slope_ok
 
 
 class PytestLoops:
@@ -381,9 +388,6 @@ class PytestLoops:
             runtimes.append(total_duration_in_nano)
 
             if should_stop(runtimes):
-                Path(f"/home/mohammed/Documents/test-results/break-{int(_ORIGINAL_TIME_TIME())}.txt").write_text(
-                    f"Break after {count} loops, runtimes: {runtimes}"
-                )
                 break
 
             if self._timed_out(session, start_time, count):
