@@ -963,7 +963,6 @@ class FunctionOptimizer:
                     file_path_to_helper_classes=file_path_to_helper_classes,
                     eval_ctx=eval_ctx,
                     all_refinements_data=all_refinements_data,
-                    ai_service_client=ai_service_client,
                     exp_type=exp_type,
                     function_references=function_references,
                 )
