@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 import click
 import git
-import inquirer
-import inquirer.themes
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
+from inquirer_textual import prompts  # type: ignore[import-untyped]
+from inquirer_textual.common.Choice import Choice  # type: ignore[import-untyped]
 from pydantic.dataclasses import dataclass
 from rich.console import Group
 from rich.panel import Panel
@@ -237,19 +237,6 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     ), config
 
 
-# Custom theme for better UX
-class CodeflashTheme(inquirer.themes.Default):
-    def __init__(self) -> None:
-        super().__init__()
-        self.Question.mark_color = inquirer.themes.term.yellow
-        self.Question.brackets_color = inquirer.themes.term.bright_blue
-        self.Question.default_color = inquirer.themes.term.bright_cyan
-        self.List.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selected_icon = "✅"
-        self.Checkbox.unselected_icon = "⬜"
-
-
 # common sections between normal mode and lsp mode
 class CommonSections(Enum):
     module_root = "module_root"
@@ -282,14 +269,15 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ]
 
 
-def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
+def get_suggestions(section: CommonSections | str) -> tuple[list[str], Optional[str]]:
     valid_subdirs = get_valid_subdirs()
-    if section == CommonSections.module_root:
+    section_value = section.value if isinstance(section, CommonSections) else section
+    if section_value == CommonSections.module_root.value:
         return [d for d in valid_subdirs if d != "tests"], None
-    if section == CommonSections.tests_root:
+    if section_value == CommonSections.tests_root.value:
         default = "tests" if "tests" in valid_subdirs else None
         return valid_subdirs, default
-    if section == CommonSections.formatter_cmds:
+    if section_value == CommonSections.formatter_cmds.value:
         return ["disabled", "ruff", "black"], "disabled"
     msg = f"Unknown section: {section}"
     raise ValueError(msg)
@@ -322,20 +310,14 @@ def collect_setup_info() -> CLISetupInfo:
     )
     console.print(info_panel)
     console.print()
-    questions = [
-        inquirer.List(
-            "module_root",
-            message="Which Python module do you want me to optimize?",
-            choices=module_subdir_options,
-            default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
-            carousel=True,
-        )
-    ]
 
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
-    if not answers:
+    default_choice = project_name if project_name in module_subdir_options else module_subdir_options[0]
+    result = prompts.select(
+        "Which Python module do you want me to optimize?", choices=module_subdir_options, default=default_choice
+    )
+    if result.command is None:
         apologize_and_exit()
-    module_root_answer = answers["module_root"]
+    module_root_answer = result.value
     if module_root_answer == curdir_option:
         module_root = "."
     elif module_root_answer == custom_dir_option:
@@ -353,22 +335,18 @@ def collect_setup_info() -> CLISetupInfo:
         # Retry loop for custom module root path
         module_root = None
         while module_root is None:
-            custom_questions = [
-                inquirer.Path(
-                    "custom_path",
-                    message="Enter the path to your module directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
-
-            custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
-            if not custom_answers:
+            result = prompts.text("Enter the path to your module directory")
+            if result.command is None:
                 apologize_and_exit()
                 return None  # unreachable but satisfies type checker
 
-            custom_path_str = str(custom_answers["custom_path"])
-            # Validate the path is safe
+            custom_path_str = result.value
+            # Validate the path is safe and exists
+            path_obj = Path(custom_path_str)
+            if not path_obj.exists() or not path_obj.is_dir():
+                click.echo(f"❌ Path does not exist or is not a directory: {custom_path_str}")
+                console.print()  # Add spacing before retry
+                continue
             is_valid, error_msg = validate_relative_directory_path(custom_path_str)
             if not is_valid:
                 click.echo(f"❌ Invalid path: {error_msg}")
@@ -402,20 +380,14 @@ def collect_setup_info() -> CLISetupInfo:
     console.print(tests_panel)
     console.print()
 
-    tests_questions = [
-        inquirer.List(
-            "tests_root",
-            message="Where are your tests located?",
-            choices=test_subdir_options,
-            default=(default_tests_subdir or test_subdir_options[0]),
-            carousel=True,
-        )
-    ]
-
-    tests_answers = inquirer.prompt(tests_questions, theme=CodeflashTheme())
-    if not tests_answers:
+    result = prompts.select(
+        "Where are your tests located?",
+        choices=test_subdir_options,
+        default=(default_tests_subdir or test_subdir_options[0]),
+    )
+    if result.command is None:
         apologize_and_exit()
-    tests_root_answer = tests_answers["tests_root"]
+    tests_root_answer = result.value
 
     if tests_root_answer == create_for_me_option:
         tests_root = Path(curdir) / (default_tests_subdir or "tests")
@@ -436,21 +408,18 @@ def collect_setup_info() -> CLISetupInfo:
         # Retry loop for custom tests root path
         tests_root = None
         while tests_root is None:
-            custom_tests_questions = [
-                inquirer.Path(
-                    "custom_tests_path",
-                    message="Enter the path to your tests directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
-
-            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
-            if not custom_tests_answers:
+            result = prompts.text("Enter the path to your tests directory")
+            if result.command is None:
                 apologize_and_exit()
                 return None  # unreachable but satisfies type checker
 
-            custom_tests_path_str = str(custom_tests_answers["custom_tests_path"])
+            custom_tests_path_str = result.value
+            # Validate the path exists
+            path_obj = Path(custom_tests_path_str)
+            if not path_obj.exists() or not path_obj.is_dir():
+                click.echo(f"❌ Path does not exist or is not a directory: {custom_tests_path_str}")
+                console.print()  # Add spacing before retry
+                continue
             # Validate the path is safe
             is_valid, error_msg = validate_relative_directory_path(custom_tests_path_str)
             if not is_valid:
@@ -502,25 +471,17 @@ def collect_setup_info() -> CLISetupInfo:
     console.print(formatter_panel)
     console.print()
 
-    formatter_questions = [
-        inquirer.List(
-            "formatter",
-            message="Which code formatter do you use?",
-            choices=[
-                ("⚫ black", "black"),
-                ("⚡ ruff", "ruff"),
-                ("🔧 other", "other"),
-                ("❌ don't use a formatter", "don't use a formatter"),
-            ],
-            default="black",
-            carousel=True,
-        )
+    formatter_choices = [
+        Choice("⚫ black", data="black"),
+        Choice("⚡ ruff", data="ruff"),
+        Choice("🔧 other", data="other"),
+        Choice("❌ don't use a formatter", data="don't use a formatter"),
     ]
 
-    formatter_answers = inquirer.prompt(formatter_questions, theme=CodeflashTheme())
-    if not formatter_answers:
+    result = prompts.select("Which code formatter do you use?", choices=formatter_choices, default=formatter_choices[0])
+    if result.command is None:
         apologize_and_exit()
-    formatter = formatter_answers["formatter"]
+    formatter = result.value.data if isinstance(result.value, Choice) else result.value
 
     git_remote = ""
     try:
@@ -540,18 +501,10 @@ def collect_setup_info() -> CLISetupInfo:
                 console.print(git_panel)
                 console.print()
 
-                git_questions = [
-                    inquirer.List(
-                        "git_remote",
-                        message="Which git remote should Codeflash use for Pull Requests?",
-                        choices=git_remotes,
-                        default="origin",
-                        carousel=True,
-                    )
-                ]
-
-                git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
-                git_remote = git_answers["git_remote"] if git_answers else git_remotes[0]
+                result = prompts.select(
+                    "Which git remote should Codeflash use for Pull Requests?", choices=git_remotes, default="origin"
+                )
+                git_remote = result.value if result.command is not None else git_remotes[0]
             else:
                 git_remote = git_remotes[0]
         else:
@@ -618,14 +571,10 @@ def check_for_toml_or_setup_file() -> str | None:
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        toml_questions = [
-            inquirer.Confirm("create_toml", message="Create pyproject.toml in the current directory?", default=True)
-        ]
-
-        toml_answers = inquirer.prompt(toml_questions, theme=CodeflashTheme())
-        if not toml_answers:
+        result = prompts.confirm("Create pyproject.toml in the current directory?", default=True)
+        if result.command is None:
             apologize_and_exit()
-        create_toml = toml_answers["create_toml"]
+        create_toml = result.value
         if create_toml:
             create_empty_pyproject_toml(pyproject_toml_path)
     click.echo()
@@ -694,45 +643,27 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Check if the workflow file already exists
         if optimize_yaml_path.exists():
-            overwrite_questions = [
-                inquirer.Confirm(
-                    "confirm_overwrite",
-                    message=f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
-                    default=False,
-                )
-            ]
-
-            overwrite_answers = inquirer.prompt(overwrite_questions, theme=CodeflashTheme())
-            if not overwrite_answers or not overwrite_answers["confirm_overwrite"]:
+            result = prompts.confirm(
+                f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?", default=False
+            )
+            if result.command is None or not result.value:
                 skip_panel = Panel(
                     Text("⏩️ Skipping workflow creation.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
                 )
                 console.print(skip_panel)
                 ph("cli-github-workflow-skipped")
                 return
-            ph(
-                "cli-github-optimization-confirm-workflow-overwrite",
-                {"confirm_overwrite": overwrite_answers["confirm_overwrite"]},
-            )
+            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": result.value})
 
-        creation_questions = [
-            inquirer.Confirm(
-                "confirm_creation", message="Set up GitHub Actions for continuous optimization?", default=True
-            )
-        ]
-
-        creation_answers = inquirer.prompt(creation_questions, theme=CodeflashTheme())
-        if not creation_answers or not creation_answers["confirm_creation"]:
+        result = prompts.confirm("Set up GitHub Actions for continuous optimization?", default=True)
+        if result.command is None or not result.value:
             skip_panel = Panel(
                 Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
             )
             console.print(skip_panel)
             ph("cli-github-workflow-skipped")
             return
-        ph(
-            "cli-github-optimization-confirm-workflow-creation",
-            {"confirm_creation": creation_answers["confirm_creation"]},
-        )
+        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": result.value})
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
@@ -752,12 +683,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             console.print(benchmark_panel)
             console.print()
 
-            benchmark_questions = [
-                inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
-            ]
-
-            benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
-            benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
+            result = prompts.confirm("Run GitHub Actions in benchmark mode?", default=True)
+            benchmark_mode = result.value if result.command is not None else False
 
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
@@ -1132,21 +1059,11 @@ def prompt_api_key() -> bool:
     # Prompt for authentication method
     auth_choices = ["🔐 Login in with Codeflash", "🔑 Use Codeflash API key"]
 
-    questions = [
-        inquirer.List(
-            "auth_method",
-            message="How would you like to authenticate?",
-            choices=auth_choices,
-            default=auth_choices[0],
-            carousel=True,
-        )
-    ]
-
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
-    if not answers:
+    result = prompts.select("How would you like to authenticate?", choices=auth_choices, default=auth_choices[0])
+    if result.command is None:
         apologize_and_exit()
 
-    method = answers["auth_method"]
+    method = result.value
 
     if method == auth_choices[1]:
         enter_api_key_and_save_to_rc()
