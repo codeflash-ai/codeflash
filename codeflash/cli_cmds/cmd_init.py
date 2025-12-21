@@ -13,7 +13,7 @@ import click
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
-from inquirer_textual.common.Choice import Choice  # type: ignore[import-untyped]
+from inquirer_textual.common.Choice import Choice
 from pydantic.dataclasses import dataclass
 from rich.console import Group
 from rich.panel import Panel
@@ -450,13 +450,12 @@ def collect_setup_info() -> CLISetupInfo:
     #
     #     # Ask about benchmark framework
     #     benchmark_framework_options = ["pytest-benchmark", "asv (Airspeed Velocity)", "custom/other"]
-    #     benchmark_framework = inquirer_wrapper(
-    #         inquirer.list_input,
-    #         message="Which benchmark framework do you use?",
+    #     result = prompts.select(
+    #         "Which benchmark framework do you use?",
     #         choices=benchmark_framework_options,
-    #         default=benchmark_framework_options[0],
-    #         carousel=True,
+    #         default=benchmark_framework_options[0]
     #     )
+    #     benchmark_framework = result.value
 
     formatter_panel = Panel(
         Text(
@@ -571,12 +570,10 @@ def check_for_toml_or_setup_file() -> str | None:
         ph("cli-no-pyproject-toml-or-setup-py")
 
         # Create a pyproject.toml file because it doesn't exist
-        result = prompts.confirm("Create pyproject.toml in the current directory?", default=True)
-        if result.command is None:
+        result = prompts.select("Create pyproject.toml in the current directory?", choices=["Yes", "No"], default="Yes")
+        if result.command is None or result.value == "No":
             apologize_and_exit()
-        create_toml = result.value
-        if create_toml:
-            create_empty_pyproject_toml(pyproject_toml_path)
+        create_empty_pyproject_toml(pyproject_toml_path)
     click.echo()
     return cast("str", project_name)
 
@@ -643,27 +640,31 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Check if the workflow file already exists
         if optimize_yaml_path.exists():
-            result = prompts.confirm(
-                f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?", default=False
+            result = prompts.select(
+                f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
+                choices=["No", "Yes"],
+                default="No",
             )
-            if result.command is None or not result.value:
+            if result.command is None or result.value == "No":
                 skip_panel = Panel(
                     Text("⏩️ Skipping workflow creation.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
                 )
                 console.print(skip_panel)
                 ph("cli-github-workflow-skipped")
                 return
-            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": result.value})
+            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": result.value == "Yes"})
 
-        result = prompts.confirm("Set up GitHub Actions for continuous optimization?", default=True)
-        if result.command is None or not result.value:
+        result = prompts.select(
+            "Set up GitHub Actions for continuous optimization?", choices=["Yes", "No"], default="Yes"
+        )
+        if result.command is None or result.value == "No":
             skip_panel = Panel(
                 Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
             )
             console.print(skip_panel)
             ph("cli-github-workflow-skipped")
             return
-        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": result.value})
+        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": result.value == "Yes"})
         workflows_path.mkdir(parents=True, exist_ok=True)
         from importlib.resources import files
 
@@ -683,8 +684,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             console.print(benchmark_panel)
             console.print()
 
-            result = prompts.confirm("Run GitHub Actions in benchmark mode?", default=True)
-            benchmark_mode = result.value if result.command is not None else False
+            result = prompts.select("Run GitHub Actions in benchmark mode?", choices=["Yes", "No"], default="Yes")
+            benchmark_mode = (result.value == "Yes") if result.command is not None else False
 
         optimize_yml_content = (
             files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")

@@ -200,7 +200,7 @@ install_types = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "inquirer_textual", "inquirer_textual.common.Choice", "numba"]
+module = ["jedi", "jedi.api.classes", "numba"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -282,7 +282,6 @@ workspace = { members = ["codeflash-benchmark"] }
 
 [tool.uv.sources]
 codeflash-benchmark = { workspace = true }
-inquirer-textual = { path = "../inquirer-textual", editable = true }
 
 [tool.uv-dynamic-versioning]
 enable = true

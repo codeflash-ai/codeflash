@@ -1,112 +1,94 @@
-"""Themed prompts wrapper for inquirer-textual with CodeFlash styling.
-
-This module provides themed prompt functions that match the original CodeFlash
-inquirer theme (yellow question marks, bright blue selections, cyan defaults).
-"""
-
 from __future__ import annotations
 
-from inquirer_textual.common.Choice import Choice  # type: ignore[import-untyped]
-from inquirer_textual.common.Result import Result  # type: ignore[import-untyped]
-from inquirer_textual.InquirerApp import InquirerApp  # type: ignore[import-untyped]
-from inquirer_textual.widgets.InquirerCheckbox import InquirerCheckbox  # type: ignore[import-untyped]
-from inquirer_textual.widgets.InquirerConfirm import InquirerConfirm  # type: ignore[import-untyped]
-from inquirer_textual.widgets.InquirerSelect import InquirerSelect  # type: ignore[import-untyped]
-from inquirer_textual.widgets.InquirerText import InquirerText  # type: ignore[import-untyped]
+from typing import TYPE_CHECKING
+
+from inquirer_textual.InquirerApp import InquirerApp
+from inquirer_textual.widgets.InquirerCheckbox import InquirerCheckbox
+from inquirer_textual.widgets.InquirerConfirm import InquirerConfirm
+from inquirer_textual.widgets.InquirerSelect import InquirerSelect
+from inquirer_textual.widgets.InquirerText import InquirerText
+
+if TYPE_CHECKING:
+    from inquirer_textual.common.Choice import Choice
 
 
-class CodeflashThemedApp(InquirerApp):  # type: ignore[misc]
-    """Custom themed InquirerApp matching the original CodeFlash theme colors."""
+class CodeflashThemedApp(InquirerApp):
+    CSS = """
+        App {
+            background: #1e293b;
+        }
+        Screen {
+            border-top: none;
+            border-bottom: none;
+            background: transparent;
+            height: auto;
+        }
+        ListView {
+            background: transparent;
+            border: none;
+        }
+        ListItem {
+            background: transparent;
+            padding: 0 1;
+            color: #f1f5f9;
+        }
+        ListItem.-highlight {
+            background: #334155;
+            color: $select-list-item-highlight-foreground;
+        }
+        Label {
+            background: transparent;
+            color: #f8fafc;
+        }
+        Static {
+            background: transparent;
+            color: #f8fafc;
+        }
+        Input {
+            background: #334155;
+            border: solid $primary;
+            color: #f8fafc;
+        }
+        Input:focus {
+            border: solid $accent;
+        }
+    """
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Return CodeFlash theme colors.
-
-        Original CodeFlash theme from inquirer:
-        - Question mark: yellow
-        - Brackets: bright blue
-        - Default: bright cyan
-        - Selection: bright blue
-        - Checkbox selected: ✅
-        - Checkbox unselected: ⬜
-        """
         return {
-            # Question mark color - yellow like the original
-            "select-question-mark": "#e5c07b",  # Gold/yellow
-            # List item highlight - bright blue like the original selection
-            "select-list-item-highlight-foreground": "#61afef",  # Bright blue
-            # Input/text color - cyan like the original
-            "input-color": "#61afef",  # Bright blue (used for inputs and selections)
-            # Additional contrast colors
-            "input-selection-background": "#3e4451",  # Subtle background for selected items
+            "select-question-mark": "#FFC143",
+            "select-list-item-highlight-foreground": "#2563EB",
+            "input-color": "#3B82F6",
+            "input-selection-background": "#1e293b",
+            "accent": "#FFC143",
+            "primary": "#2563EB",
+            "secondary": "#414372",
         }
 
 
-def select(
-    message: str, choices: list[str | Choice], default: str | Choice | None = None, mandatory: bool = True
-) -> Result[str | Choice]:  # type: ignore[type-arg]
-    """Display a select prompt with CodeFlash theming.
-
-    Args:
-        message: The prompt message to display
-        choices: List of choices (strings or Choice objects)
-        default: Default choice to pre-select
-        mandatory: Whether a response is mandatory
-
-    Returns:
-        Result object containing the selected value and command
-
-    """
-    widget = InquirerSelect(message, choices, default, mandatory)
-    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)  # type: ignore[assignment]
-    return app.run(inline=True)  # type: ignore[return-value]
+def select(  # noqa: ANN201
+    message: str, choices: list[str | Choice], default: str | Choice | None = None
+):  # type: ignore[no-untyped-def]
+    widget = InquirerSelect(message, choices, default, mandatory=True)
+    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)
+    return app.run(inline=True)
 
 
-def confirm(message: str, default: bool = False, mandatory: bool = True) -> Result[bool]:  # type: ignore[type-arg]
-    """Display a confirm prompt with CodeFlash theming.
-
-    Args:
-        message: The prompt message to display
-        default: Default value (True for yes, False for no)
-        mandatory: Whether a response is mandatory
-
-    Returns:
-        Result object containing the boolean value and command
-
-    """
-    widget = InquirerConfirm(message, default=default, mandatory=mandatory)
-    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)  # type: ignore[assignment]
-    return app.run(inline=True)  # type: ignore[return-value]
+def confirm(message: str, *, default: bool = False):  # noqa: ANN201  # type: ignore[no-untyped-def]
+    widget = InquirerConfirm(message, default=default, mandatory=True)
+    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)
+    return app.run(inline=True)
 
 
-def text(message: str) -> Result[str]:  # type: ignore[type-arg]
-    """Display a text input prompt with CodeFlash theming.
-
-    Args:
-        message: The prompt message to display
-
-    Returns:
-        Result object containing the text value and command
-
-    """
+def text(message: str):  # noqa: ANN201  # type: ignore[no-untyped-def]
     widget = InquirerText(message)
-    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)  # type: ignore[assignment]
-    return app.run(inline=True)  # type: ignore[return-value]
+    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)
+    return app.run(inline=True)
 
 
-def checkbox(
+def checkbox(  # noqa: ANN201
     message: str, choices: list[str | Choice], enabled: list[str | Choice] | None = None
-) -> Result[list[str | Choice]]:  # type: ignore[type-arg]
-    """Display a checkbox prompt with CodeFlash theming.
-
-    Args:
-        message: The prompt message to display
-        choices: List of choices (strings or Choice objects)
-        enabled: List of pre-selected choices
-
-    Returns:
-        Result object containing the list of selected values and command
-
-    """
+):  # type: ignore[no-untyped-def]
     widget = InquirerCheckbox(message, choices, enabled)
-    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)  # type: ignore[assignment]
-    return app.run(inline=True)  # type: ignore[return-value]
+    app: CodeflashThemedApp = CodeflashThemedApp(widget, shortcuts=None, show_footer=False)
+    return app.run(inline=True)
