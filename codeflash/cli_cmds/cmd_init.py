@@ -530,7 +530,7 @@ def collect_setup_info() -> CLISetupInfo:
 
 def check_for_toml_or_setup_file() -> str | None:
     console.print()
-    console.print("Checking for pyproject.toml or setup.py…\r", nl=False)
+    console.print("Checking for pyproject.toml or setup.py…\r")
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
