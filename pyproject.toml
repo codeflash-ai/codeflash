@@ -28,7 +28,6 @@ dependencies = [
     "humanize>=4.0.0",
     "posthog>=3.0.0",
     "click>=8.1.0",
-    "inquirer>=3.0.0",
     "sentry-sdk>=1.40.6,<3.0.0",
     "parameterized>=0.9.0",
     "isort>=5.11.0",
@@ -201,7 +200,7 @@ install_types = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
+module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "inquirer_textual", "inquirer_textual.common.Choice", "numba"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -283,6 +282,7 @@ workspace = { members = ["codeflash-benchmark"] }
 
 [tool.uv.sources]
 codeflash-benchmark = { workspace = true }
+inquirer-textual = { path = "../inquirer-textual", editable = true }
 
 [tool.uv-dynamic-versioning]
 enable = true
