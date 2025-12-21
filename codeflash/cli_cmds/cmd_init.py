@@ -13,7 +13,6 @@ import click
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
-from inquirer_textual import prompts  # type: ignore[import-untyped]
 from inquirer_textual.common.Choice import Choice  # type: ignore[import-untyped]
 from pydantic.dataclasses import dataclass
 from rich.console import Group
@@ -22,6 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
+from codeflash.cli_cmds import themed_prompts as prompts
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
