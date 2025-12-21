@@ -4,12 +4,12 @@ import os
 import re
 import subprocess
 import sys
+import webbrowser
 from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
-import click
 import git
 import tomlkit
 from git import InvalidGitRepositoryError, Repo
@@ -287,8 +287,8 @@ def collect_setup_info() -> CLISetupInfo:
     curdir = Path.cwd()
     # Check if the cwd is writable
     if not os.access(curdir, os.W_OK):
-        click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
-        click.echo("It's likely you don't have write permissions for this folder.")
+        console.print(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
+        console.print("It's likely you don't have write permissions for this folder.")
         sys.exit(1)
 
     # Check for the existence of pyproject.toml or setup.py
@@ -344,13 +344,13 @@ def collect_setup_info() -> CLISetupInfo:
             # Validate the path is safe and exists
             path_obj = Path(custom_path_str)
             if not path_obj.exists() or not path_obj.is_dir():
-                click.echo(f"❌ Path does not exist or is not a directory: {custom_path_str}")
+                console.print(f"❌ Path does not exist or is not a directory: {custom_path_str}")
                 console.print()  # Add spacing before retry
                 continue
             is_valid, error_msg = validate_relative_directory_path(custom_path_str)
             if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
+                console.print(f"❌ Invalid path: {error_msg}")
+                console.print("Please enter a valid relative directory path.")
                 console.print()  # Add spacing before retry
                 continue  # Retry the prompt
             module_root = Path(custom_path_str)
@@ -392,7 +392,7 @@ def collect_setup_info() -> CLISetupInfo:
     if tests_root_answer == create_for_me_option:
         tests_root = Path(curdir) / (default_tests_subdir or "tests")
         tests_root.mkdir()
-        click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
+        console.print(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
     elif tests_root_answer == custom_dir_option:
         custom_tests_panel = Panel(
             Text(
@@ -417,14 +417,14 @@ def collect_setup_info() -> CLISetupInfo:
             # Validate the path exists
             path_obj = Path(custom_tests_path_str)
             if not path_obj.exists() or not path_obj.is_dir():
-                click.echo(f"❌ Path does not exist or is not a directory: {custom_tests_path_str}")
+                console.print(f"❌ Path does not exist or is not a directory: {custom_tests_path_str}")
                 console.print()  # Add spacing before retry
                 continue
             # Validate the path is safe
             is_valid, error_msg = validate_relative_directory_path(custom_tests_path_str)
             if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
+                console.print(f"❌ Invalid path: {error_msg}")
+                console.print("Please enter a valid relative directory path.")
                 console.print()  # Add spacing before retry
                 continue  # Retry the prompt
             tests_root = Path(curdir) / Path(custom_tests_path_str)
@@ -507,7 +507,7 @@ def collect_setup_info() -> CLISetupInfo:
             else:
                 git_remote = git_remotes[0]
         else:
-            click.echo(
+            console.print(
                 "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
                 "repository to use GitHub features."
             )
@@ -529,8 +529,8 @@ def collect_setup_info() -> CLISetupInfo:
 
 
 def check_for_toml_or_setup_file() -> str | None:
-    click.echo()
-    click.echo("Checking for pyproject.toml or setup.py…\r", nl=False)
+    console.print()
+    console.print("Checking for pyproject.toml or setup.py…\r")
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
@@ -539,10 +539,10 @@ def check_for_toml_or_setup_file() -> str | None:
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
             project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
-            click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
+            console.print(f"✅ I found a pyproject.toml for your project {project_name}.")
             ph("cli-pyproject-toml-found-name")
         except Exception:
-            click.echo("✅ I found a pyproject.toml for your project.")
+            console.print("✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
     else:
         if setup_py_path.exists():
@@ -550,10 +550,10 @@ def check_for_toml_or_setup_file() -> str | None:
             project_name_match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL)
             if project_name_match:
                 project_name = project_name_match.group(1)
-                click.echo(f"✅ Found setup.py for your project {project_name}")
+                console.print(f"✅ Found setup.py for your project {project_name}")
                 ph("cli-setup-py-found-name")
             else:
-                click.echo("✅ Found setup.py.")
+                console.print("✅ Found setup.py.")
                 ph("cli-setup-py-found")
         toml_info_panel = Panel(
             Text(
@@ -574,7 +574,7 @@ def check_for_toml_or_setup_file() -> str | None:
         if result.command is None or result.value == "No":
             apologize_and_exit()
         create_empty_pyproject_toml(pyproject_toml_path)
-    click.echo()
+    console.print()
     return cast("str", project_name)
 
 
@@ -604,7 +604,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
             console.input()
         ph("cli-created-pyproject-toml")
     except OSError:
-        click.echo("❌ Failed to create pyproject.toml. Please check your disk permissions and available space.")
+        console.print("❌ Failed to create pyproject.toml. Please check your disk permissions and available space.")
         apologize_and_exit()
 
 
@@ -616,7 +616,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         try:
             repo = Repo(config["module_root"], search_parent_directories=True)
         except git.InvalidGitRepositoryError:
-            click.echo(
+            console.print(
                 "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
             )
             return
@@ -735,7 +735,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
         console.input()
 
-        click.launch(get_github_secrets_page_url(repo))
+        webbrowser.open(get_github_secrets_page_url(repo))
 
         # Post-launch message panel
         launch_panel = Panel(
@@ -750,9 +750,9 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             border_style="bright_cyan",
         )
         console.print(launch_panel)
-        click.pause()
-        click.echo()
-        click.echo(
+        console.input("Press Enter to continue...")
+        console.print()
+        console.print(
             f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
             f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
         )
@@ -853,7 +853,7 @@ def customize_codeflash_yaml_content(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -885,7 +885,7 @@ def get_formatter_cmds(formatter: str) -> list[str]:
     if formatter == "ruff":
         return ["ruff check --exit-zero --fix $file", "ruff format $file"]
     if formatter == "other":
-        click.echo(
+        console.print(
             "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code."
         )
         return ["your-formatter $file"]
@@ -906,7 +906,7 @@ def configure_pyproject_toml(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -951,8 +951,8 @@ def configure_pyproject_toml(
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"Added Codeflash configuration to {toml_path}")
-    click.echo()
+    console.print(f"Added Codeflash configuration to {toml_path}")
+    console.print()
     return True
 
 
@@ -960,79 +960,56 @@ def install_github_app(git_remote: str) -> None:
     try:
         git_repo = git.Repo(search_parent_directories=True)
     except git.InvalidGitRepositoryError:
-        click.echo("Skipping GitHub app installation because you're not in a git repository.")
+        console.print("Skipping GitHub app installation because you're not in a git repository.")
         return
 
     if git_remote not in get_git_remotes(git_repo):
-        click.echo(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
+        console.print(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
         return
 
     owner, repo = get_repo_owner_and_name(git_repo, git_remote)
 
     if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-        click.echo(
+        console.print(
             f"🐙 Looks like you've already installed the Codeflash GitHub app on this repository ({owner}/{repo})! Continuing…"
         )
 
     else:
         try:
-            click.prompt(
+            console.print(
                 f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
                 f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Please, press ENTER to open the app installation page{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix=">>> ",
-                show_default=False,
+                f"Please, press ENTER to open the app installation page{LF}"
             )
-            click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
-            click.prompt(
-                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix=">>> ",
-                show_default=False,
+            console.input(">>> ")
+            webbrowser.open("https://github.com/apps/codeflash-ai/installations/select_target")
+            console.print(
+                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}"
             )
+            console.input(">>> ")
 
             count = 2
             while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
                 if count == 0:
-                    click.echo(
+                    console.print(
                         f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                         f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
                         f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
                     )
                     break
-                click.prompt(
+                console.print(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
                     f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                    f"Please, press ENTER to continue once you've finished installing the github app…{LF}",
-                    default="",
-                    type=click.STRING,
-                    prompt_suffix=">>> ",
-                    show_default=False,
+                    f"Please, press ENTER to continue once you've finished installing the github app…{LF}"
                 )
+                console.input(">>> ")
                 count -= 1
-        except (KeyboardInterrupt, EOFError, click.exceptions.Abort):
+        except (KeyboardInterrupt, EOFError):
             # leave empty line for the next prompt to be properly rendered
-            click.echo()
+            console.print()
 
 
-class CFAPIKeyType(click.ParamType):
-    name = "cfapi-key"
-
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
-        value = value.strip()
-        if not value.startswith("cf-") and value != "":
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
-        return value
-
-
-# Returns True if the user entered a new API key, False if they used an existing one
+#
 def prompt_api_key() -> bool:
     """Prompt user for API key via OAuth or manual entry."""
     # Check for existing API key
@@ -1081,15 +1058,15 @@ def prompt_api_key() -> bool:
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
         shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
+        console.print(f"✅ Created {shell_rc_path}")
 
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
-        click.echo(result.unwrap())
-        click.echo("✅ Signed in successfully and API key saved!")
+        console.print(result.unwrap())
+        console.print("✅ Signed in successfully and API key saved!")
     else:
-        click.echo(result.failure())
-        click.pause()
+        console.print(result.failure())
+        console.input("Press Enter to continue...")
 
     os.environ["CODEFLASH_API_KEY"] = api_key
     ph("cli-oauth-signin-completed")
@@ -1100,35 +1077,42 @@ def enter_api_key_and_save_to_rc() -> None:
     browser_launched = False
     api_key = ""
     while api_key == "":
-        api_key = click.prompt(
-            f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
-            hide_input=False,
-            default="",
-            type=CFAPIKeyType(),
-            show_default=False,
-        ).strip()
+        result = prompts.text(
+            f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}"
+        )
+        if result.command is None:
+            apologize_and_exit()
+            return
+        api_key = result.value.strip()
+        
         if api_key:
+            # Validate API key format
+            if not api_key.startswith("cf-"):
+                console.print(f"❌ That key [{api_key}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.")
+                api_key = ""  # Reset to retry
+                continue
             break
+        
         if not browser_launched:
-            click.echo(
+            console.print(
                 f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                 "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
             )
-            click.launch("https://app.codeflash.ai/app/apikeys")
+            webbrowser.open("https://app.codeflash.ai/app/apikeys")
             browser_launched = True  # This does not work on remote consoles
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
         # On Windows, create the appropriate file (PowerShell .ps1 or CMD .bat) in the user's home directory
         shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
         shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
+        console.print(f"✅ Created {shell_rc_path}")
     get_user_id(api_key=api_key)  # Used to verify whether the API key is valid.
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
-        click.echo(result.unwrap())
+        console.print(result.unwrap())
     else:
-        click.echo(result.failure())
-        click.pause()
+        console.print(result.failure())
+        console.input("Press Enter to continue...")
 
     os.environ["CODEFLASH_API_KEY"] = api_key
 
