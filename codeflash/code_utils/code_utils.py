@@ -16,7 +16,8 @@ from tempfile import TemporaryDirectory
 import tomlkit
 
 from codeflash.cli_cmds.console import logger, paneled_text
-from codeflash.code_utils.config_parser import find_pyproject_toml, get_all_closest_config_files
+from codeflash.code_utils.config_parser import (find_pyproject_toml,
+                                                get_all_closest_config_files)
 from codeflash.lsp.helpers import is_LSP_enabled
 
 _INVALID_CHARS_NT = {"<", ">", ":", '"', "|", "?", "*"}
@@ -472,17 +473,27 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
 
     # Check for absolute paths, invalid characters, and validate path format
     error_msg = ""
-    if Path(path).is_absolute():
-        error_msg = "Path must be relative, not absolute"
-    elif os.name == "nt":  # Windows
+
+    # Perform early invalid characters check for Windows
+    if os.name == "nt":
         if any(char in _INVALID_CHARS_NT for char in path):
             error_msg = "Path contains invalid characters for this operating system"
+        else:
+            try:
+                p = Path(path)
+                if p.is_absolute():
+                    error_msg = "Path must be relative, not absolute"
+            except (ValueError, OSError) as e:
+                error_msg = f"Invalid path format: {e!s}"
+    # Unix-likes and others
     elif "\0" in path:  # Unix-like
         error_msg = "Path contains invalid characters for this operating system"
     else:
         # Validate using pathlib to ensure it's a valid path structure
         try:
-            Path(path)
+            p = Path(path)
+            if p.is_absolute():
+                error_msg = "Path must be relative, not absolute"
         except (ValueError, OSError) as e:
             error_msg = f"Invalid path format: {e!s}"
 
