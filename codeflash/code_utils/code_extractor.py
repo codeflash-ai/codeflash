@@ -655,8 +655,10 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
         if target is None or len(name_parts) == 1:
             return target
 
-        if not isinstance(target, ast.ClassDef):
+        if not isinstance(target, ast.ClassDef) or len(name_parts) < 2:
             return None
+        # At this point, name_parts has at least 2 elements
+        method_name: str = name_parts[1]  # type: ignore[misc]
         class_skeleton.add((target.lineno, target.body[0].lineno - 1))
         cbody = target.body
         if isinstance(cbody[0], ast.expr):  # Is a docstring
@@ -669,7 +671,7 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
             if (
                 isinstance(cnode, (ast.FunctionDef, ast.AsyncFunctionDef))
                 and len(cnode_name := cnode.name) > 4
-                and cnode_name != name_parts[1]
+                and cnode_name != method_name
                 and cnode_name.isascii()
                 and cnode_name.startswith("__")
                 and cnode_name.endswith("__")
@@ -677,7 +679,7 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
                 contextual_dunder_methods.add((target.name, cnode_name))
                 class_skeleton.add((cnode.lineno, cnode.end_lineno))
 
-        return find_target(target.body, name_parts[1:])
+        return find_target(target.body, (method_name,))
 
     with file_path.open(encoding="utf8") as file:
         source_code: str = file.read()
@@ -708,8 +710,13 @@ def get_code(functions_to_optimize: list[FunctionToOptimize]) -> tuple[str | Non
         )
         return None, set()
     for qualified_name_parts in qualified_name_parts_list:
-        target_node: ast.AST | None = find_target(module_node.body, qualified_name_parts)
+        target_node = find_target(module_node.body, qualified_name_parts)
         if target_node is None:
+            continue
+        # find_target returns FunctionDef, AsyncFunctionDef, ClassDef, Assign, or AnnAssign - all have lineno/end_lineno
+        if not isinstance(
+            target_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign)
+        ):
             continue
 
         if (

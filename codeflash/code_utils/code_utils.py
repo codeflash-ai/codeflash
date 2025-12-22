@@ -45,6 +45,63 @@ def unified_diff_strings(code1: str, code2: str, fromfile: str = "original", tof
     return "".join(diff)
 
 
+def choose_weights(**importance: float) -> list[float]:
+    """Choose normalized weights from relative importance values.
+
+    Example:
+        choose_weights(runtime=3, diff=1)
+        -> [0.75, 0.25]
+
+    Args:
+        **importance: keyword args of metric=importance (relative numbers).
+
+    Returns:
+        A list of weights in the same order as the arguments.
+
+    """
+    total = sum(importance.values())
+    if total == 0:
+        raise ValueError("At least one importance value must be > 0")
+
+    return [v / total for v in importance.values()]
+
+
+def normalize_by_max(values: list[float]) -> list[float]:
+    mx = max(values)
+    if mx == 0:
+        return [0.0] * len(values)
+    return [v / mx for v in values]
+
+
+def create_score_dictionary_from_metrics(weights: list[float], *metrics: list[float]) -> dict[int, int]:
+    """Combine multiple metrics into a single weighted score dictionary.
+
+    Each metric is a list of values (smaller = better).
+    The total score for each index is the weighted sum of its values
+    across all metrics:
+
+        score[index] = Σ (value * weight)
+
+    Args:
+        weights: A list of weights, one per metric. Larger weight = more influence.
+        *metrics: Lists of values (one list per metric, aligned by index).
+
+    Returns:
+        A dictionary mapping each index to its combined weighted score.
+
+    """
+    if len(weights) != len(metrics):
+        raise ValueError("Number of weights must match number of metrics")
+
+    combined: dict[int, float] = {}
+
+    for weight, metric in zip(weights, metrics):
+        for idx, value in enumerate(metric):
+            combined[idx] = combined.get(idx, 0) + value * weight
+
+    return combined
+
+
 def diff_length(a: str, b: str) -> int:
     """Compute the length (in characters) of the unified diff between two strings.
 
@@ -364,6 +421,10 @@ def exit_with_message(message: str, *, error_on_exit: bool = False) -> None:
     paneled_text(message, panel_args={"style": "red"})
 
     sys.exit(1 if error_on_exit else 0)
+
+
+def shorten_pytest_error(pytest_error_string: str) -> str:
+    return "\n".join(re.findall(r"^[E>] +(.*)$", pytest_error_string, re.MULTILINE))
 
 
 def extract_unique_errors(pytest_output: str) -> set[str]:
