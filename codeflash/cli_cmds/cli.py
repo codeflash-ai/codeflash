@@ -4,13 +4,12 @@ from argparse import SUPPRESS, ArgumentParser, Namespace
 from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
-from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cli_common import apologize_and_exit, get_git_repo_or_none, parse_config_file_or_exit
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
-from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
@@ -163,10 +162,7 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
 
 
 def process_pyproject_config(args: Namespace) -> Namespace:
-    try:
-        pyproject_config, pyproject_file_path = parse_config_file(args.config_file)
-    except ValueError as e:
-        exit_with_message(f"Error parsing config file: {e}", error_on_exit=True)
+    pyproject_config, pyproject_file_path = parse_config_file_or_exit(args.config_file)
     supported_keys = [
         "module_root",
         "tests_root",
@@ -248,21 +244,21 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
         no_pr = getattr(args, "no_pr", False)
 
         if not no_pr:
-            import git
-
             from codeflash.code_utils.git_utils import check_and_push_branch, get_repo_owner_and_name
             from codeflash.code_utils.github_utils import require_github_app_or_exit
 
             # Ensure that the user can actually open PRs on the repo.
-            try:
-                git_repo = git.Repo(search_parent_directories=True)
-            except git.exc.InvalidGitRepositoryError:
+            maybe_git_repo = get_git_repo_or_none()
+            if maybe_git_repo is None:
                 mode = "--all" if hasattr(args, "all") else "--file"
-                logger.exception(
+                logger.error(
                     f"I couldn't find a git repository in the current directory. "
                     f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
                 )
                 apologize_and_exit()
+            # After None check and apologize_and_exit(), we know git_repo is not None
+            git_repo = maybe_git_repo
+            assert git_repo is not None  # For mypy
             git_remote = getattr(args, "git_remote", None)
             if not check_and_push_branch(git_repo, git_remote=git_remote):
                 exit_with_message("Branch is not pushed...", error_on_exit=True)

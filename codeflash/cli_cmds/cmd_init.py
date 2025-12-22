@@ -10,17 +10,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
-import git
 import tomlkit
-from git import InvalidGitRepositoryError, Repo
 from inquirer_textual.common.Choice import Choice
 from inquirer_textual.widgets.InquirerConfirm import InquirerConfirm
 from inquirer_textual.widgets.InquirerSelect import InquirerSelect
 from pydantic.dataclasses import dataclass
 
-from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo
+from codeflash.api.cfapi import get_user_id
 from codeflash.cli_cmds import themed_prompts as prompts
-from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cli_common import apologize_and_exit, get_git_repo_or_none
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.cli_cmds.validators import (
@@ -34,8 +32,8 @@ from codeflash.cli_cmds.validators import (
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
-from codeflash.code_utils.git_utils import get_git_remotes, get_repo_owner_and_name
-from codeflash.code_utils.github_utils import get_github_secrets_page_url
+from codeflash.code_utils.git_utils import get_git_remotes
+from codeflash.code_utils.github_utils import get_github_secrets_page_url, install_github_app
 from codeflash.code_utils.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell, save_api_key_to_rc
 from codeflash.either import is_successful
@@ -236,11 +234,8 @@ def init_codeflash() -> None:
 
             project_name = check_for_toml_or_setup_file()
 
-            try:
-                repo = Repo(curdir, search_parent_directories=True)
-                git_remotes = get_git_remotes(repo)
-            except InvalidGitRepositoryError:
-                git_remotes = []
+            repo = get_git_repo_or_none(curdir)
+            git_remotes = get_git_remotes(repo) if repo is not None else []
 
             answers = collect_config(curdir, auth_status, project_name, git_remotes)
             git_remote = answers.git_remote
@@ -257,11 +252,8 @@ def init_codeflash() -> None:
             if not configure_pyproject_toml(setup_info):
                 apologize_and_exit()
 
-        try:
-            git.Repo(search_parent_directories=True)
-            in_git_repo = True
-        except git.InvalidGitRepositoryError:
-            in_git_repo = False
+        maybe_git_repo = get_git_repo_or_none()
+        in_git_repo = maybe_git_repo is not None
 
         integration_options = [Choice("📦 VSCode Extension", data="vscode")]
         if in_git_repo:
@@ -283,7 +275,8 @@ def init_codeflash() -> None:
         )
         for choice in selected:
             if choice.data == "github_app":
-                install_github_app(git_remote)
+                if maybe_git_repo is not None:
+                    install_github_app(maybe_git_repo, git_remote)
             elif choice.data == "github_actions":
                 install_github_actions(override_formatter_check=True)
             elif choice.data == "vscode":
@@ -541,9 +534,8 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
         ph("cli-github-actions-install-started")
 
-        try:
-            repo = Repo(config["module_root"], search_parent_directories=True)
-        except git.InvalidGitRepositoryError:
+        repo = get_git_repo_or_none(Path(config["module_root"]))
+        if repo is None:
             console.print(
                 "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
             )
@@ -846,74 +838,8 @@ def configure_pyproject_toml(
     return True
 
 
-def prompt_github_app_install(owner: str, repo: str) -> None:
-    """Prompt user to install GitHub app and wait for confirmation."""
-    app_url = "https://github.com/apps/codeflash-ai/installations/select_target"
-
-    open_page = prompts.select_or_exit(
-        f"Open GitHub App installation page? ({app_url})",
-        choices=["Yes", "No"],
-        default="Yes",
-        header=(
-            f"🐙 GitHub App Installation\n\n"
-            f"You'll need to install the Codeflash GitHub app for {owner}/{repo}.\n\n"
-            "I'll open the installation page where you can select your repository."
-        ),
-    )
-    if open_page == "Yes":
-        webbrowser.open(app_url)
-
-    prompts.confirm("Continue once you've completed the installation?", default=True)
-
-
-def install_github_app(git_remote: str) -> None:
-    try:
-        git_repo = git.Repo(search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        console.print("Skipping GitHub app installation because you're not in a git repository.")
-        return
-
-    if git_remote not in get_git_remotes(git_repo):
-        console.print(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
-        return
-
-    owner, repo = get_repo_owner_and_name(git_repo, git_remote)
-
-    if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-        console.print(
-            f"🐙 Looks like you've already installed the Codeflash GitHub app on this repository ({owner}/{repo})! Continuing…"
-        )
-        return
-
-    # Not installed - prompt for installation
-    try:
-        prompt_github_app_install(owner, repo)
-
-        # Verify installation with retries
-        max_retries = 2
-        for attempt in range(max_retries + 1):
-            if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-                console.print(f"✅ GitHub App installed successfully for {owner}/{repo}!")
-                break
-
-            if attempt == max_retries:
-                console.print(
-                    f"❌ GitHub App not detected on {owner}/{repo}.\n"
-                    f"You won't be able to create PRs until you install it.\n"
-                    f"Use the '--no-pr' flag for local-only optimizations."
-                )
-                break
-
-            console.print(
-                f"❌ GitHub App not detected on {owner}/{repo}.\nPress Enter to check again after installation..."
-            )
-            console.input()
-    except (KeyboardInterrupt, EOFError):
-        console.print()  # Clean line for next prompt
-
-
 def save_api_key_and_set_env(api_key: str) -> None:
-    """Save API key to shell RC file and set environment variable."""
+    """Save API key to shell RC and set env var."""
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
         shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
@@ -931,7 +857,7 @@ def save_api_key_and_set_env(api_key: str) -> None:
 
 
 def enter_api_key_and_save_to_rc() -> None:
-    """Prompt for API key with validation and save to shell RC file."""
+    """Prompt for API key and save to shell RC."""
     browser_launched = False
     api_key = ""
 
