@@ -255,3 +255,8 @@ fabric.properties
 # Mac
 .DS_Store
 WARP.MD
+
+.mcp.json
+.tessl/
+CLAUDE.md
+tessl.json
