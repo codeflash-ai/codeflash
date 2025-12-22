@@ -106,9 +106,7 @@ def confirm(message: str, *, default: bool = False, header: str | list[str] | No
 
 
 def text(  # noqa: ANN201  # type: ignore[no-untyped-def]
-    message: str,
-    validators: Validator | Iterable[Validator] | None = None,
-    header: str | list[str] | None = None,
+    message: str, validators: Validator | Iterable[Validator] | None = None, header: str | list[str] | None = None
 ):
     widget = InquirerText(message, validators=validators)
     app = create_app(widget, header=header)

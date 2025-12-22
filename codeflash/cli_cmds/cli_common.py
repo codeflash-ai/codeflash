@@ -51,7 +51,7 @@ def require_git_repo_or_exit(search_path: Optional[Path] = None, error_message: 
     return repo
 
 
-def parse_config_file_or_exit(config_file: Optional[Path] = None, **kwargs: Any) -> tuple[dict[str, Any], Path]:
+def parse_config_file_or_exit(config_file: Optional[Path] = None, **kwargs: Any) -> tuple[dict[str, Any], Path]:  # noqa: ANN401
     """Parse config file or exit with error."""
     from codeflash.code_utils.code_utils import exit_with_message
     from codeflash.code_utils.config_parser import parse_config_file

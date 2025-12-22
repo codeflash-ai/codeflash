@@ -92,13 +92,13 @@ class NotEqualPathValidator(Validator):
 class DirectoryOrCreatableValidator(Validator):
     """Validator that accepts existing directories or creates them if they don't exist."""
 
-    def __init__(self, create_if_missing: bool = True, failure_description: str | None = None) -> None:
+    def __init__(self, *, create_if_missing: bool = True, failure_description: str | None = None) -> None:
         self.create_if_missing = create_if_missing
         super().__init__(
             failure_description=failure_description or "Must be a valid directory path or creatable location"
         )
 
-    def validate(self, value: str) -> ValidationResult:
+    def validate(self, value: str) -> ValidationResult:  # noqa: PLR0911
         if not value:
             return self.failure("Path cannot be empty")
 
@@ -160,7 +160,7 @@ class PyprojectTomlValidator(Validator):
     def __init__(self, failure_description: str | None = None) -> None:
         super().__init__(failure_description=failure_description or "Invalid pyproject.toml configuration")
 
-    def validate(self, value: str) -> ValidationResult:
+    def validate(self, value: str) -> ValidationResult:  # noqa: PLR0911
         if not value:
             return self.failure("Path cannot be empty")
 
