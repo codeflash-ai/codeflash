@@ -287,8 +287,8 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
 
 def should_stop(
     runtimes: list[int],
-    warmup: int = 3,
-    window: int = 3,
+    warmup: int = 4,
+    window: int = 6,
     center_rel_tol: float = 0.01,  # ±1% around median
     spread_rel_tol: float = 0.02,  # 2% window spread
     slope_rel_tol: float = 0.01,  # 1% improvement allowed
@@ -324,7 +324,7 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
-        self.current_loop_durations_in_nano: list[int] = []
+        self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
 
     def dynamic_tolerance(self, avg_ns: float) -> float:  # noqa: PLR0911
         if avg_ns < 200_000:  # < 0.2 ms
@@ -345,8 +345,10 @@ class PytestLoops:
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        if report.when == "call" and (duration_ns := get_runtime_from_stdout(report.capstdout)):
-            self.current_loop_durations_in_nano.append(duration_ns)
+        if report.when == "call" and report.passed and (duration_ns := get_runtime_from_stdout(report.capstdout)):  # noqa: SIM102
+            if duration_ns:
+                clean_id = re.sub(r"\s*\[\s*\d+\s*\]\s*$", "", report.nodeid)
+                self.usable_runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -365,8 +367,6 @@ class PytestLoops:
         runtimes = []
         while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
-            self.current_loop_durations_in_nano.clear()
-
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
                 item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
@@ -384,8 +384,10 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            total_duration_in_nano = sum(self.current_loop_durations_in_nano)
-            runtimes.append(total_duration_in_nano)
+            best_runtime_until_now = sum(
+                [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case.items()]
+            )
+            runtimes.append(best_runtime_until_now)
 
             if should_stop(runtimes):
                 break
