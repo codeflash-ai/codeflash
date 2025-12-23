@@ -1295,47 +1295,51 @@ class FunctionOptimizer:
         n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
         assert len(generated_test_paths) == n_tests
 
-        # Submit test generation tasks
-        future_tests = self.submit_test_generation_tasks(
-            self.executor,
-            testgen_context.markdown,
-            [definition.fully_qualified_name for definition in helper_functions],
-            generated_test_paths,
-            generated_perf_test_paths,
-        )
+        if not self.args.no_gen_tests:
+            # Submit test generation tasks
+            future_tests = self.submit_test_generation_tasks(
+                self.executor,
+                testgen_context.markdown,
+                [definition.fully_qualified_name for definition in helper_functions],
+                generated_test_paths,
+                generated_perf_test_paths,
+            )
 
         future_concolic_tests = self.executor.submit(
             generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
         )
 
-        # Wait for test futures to complete
-        concurrent.futures.wait([*future_tests, future_concolic_tests])
-
+        if not self.args.no_gen_tests:
+            # Wait for test futures to complete
+            concurrent.futures.wait([*future_tests, future_concolic_tests])
+        else:
+            concurrent.futures.wait([future_concolic_tests])
         # Process test generation results
         tests: list[GeneratedTests] = []
-        for future in future_tests:
-            res = future.result()
-            if res:
-                (
-                    generated_test_source,
-                    instrumented_behavior_test_source,
-                    instrumented_perf_test_source,
-                    test_behavior_path,
-                    test_perf_path,
-                ) = res
-                tests.append(
-                    GeneratedTests(
-                        generated_original_test_source=generated_test_source,
-                        instrumented_behavior_test_source=instrumented_behavior_test_source,
-                        instrumented_perf_test_source=instrumented_perf_test_source,
-                        behavior_file_path=test_behavior_path,
-                        perf_file_path=test_perf_path,
+        if not self.args.no_gen_tests:
+            for future in future_tests:
+                res = future.result()
+                if res:
+                    (
+                        generated_test_source,
+                        instrumented_behavior_test_source,
+                        instrumented_perf_test_source,
+                        test_behavior_path,
+                        test_perf_path,
+                    ) = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_behavior_test_source=instrumented_behavior_test_source,
+                            instrumented_perf_test_source=instrumented_perf_test_source,
+                            behavior_file_path=test_behavior_path,
+                            perf_file_path=test_perf_path,
+                        )
                     )
-                )
 
-        if not tests:
-            logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
-            return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
+            if not tests:
+                logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
+                return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
 
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
         count_tests = len(tests)
