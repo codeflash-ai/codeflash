@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from codeflash.models.models import AIServiceCodeRepairRequest, AIServiceRefinerRequest
     from codeflash.result.explanation import Explanation
 
+
 class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
@@ -244,11 +245,11 @@ class AiServiceClient:
         dependency_code: str,
         base_trace_id: str,
         model_distribution: list[tuple[str, int]],
+        executor: concurrent.futures.ThreadPoolExecutor,
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         is_async: bool = False,
         sequence_offset: int = 0,
-        executor: concurrent.futures.ThreadPoolExecutor | None = None,
     ) -> tuple[list[OptimizedCandidate], int]:
         """Generate optimizations using multiple models in parallel."""
         logger.info("Generating optimized candidates…")
@@ -295,9 +296,9 @@ class AiServiceClient:
         base_trace_id: str,
         line_profiler_results: str,
         model_distribution: list[tuple[str, int]],
+        executor: concurrent.futures.ThreadPoolExecutor,
         experiment_metadata: ExperimentMetadata | None = None,
         sequence_offset: int = 0,
-        executor: concurrent.futures.ThreadPoolExecutor | None = None,
     ) -> tuple[list[OptimizedCandidate], int]:
         """Generate line profiler optimizations using multiple models in parallel."""
         logger.info("Generating optimized candidates with line profiler…")

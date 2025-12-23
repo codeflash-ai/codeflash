@@ -955,13 +955,13 @@ class FunctionOptimizer:
             base_trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
             model_distribution=MODEL_DISTRIBUTION_LP_EFFECTIVE,
+            executor=self.executor,
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
             if self.experiment_id
             else None,
             sequence_offset=self.optimize_calls_count,
-            executor=self.executor,
         )
 
         processor = CandidateProcessor(
@@ -1393,10 +1393,10 @@ class FunctionOptimizer:
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             MODEL_DISTRIBUTION_EFFECTIVE,
+            self.executor,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
             sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
-            executor=self.executor,
         )
 
         future_references = self.executor.submit(
@@ -1418,10 +1418,10 @@ class FunctionOptimizer:
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
                 MODEL_DISTRIBUTION_EFFECTIVE,
+                self.executor,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
                 sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
-                executor=self.executor,
             )
             futures.append(future_candidates_exp)
 
