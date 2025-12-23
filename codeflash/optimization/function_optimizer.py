@@ -128,12 +128,60 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+class CandidateNode:
+    __slots__ = ("candidate", "children", "parent")
+
+    def __init__(self, candidate: OptimizedCandidate) -> None:
+        self.candidate = candidate
+        self.parent: CandidateNode | None = None
+        self.children: list[CandidateNode] = []
+
+    def is_leaf(self) -> bool:
+        return not self.children
+
+    def path_to_root(self) -> list[OptimizedCandidate]:
+        path = []
+        node: CandidateNode | None = self
+        while node:
+            path.append(node.candidate)
+            node = node.parent
+        return path[::-1]
+
+
+class CandidateForest:
+    def __init__(self) -> None:
+        self.nodes: dict[str, CandidateNode] = {}
+
+    def add(self, candidate: OptimizedCandidate) -> CandidateNode:
+        cid = candidate.optimization_id
+        pid = candidate.parent_id
+
+        node = self.nodes.get(cid)
+        if node is None:
+            node = CandidateNode(candidate)
+            self.nodes[cid] = node
+
+        if pid is not None:
+            parent = self.nodes.get(pid)
+            if parent is None:
+                parent = CandidateNode(candidate=None)  # placeholder
+                self.nodes[pid] = parent
+
+            node.parent = parent
+            parent.children.append(node)
+
+        return node
+
+    def get_node(self, cid: str) -> CandidateNode | None:
+        return self.nodes.get(cid)
+
+
 class CandidateProcessor:
     """Handles candidate processing using a queue-based approach."""
 
     def __init__(
         self,
-        initial_candidates: list,
+        initial_candidates: list[OptimizedCandidate],
         future_line_profile_results: concurrent.futures.Future,
         all_refinements_data: list[AIServiceRefinerRequest],
         ai_service_client: AiServiceClient,
@@ -141,6 +189,7 @@ class CandidateProcessor:
         future_all_code_repair: list[concurrent.futures.Future],
     ) -> None:
         self.candidate_queue = queue.Queue()
+        self.forest = CandidateForest()
         self.line_profiler_done = False
         self.refinement_done = False
         self.candidate_len = len(initial_candidates)
@@ -149,20 +198,21 @@ class CandidateProcessor:
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
+            self.forest.add(candidate)
             self.candidate_queue.put(candidate)
 
         self.future_line_profile_results = future_line_profile_results
         self.all_refinements_data = all_refinements_data
         self.future_all_code_repair = future_all_code_repair
 
-    def get_next_candidate(self) -> OptimizedCandidate | None:
+    def get_next_candidate(self) -> CandidateNode | None:
         """Get the next candidate from the queue, handling async results as needed."""
         try:
-            return self.candidate_queue.get_nowait()
+            return self.forest.get_node(self.candidate_queue.get_nowait().optimization_id)
         except queue.Empty:
             return self._handle_empty_queue()
 
-    def _handle_empty_queue(self) -> OptimizedCandidate | None:
+    def _handle_empty_queue(self) -> CandidateNode | None:
         """Handle empty queue by checking for pending async results."""
         if not self.line_profiler_done:
             return self._process_line_profiler_results()
@@ -172,13 +222,14 @@ class CandidateProcessor:
             return self._process_refinement_results()
         return None  # All done
 
-    def _process_line_profiler_results(self) -> OptimizedCandidate | None:
+    def _process_line_profiler_results(self) -> CandidateNode | None:
         """Process line profiler results and add to queue."""
         logger.debug("all candidates processed, await candidates from line profiler")
         concurrent.futures.wait([self.future_line_profile_results])
         line_profile_results = self.future_line_profile_results.result()
 
         for candidate in line_profile_results:
+            self.forest.add(candidate)
             self.candidate_queue.put(candidate)
 
         self.candidate_len += len(line_profile_results)
@@ -190,7 +241,7 @@ class CandidateProcessor:
     def refine_optimizations(self, request: list[AIServiceRefinerRequest]) -> concurrent.futures.Future:
         return self.executor.submit(self.ai_service_client.optimize_python_code_refinement, request=request)
 
-    def _process_refinement_results(self) -> OptimizedCandidate | None:
+    def _process_refinement_results(self) -> CandidateNode | None:
         """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
         future_refinements: list[concurrent.futures.Future] = []
 
@@ -230,6 +281,7 @@ class CandidateProcessor:
                 refinement_response.append(possible_refinement[0])
 
         for candidate in refinement_response:
+            self.forest.add(candidate)
             self.candidate_queue.put(candidate)
 
         self.candidate_len += len(refinement_response)
@@ -241,13 +293,14 @@ class CandidateProcessor:
 
         return self.get_next_candidate()
 
-    def _process_code_repair(self) -> OptimizedCandidate | None:
+    def _process_code_repair(self) -> CandidateNode | None:
         logger.info(f"loading|Repairing {len(self.future_all_code_repair)} candidates")
         concurrent.futures.wait(self.future_all_code_repair)
         candidates_added = 0
         for future_code_repair in self.future_all_code_repair:
             possible_code_repair = future_code_repair.result()
             if possible_code_repair:
+                self.forest.add(possible_code_repair)
                 self.candidate_queue.put(possible_code_repair)
                 self.candidate_len += 1
                 candidates_added += 1
@@ -947,15 +1000,16 @@ class FunctionOptimizer:
 
         # Process candidates using queue-based approach
         while not processor.is_done():
-            candidate = processor.get_next_candidate()
-            if candidate is None:
+            candidate_node = processor.get_next_candidate()
+            if candidate_node is None:
                 logger.debug("everything done, exiting")
                 break
 
             try:
                 candidate_index += 1
+                print(f"node ancestry: {[c.optimization_id for c in candidate_node.path_to_root()]}")
                 self.process_single_candidate(
-                    candidate=candidate,
+                    candidate=candidate_node.candidate,
                     candidate_index=candidate_index,
                     total_candidates=processor.candidate_len,
                     code_context=code_context,
