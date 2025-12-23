@@ -118,11 +118,11 @@ class AiServiceClient:
         source_code: str,
         dependency_code: str,
         trace_id: str,
-        num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         is_async: bool = False,
         model: str | None = None,
+        call_sequence: int | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -131,9 +131,9 @@ class AiServiceClient:
         - source_code (str): The python code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
-        - num_candidates (int): Number of optimization variants to generate. Default is 10.
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
         - model (str | None): Model name to use ("gpt-4.1" or "claude-sonnet-4-5"). Default is None (server default).
+        - call_sequence (int | None): Sequence number for multi-model calls (1, 2, 3...). Default is None.
 
         Returns
         -------
@@ -146,7 +146,6 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
-            "num_variants": num_candidates,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
@@ -154,13 +153,12 @@ class AiServiceClient:
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
-            "n_candidates": num_candidates,
             "is_async": is_async,
             "model": model,
+            "call_sequence": call_sequence,
         }
+        logger.debug(f"Sending optimize request: model={model}, trace_id={trace_id}, call_sequence={call_sequence}")
 
-        logger.info("!lsp|Generating optimized candidates…")
-        console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
@@ -170,9 +168,9 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            console.rule()
             end_time = time.perf_counter()
             logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
+            logger.debug(f"Backend returned {len(optimizations_json)} optimization(s)")
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE, model=model)
         try:
             error = response.json()["error"]
@@ -180,7 +178,6 @@ class AiServiceClient:
             error = response.text
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
-        console.rule()
         return []
 
     def optimize_python_code_line_profiler(  # noqa: D417
@@ -189,9 +186,9 @@ class AiServiceClient:
         dependency_code: str,
         trace_id: str,
         line_profiler_results: str,
-        num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
         model: str | None = None,
+        call_sequence: int | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -200,9 +197,9 @@ class AiServiceClient:
         - source_code (str): The python code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
-        - num_candidates (int): Number of optimization variants to generate. Default is 10.
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
         - model (str | None): Model name to use ("gpt-4.1" or "claude-sonnet-4-5"). Default is None (server default).
+        - call_sequence (int | None): Sequence number for multi-model calls (1, 2, 3...). Default is None.
 
         Returns
         -------
@@ -212,21 +209,18 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
-            "num_variants": num_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
-            "n_candidates_lp": num_candidates,
             "model": model,
+            "call_sequence": call_sequence,
         }
 
-        console.rule()
         if line_profiler_results == "":
             logger.info("No LineProfiler results were provided, Skipping optimization.")
-            console.rule()
             return []
         try:
             response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
@@ -237,10 +231,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(
-                f"!lsp|Generated {len(optimizations_json)} candidate optimizations using line profiler information."
-            )
-            console.rule()
+            logger.debug(f"Backend returned {len(optimizations_json)} LP optimization(s)")
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE_LP, model=model)
         try:
             error = response.json()["error"]
@@ -248,7 +239,6 @@ class AiServiceClient:
             error = response.text
         logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
-        console.rule()
         return []
 
     def optimize_python_code_multi_model(
@@ -260,32 +250,34 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         is_async: bool = False,
-    ) -> list[OptimizedCandidate]:
+        sequence_offset: int = 0,
+    ) -> tuple[list[OptimizedCandidate], int]:
         """Generate optimizations using multiple models in parallel."""
-        futures: list[tuple[concurrent.futures.Future[list[OptimizedCandidate]], str]] = []
-        call_index = 0
+        logger.info("Generating optimized candidates…")
+        console.rule()
 
+        futures: list[tuple[concurrent.futures.Future[list[OptimizedCandidate]], str]] = []
+
+        call_index = 0
         for model_name, num_calls in model_distribution:
             for _ in range(num_calls):
-                call_trace_id = f"{base_trace_id[:-4]}M{call_index:02d}"
+                call_trace_id = f"{base_trace_id[:-3]}0{call_index:02x}"
+                call_sequence = sequence_offset + call_index + 1
                 call_index += 1
-
                 future = multi_model_executor.submit(
                     self.optimize_python_code,
                     source_code,
                     dependency_code,
                     call_trace_id,
-                    num_candidates=1,  # Each call returns 1 candidate
-                    experiment_metadata=experiment_metadata,
+                    experiment_metadata,
                     is_async=is_async,
                     model=model_name,
+                    call_sequence=call_sequence,
                 )
                 futures.append((future, model_name))
 
-        # Wait for all calls to complete
         concurrent.futures.wait([f for f, _ in futures])
 
-        # Collect results
         all_candidates: list[OptimizedCandidate] = []
         for future, model_name in futures:
             try:
@@ -295,7 +287,8 @@ class AiServiceClient:
                 logger.warning(f"Model {model_name} call failed: {e}")
                 continue
 
-        return all_candidates
+        console.rule()
+        return all_candidates, call_index
 
     def optimize_python_code_line_profiler_multi_model(
         self,
@@ -305,25 +298,29 @@ class AiServiceClient:
         line_profiler_results: str,
         model_distribution: list[tuple[str, int]],
         experiment_metadata: ExperimentMetadata | None = None,
-    ) -> list[OptimizedCandidate]:
+        sequence_offset: int = 0,
+    ) -> tuple[list[OptimizedCandidate], int]:
         """Generate line profiler optimizations using multiple models in parallel."""
-        futures: list[tuple[concurrent.futures.Future[list[OptimizedCandidate]], str]] = []
-        call_index = 0
+        logger.info("Generating optimized candidates with line profiler…")
+        console.rule()
 
+        futures: list[tuple[concurrent.futures.Future[list[OptimizedCandidate]], str]] = []
+
+        call_index = 0
         for model_name, num_calls in model_distribution:
             for _ in range(num_calls):
-                call_trace_id = f"{base_trace_id[:-4]}L{call_index:02d}"
+                call_trace_id = f"{base_trace_id[:-3]}1{call_index:02x}"
+                call_sequence = sequence_offset + call_index + 1
                 call_index += 1
-
                 future = multi_model_executor.submit(
                     self.optimize_python_code_line_profiler,
                     source_code,
                     dependency_code,
                     call_trace_id,
                     line_profiler_results,
-                    num_candidates=1,
-                    experiment_metadata=experiment_metadata,
-                    model=model_name,
+                    experiment_metadata,
+                    model_name,
+                    call_sequence,
                 )
                 futures.append((future, model_name))
 
@@ -338,7 +335,8 @@ class AiServiceClient:
                 logger.warning(f"Line profiler model {model_name} call failed: {e}")
                 continue
 
-        return all_candidates
+        console.rule()
+        return all_candidates, call_index
 
     def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
@@ -366,6 +364,7 @@ class AiServiceClient:
                 "trace_id": opt.trace_id,
                 "function_references": opt.function_references,
                 "python_version": platform.python_version(),
+                "call_sequence": opt.call_sequence,
             }
             for opt in request
         ]
@@ -455,6 +454,7 @@ class AiServiceClient:
         throughput_improvement: str | None = None,
         function_references: str | None = None,
         codeflash_version: str = codeflash_version,
+        call_sequence: int | None = None,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -500,6 +500,7 @@ class AiServiceClient:
             "throughput_improvement": throughput_improvement,
             "function_references": function_references,
             "codeflash_version": codeflash_version,
+            "call_sequence": call_sequence,
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -627,6 +628,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        call_sequence: int | None = None,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -662,6 +664,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
+            "call_sequence": call_sequence,
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
@@ -702,6 +705,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
+        call_sequence: int | None = None,
     ) -> str:
         """Compute the optimization review of current Pull Request.
 
@@ -748,6 +752,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "python_version": platform.python_version(),
+            "call_sequence": call_sequence,
         }
         console.rule()
         try:

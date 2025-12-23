@@ -139,6 +139,7 @@ class CandidateProcessor:
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
         future_all_code_repair: list[concurrent.futures.Future],
+        sequence_offset: int = 0,
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.line_profiler_done = False
@@ -146,6 +147,9 @@ class CandidateProcessor:
         self.candidate_len = len(initial_candidates)
         self.ai_service_client = ai_service_client
         self.executor = executor
+        self.sequence_offset = sequence_offset
+        self.lp_calls_count = 0
+        self.refinement_calls_count = 0
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
@@ -154,6 +158,9 @@ class CandidateProcessor:
         self.future_line_profile_results = future_line_profile_results
         self.all_refinements_data = all_refinements_data
         self.future_all_code_repair = future_all_code_repair
+
+    def get_total_llm_calls(self) -> int:
+        return self.sequence_offset + self.lp_calls_count + self.refinement_calls_count
 
     def get_next_candidate(self) -> OptimizedCandidate | None:
         """Get the next candidate from the queue, handling async results as needed."""
@@ -176,7 +183,11 @@ class CandidateProcessor:
         """Process line profiler results and add to queue."""
         logger.debug("all candidates processed, await candidates from line profiler")
         concurrent.futures.wait([self.future_line_profile_results])
-        line_profile_results = self.future_line_profile_results.result()
+        result = self.future_line_profile_results.result()
+
+        # LP multi-model now returns (candidates, lp_call_count)
+        line_profile_results, lp_call_count = result
+        self.lp_calls_count = lp_call_count
 
         for candidate in line_profile_results:
             self.candidate_queue.put(candidate)
@@ -192,11 +203,18 @@ class CandidateProcessor:
 
     def _process_refinement_results(self) -> OptimizedCandidate | None:
         """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
+        import dataclasses  # noqa: PLC0415
+
         future_refinements: list[concurrent.futures.Future] = []
+        # Calculate base sequence: offset + lp_calls (refinements come after LP)
+        base_sequence = self.sequence_offset + self.lp_calls_count
+        refinement_call_index = 0
 
         if len(self.all_refinements_data) <= REFINE_ALL_THRESHOLD:
             for data in self.all_refinements_data:
-                future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
+                refinement_call_index += 1
+                data_with_seq = dataclasses.replace(data, call_sequence=base_sequence + refinement_call_index)
+                future_refinements.append(self.refine_optimizations([data_with_seq]))
         else:
             diff_lens_list = []
             runtimes_list = []
@@ -215,8 +233,13 @@ class CandidateProcessor:
             top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
 
             for idx in top_indecies:
+                refinement_call_index += 1
                 data = self.all_refinements_data[idx]
-                future_refinements.append(self.refine_optimizations([data]))
+                data_with_seq = dataclasses.replace(data, call_sequence=base_sequence + refinement_call_index)
+                future_refinements.append(self.refine_optimizations([data_with_seq]))
+
+        # Track total refinement calls made
+        self.refinement_calls_count = refinement_call_index
 
         if future_refinements:
             logger.info("loading|Refining generated code for improved quality and performance...")
@@ -319,10 +342,14 @@ class FunctionOptimizer:
         self.optimization_review = ""
         self.future_all_code_repair: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
+        self.test_gen_calls_count = 0
+        self.optimize_calls_count = 0
+        self.lp_calls_count = 0
+        self.total_llm_calls = 0
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
-        logger.debug(f"Function Trace ID: {self.function_trace_id}")
+        logger.info(f"Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
@@ -921,7 +948,6 @@ class FunctionOptimizer:
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
 
-        # Use multi-model approach for line profiler optimization
         future_line_profile_results = self.executor.submit(
             ai_service_client.optimize_python_code_line_profiler_multi_model,
             source_code=code_context.read_writable_code.markdown,
@@ -934,6 +960,7 @@ class FunctionOptimizer:
             )
             if self.experiment_id
             else None,
+            sequence_offset=self.optimize_calls_count,
         )
 
         processor = CandidateProcessor(
@@ -943,6 +970,7 @@ class FunctionOptimizer:
             self.aiservice_client,
             self.executor,
             self.future_all_code_repair,
+            sequence_offset=self.optimize_calls_count,
         )
         candidate_index = 0
 
@@ -975,6 +1003,9 @@ class FunctionOptimizer:
                 self.write_code_and_helpers(
                     self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
                 )
+
+        # Track total LLM calls from the processor for sequence numbering
+        self.total_llm_calls = processor.get_total_llm_calls()
 
         # Select and return the best optimization
         best_optimization = self.select_best_optimization(
@@ -1355,7 +1386,6 @@ class FunctionOptimizer:
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function using multiple models in parallel."""
-        # Use multi-model approach for diversity
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code_multi_model,
             read_writable_code.markdown,
@@ -1364,6 +1394,7 @@ class FunctionOptimizer:
             MODEL_DISTRIBUTION_EFFECTIVE,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
+            sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
         )
 
         future_references = self.executor.submit(
@@ -1387,20 +1418,26 @@ class FunctionOptimizer:
                 MODEL_DISTRIBUTION_EFFECTIVE,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
+                sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
             )
             futures.append(future_candidates_exp)
 
         # Wait for optimization futures to complete
         concurrent.futures.wait(futures)
 
-        # Retrieve results
-        candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"!lsp|Generated '{len(candidates)}' candidate optimizations from multiple models.")
+        # Retrieve results - optimize_python_code_multi_model returns (candidates, call_count)
+        candidates, optimize_call_count = future_optimization_candidates.result()
+        # Total sequence count = test gen calls + optimization calls (LP will continue from here)
+        self.optimize_calls_count = N_TESTS_TO_GENERATE_EFFECTIVE + optimize_call_count
+        logger.info(f"!lsp|Completed {optimize_call_count} optimization calls, got {len(candidates)} candidates.")
 
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
 
-        candidates_experiment = future_candidates_exp.result() if future_candidates_exp else None
+        # Handle experiment results - also returns (candidates, call_count) tuple
+        candidates_experiment = None
+        if future_candidates_exp:
+            candidates_experiment, _ = future_candidates_exp.result()
         function_references = future_references.result()
 
         return Success((OptimizationSet(control=candidates, experiment=candidates_experiment), function_references))
@@ -1647,6 +1684,10 @@ class FunctionOptimizer:
             )
             throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
 
+        # Explanation call continues the sequence numbering
+        explanation_call_sequence = self.total_llm_calls + 1
+        self.total_llm_calls = explanation_call_sequence
+
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
@@ -1664,6 +1705,7 @@ class FunctionOptimizer:
             optimized_throughput=optimized_throughput_str,
             throughput_improvement=throughput_improvement_str,
             function_references=function_references,
+            call_sequence=explanation_call_sequence,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
@@ -1699,9 +1741,13 @@ class FunctionOptimizer:
         staging_review = self.args.staging_review
         opt_review_response = ""
         # this will now run regardless of pr, staging review flags
+        # Optimization review call continues the sequence numbering
+        review_call_sequence = self.total_llm_calls + 1
+        self.total_llm_calls = review_call_sequence
+
         try:
             opt_review_response = self.aiservice_client.get_optimization_review(
-                **data, calling_fn_details=function_references
+                **data, calling_fn_details=function_references, call_sequence=review_call_sequence
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
@@ -2192,6 +2238,9 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
     ) -> list[concurrent.futures.Future]:
+        # Track how many test generation calls we're making for sequence numbering
+        self.test_gen_calls_count = len(generated_test_paths)
+
         return [
             executor.submit(
                 generate_tests,
@@ -2206,6 +2255,7 @@ class FunctionOptimizer:
                 test_index,
                 test_path,
                 test_perf_path,
+                call_sequence=test_index + 1,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)

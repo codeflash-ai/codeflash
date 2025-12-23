@@ -46,6 +46,7 @@ class AIServiceRefinerRequest:
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     function_references: str | None = None
+    call_sequence: int | None = None
 
 
 class TestDiffScope(str, Enum):
