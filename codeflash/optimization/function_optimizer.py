@@ -1344,7 +1344,10 @@ class FunctionOptimizer:
 
         logger.info(f"!lsp|Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
 
-        generated_tests = GeneratedTestsList(generated_tests=tests)
+        if self.args.no_gen_test:
+            generated_tests = GeneratedTestsList(generated_tests=[])
+        else:
+            generated_tests = GeneratedTestsList(generated_tests=tests)
         return Success((count_tests, generated_tests, function_to_concolic_tests, concolic_test_str))
 
     def generate_optimizations(
