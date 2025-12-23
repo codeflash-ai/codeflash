@@ -46,6 +46,8 @@ from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_REPAIRS_PER_TRACE,
+    MODEL_DISTRIBUTION_EFFECTIVE,
+    MODEL_DISTRIBUTION_LP_EFFECTIVE,
     N_CANDIDATES_EFFECTIVE,
     N_CANDIDATES_LP_EFFECTIVE,
     N_TESTS_TO_GENERATE_EFFECTIVE,
@@ -921,18 +923,20 @@ class FunctionOptimizer:
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
 
+        # Use multi-model approach for line profiler optimization
         future_line_profile_results = self.executor.submit(
-            ai_service_client.optimize_python_code_line_profiler,
+            ai_service_client.optimize_python_code_line_profiler_multi_model,
             source_code=code_context.read_writable_code.markdown,
             dependency_code=code_context.read_only_context_code,
-            trace_id=self.get_trace_id(exp_type),
+            base_trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=N_CANDIDATES_LP_EFFECTIVE,
+            model_distribution=MODEL_DISTRIBUTION_LP_EFFECTIVE,
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
             if self.experiment_id
             else None,
+            executor=self.executor,
         )
 
         processor = CandidateProcessor(
@@ -1353,17 +1357,17 @@ class FunctionOptimizer:
         read_only_context_code: str,
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
-        """Generate optimization candidates for the function."""
-        n_candidates = N_CANDIDATES_EFFECTIVE
-
+        """Generate optimization candidates for the function using multiple models in parallel."""
+        # Use multi-model approach for diversity
         future_optimization_candidates = self.executor.submit(
-            self.aiservice_client.optimize_python_code,
+            self.aiservice_client.optimize_python_code_multi_model,
             read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
-            n_candidates,
+            MODEL_DISTRIBUTION_EFFECTIVE,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
+            executor=self.executor,
         )
 
         future_references = self.executor.submit(
@@ -1380,13 +1384,14 @@ class FunctionOptimizer:
 
         if run_experiment:
             future_candidates_exp = self.executor.submit(
-                self.local_aiservice_client.optimize_python_code,
+                self.local_aiservice_client.optimize_python_code_multi_model,
                 read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
-                n_candidates,
+                MODEL_DISTRIBUTION_EFFECTIVE,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
+                executor=self.executor,
             )
             futures.append(future_candidates_exp)
 
@@ -1395,7 +1400,7 @@ class FunctionOptimizer:
 
         # Retrieve results
         candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"!lsp|Generated '{len(candidates)}' candidate optimizations.")
+        logger.info(f"!lsp|Generated '{len(candidates)}' candidate optimizations from multiple models.")
 
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")

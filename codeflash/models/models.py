@@ -464,6 +464,7 @@ class OptimizedCandidate:
     optimization_id: str
     source: OptimizedCandidateSource
     parent_id: str | None = None
+    model: str | None = None  # Which LLM model generated this candidate
 
 
 @dataclass(frozen=True)
