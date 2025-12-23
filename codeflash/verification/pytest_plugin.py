@@ -12,7 +12,6 @@ import warnings
 
 # System Imports
 from pathlib import Path
-from statistics import mean, median
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
@@ -309,20 +308,28 @@ def should_stop(
         return False
 
     recent = runtimes[-window:]
-    m = median(recent)
+
+    # Use sorted array for faster median and min/max operations
+    recent_sorted = sorted(recent)
+    mid = window // 2
+    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
 
     # 1) All recent points close to the median
-    centered = all(abs(r - m) / m <= center_rel_tol for r in recent)
+    centered = True
+    for r in recent:
+        if abs(r - m) / m > center_rel_tol:
+            centered = False
+            break
 
     # 2) Window spread is small
-    r_min, r_max = min(recent), max(recent)
+    r_min, r_max = recent_sorted[0], recent_sorted[-1]
     spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
 
     # 3) No strong downward trend (still improving)
     # Compare first half vs second half
     half = window // 2
-    first = mean(recent[:half])
-    second = mean(recent[half:])
+    first = sum(recent[:half]) / half
+    second = sum(recent[half:]) / (window - half)
     slope_ok = (first - second) / first <= slope_rel_tol
 
     return centered and spread_ok and slope_ok
