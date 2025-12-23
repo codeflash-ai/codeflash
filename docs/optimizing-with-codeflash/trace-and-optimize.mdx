@@ -6,9 +6,11 @@ sidebarTitle: "Optimize E2E Workflows"
 keywords: ["tracing", "workflow optimization", "replay tests", "end-to-end", "script optimization", "context manager"]
 ---
 
-Codeflash supports optimizing an entire Python script end-to-end by tracing the script's execution and generating Replay Tests.
+Codeflash can optimize an entire Python script end-to-end by tracing the script's execution and generating Replay Tests.
 Tracing follows the execution of a script, profiles it and captures inputs to all functions it called, allowing them to be replayed during optimization.
-Codeflash uses these Replay Tests to optimize all functions called in the script, starting from the most important ones.
+Codeflash uses these Replay Tests to optimize the most important functions called in the script, delivering the best performance for your workflow.
+
+![Function Optimization](/images/priority-order.png)
 
 To optimize a script, `python myscript.py`, simply replace `python` with `codeflash optimize` and run the following command:
 
