@@ -203,7 +203,7 @@ class CandidateProcessor:
 
     def _process_refinement_results(self) -> OptimizedCandidate | None:
         """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
-        import dataclasses  # noqa: PLC0415
+        import dataclasses
 
         future_refinements: list[concurrent.futures.Future] = []
         # Calculate base sequence: offset + lp_calls (refinements come after LP)

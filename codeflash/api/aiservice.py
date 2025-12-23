@@ -721,6 +721,7 @@ class AiServiceClient:
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
         calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
+        call_sequence: int | None -> sequence number for multi-model calls
 
         Returns:
         -------
