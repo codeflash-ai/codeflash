@@ -20,6 +20,13 @@ from unittest import TestCase
 import pytest
 from pluggy import HookspecMarker
 
+from codeflash.code_utils.config_consts import (
+    STABILITY_CENTER_TOLERANCE,
+    STABILITY_SLOPE_TOLERANCE,
+    STABILITY_SPREAD_TOLERANCE,
+    STABILITY_WARMUP_LOOPS,
+    STABILITY_WINDOW_SIZE,
+)
 from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
@@ -287,13 +294,16 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
     return int(payload[last_colon + 1 :])
 
 
+_NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
+
+
 def should_stop(
     runtimes: list[int],
-    warmup: int = 4,
-    window: int = 6,
-    center_rel_tol: float = 0.01,  # ±1% around median
-    spread_rel_tol: float = 0.02,  # 2% window spread
-    slope_rel_tol: float = 0.01,  # 1% improvement allowed
+    warmup: int = STABILITY_WARMUP_LOOPS,
+    window: int = STABILITY_WINDOW_SIZE,
+    center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
+    spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
+    slope_rel_tol: float = STABILITY_SLOPE_TOLERANCE,
 ) -> bool:
     if len(runtimes) < warmup + window:
         return False
@@ -328,29 +338,12 @@ class PytestLoops:
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
 
-    def dynamic_tolerance(self, avg_ns: float) -> float:  # noqa: PLR0911
-        if avg_ns < 200_000:  # < 0.2 ms
-            return 0.80  # 80%
-        if avg_ns < 500_000:  # < 0.5 ms
-            return 0.60  # 60%
-        if avg_ns < 1_000_000:  # < 1 ms
-            return 0.45  # 45%
-        if avg_ns < 2_000_000:  # < 2 ms
-            return 0.30  # 30%
-        if avg_ns < 5_000_000:  # < 5 ms
-            return 0.20  # 20%
-        if avg_ns < 20_000_000:  # < 20 ms
-            return 0.12  # 12%
-        if avg_ns < 100_000_000:  # < 100 ms
-            return 0.07  # 7%
-        return 0.05  # ≥ 100 ms
-
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         if report.when == "call" and report.passed:
             duration_ns = get_runtime_from_stdout(report.capstdout)
             if duration_ns:
-                clean_id = re.sub(r"\s*\[\s*\d+\s*\]\s*$", "", report.nodeid)
+                clean_id = _NODEID_BRACKET_PATTERN.sub("", report.nodeid)
                 self.usable_runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
 
     @hookspec(firstresult=True)
@@ -388,7 +381,8 @@ class PytestLoops:
                     raise session.Interrupted(session.shouldstop)
 
             best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
-            runtimes.append(best_runtime_until_now)
+            if best_runtime_until_now > 0:
+                runtimes.append(best_runtime_until_now)
 
             if should_stop(runtimes):
                 break
