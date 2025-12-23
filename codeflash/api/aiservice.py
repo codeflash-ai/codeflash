@@ -46,7 +46,7 @@ class AiServiceClient:
             logger.info("Using local AI Service at http://localhost:8000")
             console.rule()
             return "http://localhost:8000"
-        return "https://app.codeflash.ai"
+        return "http://localhost:8000"
 
     def make_ai_service_request(
         self,
