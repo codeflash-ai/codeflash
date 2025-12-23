@@ -961,6 +961,7 @@ class FunctionOptimizer:
             if self.experiment_id
             else None,
             sequence_offset=self.optimize_calls_count,
+            executor=self.executor,
         )
 
         processor = CandidateProcessor(
@@ -1395,6 +1396,7 @@ class FunctionOptimizer:
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
             sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
+            executor=self.executor,
         )
 
         future_references = self.executor.submit(
@@ -1419,6 +1421,7 @@ class FunctionOptimizer:
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
                 sequence_offset=N_TESTS_TO_GENERATE_EFFECTIVE,
+                executor=self.executor,
             )
             futures.append(future_candidates_exp)
 
