@@ -35,28 +35,16 @@ MAX_N_CANDIDATES_LP = 6
 # Multi-model diversity configuration
 # Each tuple is (model_name, num_calls) where each call returns 1 candidate
 # Standard mode: 3 GPT-4.1 + 2 Claude Sonnet = 5 candidates
-MODEL_DISTRIBUTION: list[tuple[str, int]] = [
-    ("gpt-4.1", 3),
-    ("claude-sonnet-4-5", 2),
-]
+MODEL_DISTRIBUTION: list[tuple[str, int]] = [("gpt-4.1", 3), ("claude-sonnet-4-5", 2)]
 
 # LSP mode: fewer candidates for faster response
-MODEL_DISTRIBUTION_LSP: list[tuple[str, int]] = [
-    ("gpt-4.1", 2),
-    ("claude-sonnet-4-5", 1),
-]
+MODEL_DISTRIBUTION_LSP: list[tuple[str, int]] = [("gpt-4.1", 2), ("claude-sonnet-4-5", 1)]
 
 # Line profiler mode: 6 candidates total
-MODEL_DISTRIBUTION_LP: list[tuple[str, int]] = [
-    ("gpt-4.1", 4),
-    ("claude-sonnet-4-5", 2),
-]
+MODEL_DISTRIBUTION_LP: list[tuple[str, int]] = [("gpt-4.1", 4), ("claude-sonnet-4-5", 2)]
 
 # Line profiler LSP mode
-MODEL_DISTRIBUTION_LP_LSP: list[tuple[str, int]] = [
-    ("gpt-4.1", 2),
-    ("claude-sonnet-4-5", 1),
-]
+MODEL_DISTRIBUTION_LP_LSP: list[tuple[str, int]] = [("gpt-4.1", 2), ("claude-sonnet-4-5", 1)]
 
 try:
     from codeflash.lsp.helpers import is_LSP_enabled

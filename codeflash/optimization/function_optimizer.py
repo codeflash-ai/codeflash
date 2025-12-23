@@ -48,8 +48,6 @@ from codeflash.code_utils.config_consts import (
     MAX_REPAIRS_PER_TRACE,
     MODEL_DISTRIBUTION_EFFECTIVE,
     MODEL_DISTRIBUTION_LP_EFFECTIVE,
-    N_CANDIDATES_EFFECTIVE,
-    N_CANDIDATES_LP_EFFECTIVE,
     N_TESTS_TO_GENERATE_EFFECTIVE,
     REFINE_ALL_THRESHOLD,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
@@ -936,7 +934,6 @@ class FunctionOptimizer:
             )
             if self.experiment_id
             else None,
-            executor=self.executor,
         )
 
         processor = CandidateProcessor(
@@ -1367,7 +1364,6 @@ class FunctionOptimizer:
             MODEL_DISTRIBUTION_EFFECTIVE,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
-            executor=self.executor,
         )
 
         future_references = self.executor.submit(
@@ -1391,7 +1387,6 @@ class FunctionOptimizer:
                 MODEL_DISTRIBUTION_EFFECTIVE,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
-                executor=self.executor,
             )
             futures.append(future_candidates_exp)
 
