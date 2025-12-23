@@ -10,8 +10,8 @@ from codeflash.cli_cmds.cmd_init import (
     configure_pyproject_toml,
     get_formatter_cmds,
     get_valid_subdirs,
-    is_valid_pyproject_toml,
 )
+from codeflash.cli_cmds.validators import PyprojectTomlValidator
 
 
 @pytest.fixture
@@ -27,28 +27,28 @@ def test_is_valid_pyproject_toml_with_empty_config(temp_dir: Path) -> None:
 """
         )
         f.flush()
-        valid, _, _message = is_valid_pyproject_toml(temp_dir / "pyproject.toml")
-        assert not valid
-        assert _message == "Missing required field: 'module_root'"
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(temp_dir / "pyproject.toml"))
+        assert not result.is_valid
+        assert "Missing required field: 'module_root'" in result.failure_descriptions[0]
 
 
 def test_is_valid_pyproject_toml_with_incorrect_module_root(temp_dir: Path) -> None:
     with (temp_dir / "pyproject.toml").open(mode="w") as f:
-        wrong_module_root = temp_dir / "invalid_directory"
         f.write(
             """[tool.codeflash]
 module-root = "invalid_directory"
 """
         )
         f.flush()
-        valid, config, _message = is_valid_pyproject_toml(temp_dir / "pyproject.toml")
-        assert not valid
-        assert _message == f"Invalid 'module_root': directory does not exist at {wrong_module_root}"
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(temp_dir / "pyproject.toml"))
+        assert not result.is_valid
+        assert "Invalid 'module_root'" in result.failure_descriptions[0]
 
 
 def test_is_valid_pyproject_toml_with_incorrect_tests_root(temp_dir: Path) -> None:
     with (temp_dir / "pyproject.toml").open(mode="w") as f:
-        wrong_tests_root = temp_dir / "incorrect_tests_root"
         f.write(
             """[tool.codeflash]
 module-root = "."
@@ -56,9 +56,10 @@ tests-root = "incorrect_tests_root"
 """
         )
         f.flush()
-        valid, config, _message = is_valid_pyproject_toml(temp_dir / "pyproject.toml")
-        assert not valid
-        assert _message == f"Invalid 'tests_root': directory does not exist at {wrong_tests_root}"
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(temp_dir / "pyproject.toml"))
+        assert not result.is_valid
+        assert "Invalid 'tests_root'" in result.failure_descriptions[0]
 
 
 def test_is_valid_pyproject_toml_with_valid_config(temp_dir: Path) -> None:
@@ -71,8 +72,9 @@ tests-root = "tests"
 """
         )
         f.flush()
-        valid, config, _message = is_valid_pyproject_toml(temp_dir / "pyproject.toml")
-        assert valid
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(temp_dir / "pyproject.toml"))
+        assert result.is_valid
 
 
 def test_get_formatter_cmd(temp_dir: Path) -> None:
@@ -114,8 +116,9 @@ disable-telemetry = true
 formatter-cmds = ["black $file"]
 """
         )
-        valid, _, _ = is_valid_pyproject_toml(pyproject_path)
-        assert valid
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(pyproject_path))
+        assert result.is_valid
 
 
 def test_configure_pyproject_toml_for_vscode_with_empty_config(temp_dir: Path) -> None:
@@ -139,8 +142,9 @@ tests-root = "tests"
 formatter-cmds = ["black $file"]
 """
         )
-        valid, _, _ = is_valid_pyproject_toml(pyproject_path)
-        assert valid
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(pyproject_path))
+        assert result.is_valid
 
 
 def test_configure_pyproject_toml_for_vscode_with_existing_config(temp_dir: Path) -> None:
@@ -171,8 +175,9 @@ benchmarks-root = "tests/benchmarks"
 formatter-cmds = ["disabled"]
 """
         )
-        valid, _, _ = is_valid_pyproject_toml(pyproject_path)
-        assert valid
+        validator = PyprojectTomlValidator()
+        result = validator.validate(str(pyproject_path))
+        assert result.is_valid
 
 
 def test_get_valid_subdirs(temp_dir: Path) -> None:
