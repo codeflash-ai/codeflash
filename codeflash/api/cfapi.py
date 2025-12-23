@@ -55,13 +55,17 @@ def make_cfapi_request(
     *,
     api_key: str | None = None,
     suppress_errors: bool = False,
+    params: dict[str, Any] | None = None,
 ) -> Response:
     """Make an HTTP request using the specified method, URL, headers, and JSON payload.
 
     :param endpoint: The endpoint URL to send the request to.
     :param method: The HTTP method to use ('GET', 'POST', etc.).
     :param payload: Optional JSON payload to include in the POST request body.
+    :param extra_headers: Optional extra headers to include in the request.
+    :param api_key: Optional API key to use for authentication.
     :param suppress_errors: If True, suppress error logging for HTTP errors.
+    :param params: Optional query parameters for GET requests.
     :return: The response object from the API.
     """
     url = f"{get_cfapi_base_urls().cfapi_base_url}/cfapi{endpoint}"
@@ -75,7 +79,7 @@ def make_cfapi_request(
             cfapi_headers["Content-Type"] = "application/json"
             response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
         else:
-            response = requests.get(url, headers=cfapi_headers, timeout=60)
+            response = requests.get(url, headers=cfapi_headers, params=params, timeout=60)
         response.raise_for_status()
         return response  # noqa: TRY300
     except requests.exceptions.HTTPError:
@@ -237,6 +241,20 @@ def create_pr(
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
+
+
+def setup_github_actions(owner: str, repo: str, base_branch: str, workflow_content: str) -> Response:
+    """Set up GitHub Actions workflow by creating a PR with the workflow file.
+
+    :param owner: Repository owner (username or organization)
+    :param repo: Repository name
+    :param base_branch: Base branch to create PR against (e.g., "main", "master")
+    :param workflow_content: Content of the GitHub Actions workflow file (YAML)
+    :return: Response object with pr_url and pr_number on success
+    """
+    payload = {"owner": owner, "repo": repo, "baseBranch": base_branch, "workflowContent": workflow_content}
+
+    return make_cfapi_request(endpoint="/setup-github-actions", method="POST", payload=payload)
 
 
 def create_staging(
