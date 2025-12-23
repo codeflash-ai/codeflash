@@ -20,6 +20,8 @@ from unittest import TestCase
 import pytest
 from pluggy import HookspecMarker
 
+from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
+
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
     from _pytest.main import Session
@@ -345,7 +347,8 @@ class PytestLoops:
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        if report.when == "call" and report.passed and (duration_ns := get_runtime_from_stdout(report.capstdout)):  # noqa: SIM102
+        if report.when == "call" and report.passed:
+            duration_ns = get_runtime_from_stdout(report.capstdout)
             if duration_ns:
                 clean_id = re.sub(r"\s*\[\s*\d+\s*\]\s*$", "", report.nodeid)
                 self.usable_runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
@@ -384,9 +387,7 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            best_runtime_until_now = sum(
-                [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case.items()]
-            )
+            best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
             runtimes.append(best_runtime_until_now)
 
             if should_stop(runtimes):
