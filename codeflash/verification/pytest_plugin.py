@@ -300,10 +300,7 @@ def should_stop(
     # Use sorted array for faster median and min/max operations
     recent_sorted = sorted(recent)
     mid = window // 2
-    if window % 2:
-        m = recent_sorted[mid]
-    else:
-        m = (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
+    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
 
     # 1) All recent points close to the median
     centered = True
