@@ -331,6 +331,8 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Be conservative except when an alias is used (which requires exact method matching)
             for target_func in fnames:
                 if "." in target_func:
+                    # Split to extract class name; method name is intentionally discarded (leading underscore)
+                    # as we only need to check if the imported class matches the target function's class
                     class_name, _method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
                         self.found_any_target_function = True
@@ -604,23 +606,38 @@ def discover_tests_pytest(
                 check=False,
                 **run_kwargs,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
+            logger.error(
+                f"Test discovery subprocess timed out after {run_kwargs.get('timeout', 600)} seconds. "
+                f"Command: {discovery_script}"
+            )
             result = subprocess.CompletedProcess(args=[], returncode=-1, stdout="", stderr="Timeout")
-        except Exception as e:
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
+            logger.error(
+                f"Test discovery subprocess failed with error: {e}. "
+                f"Command: {discovery_script}, "
+                f"Project root: {project_root}, Tests root: {tests_root}"
+            )
             result = subprocess.CompletedProcess(args=[], returncode=-1, stdout="", stderr=str(e))
 
     try:
         # Check if pickle file exists before trying to read it
         if not tmp_pickle_path.exists():
             tests, pytest_rootdir = [], None
-            logger.warning(
+            logger.error(
                 f"Test discovery pickle file not found. "
-                f"Subprocess return code: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}"
+                f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
             )
             exitcode = result.returncode if result.returncode != 0 else -1
         else:
             with tmp_pickle_path.open(mode="rb") as f:
                 exitcode, tests, pytest_rootdir = pickle.load(f)
+            # Log error if subprocess failed even though pickle file exists
+            if exitcode != 0:
+                logger.error(
+                    f"Test discovery subprocess returned non-zero exit code: {exitcode}. "
+                    f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
+                )
     except Exception as e:
         tests, pytest_rootdir = [], None
         logger.exception(

@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
+# Constant for subprocess drain timeout after killing
+SUBPROCESS_DRAIN_TIMEOUT_SECONDS = 5
+
 
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
@@ -74,7 +77,13 @@ def execute_test_subprocess(
                     process.kill()
 
                 # Drain remaining output after killing
-                stdout_content, stderr_content = process.communicate(timeout=5)
+                try:
+                    stdout_content, stderr_content = process.communicate(timeout=SUBPROCESS_DRAIN_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired:
+                    # Last resort: terminate and get partial output
+                    with contextlib.suppress(OSError):
+                        process.terminate()
+                    stdout_content, stderr_content = "", "Process killed after timeout"
                 raise subprocess.TimeoutExpired(
                     cmd_list, timeout, output=stdout_content, stderr=stderr_content
                 ) from None

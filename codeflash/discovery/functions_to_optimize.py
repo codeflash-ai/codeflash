@@ -665,12 +665,54 @@ def filter_functions(
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
 
+    def _validate_path_no_traversal(path: Path | str) -> bool:
+        """Validate that a path does not contain path traversal components.
+        
+        This prevents path traversal attacks by rejecting paths with '..' components.
+        Paths passed to this function should be from trusted sources (git operations,
+        file system discovery), but we validate defensively.
+        
+        Args:
+            path: Path to validate
+            
+        Returns:
+            True if path is safe (no traversal components), False otherwise
+        """
+        path_str = str(path)
+        # Check for path traversal attempts
+        if ".." in path_str:
+            return False
+        # Check for absolute paths that might escape (additional safety check)
+        # Note: We allow absolute paths as they're needed for worktree paths
+        return True
+
     def _resolve_path(path: Path | str) -> Path:
         # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
+        # SECURITY: Validate path before resolution to prevent traversal attacks
+        if not _validate_path_no_traversal(path):
+            raise ValueError(f"Path contains traversal components: {path}")
         return Path(path).resolve(strict=False)
 
     def _resolve_path_consistent(path: Path | str) -> Path:
-        """Resolve path consistently: use strict resolution if path exists, otherwise non-strict."""
+        """Resolve path consistently: use strict resolution if path exists, otherwise non-strict.
+        
+        SECURITY: This function validates paths to prevent traversal attacks before resolution.
+        Paths should come from trusted sources (git operations, file system discovery),
+        but we validate defensively.
+        
+        Args:
+            path: Path to resolve (from trusted sources like git diff or file discovery)
+            
+        Returns:
+            Resolved absolute Path
+            
+        Raises:
+            ValueError: If path contains traversal components
+        """
+        # SECURITY: Validate path before any resolution to prevent traversal attacks
+        if not _validate_path_no_traversal(path):
+            raise ValueError(f"Path contains traversal components: {path}")
+            
         path_obj = Path(path)
         if path_obj.exists():
             try:
@@ -691,6 +733,10 @@ def filter_functions(
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
+        # SECURITY: Validate file path before processing to prevent traversal attacks
+        if not _validate_path_no_traversal(file_path_path):
+            logger.warning(f"Skipping file with traversal components: {file_path_path}")
+            continue
         # Resolve file path to absolute path
         # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
         file_path_obj = Path(file_path_path)

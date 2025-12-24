@@ -11,7 +11,7 @@ from codeflash.lsp.helpers import is_LSP_enabled, replace_quotes_with_backticks,
 json_primitive_types = (str, float, int, bool)
 max_code_lines_before_collapse = 45
 
-# \\u241F is the message delimiter becuase it can be more than one message sent over the same message, so we need something to separate each message
+# \\u241F is the message delimiter because it can be more than one message sent over the same message, so we need something to separate each message
 message_delimiter = "\\u241F"
 
 

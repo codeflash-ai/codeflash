@@ -21,6 +21,10 @@ from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_d
 worktree_dirs = codeflash_cache_dir / "worktrees"
 patches_dir = codeflash_cache_dir / "patches"
 
+# Constants for Windows retry logic
+MAX_WINDOWS_RETRIES = 3
+INITIAL_RETRY_DELAY_SECONDS = 0.5
+
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
     repository = git.Repo(worktree_dir, search_parent_directories=True)
@@ -113,14 +117,17 @@ def remove_worktree(worktree_dir: Path) -> None:
         return
 
     is_windows = sys.platform == "win32"
-    max_retries = 3 if is_windows else 1
-    retry_delay = 0.5  # Start with 500ms delay
+    max_retries = MAX_WINDOWS_RETRIES if is_windows else 1
+    retry_delay = INITIAL_RETRY_DELAY_SECONDS
 
     # Try to get the repository and git root for worktree removal
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
-    except Exception:
+    except (git.exc.InvalidGitRepositoryError, OSError, PermissionError) as e:
         # If we can't access the repository, try manual cleanup
+        # Log at debug level since this is expected in some edge cases
+        from codeflash.cli_cmds.console import logger
+        logger.debug(f"Could not access git repository at {worktree_dir}: {e}. Attempting manual cleanup.")
         _manual_cleanup_worktree_directory(worktree_dir)
         return
 
@@ -140,17 +147,20 @@ def remove_worktree(worktree_dir: Path) -> None:
             else:
                 # Last attempt failed or non-permission error
                 break
-        except Exception:
+        except (OSError, PermissionError) as e:
+            # Log unexpected errors for debugging
+            from codeflash.cli_cmds.console import logger
+            logger.debug(f"Worktree removal attempt {attempt + 1} failed with unexpected error: {e}")
             break
 
     # Fallback: Try to remove worktree entry from git, then manually delete directory
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(git.exc.GitCommandError, OSError, PermissionError):
         # Try to prune the worktree entry from git (this doesn't delete the directory)
         # Use git worktree prune to remove stale entries
         repository.git.worktree("prune")
 
     # Manually remove the directory (always attempt, even if prune failed)
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(OSError, PermissionError):
         _manual_cleanup_worktree_directory(worktree_dir)
 
 
@@ -178,8 +188,8 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
 
     # Attempt removal with retries on Windows
     is_windows = sys.platform == "win32"
-    max_retries = 3 if is_windows else 1
-    retry_delay = 0.5
+    max_retries = MAX_WINDOWS_RETRIES if is_windows else 1
+    retry_delay = INITIAL_RETRY_DELAY_SECONDS
 
     for attempt in range(max_retries):
         attempt_num = attempt + 1

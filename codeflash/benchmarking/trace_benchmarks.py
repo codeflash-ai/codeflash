@@ -10,6 +10,9 @@ from pathlib import Path
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 
+# Constant for subprocess drain timeout after killing
+SUBPROCESS_DRAIN_TIMEOUT_SECONDS = 5
+
 
 def trace_benchmarks_pytest(
     benchmarks_root: Path, tests_root: Path, project_root: Path, trace_file: Path, timeout: int = 300
@@ -48,7 +51,14 @@ def trace_benchmarks_pytest(
         except subprocess.TimeoutExpired:
             with contextlib.suppress(OSError):
                 process.kill()
-            stdout_content, stderr_content = process.communicate(timeout=5)
+            try:
+                # Try to drain remaining output after killing
+                stdout_content, stderr_content = process.communicate(timeout=SUBPROCESS_DRAIN_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                # Last resort: terminate and get partial output
+                with contextlib.suppress(OSError):
+                    process.terminate()
+                stdout_content, stderr_content = "", "Process killed after timeout"
             raise subprocess.TimeoutExpired(cmd_list, timeout, output=stdout_content, stderr=stderr_content) from None
         result = subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
     else:
