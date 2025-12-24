@@ -684,7 +684,8 @@ class AiServiceClient:
                 response_json["instrumented_perf_tests"],
             )
         try:
-            error = response.json()["error"]
+            response_json = response.json()
+            error = response_json["error"]
             logger.error(f"Error generating tests: {response.status_code} - {error}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
             return None  # noqa: TRY300

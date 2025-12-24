@@ -300,18 +300,24 @@ def get_qualified_name(module_name: str, full_qualified_name: str) -> str:
 
 
 def module_name_from_file_path(file_path: Path, project_root_path: Path, *, traverse_up: bool = False) -> str:
+    file_path_resolved = _resolved_path(file_path)
+    project_root_path_resolved = _resolved_path(project_root_path)
     try:
-        relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+        relative_path = file_path_resolved.relative_to(project_root_path_resolved)
         return relative_path.with_suffix("").as_posix().replace("/", ".")
     except ValueError:
         if traverse_up:
-            parent = file_path.parent
-            while parent not in (project_root_path, parent.parent):
+            # Build the ancestor list once, working upward
+            ancestors = list(file_path_resolved.parents)
+            # Stop at the first equal-to project_root_path or filesystem root; match original behavior
+            for parent in ancestors:
+                if parent in (project_root_path_resolved, parent.parent):
+                    break
                 try:
-                    relative_path = file_path.resolve().relative_to(parent.resolve())
+                    relative_path = file_path_resolved.relative_to(parent)
                     return relative_path.with_suffix("").as_posix().replace("/", ".")
                 except ValueError:
-                    parent = parent.parent
+                    continue
         msg = f"File {file_path} is not within the project root {project_root_path}."
         raise ValueError(msg)  # noqa: B904
 
@@ -489,3 +495,8 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
     if error_msg:
         return False, error_msg
     return True, ""
+
+
+@lru_cache(maxsize=128)
+def _resolved_path(path: Path) -> Path:
+    return path.resolve()
