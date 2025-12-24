@@ -127,6 +127,7 @@ def remove_worktree(worktree_dir: Path) -> None:
         # If we can't access the repository, try manual cleanup
         # Log at debug level since this is expected in some edge cases
         from codeflash.cli_cmds.console import logger
+
         logger.debug(f"Could not access git repository at {worktree_dir}: {e}. Attempting manual cleanup.")
         _manual_cleanup_worktree_directory(worktree_dir)
         return
@@ -150,6 +151,7 @@ def remove_worktree(worktree_dir: Path) -> None:
         except (OSError, PermissionError) as e:
             # Log unexpected errors for debugging
             from codeflash.cli_cmds.console import logger
+
             logger.debug(f"Worktree removal attempt {attempt + 1} failed with unexpected error: {e}")
             break
 

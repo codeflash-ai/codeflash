@@ -606,7 +606,7 @@ def discover_tests_pytest(
                 check=False,
                 **run_kwargs,
             )
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             logger.error(
                 f"Test discovery subprocess timed out after {run_kwargs.get('timeout', 600)} seconds. "
                 f"Command: {discovery_script}"
