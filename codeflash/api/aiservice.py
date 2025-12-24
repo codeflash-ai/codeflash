@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import time
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
@@ -96,7 +97,7 @@ class AiServiceClient:
     ) -> list[OptimizedCandidate]:
         candidates: list[OptimizedCandidate] = []
         for opt in optimizations_json:
-            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+            code = self._cached_parse_markdown_code(opt["source_code"])
             if not code.code_strings:
                 continue
             candidates.append(
@@ -827,6 +828,11 @@ class AiServiceClient:
         except Exception:
             logger.debug("[aiservice.py:generate_workflow_steps] Could not parse error response")
         return None
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def _cached_parse_markdown_code(source_code: str) -> CodeStringsMarkdown:
+        return CodeStringsMarkdown.parse_markdown_code(source_code)
 
 
 class LocalAiServiceClient(AiServiceClient):
