@@ -679,22 +679,17 @@ def filter_functions(
             True if path is safe (no traversal components), False otherwise
 
         """
-        path_str = str(path)
-        # Check for path traversal attempts
-        # Check for absolute paths that might escape (additional safety check)
-        # Note: We allow absolute paths as they're needed for worktree paths
-        return ".." not in path_str
+        try:
+            path_obj = Path(path)
+        except (ValueError, OSError):
+            return False
+        else:
+            # Check if any part is exactly '..' (not just containing '..' as a substring)
+            # This avoids false positives like files named "config..bak"
+            return ".." not in path_obj.parts
 
-    def _resolve_path(path: Path | str) -> Path:
-        # Use strict=False so we don't fail on paths that don't exist yet (e.g. worktree paths)
-        # SECURITY: Validate path before resolution to prevent traversal attacks
-        if not _validate_path_no_traversal(path):
-            error_msg = f"Path contains traversal components: {path}"
-            raise ValueError(error_msg)
-        return Path(path).resolve(strict=False)
-
-    def _resolve_path_consistent(path: Path | str) -> Path:
-        """Resolve path consistently: use strict resolution if path exists, otherwise non-strict.
+    def _resolve_path_safely(path: Path | str) -> Path:
+        """Resolve path, preferring strict resolution but falling back to non-strict.
 
         SECURITY: This function validates paths to prevent traversal attacks before resolution.
         Paths should come from trusted sources (git operations, file system discovery),
@@ -716,42 +711,34 @@ def filter_functions(
             raise ValueError(error_msg)
 
         path_obj = Path(path)
-        if path_obj.exists():
-            try:
-                return path_obj.resolve()
-            except (OSError, RuntimeError):
-                return _resolve_path(path)
-        return _resolve_path(path)
+        try:
+            # Prefer strict resolution if path exists, otherwise use non-strict
+            return path_obj.resolve(strict=True) if path_obj.exists() else path_obj.resolve(strict=False)
+        except (OSError, RuntimeError):
+            # Fallback to non-strict resolution on errors
+            return path_obj.resolve(strict=False)
 
     # Resolve all root paths to absolute paths for consistent comparison
     # Use consistent resolution: strict for existing paths, non-strict for non-existent
-    tests_root_resolved = _resolve_path_consistent(tests_root)
-    module_root_resolved = _resolve_path_consistent(module_root)
+    tests_root_resolved = _resolve_path_safely(tests_root)
+    module_root_resolved = _resolve_path_safely(module_root)
 
     # Resolve ignore paths and submodule paths
-    ignore_paths_resolved = [_resolve_path_consistent(p) for p in ignore_paths]
-    submodule_paths_resolved = [_resolve_path_consistent(p) for p in submodule_paths]
+    ignore_paths_resolved = [_resolve_path_safely(p) for p in ignore_paths]
+    submodule_paths_resolved = [_resolve_path_safely(p) for p in submodule_paths]
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         # SECURITY: Validate file path before processing to prevent traversal attacks
+        # Note: Paths come from trusted sources (git operations), but we validate defensively
         if not _validate_path_no_traversal(file_path_path):
-            logger.warning(f"Skipping file with traversal components: {file_path_path}")
-            continue
-        # Resolve file path to absolute path
-        # Convert to Path if it's a string (e.g., from get_functions_within_git_diff)
-        file_path_obj = Path(file_path_path)
-        # Use consistent resolution: try strict first (for existing files), fall back to non-strict
-        if file_path_obj.exists():
-            try:
-                file_path_resolved = file_path_obj.resolve()
-            except (OSError, RuntimeError):
-                file_path_resolved = _resolve_path(file_path_path)
-        else:
-            file_path_resolved = _resolve_path(file_path_path)
-
-        file_path = str(file_path_obj)
+            error_msg = f"Path contains traversal components: {file_path_path}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        # Resolve file path to absolute path using consolidated resolution logic
+        file_path_resolved = _resolve_path_safely(file_path_path)
+        file_path = str(file_path_path)  # Keep original path string for compatibility
 
         # Check if file is in tests root using resolved paths
         try:

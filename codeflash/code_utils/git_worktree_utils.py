@@ -8,10 +8,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import Any, Callable, Optional
 
 import git
 
@@ -24,6 +21,8 @@ patches_dir = codeflash_cache_dir / "patches"
 # Constants for Windows retry logic
 MAX_WINDOWS_RETRIES = 3
 INITIAL_RETRY_DELAY_SECONDS = 0.5
+WINDOWS_FILE_RELEASE_WAIT_LONG = 0.3
+WINDOWS_FILE_RELEASE_WAIT_SHORT = 0.1
 
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:
@@ -212,14 +211,18 @@ def _manual_cleanup_worktree_directory(worktree_dir: Path) -> None:
 
             # Brief wait on Windows to allow file handles to be released
             if is_windows:
-                wait_time = 0.3 if attempt_num < max_retries else 0.1
+                wait_time = (
+                    WINDOWS_FILE_RELEASE_WAIT_LONG if attempt_num < max_retries else WINDOWS_FILE_RELEASE_WAIT_SHORT
+                )
                 time.sleep(wait_time)
 
             # Check if removal was successful
             if not worktree_dir.exists():
                 return
 
-        except Exception:  # noqa: S110
+        except (OSError, PermissionError):
+            # Silently ignore permission errors during cleanup attempts
+            # These are expected on Windows when files are locked
             pass
 
 
@@ -251,9 +254,11 @@ def _validate_worktree_path_safety(worktree_dir: Path) -> bool:
     return worktree_dir_resolved != worktree_dirs_resolved
 
 
-def _create_windows_rmtree_error_handler() -> Callable[
-    [Callable[[str], None], str, tuple[type[BaseException], BaseException, Any]], None
-]:
+# Type alias for shutil.rmtree error handler signature
+ErrorHandler = Callable[[Callable[[str], None], str, tuple[type[BaseException], BaseException, Any]], None]
+
+
+def _create_windows_rmtree_error_handler() -> ErrorHandler:
     """Create an error handler for shutil.rmtree that handles Windows-specific issues.
 
     This handler attempts to remove read-only attributes when encountering permission errors.
