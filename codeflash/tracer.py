@@ -86,6 +86,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
     # to the output file at startup.
     if parsed_args.outfile is not None:
         parsed_args.outfile = Path(parsed_args.outfile).resolve()
+    outfile = parsed_args.outfile
     config, found_config_path = parse_config_file(parsed_args.codeflash_config)
     project_root = project_root_from_module_root(Path(config["module_root"]), found_config_path)
     if len(unknown_args) > 0:
@@ -214,6 +215,12 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.optimization import optimizer
 
                 optimizer.run_with_args(args)
+
+                # Delete the trace file and the replay test file if they exist
+                if outfile:
+                    outfile.unlink(missing_ok=True)
+                for replay_test_path in replay_test_paths:
+                    Path(replay_test_path).unlink(missing_ok=True)
 
         except BrokenPipeError as exc:
             # Prevent "Exception ignored" during interpreter shutdown.

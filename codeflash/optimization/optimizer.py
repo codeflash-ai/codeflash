@@ -409,6 +409,12 @@ class Optimizer:
         if self.args.worktree:
             self.worktree_mode()
 
+        if not self.args.replay_test and self.test_cfg.tests_root.exists():
+            leftover_trace_files = list(self.test_cfg.tests_root.glob("*.trace"))
+            if leftover_trace_files:
+                logger.debug(f"Cleaning up {len(leftover_trace_files)} leftover trace file(s) from previous runs")
+                cleanup_paths(leftover_trace_files)
+
         cleanup_paths(Optimizer.find_leftover_instrumented_test_files(self.test_cfg.tests_root))
 
         function_optimizer = None
@@ -519,6 +525,8 @@ class Optimizer:
                 )
             if self.functions_checkpoint:
                 self.functions_checkpoint.cleanup()
+            if hasattr(self.args, "command") and self.args.command == "optimize":
+                self.cleanup_replay_tests()
             if optimizations_found == 0:
                 logger.info("❌ No optimizations found.")
             elif self.args.all:
@@ -554,6 +562,17 @@ class Optimizer:
             file_path for file_path in test_root.rglob("*") if file_path.is_file() and pattern.match(file_path.name)
         ]
 
+    def cleanup_replay_tests(self) -> None:
+        paths_to_cleanup = []
+        if self.replay_tests_dir and self.replay_tests_dir.exists():
+            logger.debug(f"Cleaning up replay tests directory: {self.replay_tests_dir}")
+            paths_to_cleanup.append(self.replay_tests_dir)
+        if self.trace_file and self.trace_file.exists():
+            logger.debug(f"Cleaning up trace file: {self.trace_file}")
+            paths_to_cleanup.append(self.trace_file)
+        if paths_to_cleanup:
+            cleanup_paths(paths_to_cleanup)
+
     def cleanup_temporary_paths(self) -> None:
         if hasattr(get_run_tmp_file, "tmpdir"):
             get_run_tmp_file.tmpdir.cleanup()
@@ -568,6 +587,14 @@ class Optimizer:
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
+        paths_to_cleanup = [self.replay_tests_dir]
+        if self.trace_file:
+            paths_to_cleanup.append(self.trace_file)
+        if self.test_cfg.tests_root.exists():
+            for trace_file in self.test_cfg.tests_root.glob("*.trace"):
+                if trace_file not in paths_to_cleanup:
+                    paths_to_cleanup.append(trace_file)
+        cleanup_paths(paths_to_cleanup)
 
     def worktree_mode(self) -> None:
         if self.current_worktree:
