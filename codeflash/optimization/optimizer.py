@@ -559,13 +559,15 @@ class Optimizer:
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
 
+        # Always clean up concolic test directory
+        cleanup_paths([self.test_cfg.concolic_test_root_dir])
+
         if self.current_worktree:
             remove_worktree(self.current_worktree)
             return
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-        cleanup_paths([self.test_cfg.concolic_test_root_dir])
 
     def worktree_mode(self) -> None:
         if self.current_worktree:
