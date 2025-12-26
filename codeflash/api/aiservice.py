@@ -151,6 +151,7 @@ class AiServiceClient:
             "repo_name": git_repo_name,
             "is_async": is_async,
             "lsp_mode": is_LSP_enabled(),
+            "call_sequence": 1,
         }
         logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
 
@@ -217,6 +218,7 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
+            "call_sequence": 1,
         }
 
         try:
