@@ -367,7 +367,7 @@ class PytestLoops:
         runtimes = []
         elapsed = 0.0
 
-        while total_time >= SHORTEST_AMOUNT_OF_TIME:
+        while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
             count += 1
             loop_start = _ORIGINAL_PERF_COUNTER_NS()
             for index, item in enumerate(session.items):
