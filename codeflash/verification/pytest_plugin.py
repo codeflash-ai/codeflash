@@ -338,7 +338,7 @@ class PytestLoops:
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
         self.total_loop_runtimes: list[int] = []
-        self.is_perf_test: bool = config.option.codeflash_max_loops > 1
+        self.is_perf_test: bool = getattr(config.option, "codeflash_max_loops", 1) > 1
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
