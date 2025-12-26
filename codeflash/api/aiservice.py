@@ -670,6 +670,60 @@ class AiServiceClient:
         console.rule()
         return ""
 
+    def generate_workflow_steps(
+        self,
+        repo_files: dict[str, str],
+        directory_structure: dict[str, Any],
+        codeflash_config: dict[str, Any] | None = None,
+    ) -> str | None:
+        """Generate GitHub Actions workflow steps based on repository analysis.
+
+        :param repo_files: Dictionary mapping file paths to their contents
+        :param directory_structure: 2-level nested directory structure
+        :param codeflash_config: Optional codeflash configuration
+        :return: YAML string for workflow steps section, or None on error
+        """
+        payload = {
+            "repo_files": repo_files,
+            "directory_structure": directory_structure,
+            "codeflash_config": codeflash_config,
+        }
+
+        logger.debug(
+            f"[aiservice.py:generate_workflow_steps] Sending request to AI service with {len(repo_files)} files, "
+            f"{len(directory_structure)} top-level directories"
+        )
+
+        try:
+            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            # AI service unavailable - this is expected, will fall back to static workflow
+            logger.debug(
+                f"[aiservice.py:generate_workflow_steps] Request exception (falling back to static workflow): {e}"
+            )
+            return None
+
+        if response.status_code == 200:
+            response_data = response.json()
+            workflow_steps = cast("str", response_data.get("workflow_steps"))
+            logger.debug(
+                f"[aiservice.py:generate_workflow_steps] Successfully received workflow steps "
+                f"({len(workflow_steps) if workflow_steps else 0} chars)"
+            )
+            return workflow_steps
+        # AI service unavailable or endpoint not found - this is expected, will fall back to static workflow
+        logger.debug(
+            f"[aiservice.py:generate_workflow_steps] AI service returned status {response.status_code}, "
+            f"falling back to static workflow generation"
+        )
+        try:
+            error_response = response.json()
+            error = cast("str", error_response.get("error", "Unknown error"))
+            logger.debug(f"[aiservice.py:generate_workflow_steps] Error: {error}")
+        except Exception:
+            logger.debug("[aiservice.py:generate_workflow_steps] Could not parse error response")
+        return None
+
 
 class LocalAiServiceClient(AiServiceClient):
     """Client for interacting with the local AI service."""
