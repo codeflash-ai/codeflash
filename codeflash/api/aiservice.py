@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import time
+from itertools import count
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
@@ -39,6 +40,11 @@ class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
+        self.llm_call_counter = count(1)
+
+    def get_next_sequence(self) -> int:
+        """Get the next LLM call sequence number."""
+        return next(self.llm_call_counter)
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -151,7 +157,7 @@ class AiServiceClient:
             "repo_name": git_repo_name,
             "is_async": is_async,
             "lsp_mode": is_LSP_enabled(),
-            "call_sequence": 1,
+            "call_sequence": self.get_next_sequence(),
         }
         logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
 
@@ -218,7 +224,7 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
-            "call_sequence": 1,
+            "call_sequence": self.get_next_sequence(),
         }
 
         try:
@@ -269,7 +275,7 @@ class AiServiceClient:
                 "trace_id": opt.trace_id,
                 "function_references": opt.function_references,
                 "python_version": platform.python_version(),
-                "call_sequence": opt.call_sequence,
+                "call_sequence": self.get_next_sequence(),
             }
             for opt in request
         ]
@@ -359,7 +365,6 @@ class AiServiceClient:
         throughput_improvement: str | None = None,
         function_references: str | None = None,
         codeflash_version: str = codeflash_version,
-        call_sequence: int | None = None,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -405,7 +410,7 @@ class AiServiceClient:
             "throughput_improvement": throughput_improvement,
             "function_references": function_references,
             "codeflash_version": codeflash_version,
-            "call_sequence": call_sequence,
+            "call_sequence": self.get_next_sequence(),
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -533,7 +538,6 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
-        call_sequence: int | None = None,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -569,7 +573,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
-            "call_sequence": call_sequence,
+            "call_sequence": self.get_next_sequence(),
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
@@ -610,7 +614,6 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
-        call_sequence: int | None = None,
     ) -> str:
         """Compute the optimization review of current Pull Request.
 
@@ -626,7 +629,6 @@ class AiServiceClient:
         root_dir: Path -> path of git directory
         concolic_tests: str -> concolic_tests (not used)
         calling_fn_details: str -> filenames and definitions of functions which call the function_to_optimize
-        call_sequence: int | None -> sequence number for multi-model calls
 
         Returns:
         -------
@@ -658,7 +660,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "python_version": platform.python_version(),
-            "call_sequence": call_sequence,
+            "call_sequence": self.get_next_sequence(),
         }
         console.rule()
         try:

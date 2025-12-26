@@ -327,8 +327,6 @@ class FunctionOptimizer:
         self.optimization_review = ""
         self.future_all_code_repair: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
-        # Counter for post-optimization LLM calls (explanation, review) - optimization calls are handled by backend
-        self.post_optimization_call_count = 0
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -1655,10 +1653,6 @@ class FunctionOptimizer:
             )
             throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
 
-        # Explanation call sequence for tracking
-        self.post_optimization_call_count += 1
-        explanation_call_sequence = self.post_optimization_call_count
-
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
             dependency_code=code_context.read_only_context_code,
@@ -1676,7 +1670,6 @@ class FunctionOptimizer:
             optimized_throughput=optimized_throughput_str,
             throughput_improvement=throughput_improvement_str,
             function_references=function_references,
-            call_sequence=explanation_call_sequence,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
@@ -1712,13 +1705,9 @@ class FunctionOptimizer:
         staging_review = self.args.staging_review
         opt_review_response = ""
         # this will now run regardless of pr, staging review flags
-        # Review call sequence for tracking
-        self.post_optimization_call_count += 1
-        review_call_sequence = self.post_optimization_call_count
-
         try:
             opt_review_response = self.aiservice_client.get_optimization_review(
-                **data, calling_fn_details=function_references, call_sequence=review_call_sequence
+                **data, calling_fn_details=function_references
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
@@ -2223,7 +2212,6 @@ class FunctionOptimizer:
                 test_index,
                 test_path,
                 test_perf_path,
-                call_sequence=test_index + 1,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)
