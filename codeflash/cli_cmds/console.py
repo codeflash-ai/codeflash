@@ -141,6 +141,15 @@ def progress_bar(
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
+    if is_LSP_enabled():
+
+        class DummyProgress:
+            def advance(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        yield DummyProgress(), 0  # type: ignore[return-value]
+        return
+
     with Progress(
         SpinnerColumn(next(spinners)),
         TextColumn("[progress.description]{task.description}"),

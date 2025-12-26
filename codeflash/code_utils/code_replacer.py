@@ -447,7 +447,7 @@ def replace_function_definitions_in_module(
 
     new_code: str = replace_functions_and_add_imports(
         # adding the global assignments before replacing the code, not after
-        # becuase of an "edge case" where the optimized code intoduced a new import and a global assignment using that import
+        # because of an "edge case" where the optimized code intoduced a new import and a global assignment using that import
         # and that import wasn't used before, so it was ignored when calling AddImportsVisitor.add_needed_import inside replace_functions_and_add_imports (because the global assignment wasn't added yet)
         # this was added at https://github.com/codeflash-ai/codeflash/pull/448
         add_global_assignments(code_to_apply, source_code) if should_add_global_assignments else source_code,

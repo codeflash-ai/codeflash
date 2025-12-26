@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import os
 import random
 import warnings
 from _ast import AsyncFunctionDef, ClassDef, FunctionDef
@@ -665,34 +664,128 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    tests_root_str = str(tests_root)
-    module_root_str = str(module_root)
+
+    def _validate_path_no_traversal(path: Path | str) -> bool:
+        """Validate that a path does not contain path traversal components.
+
+        This prevents path traversal attacks by rejecting paths with '..' components.
+        Paths passed to this function should be from trusted sources (git operations,
+        file system discovery), but we validate defensively.
+
+        Args:
+            path: Path to validate
+
+        Returns:
+            True if path is safe (no traversal components), False otherwise
+
+        """
+        try:
+            path_obj = Path(path)
+        except (ValueError, OSError):
+            return False
+        else:
+            # Check if any part is exactly '..' (not just containing '..' as a substring)
+            # This avoids false positives like files named "config..bak"
+            return ".." not in path_obj.parts
+
+    def _resolve_path_safely(path: Path | str) -> Path:
+        """Resolve path, preferring strict resolution but falling back to non-strict.
+
+        SECURITY: This function validates paths to prevent traversal attacks before resolution.
+        Paths should come from trusted sources (git operations, file system discovery),
+        but we validate defensively.
+
+        Args:
+            path: Path to resolve (from trusted sources like git diff or file discovery)
+
+        Returns:
+            Resolved absolute Path
+
+        Raises:
+            ValueError: If path contains traversal components
+
+        """
+        # SECURITY: Validate path before any resolution to prevent traversal attacks
+        if not _validate_path_no_traversal(path):
+            error_msg = f"Path contains traversal components: {path}"
+            raise ValueError(error_msg)
+
+        path_obj = Path(path)
+        try:
+            # Prefer strict resolution if path exists, otherwise use non-strict
+            return path_obj.resolve(strict=True) if path_obj.exists() else path_obj.resolve(strict=False)
+        except (OSError, RuntimeError):
+            # Fallback to non-strict resolution on errors
+            return path_obj.resolve(strict=False)
+
+    # Resolve all root paths to absolute paths for consistent comparison
+    # Use consistent resolution: strict for existing paths, non-strict for non-existent
+    tests_root_resolved = _resolve_path_safely(tests_root)
+    module_root_resolved = _resolve_path_safely(module_root)
+
+    # Resolve ignore paths and submodule paths
+    ignore_paths_resolved = [_resolve_path_safely(p) for p in ignore_paths]
+    submodule_paths_resolved = [_resolve_path_safely(p) for p in submodule_paths]
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
-        file_path = str(file_path_path)
-        if file_path.startswith(tests_root_str + os.sep):
+        # SECURITY: Validate file path before processing to prevent traversal attacks
+        # Note: Paths come from trusted sources (git operations), but we validate defensively
+        if not _validate_path_no_traversal(file_path_path):
+            error_msg = f"Path contains traversal components: {file_path_path}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        # Resolve file path to absolute path using consolidated resolution logic
+        file_path_resolved = _resolve_path_safely(file_path_path)
+        file_path = str(file_path_path)  # Keep original path string for compatibility
+
+        # Check if file is in tests root using resolved paths
+        try:
+            file_path_resolved.relative_to(tests_root_resolved)
             test_functions_removed_count += len(_functions)
             continue
-        if file_path in ignore_paths or any(
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
-        ):
+        except ValueError:
+            pass  # File is not in tests root, continue checking
+
+        # Check if file is in ignore paths using resolved paths
+        is_ignored = False
+        for ignore_path_resolved in ignore_paths_resolved:
+            try:
+                file_path_resolved.relative_to(ignore_path_resolved)
+                is_ignored = True
+                break
+            except ValueError:
+                pass
+        if is_ignored:
             ignore_paths_removed_count += 1
             continue
-        if file_path in submodule_paths or any(
-            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
-        ):
+
+        # Check if file is in submodule paths using resolved paths
+        is_in_submodule = False
+        for submodule_path_resolved in submodule_paths_resolved:
+            try:
+                file_path_resolved.relative_to(submodule_path_resolved)
+                is_in_submodule = True
+                break
+            except ValueError:
+                pass
+        if is_in_submodule:
             submodule_ignored_paths_count += 1
             continue
-        if path_belongs_to_site_packages(Path(file_path)):
+
+        if path_belongs_to_site_packages(file_path_resolved):
             site_packages_removed_count += len(_functions)
             continue
-        if not file_path.startswith(module_root_str + os.sep):
+
+        # Check if file is in module root using resolved paths
+        try:
+            file_path_resolved.relative_to(module_root_resolved)
+        except ValueError:
             non_modules_removed_count += len(_functions)
             continue
         try:
-            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+            ast.parse(f"import {module_name_from_file_path(file_path_resolved, project_root)}")
         except SyntaxError:
             malformed_paths_count += 1
             continue

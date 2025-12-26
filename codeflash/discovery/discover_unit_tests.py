@@ -331,7 +331,9 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Be conservative except when an alias is used (which requires exact method matching)
             for target_func in fnames:
                 if "." in target_func:
-                    class_name, method_name = target_func.split(".", 1)
+                    # Split to extract class name; method name is intentionally discarded (leading underscore)
+                    # as we only need to check if the imported class matches the target function's class
+                    class_name, _method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
                         self.found_any_target_function = True
                         self.found_qualified_name = target_func
@@ -584,26 +586,63 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    discovery_script = Path(__file__).parent / "pytest_new_process_discovery.py"
+
+    run_kwargs = {
+        "cwd": project_root,
+        "capture_output": True,
+        "text": True,
+        "stdin": subprocess.DEVNULL,
+        "timeout": 600,
+    }
+    if os.name == "nt":
+        # Prevent console window spawning on Windows which can cause hangs in LSP
+        run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    cmd_list = [SAFE_SYS_EXECUTABLE, discovery_script, str(project_root), str(tests_root), str(tmp_pickle_path)]
     with custom_addopts():
-        result = subprocess.run(
-            [
-                SAFE_SYS_EXECUTABLE,
-                Path(__file__).parent / "pytest_new_process_discovery.py",
-                str(project_root),
-                str(tests_root),
-                str(tmp_pickle_path),
-            ],
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(cmd_list, check=False, **run_kwargs)
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"Test discovery subprocess timed out after {run_kwargs.get('timeout', 600)} seconds. "
+                f"Command: {discovery_script}"
+            )
+            # Preserve command args for better error context
+            result = subprocess.CompletedProcess(args=cmd_list, returncode=-1, stdout="", stderr="Timeout")
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
+            logger.error(
+                f"Test discovery subprocess failed with error: {e}. "
+                f"Command: {discovery_script}, "
+                f"Project root: {project_root}, Tests root: {tests_root}"
+            )
+            # Preserve command args for better error context
+            result = subprocess.CompletedProcess(args=cmd_list, returncode=-1, stdout="", stderr=str(e))
+
     try:
-        with tmp_pickle_path.open(mode="rb") as f:
-            exitcode, tests, pytest_rootdir = pickle.load(f)
+        # Check if pickle file exists before trying to read it
+        if not tmp_pickle_path.exists():
+            tests, pytest_rootdir = [], None
+            logger.error(
+                f"Test discovery pickle file not found. "
+                f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
+            )
+            exitcode = result.returncode if result.returncode != 0 else -1
+        else:
+            with tmp_pickle_path.open(mode="rb") as f:
+                exitcode, tests, pytest_rootdir = pickle.load(f)
+            # Log error if subprocess failed even though pickle file exists
+            if exitcode != 0:
+                logger.error(
+                    f"Test discovery subprocess returned non-zero exit code: {exitcode}. "
+                    f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
+                )
     except Exception as e:
         tests, pytest_rootdir = [], None
-        logger.exception(f"Failed to discover tests: {e}")
+        logger.exception(
+            f"Failed to discover tests: {e}. "
+            f"Subprocess return code: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}"
+        )
         exitcode = -1
     finally:
         tmp_pickle_path.unlink(missing_ok=True)
@@ -750,7 +789,6 @@ def process_test_files(
     jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path)
 
     tests_cache = TestsCache(project_root_path)
-    logger.info("!lsp|Discovering tests and processing unit tests")
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
