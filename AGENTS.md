@@ -65,12 +65,6 @@ from codeflash.code_utils.git_worktree_utils import create_detached_worktree, re
 - **Naming**: Prefer public functions (no leading underscore) - Python doesn't have true private functions
 - **Paths**: Always use absolute paths, handle encoding explicitly (UTF-8)
 
-## PR Review Guidelines
-
-- **Limit review scope** - only review code actually modified in the PR, not other parts of the codebase
-- **Single comment** - consolidate all feedback into one comment per review
-- **Edit existing comments** - if you already commented on the PR, edit that comment instead of creating a new one
-
 # Agent Rules <!-- tessl-managed -->
 
 @.tessl/RULES.md follow the [instructions](.tessl/RULES.md)
