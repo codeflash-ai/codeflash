@@ -44,7 +44,10 @@ def get_function_alias(module: str, function_name: str) -> str:
 
 
 def create_trace_replay_test(trace_file: str, functions: list[FunctionModules], max_run_count: int = 100) -> str:
-    imports = """import dill as pickle
+    imports = """import warnings
+import dill as pickle
+from dill import PicklingWarning
+warnings.filterwarnings("ignore", category=PicklingWarning)
 from codeflash.tracing.replay_test import get_next_arg_and_return
 """
 
