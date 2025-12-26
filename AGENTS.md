@@ -317,6 +317,23 @@ Language Server Protocol support in `codeflash/lsp/` enables IDE integration dur
 - Use benchmarks to validate improvements
 - Generate detailed performance reports
 
+### PR Review Comments
+When reviewing pull requests:
+- Make a **single comment** per PR review, consolidating all feedback into one comment
+- If an existing review comment from you already exists on the PR, **update that comment** instead of creating a new one
+- Never spam PRs with multiple separate comments
+
+### Comments and Documentation
+- Keep comments and docstrings to a minimum
+- Only add comments where the logic is not self-evident
+- Do not add docstrings to functions unless explicitly requested
+- Code should be self-documenting through clear naming and structure
+
+### Naming Conventions
+- Prefer public function names over private (no leading underscore)
+- Python doesn't have true private functions, so avoid `_function_name` patterns unless there's a strong reason
+- Use clear, descriptive names that make the code self-documenting
+
 # Agent Rules <!-- tessl-managed -->
 
 @.tessl/RULES.md follow the [instructions](.tessl/RULES.md)
