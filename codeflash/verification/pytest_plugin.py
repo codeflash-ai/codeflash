@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
+import math
 import os
 import platform
 import re
@@ -21,11 +22,11 @@ from pluggy import HookspecMarker
 
 from codeflash.code_utils.config_consts import (
     STABILITY_CENTER_TOLERANCE,
-    STABILITY_SLOPE_TOLERANCE,
     STABILITY_SPREAD_TOLERANCE,
     STABILITY_WARMUP_LOOPS,
     STABILITY_WINDOW_SIZE,
 )
+from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
@@ -298,11 +299,10 @@ _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
 
 def should_stop(
     runtimes: list[int],
-    warmup: int = STABILITY_WARMUP_LOOPS,
-    window: int = STABILITY_WINDOW_SIZE,
+    warmup: int,
+    window: int,
     center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
     spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
-    slope_rel_tol: float = STABILITY_SLOPE_TOLERANCE,
 ) -> bool:
     if len(runtimes) < warmup + window:
         return False
@@ -325,14 +325,7 @@ def should_stop(
     r_min, r_max = recent_sorted[0], recent_sorted[-1]
     spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
 
-    # 3) No strong downward trend (still improving)
-    # Compare first half vs second half
-    half = window // 2
-    first = sum(recent[:half]) / half
-    second = sum(recent[half:]) / (window - half)
-    slope_ok = (first - second) / first <= slope_rel_tol
-
-    return centered and spread_ok and slope_ok
+    return centered and spread_ok
 
 
 class PytestLoops:
@@ -344,6 +337,7 @@ class PytestLoops:
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
+        self.total_loop_runtimes: list[int] = []
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
@@ -359,6 +353,7 @@ class PytestLoops:
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
             raise session.Interrupted(msg)
+        is_perf_test = bool(session.config.option.codeflash_max_loops > 1)
 
         if session.config.option.collectonly:
             return True
@@ -368,8 +363,12 @@ class PytestLoops:
 
         count: int = 0
         runtimes = []
+        break_at = -1
+        elapsed = 0.0
+
         while total_time >= SHORTEST_AMOUNT_OF_TIME:
             count += 1
+            loop_start = _ORIGINAL_PERF_COUNTER_NS()
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
                 item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
@@ -387,14 +386,58 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
-            if best_runtime_until_now > 0:
-                runtimes.append(best_runtime_until_now)
+            if is_perf_test:
+                loop_end = _ORIGINAL_PERF_COUNTER_NS()
+                dt = loop_end - loop_start  # nano-seconds
 
-            if should_stop(runtimes):
-                break
+                elapsed += dt
+                self.total_loop_runtimes.append(dt)
+
+                best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
+                if best_runtime_until_now > 0:
+                    runtimes.append(best_runtime_until_now)
+
+                estimated_total_loops = 0
+                if elapsed > 0:
+                    rate = count / elapsed  # loops / nano-seconds
+                    estimated_total_loops = int(rate * total_time * 1e9)
+
+                warmup_loops = math.floor(STABILITY_WARMUP_LOOPS * estimated_total_loops)
+                window_size = math.floor(STABILITY_WINDOW_SIZE * estimated_total_loops)
+                if (  # noqa: SIM102
+                    warmup_loops > 1 and window_size > 1 and should_stop(runtimes, warmup_loops, window_size)
+                ):
+                    if break_at == -1:
+                        break_at = count
+                    # break
 
             if self._timed_out(session, start_time, count):
+                if is_perf_test:
+                    did_break = "true" if break_at != -1 else "false"
+                    best_of_all = min(runtimes)
+                    best_before_break = min(runtimes[:break_at])
+
+                    runtimes_after_break = self.total_loop_runtimes[break_at:]
+                    total_after_break = str(sum(runtimes_after_break)) if did_break == "true" else "NA"
+                    total_runtime = str(sum(self.total_loop_runtimes))
+
+                    accuracy_str = "NA"
+                    if did_break == "true":
+                        accuracy = best_of_all / best_before_break * 100
+                        accuracy_str = f"{accuracy:.2f}"
+                    Path(
+                        f"/home/mohammed/Documents/test-results/optimize-me-exp/exp-{int(_ORIGINAL_TIME_TIME())}.json"
+                    ).write_text(f"""{{
+    "runtimes": {runtimes},
+    "did_break": {did_break},
+    "accuracy": "{accuracy_str}%",
+    "time_saved": "{total_after_break}",
+    "total_runtime": "{total_runtime}",
+    "total_loops": {count},
+    "breaked_at": {break_at},
+    "best_of_all": "{humanize_runtime(best_of_all)}",
+    "best_before_break": "{humanize_runtime(best_before_break)}"
+    }}""")
                 break
 
             _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))

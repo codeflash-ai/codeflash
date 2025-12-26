@@ -15,11 +15,11 @@ DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 N_CANDIDATES_LP = 6
 
 # pytest loop stability
-STABILITY_WARMUP_LOOPS = 4
-STABILITY_WINDOW_SIZE = 6
-STABILITY_CENTER_TOLERANCE = 0.01  # ±1% around median
-STABILITY_SPREAD_TOLERANCE = 0.02  # 2% window spread
-STABILITY_SLOPE_TOLERANCE = 0.01  # 1% improvement allowed
+# For now, we use strict thresholds (large windows and tight tolerances), since this is still experimental.
+STABILITY_WARMUP_LOOPS = 0.05  # 5% of total window
+STABILITY_WINDOW_SIZE = 0.35  # 35% of total window
+STABILITY_CENTER_TOLERANCE = 0.005  # ±0.5% around median
+STABILITY_SPREAD_TOLERANCE = 0.005  # 0.5% window spread
 
 # Refinement
 REFINE_ALL_THRESHOLD = 2  # when valid optimizations count is 2 or less, refine all optimizations
