@@ -2,22 +2,32 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-
-# System Imports
 import logging
+import math
 import os
 import platform
 import re
 import sys
 import time as _time_module
 import warnings
+
+# System Imports
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
-# PyTest Imports
 import pytest
 from pluggy import HookspecMarker
+
+from codeflash.code_utils.config_consts import (
+    STABILITY_CENTER_TOLERANCE,
+    STABILITY_SPREAD_TOLERANCE,
+    STABILITY_WARMUP_LOOPS,
+    STABILITY_WINDOW_SIZE,
+)
+
+# PyTest Imports
+from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -77,6 +87,7 @@ if platform.system() == "Linux":
 # Store references to original functions before any patching
 _ORIGINAL_TIME_TIME = _time_module.time
 _ORIGINAL_PERF_COUNTER = _time_module.perf_counter
+_ORIGINAL_PERF_COUNTER_NS = _time_module.perf_counter_ns
 _ORIGINAL_TIME_SLEEP = _time_module.sleep
 
 
@@ -260,6 +271,63 @@ def pytest_configure(config: Config) -> None:
     _apply_deterministic_patches()
 
 
+def get_runtime_from_stdout(stdout: str) -> Optional[int]:
+    marker_start = "!######"
+    marker_end = "######!"
+
+    if not stdout:
+        return None
+
+    end = stdout.rfind(marker_end)
+    if end == -1:
+        return None
+
+    start = stdout.rfind(marker_start, 0, end)
+    if start == -1:
+        return None
+
+    payload = stdout[start + len(marker_start) : end]
+    last_colon = payload.rfind(":")
+    if last_colon == -1:
+        return None
+
+    return int(payload[last_colon + 1 :])
+
+
+_NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
+
+
+def should_stop(
+    runtimes: list[int],
+    warmup: int,
+    window: int,
+    center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
+    spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
+) -> bool:
+    if len(runtimes) < warmup + window:
+        return False
+
+    recent = runtimes[-window:]
+
+    # Use sorted array for faster median and min/max operations
+    recent_sorted = sorted(recent)
+    mid = window // 2
+    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
+
+    # 1) All recent points close to the median
+    centered = True
+    for r in recent:
+        if abs(r - m) / m > center_rel_tol:
+            centered = False
+            break
+
+    # 2) Window spread is small
+    r_min, r_max = recent_sorted[0], recent_sorted[-1]
+    spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
+
+    return centered and spread_ok
+
+
 class PytestLoops:
     name: str = "pytest-loops"
 
@@ -268,6 +336,19 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
+        self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
+        self.total_loop_runtimes: list[int] = []
+        self.is_perf_test: bool = getattr(config.option, "codeflash_max_loops", 1) > 1
+
+    @pytest.hookimpl
+    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if not self.is_perf_test:
+            return
+        if report.when == "call" and report.passed:
+            duration_ns = get_runtime_from_stdout(report.capstdout)
+            if duration_ns:
+                clean_id = _NODEID_BRACKET_PATTERN.sub("", report.nodeid)
+                self.usable_runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -283,11 +364,12 @@ class PytestLoops:
         total_time: float = self._get_total_time(session)
 
         count: int = 0
+        runtimes = []
+        elapsed = 0.0
 
         while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
             count += 1
-            total_time = self._get_total_time(session)
-
+            loop_start = _ORIGINAL_PERF_COUNTER_NS()
             for index, item in enumerate(session.items):
                 item: pytest.Item = item  # noqa: PLW0127, PLW2901
                 item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
@@ -304,8 +386,36 @@ class PytestLoops:
                     raise session.Failed(session.shouldfail)
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
+
+            if self.is_perf_test:
+                loop_end = _ORIGINAL_PERF_COUNTER_NS()
+                dt = loop_end - loop_start  # nano-seconds
+
+                elapsed += dt
+                self.total_loop_runtimes.append(dt)
+
+                best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
+                if best_runtime_until_now > 0:
+                    runtimes.append(best_runtime_until_now)
+
+                estimated_total_loops = 0
+                if elapsed > 0:
+                    rate = count / elapsed  # loops / nano-seconds
+                    estimated_total_loops = int(rate * total_time * 1e9)
+
+                warmup_loops = math.floor(STABILITY_WARMUP_LOOPS * estimated_total_loops)
+                window_size = math.floor(STABILITY_WINDOW_SIZE * estimated_total_loops)
+                if (
+                    count >= session.config.option.codeflash_min_loops
+                    and warmup_loops > 1
+                    and window_size > 1
+                    and should_stop(runtimes, warmup_loops, window_size)
+                ):
+                    break
+
             if self._timed_out(session, start_time, count):
-                break  # exit loop
+                break
+
             _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
         return True
 

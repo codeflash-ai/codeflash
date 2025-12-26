@@ -19,7 +19,6 @@ from codeflash.lsp.helpers import is_LSP_enabled
 def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
-
     first_cmd = formatter_cmds[0]
     cmd_tokens = shlex.split(first_cmd) if isinstance(first_cmd, str) else [first_cmd]
 
