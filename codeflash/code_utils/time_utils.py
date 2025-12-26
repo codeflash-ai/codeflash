@@ -1,56 +1,54 @@
 from __future__ import annotations
 
-import datetime as dt
-import re
-
-import humanize
+import math
 
 
 def humanize_runtime(time_in_ns: int) -> str:
-    runtime_human: str = str(time_in_ns)
-    units = "nanoseconds"
-    if 1 <= time_in_ns < 2:
-        units = "nanosecond"
+    # Fast path for sub-microsecond values
+    if time_in_ns < 1000:
+        units = "nanoseconds" if time_in_ns != 1 else "nanosecond"
+        return f"{time_in_ns} {units}"
 
-    if time_in_ns / 1000 >= 1:
-        time_micro = float(time_in_ns) / 1000
-        runtime_human = humanize.precisedelta(dt.timedelta(microseconds=time_micro), minimum_unit="microseconds")
+    time_micro = time_in_ns / 1000  # microseconds
+    # Below logic maps direct unit selection and formatting with minimal overhead.
 
-        units = re.split(r",|\s", runtime_human)[1]
-
-        if units in {"microseconds", "microsecond"}:
-            runtime_human = f"{time_micro:.3g}"
-        elif units in {"milliseconds", "millisecond"}:
-            runtime_human = "%.3g" % (time_micro / 1000)
-        elif units in {"seconds", "second"}:
-            runtime_human = "%.3g" % (time_micro / (1000**2))
-        elif units in {"minutes", "minute"}:
-            runtime_human = "%.3g" % (time_micro / (60 * 1000**2))
-        elif units in {"hour", "hours"}:  # hours
-            runtime_human = "%.3g" % (time_micro / (3600 * 1000**2))
-        else:  # days
-            runtime_human = "%.3g" % (time_micro / (24 * 3600 * 1000**2))
-    runtime_human_parts = str(runtime_human).split(".")
-    if len(runtime_human_parts[0]) == 1:
-        if runtime_human_parts[0] == "1" and len(runtime_human_parts) > 1:
-            units = units + "s"
-        if len(runtime_human_parts) == 1:
-            runtime_human = f"{runtime_human_parts[0]}.00"
-        elif len(runtime_human_parts[1]) >= 2:
-            runtime_human = f"{runtime_human_parts[0]}.{runtime_human_parts[1][0:2]}"
-        else:
-            runtime_human = (
-                f"{runtime_human_parts[0]}.{runtime_human_parts[1]}{'0' * (2 - len(runtime_human_parts[1]))}"
-            )
-    elif len(runtime_human_parts[0]) == 2:
-        if len(runtime_human_parts) > 1:
-            runtime_human = f"{runtime_human_parts[0]}.{runtime_human_parts[1][0]}"
-        else:
-            runtime_human = f"{runtime_human_parts[0]}.0"
+    if time_micro < 1000:
+        value = time_micro
+        unit_singular = "microsecond"
+        unit_plural = "microseconds"
+    elif time_micro < 1_000_000:
+        value = time_micro / 1000
+        unit_singular = "millisecond"
+        unit_plural = "milliseconds"
+    elif time_micro < 60_000_000:
+        value = time_micro / 1_000_000
+        unit_singular = "second"
+        unit_plural = "seconds"
+    elif time_micro < 3_600_000_000:
+        value = time_micro / 60_000_000
+        unit_singular = "minute"
+        unit_plural = "minutes"
+    elif time_micro < 86_400_000_000:
+        value = time_micro / 3_600_000_000
+        unit_singular = "hour"
+        unit_plural = "hours"
     else:
-        runtime_human = runtime_human_parts[0]
+        value = time_micro / 86_400_000_000
+        unit_singular = "day"
+        unit_plural = "days"
 
-    return f"{runtime_human} {units}"
+    # Smart formatting (similar to former logic)
+    if value < 10:
+        str_value = f"{value:.2f}"
+    elif value < 100:
+        str_value = f"{value:.1f}"
+    else:
+        str_value = f"{int(round(value))}"
+
+    # Use plural unless it's very close to 1
+    units = unit_singular if math.isclose(value, 1.0, abs_tol=1e-9) else unit_plural
+
+    return f"{str_value} {units}"
 
 
 def format_time(nanoseconds: int) -> str:
