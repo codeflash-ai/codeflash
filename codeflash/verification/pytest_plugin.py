@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
-# PyTest Imports
 import pytest
 from pluggy import HookspecMarker
 
@@ -26,7 +25,8 @@ from codeflash.code_utils.config_consts import (
     STABILITY_WARMUP_LOOPS,
     STABILITY_WINDOW_SIZE,
 )
-from codeflash.code_utils.time_utils import humanize_runtime
+
+# PyTest Imports
 from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
@@ -338,9 +338,12 @@ class PytestLoops:
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
         self.total_loop_runtimes: list[int] = []
+        self.is_perf_test: bool = config.option.codeflash_max_loops > 1
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
+        if not self.is_perf_test:
+            return
         if report.when == "call" and report.passed:
             duration_ns = get_runtime_from_stdout(report.capstdout)
             if duration_ns:
@@ -353,7 +356,6 @@ class PytestLoops:
         if session.testsfailed and not session.config.option.continue_on_collection_errors:
             msg = "{} error{} during collection".format(session.testsfailed, "s" if session.testsfailed != 1 else "")
             raise session.Interrupted(msg)
-        is_perf_test = bool(session.config.option.codeflash_max_loops > 1)
 
         if session.config.option.collectonly:
             return True
@@ -363,7 +365,6 @@ class PytestLoops:
 
         count: int = 0
         runtimes = []
-        break_at = -1
         elapsed = 0.0
 
         while total_time >= SHORTEST_AMOUNT_OF_TIME:
@@ -386,7 +387,7 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            if is_perf_test:
+            if self.is_perf_test:
                 loop_end = _ORIGINAL_PERF_COUNTER_NS()
                 dt = loop_end - loop_start  # nano-seconds
 
@@ -404,40 +405,15 @@ class PytestLoops:
 
                 warmup_loops = math.floor(STABILITY_WARMUP_LOOPS * estimated_total_loops)
                 window_size = math.floor(STABILITY_WINDOW_SIZE * estimated_total_loops)
-                if (  # noqa: SIM102
-                    warmup_loops > 1 and window_size > 1 and should_stop(runtimes, warmup_loops, window_size)
+                if (
+                    count >= session.config.option.codeflash_min_loops
+                    and warmup_loops > 1
+                    and window_size > 1
+                    and should_stop(runtimes, warmup_loops, window_size)
                 ):
-                    if break_at == -1:
-                        break_at = count
-                    # break
+                    break
 
             if self._timed_out(session, start_time, count):
-                if is_perf_test:
-                    did_break = "true" if break_at != -1 else "false"
-                    best_of_all = min(runtimes)
-                    best_before_break = min(runtimes[:break_at])
-
-                    runtimes_after_break = self.total_loop_runtimes[break_at:]
-                    total_after_break = str(sum(runtimes_after_break)) if did_break == "true" else "NA"
-                    total_runtime = str(sum(self.total_loop_runtimes))
-
-                    accuracy_str = "NA"
-                    if did_break == "true":
-                        accuracy = best_of_all / best_before_break * 100
-                        accuracy_str = f"{accuracy:.2f}"
-                    Path(
-                        f"/home/mohammed/Documents/test-results/optimize-me-exp/exp-{int(_ORIGINAL_TIME_TIME())}.json"
-                    ).write_text(f"""{{
-    "runtimes": {runtimes},
-    "did_break": {did_break},
-    "accuracy": "{accuracy_str}%",
-    "time_saved": "{total_after_break}",
-    "total_runtime": "{total_runtime}",
-    "total_loops": {count},
-    "breaked_at": {break_at},
-    "best_of_all": "{humanize_runtime(best_of_all)}",
-    "best_before_break": "{humanize_runtime(best_before_break)}"
-    }}""")
                 break
 
             _ORIGINAL_TIME_SLEEP(self._get_delay_time(session))
