@@ -27,12 +27,13 @@ codeflash/
 
 ## Critical Development Patterns
 
-### Use uv, not pip
+### Use uv, NEVER pip
+**NEVER use `pip install` or `pip` commands.** This project uses `uv` exclusively for package management.
 ```bash
-uv sync                    # Install dependencies
-uv sync --group dev        # Dev dependencies
-uv run pytest              # Run commands
-uv add package             # Add packages
+uv sync                    # Install dependencies (NOT pip install -r requirements.txt)
+uv sync --group dev        # Dev dependencies (NOT pip install -e .)
+uv run pytest              # Run commands (NOT python -m pytest)
+uv add package             # Add packages (NOT pip install package)
 ```
 
 ### Use libcst, not ast
