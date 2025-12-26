@@ -219,6 +219,10 @@ uv run codeflash --replay-test tests/specific_test.py
 - Pre-commit hooks enforce code quality
 - Line length: 120 characters
 - Python 3.10+ syntax
+- Keep comments and docstrings to a minimum
+- **Inline comments**: Only add where the logic is not self-evident (explain "why", not "what")
+- **Docstrings**: Do not add to functions unless explicitly requested - function names should be self-explanatory
+- Code should be self-documenting through clear naming and structure
 
 ### Testing Strategy
 - Primary test framework: pytest
@@ -319,15 +323,10 @@ Language Server Protocol support in `codeflash/lsp/` enables IDE integration dur
 
 ### PR Review Comments
 When reviewing pull requests:
+- **Limit your review to the changes in the PR** - only review the code that was actually modified in the commits, not other parts of the codebase
 - Make a **single comment** per PR review, consolidating all feedback into one comment
-- If an existing review comment from you already exists on the PR, **update that comment** instead of creating a new one
+- If an existing review comment from you already exists on the PR, **edit that existing comment** instead of creating a new one
 - Never spam PRs with multiple separate comments
-
-### Comments and Documentation
-- Keep comments and docstrings to a minimum
-- Only add comments where the logic is not self-evident
-- Do not add docstrings to functions unless explicitly requested
-- Code should be self-documenting through clear naming and structure
 
 ### Naming Conventions
 - Prefer public function names over private (no leading underscore)
