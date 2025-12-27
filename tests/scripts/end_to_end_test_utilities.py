@@ -164,7 +164,7 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         return False
 
     if config.expected_unit_tests is not None:
-        unit_test_match = re.search(r"Discovered (\d+) existing unit test file", stdout)
+        unit_test_match = re.search(r"Discovered (\d+) existing unit tests?", stdout)
         if not unit_test_match:
             logging.error("Could not find unit test count")
             return False
