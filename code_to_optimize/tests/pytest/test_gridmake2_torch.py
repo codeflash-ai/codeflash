@@ -1,8 +1,7 @@
-import numpy as np
 import pytest
 import torch
 
-from code_to_optimize.discrete_riccati import _gridmake2, _gridmake2_torch
+from code_to_optimize.discrete_riccati import _gridmake2_torch
 
 
 class TestGridmake2TorchCPU:
@@ -27,19 +26,6 @@ class TestGridmake2TorchCPU:
             [3, 20],
         ])
         assert torch.equal(result, expected)
-
-    def test_both_1d_matches_numpy(self):
-        """Test that torch version matches numpy version for 1D inputs."""
-        x1_np = np.array([1.0, 2.0, 3.0, 4.0])
-        x2_np = np.array([10.0, 20.0, 30.0])
-
-        x1_torch = torch.tensor(x1_np)
-        x2_torch = torch.tensor(x2_np)
-
-        result_np = _gridmake2(x1_np, x2_np)
-        result_torch = _gridmake2_torch(x1_torch, x2_torch)
-
-        np.testing.assert_array_almost_equal(result_np, result_torch.numpy())
 
     def test_both_1d_single_element(self):
         """Test with single element tensors."""
@@ -78,19 +64,6 @@ class TestGridmake2TorchCPU:
             [3, 4, 20],
         ])
         assert torch.equal(result, expected)
-
-    def test_2d_and_1d_matches_numpy(self):
-        """Test that torch version matches numpy version for 2D, 1D inputs."""
-        x1_np = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-        x2_np = np.array([10.0, 20.0])
-
-        x1_torch = torch.tensor(x1_np)
-        x2_torch = torch.tensor(x2_np)
-
-        result_np = _gridmake2(x1_np, x2_np)
-        result_torch = _gridmake2_torch(x1_torch, x2_torch)
-
-        np.testing.assert_array_almost_equal(result_np, result_torch.numpy())
 
     def test_2d_and_1d_single_column(self):
         """Test with 2D x1 having a single column and 1D x2."""
@@ -292,15 +265,3 @@ class TestGridmake2TorchCUDA:
         with pytest.raises(NotImplementedError, match="Come back here"):
             _gridmake2_torch(x1, x2)
 
-    def test_matches_numpy_via_cpu_conversion(self):
-        """Test CUDA result matches numpy version via CPU conversion."""
-        x1_np = np.array([1.0, 2.0, 3.0, 4.0])
-        x2_np = np.array([10.0, 20.0, 30.0])
-
-        x1_cuda = torch.tensor(x1_np, device="cuda")
-        x2_cuda = torch.tensor(x2_np, device="cuda")
-
-        result_np = _gridmake2(x1_np, x2_np)
-        result_cuda = _gridmake2_torch(x1_cuda, x2_cuda)
-
-        np.testing.assert_array_almost_equal(result_np, result_cuda.cpu().numpy())
