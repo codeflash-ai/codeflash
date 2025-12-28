@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
-import math
 import os
 import platform
 import re
@@ -22,7 +21,6 @@ from pluggy import HookspecMarker
 from codeflash.code_utils.config_consts import (
     STABILITY_CENTER_TOLERANCE,
     STABILITY_SPREAD_TOLERANCE,
-    STABILITY_WARMUP_LOOPS,
     STABILITY_WINDOW_SIZE,
 )
 
@@ -260,6 +258,14 @@ def pytest_addoption(parser: Parser) -> None:
         choices=("function", "class", "module", "session"),
         help="Scope for looping tests",
     )
+    pytest_loops.addoption(
+        "--codeflash_stability_check",
+        action="store",
+        default="false",
+        type=str,
+        choices=("true", "false"),
+        help="Enable stability checks for the loops",
+    )
 
 
 @pytest.hookimpl(trylast=True)
@@ -299,12 +305,11 @@ _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
 
 def should_stop(
     runtimes: list[int],
-    warmup: int,
     window: int,
     center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
     spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
 ) -> bool:
-    if len(runtimes) < warmup + window:
+    if len(runtimes) < window:
         return False
 
     recent = runtimes[-window:]
@@ -337,12 +342,14 @@ class PytestLoops:
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
-        self.total_loop_runtimes: list[int] = []
-        self.is_perf_test: bool = getattr(config.option, "codeflash_max_loops", 1) > 1
+        self.enable_stability_check: bool = (
+            getattr(config.option, "codeflash_max_loops", 1) > 1
+            and str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
+        )
 
     @pytest.hookimpl
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        if not self.is_perf_test:
+        if not self.enable_stability_check:
             return
         if report.when == "call" and report.passed:
             duration_ns = get_runtime_from_stdout(report.capstdout)
@@ -387,12 +394,11 @@ class PytestLoops:
                 if session.shouldstop:
                     raise session.Interrupted(session.shouldstop)
 
-            if self.is_perf_test:
+            if self.enable_stability_check:
                 loop_end = _ORIGINAL_PERF_COUNTER_NS()
                 dt = loop_end - loop_start  # nano-seconds
 
                 elapsed += dt
-                self.total_loop_runtimes.append(dt)
 
                 best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
                 if best_runtime_until_now > 0:
@@ -403,13 +409,11 @@ class PytestLoops:
                     rate = count / elapsed  # loops / nano-seconds
                     estimated_total_loops = int(rate * total_time * 1e9)
 
-                warmup_loops = math.floor(STABILITY_WARMUP_LOOPS * estimated_total_loops)
-                window_size = math.floor(STABILITY_WINDOW_SIZE * estimated_total_loops)
+                window_size = int(STABILITY_WINDOW_SIZE * estimated_total_loops + 0.5)
                 if (
                     count >= session.config.option.codeflash_min_loops
-                    and warmup_loops > 1
                     and window_size > 1
-                    and should_stop(runtimes, warmup_loops, window_size)
+                    and should_stop(runtimes, window_size)
                 ):
                     break
 
