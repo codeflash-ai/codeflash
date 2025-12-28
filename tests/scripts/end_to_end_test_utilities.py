@@ -129,7 +129,7 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    base_command.extend(["--tests-root", str(test_root)])
+    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
