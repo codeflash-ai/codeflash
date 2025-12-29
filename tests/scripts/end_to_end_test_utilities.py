@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 import pathlib
@@ -7,6 +8,11 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 
 @dataclass
@@ -129,7 +135,20 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+
+    # Check if pyproject.toml exists with codeflash config - if so, don't override it
+    pyproject_path = cwd / "pyproject.toml"
+    has_codeflash_config = False
+    if pyproject_path.exists():
+        with contextlib.suppress(Exception):
+            with open(pyproject_path, "rb") as f:
+                pyproject_data = tomllib.load(f)
+                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+
+    # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
+    if not has_codeflash_config:
+        base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
@@ -164,7 +183,9 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         return False
 
     if config.expected_unit_tests is not None:
-        unit_test_match = re.search(r"Discovered (\d+) existing unit test file", stdout)
+        # Match the global test discovery message from optimizer.py which counts test invocations
+        # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
+        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout)
         if not unit_test_match:
             logging.error("Could not find unit test count")
             return False
