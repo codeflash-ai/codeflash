@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+
+# System Imports
 import logging
 import os
 import platform
@@ -9,12 +11,11 @@ import re
 import sys
 import time as _time_module
 import warnings
-
-# System Imports
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from unittest import TestCase
 
+# PyTest Imports
 import pytest
 from pluggy import HookspecMarker
 
@@ -23,8 +24,6 @@ from codeflash.code_utils.config_consts import (
     STABILITY_SPREAD_TOLERANCE,
     STABILITY_WINDOW_SIZE,
 )
-
-# PyTest Imports
 from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
@@ -293,11 +292,14 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
         return None
 
     payload = stdout[start + len(marker_start) : end]
-    last_colon = payload.rfind(":")
-    if last_colon == -1:
+    parts = payload.split(":")
+    if len(parts) != 6:
         return None
 
-    return int(payload[last_colon + 1 :])
+    try:
+        return int(parts[5])
+    except ValueError:
+        return None
 
 
 _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
@@ -312,12 +314,11 @@ def should_stop(
     if len(runtimes) < window:
         return False
 
+    # runtimes is already sorted descending
     recent = runtimes[-window:]
 
-    # Use sorted array for faster median and min/max operations
-    recent_sorted = sorted(recent)
     mid = window // 2
-    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
+    m = recent[mid] if window % 2 else (recent[mid - 1] + recent[mid]) / 2
 
     # 1) All recent points close to the median
     centered = True
@@ -327,7 +328,8 @@ def should_stop(
             break
 
     # 2) Window spread is small
-    r_min, r_max = recent_sorted[0], recent_sorted[-1]
+    r_max = recent[0]
+    r_min = recent[-1]
     spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
 
     return centered and spread_ok
@@ -406,7 +408,8 @@ class PytestLoops:
                 estimated_total_loops = 0
                 if elapsed > 0:
                     rate = count / elapsed  # loops / nano-seconds
-                    estimated_total_loops = int(rate * total_time * 1e9)
+                    total_time_ns = total_time * 1e9
+                    estimated_total_loops = int(rate * total_time_ns)
 
                 window_size = int(STABILITY_WINDOW_SIZE * estimated_total_loops + 0.5)
                 if (
