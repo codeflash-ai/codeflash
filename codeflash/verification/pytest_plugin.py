@@ -343,8 +343,7 @@ class PytestLoops:
         self.logger = logging.getLogger(self.name)
         self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
         self.enable_stability_check: bool = (
-            getattr(config.option, "codeflash_max_loops", 1) > 1
-            and str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
+            str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
         )
 
     @pytest.hookimpl

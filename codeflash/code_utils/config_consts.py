@@ -16,9 +16,9 @@ N_CANDIDATES_LP = 6
 
 # pytest loop stability
 # For now, we use strict thresholds (large windows and no tolerances), since this is still experimental.
-STABILITY_WINDOW_SIZE = 0.33  # 33% of total window
-STABILITY_CENTER_TOLERANCE = 0.0  # 0% around median
-STABILITY_SPREAD_TOLERANCE = 0.0  # 0% window spread
+STABILITY_WINDOW_SIZE = 0.35  # 35% of total window
+STABILITY_CENTER_TOLERANCE = 0.0025  # ±0.25% around median
+STABILITY_SPREAD_TOLERANCE = 0.0025  # 0.25% window spread
 
 # Refinement
 REFINE_ALL_THRESHOLD = 2  # when valid optimizations count is 2 or less, refine all optimizations
