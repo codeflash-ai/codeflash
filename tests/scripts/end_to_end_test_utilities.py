@@ -27,6 +27,7 @@ class TestConfig:
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
     use_worktree: bool = False
+    no_gen_tests: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -125,7 +126,7 @@ def build_command(
 ) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
-    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
+    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr", "--no-gen-tests" if config.no_gen_tests else ""]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
