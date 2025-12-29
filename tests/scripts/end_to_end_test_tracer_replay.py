@@ -8,7 +8,7 @@ def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         trace_mode=True,
         min_improvement_x=0.1,
-        expected_unit_tests=None,  # Tracer creates replay tests dynamically, skip validation
+        expected_unit_tests_count=None,  # Tracer creates replay tests dynamically, skip validation
         coverage_expectations=[
             CoverageExpectation(function_name="funcA", expected_coverage=100.0, expected_lines=[6, 7, 8, 9, 11, 14])
         ],
