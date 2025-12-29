@@ -27,7 +27,10 @@ class TestConfig:
     # Make file_path optional when trace_mode is True
     file_path: Optional[pathlib.Path] = None
     function_name: Optional[str] = None
-    expected_unit_tests: Optional[int] = None
+    # Global count: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path"
+    expected_unit_tests_count: Optional[int] = None
+    # Per-function count: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
+    expected_unit_test_files: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
@@ -182,17 +185,30 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         logging.error(f"Performance improvement rate {improvement_x}x not above {config.min_improvement_x}x")
         return False
 
-    if config.expected_unit_tests is not None:
+    if config.expected_unit_tests_count is not None:
         # Match the global test discovery message from optimizer.py which counts test invocations
         # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
         unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout)
         if not unit_test_match:
-            logging.error("Could not find unit test count")
+            logging.error("Could not find global unit test count")
             return False
 
         num_tests = int(unit_test_match.group(1))
-        if num_tests != config.expected_unit_tests:
-            logging.error(f"Expected {config.expected_unit_tests} unit tests, found {num_tests}")
+        if num_tests != config.expected_unit_tests_count:
+            logging.error(f"Expected {config.expected_unit_tests_count} global unit tests, found {num_tests}")
+            return False
+
+    if config.expected_unit_test_files is not None:
+        # Match the per-function test discovery message from function_optimizer.py
+        # Format: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
+        unit_test_files_match = re.search(r"Discovered (\d+) existing unit test files?", stdout)
+        if not unit_test_files_match:
+            logging.error("Could not find per-function unit test file count")
+            return False
+
+        num_test_files = int(unit_test_files_match.group(1))
+        if num_test_files != config.expected_unit_test_files:
+            logging.error(f"Expected {config.expected_unit_test_files} unit test files, found {num_test_files}")
             return False
 
     if config.coverage_expectations:
