@@ -131,7 +131,7 @@ def build_command(
 ) -> list[str]:
     python_path = "../../../codeflash/main.py" if "code_directories" in str(cwd) else "../codeflash/main.py"
 
-    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr", "--no-gen-tests" if config.no_gen_tests else ""]
+    base_command = ["uv", "run", "--no-project", python_path, "--file", config.file_path, "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
@@ -140,6 +140,8 @@ def build_command(
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
         base_command.append("--worktree")
+    if config.no_gen_tests:
+        base_command.append("--no-gen-tests")
     return base_command
 
 
