@@ -606,12 +606,10 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
         from importlib.resources import files
 
-        optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
+        optimize_yml_content = (files("codeflash") / "cli_cmds" / "workflows" / "codeflash-optimize.yaml").read_text(
+            encoding="utf-8"
         )
-        materialized_content = generate_dynamic_workflow_content(
-            optimize_yml_content, config, git_root, benchmark_mode
-        )
+        materialized_content = generate_dynamic_workflow_content(optimize_yml_content, config, git_root, benchmark_mode)
 
         pr_created_via_api = False
         pr_url = None
@@ -633,10 +631,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
                 )
 
                 response = setup_github_actions(
-                    owner=owner,
-                    repo=repo_name,
-                    base_branch=base_branch,
-                    workflow_content=materialized_content,
+                    owner=owner, repo=repo_name, base_branch=base_branch, workflow_content=materialized_content
                 )
 
                 if response.status_code == 200:
@@ -748,18 +743,18 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         if pr_created_via_api:
             if pr_url:
                 console.print(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
-                    f"Once you merge the PR, the workflow will be active."
+                    "🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
+                    "Once you merge the PR, the workflow will be active."
                 )
             else:
                 console.print(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
-                    f"The workflow is ready to use."
+                    "🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
+                    "The workflow is ready to use."
                 )
         else:
             console.print(
-                f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!\n"
-                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!"
+                "Please edit, commit and push this GitHub actions file to your repo, and you're all set!\n"
+                "🚀 Codeflash is now configured to automatically optimize new Github PRs!"
             )
 
         # Guide user to add GitHub secret
@@ -963,14 +958,14 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
 
 def generate_dynamic_workflow_content(
     optimize_yml_content: str,
-    config: tuple[dict[str, Any], Path],
+    config: dict[str, Any],
     git_root: Path,
     benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     """Generate workflow content with dynamic steps from AI service, falling back to static template.
 
     :param optimize_yml_content: Base workflow template content
-    :param config: Codeflash configuration tuple (dict, Path)
+    :param config: Codeflash configuration dict
     :param git_root: Root directory of the git repository
     :param benchmark_mode: Whether to enable benchmark mode
     :return: Complete workflow YAML content
@@ -985,7 +980,7 @@ def generate_dynamic_workflow_content(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
