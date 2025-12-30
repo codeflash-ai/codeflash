@@ -192,14 +192,13 @@ class CandidateProcessor:
         future_refinements: list[concurrent.futures.Future] = []
         top_n_candidates = int(
             min(
-                get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort),
+                int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)),
                 len(self.all_refinements_data),
             )
         )
 
-        if top_n_candidates == len(self.all_refinements_data) or len(self.all_refinements_data) <= get_effort_value(
-            EffortKeys.REFINE_ALL_THRESHOLD, self.effort
-        ):
+        if top_n_candidates == len(self.all_refinements_data):
+            # if we'll refine all candidates, we can skip the ranking and just refine them all
             for data in self.all_refinements_data:
                 future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
         else:

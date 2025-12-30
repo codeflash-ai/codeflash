@@ -42,7 +42,6 @@ class EffortKeys(StrEnum):
     N_GENERATED_TESTS = auto()
     MAX_CODE_REPAIRS_PER_TRACE = auto()
     REPAIR_UNMATCHED_PERCENTAGE_LIMIT = auto()
-    REFINE_ALL_THRESHOLD = auto()
     TOP_VALID_CANDIDATES_FOR_REFINEMENT = auto()
 
 
@@ -54,14 +53,12 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
     # maximum number of repairs we will do for each function
     EffortKeys.MAX_CODE_REPAIRS_PER_TRACE.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 4, EffortLevel.HIGH: 5},
     # if the percentage of unmatched tests is greater than this, we won't fix it (lowering this value makes the repair more stricted)
-    # on the low effort we lower the limit to 20% to be more strict (less repairs)
+    # on the low effort we lower the limit to 20% to be more strict (less repairs, less time)
     EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT.value: {
         EffortLevel.LOW: 0.2,
         EffortLevel.MEDIUM: 0.4,
         EffortLevel.HIGH: 0.5,
     },
-    # when valid optimizations count is N or less, refine all optimizations
-    EffortKeys.REFINE_ALL_THRESHOLD.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
     # Top valid candidates for refinements
     EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
 }
