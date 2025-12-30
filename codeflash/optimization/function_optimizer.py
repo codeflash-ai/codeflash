@@ -245,6 +245,7 @@ class CandidateProcessor:
             logger.info(
                 f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
             )
+            console.rule()
         self.refinement_done = True
 
         return self.get_next_candidate()
@@ -1213,7 +1214,6 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
-            console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
@@ -1349,7 +1349,8 @@ class FunctionOptimizer:
         if concolic_test_str:
             count_tests += 1
 
-        logger.info(f"!lsp|Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
+        logger.info(f"!lsp|Generated {count_tests} tests for '{self.function_to_optimize.function_name}'")
+        console.rule()
 
         generated_tests = GeneratedTestsList(generated_tests=tests)
         return Success((count_tests, generated_tests, function_to_concolic_tests, concolic_test_str))
@@ -1398,7 +1399,6 @@ class FunctionOptimizer:
 
         # Retrieve results - optimize_python_code returns list of candidates
         candidates = future_optimization_candidates.result()
-        logger.info(f"!lsp|Received {len(candidates)} optimization candidates.")
 
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
@@ -2026,6 +2026,7 @@ class FunctionOptimizer:
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
+            console.rule()
 
             # For async functions, instrument at definition site for performance benchmarking
             if self.function_to_optimize.is_async:
