@@ -453,8 +453,26 @@ class FunctionOptimizer:
             revert_to_print=bool(get_pr_number()),
         ):
             console.rule()
+            # get new opt candidate
+
+            jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
+                code_context.read_writable_code.markdown, code_context.read_only_context_code, self.function_trace_id
+            )
+            # write files
+            # Try to replace function with optimized code
+            self.replace_function_and_helpers_with_optimized_code(
+                code_context=code_context,
+                optimized_code=jit_compiled_opt_candidate[0].source_code,
+                original_helper_code=original_helper_code,
+            )
+            # get codecontext
+            new_code_context = self.get_code_optimization_context().unwrap()
+            # unwrite files
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
             # Generate tests and optimizations in parallel
-            future_tests = self.executor.submit(self.generate_and_instrument_tests, code_context)
+            future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(
                 self.generate_optimizations,
                 read_writable_code=code_context.read_writable_code,
@@ -1344,8 +1362,7 @@ class FunctionOptimizer:
 
         logger.info(f"!lsp|Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
 
-        # generated_tests = GeneratedTestsList(generated_tests=tests)
-        generated_tests = GeneratedTestsList(generated_tests=[])
+        generated_tests = GeneratedTestsList(generated_tests=tests)
         return Success((count_tests, generated_tests, function_to_concolic_tests, concolic_test_str))
 
     def generate_optimizations(
