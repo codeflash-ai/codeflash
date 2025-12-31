@@ -10,7 +10,6 @@ from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.test_type import TestType
-from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -818,7 +817,9 @@ class TestResults(BaseModel):  # noqa: PLW1641
         :return: The runtime in nanoseconds.
         """
         # TODO this doesn't look at the intersection of tests of baseline and original
-        return calculate_best_summed_runtime(self.usable_runtime_data_by_test_case())
+        return sum(
+            [min(usable_runtime_data) for _, usable_runtime_data in self.usable_runtime_data_by_test_case().items()]
+        )
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
         map_gen_test_file_to_no_of_tests = Counter()

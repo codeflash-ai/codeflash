@@ -24,7 +24,6 @@ from codeflash.code_utils.config_consts import (
     STABILITY_SPREAD_TOLERANCE,
     STABILITY_WINDOW_SIZE,
 )
-from codeflash.result.best_summed_runtime import calculate_best_summed_runtime
 
 if TYPE_CHECKING:
     from _pytest.config import Config, Parser
@@ -292,12 +291,11 @@ def get_runtime_from_stdout(stdout: str) -> Optional[int]:
         return None
 
     payload = stdout[start + len(marker_start) : end]
-    parts = payload.split(":")
-    if len(parts) != 6:
+    last_colon = payload.rfind(":")
+    if last_colon == -1:
         return None
-
     try:
-        return int(parts[5])
+        return int(payload[last_colon + 1 :])
     except ValueError:
         return None
 
@@ -308,17 +306,22 @@ _NODEID_BRACKET_PATTERN = re.compile(r"\s*\[\s*\d+\s*\]\s*$")
 def should_stop(
     runtimes: list[int],
     window: int,
+    min_window_size: int,
     center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
     spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
 ) -> bool:
     if len(runtimes) < window:
         return False
 
-    # runtimes is already sorted descending
+    if len(runtimes) < min_window_size:
+        return False
+
     recent = runtimes[-window:]
 
+    # Use sorted array for faster median and min/max operations
+    recent_sorted = sorted(recent)
     mid = window // 2
-    m = recent[mid] if window % 2 else (recent[mid - 1] + recent[mid]) / 2
+    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
 
     # 1) All recent points close to the median
     centered = True
@@ -328,8 +331,9 @@ def should_stop(
             break
 
     # 2) Window spread is small
-    r_max = recent[0]
-    r_min = recent[-1]
+    r_min, r_max = recent_sorted[0], recent_sorted[-1]
+    if r_min == 0:
+        return False
     spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
 
     return centered and spread_ok
@@ -343,7 +347,7 @@ class PytestLoops:
         level = logging.DEBUG if config.option.verbose > 1 else logging.INFO
         logging.basicConfig(level=level)
         self.logger = logging.getLogger(self.name)
-        self.usable_runtime_data_by_test_case: dict[str, list[int]] = {}
+        self.runtime_data_by_test_case: dict[str, list[int]] = {}
         self.enable_stability_check: bool = (
             str(getattr(config.option, "codeflash_stability_check", "false")).lower() == "true"
         )
@@ -356,7 +360,7 @@ class PytestLoops:
             duration_ns = get_runtime_from_stdout(report.capstdout)
             if duration_ns:
                 clean_id = _NODEID_BRACKET_PATTERN.sub("", report.nodeid)
-                self.usable_runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
+                self.runtime_data_by_test_case.setdefault(clean_id, []).append(duration_ns)
 
     @hookspec(firstresult=True)
     def pytest_runtestloop(self, session: Session) -> bool:
@@ -373,7 +377,7 @@ class PytestLoops:
 
         count: int = 0
         runtimes = []
-        elapsed = 0.0
+        elapsed_ns = 0
 
         while total_time >= SHORTEST_AMOUNT_OF_TIME:  # need to run at least one for normal tests
             count += 1
@@ -396,27 +400,19 @@ class PytestLoops:
                     raise session.Interrupted(session.shouldstop)
 
             if self.enable_stability_check:
-                loop_end = _ORIGINAL_PERF_COUNTER_NS()
-                dt = loop_end - loop_start  # nano-seconds
-
-                elapsed += dt
-
-                best_runtime_until_now = calculate_best_summed_runtime(self.usable_runtime_data_by_test_case)
+                elapsed_ns += _ORIGINAL_PERF_COUNTER_NS() - loop_start
+                best_runtime_until_now = sum([min(data) for data in self.runtime_data_by_test_case.values()])
                 if best_runtime_until_now > 0:
                     runtimes.append(best_runtime_until_now)
 
                 estimated_total_loops = 0
-                if elapsed > 0:
-                    rate = count / elapsed  # loops / nano-seconds
+                if elapsed_ns > 0:
+                    rate = count / elapsed_ns
                     total_time_ns = total_time * 1e9
                     estimated_total_loops = int(rate * total_time_ns)
 
                 window_size = int(STABILITY_WINDOW_SIZE * estimated_total_loops + 0.5)
-                if (
-                    count >= session.config.option.codeflash_min_loops
-                    and window_size > 1
-                    and should_stop(runtimes, window_size)
-                ):
+                if should_stop(runtimes, window_size, session.config.option.codeflash_min_loops):
                     break
 
             if self._timed_out(session, start_time, count):
