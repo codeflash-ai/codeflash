@@ -162,7 +162,7 @@ class AiServiceClient:
         logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
 
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -228,7 +228,7 @@ class AiServiceClient:
         }
 
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
