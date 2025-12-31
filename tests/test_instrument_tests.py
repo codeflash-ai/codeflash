@@ -193,7 +193,7 @@ import dill as pickle"""
             Path(f.name),
             [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
             func,
-            Path(f.name).parent,
+            Path(f.name).parent, jit_warmup=True
         )
         os.chdir(original_cwd)
     assert success

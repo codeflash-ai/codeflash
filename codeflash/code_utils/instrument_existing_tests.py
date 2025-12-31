@@ -1137,25 +1137,6 @@ def create_wrapper_function(mode: TestingMode = TestingMode.BEHAVIOR, *, jit_war
         ast.Assign(
             targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
         ),
-        # JIT warmup: call function once to trigger JIT compilation before timing
-        *(
-            [
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
-                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                    ),
-                    lineno=lineno + 10,
-                ),
-                ast.Expr(
-                    value=ast.Call(func=ast.Name(id="_codeflash_jit_sync", ctx=ast.Load()), args=[], keywords=[]),
-                    lineno=lineno + 10,
-                ),
-            ]
-            if jit_warmup
-            else []
-        ),
         ast.Expr(
             value=ast.Call(
                 func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="disable", ctx=ast.Load()),
