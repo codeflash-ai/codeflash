@@ -46,7 +46,7 @@ class AiServiceClient:
             logger.info("Using local AI Service at http://localhost:8000")
             console.rule()
             return "http://localhost:8000"
-        return "https://app.codeflash.ai"
+        return "http://localhost:8000"
 
     def make_ai_service_request(
         self,
@@ -157,6 +157,73 @@ class AiServiceClient:
         console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            console.rule()
+            end_time = time.perf_counter()
+            logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
+    def get_jit_rewritten_code(  # noqa: D417
+        self,
+        source_code: str,
+        dependency_code: str,
+        trace_id: str,
+        num_candidates: int = 1,
+        experiment_metadata: ExperimentMetadata | None = None,
+        *,
+        is_async: bool = False,
+    ) -> list[OptimizedCandidate]:
+        """Optimize the given python code for performance by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - dependency_code (str): The dependency code used as read-only context for the optimization
+        - trace_id (str): Trace id of optimization run
+        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        start_time = time.perf_counter()
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
+
+        payload = {
+            "source_code": source_code,
+            "dependency_code": dependency_code,
+            "num_variants": num_candidates,
+            "trace_id": trace_id,
+            "python_version": platform.python_version(),
+            "experiment_metadata": experiment_metadata,
+            "codeflash_version": codeflash_version,
+            "current_username": get_last_commit_author_if_pr_exists(None),
+            "repo_owner": git_repo_owner,
+            "repo_name": git_repo_name,
+            "n_candidates": N_CANDIDATES_EFFECTIVE,
+            "is_async": is_async,
+        }
+
+        logger.info("!lsp|Generating optimized candidates…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
