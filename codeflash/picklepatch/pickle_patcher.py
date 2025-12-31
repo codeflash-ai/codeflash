@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import contextlib
 import pickle
+import warnings
 from typing import Any, ClassVar
 
 import dill
+from dill import PicklingWarning
 
 from .pickle_placeholder import PicklePlaceholder
+
+warnings.filterwarnings("ignore", category=PicklingWarning)
 
 
 class PicklePatcher:
