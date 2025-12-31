@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 import pathlib
@@ -7,6 +8,11 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 
 @dataclass
@@ -21,12 +27,16 @@ class TestConfig:
     # Make file_path optional when trace_mode is True
     file_path: Optional[pathlib.Path] = None
     function_name: Optional[str] = None
-    expected_unit_tests: Optional[int] = None
+    # Global count: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path"
+    expected_unit_tests_count: Optional[int] = None
+    # Per-function count: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
+    expected_unit_test_files: Optional[int] = None
     min_improvement_x: float = 0.1
     trace_mode: bool = False
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
     use_worktree: bool = False
+    no_gen_tests: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -75,6 +85,11 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
 
     return True
 
+def validate_no_gen_tests(stdout: str) -> bool:
+    if "Generated '0' tests for" not in stdout:
+        logging.error("Tests generated even when flag was on")
+        return False
+    return True
 
 def run_codeflash_command(
     cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int, expected_in_stdout: list[str] = None
@@ -129,11 +144,26 @@ def build_command(
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
-    base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+
+    # Check if pyproject.toml exists with codeflash config - if so, don't override it
+    pyproject_path = cwd / "pyproject.toml"
+    has_codeflash_config = False
+    if pyproject_path.exists():
+        with contextlib.suppress(Exception):
+            with open(pyproject_path, "rb") as f:
+                pyproject_data = tomllib.load(f)
+                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+
+    # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
+    if not has_codeflash_config:
+        base_command.extend(["--tests-root", str(test_root), "--module-root", str(cwd)])
+
     if benchmarks_root:
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
         base_command.append("--worktree")
+    if config.no_gen_tests:
+        base_command.append("--no-gen-tests")
     return base_command
 
 
@@ -163,19 +193,37 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         logging.error(f"Performance improvement rate {improvement_x}x not above {config.min_improvement_x}x")
         return False
 
-    if config.expected_unit_tests is not None:
-        unit_test_match = re.search(r"Discovered (\d+) existing unit test file", stdout)
+    if config.expected_unit_tests_count is not None:
+        # Match the global test discovery message from optimizer.py which counts test invocations
+        # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
+        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout)
         if not unit_test_match:
-            logging.error("Could not find unit test count")
+            logging.error("Could not find global unit test count")
             return False
 
         num_tests = int(unit_test_match.group(1))
-        if num_tests != config.expected_unit_tests:
-            logging.error(f"Expected {config.expected_unit_tests} unit tests, found {num_tests}")
+        if num_tests != config.expected_unit_tests_count:
+            logging.error(f"Expected {config.expected_unit_tests_count} global unit tests, found {num_tests}")
+            return False
+
+    if config.expected_unit_test_files is not None:
+        # Match the per-function test discovery message from function_optimizer.py
+        # Format: "Discovered X existing unit test files, Y replay test files, and Z concolic..."
+        unit_test_files_match = re.search(r"Discovered (\d+) existing unit test files?", stdout)
+        if not unit_test_files_match:
+            logging.error("Could not find per-function unit test file count")
+            return False
+
+        num_test_files = int(unit_test_files_match.group(1))
+        if num_test_files != config.expected_unit_test_files:
+            logging.error(f"Expected {config.expected_unit_test_files} unit test files, found {num_test_files}")
             return False
 
     if config.coverage_expectations:
         validate_coverage(stdout, config.coverage_expectations)
+
+    if config.no_gen_tests:
+        validate_no_gen_tests(stdout)
 
     logging.info(f"Success: Performance improvement is {improvement_pct}%")
     return True
