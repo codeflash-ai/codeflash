@@ -76,6 +76,8 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
+    AdaptiveOptimizedCandidate,
+    AIServiceAdaptiveOptimizeRequest,
     AIServiceCodeRepairRequest,
     BestOptimization,
     CandidateEvaluationContext,
@@ -187,6 +189,7 @@ class CandidateProcessor:
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
         future_all_code_repair: list[concurrent.futures.Future],
+        future_adaptive_optimizations: list[concurrent.futures.Future],
     ) -> None:
         self.candidate_queue = queue.Queue()
         self.forest = CandidateForest()
@@ -204,6 +207,7 @@ class CandidateProcessor:
         self.future_line_profile_results = future_line_profile_results
         self.all_refinements_data = all_refinements_data
         self.future_all_code_repair = future_all_code_repair
+        self.future_adaptive_optimizations = future_adaptive_optimizations
 
     def get_next_candidate(self) -> CandidateNode | None:
         """Get the next candidate from the queue, handling async results as needed."""
@@ -214,12 +218,15 @@ class CandidateProcessor:
 
     def _handle_empty_queue(self) -> CandidateNode | None:
         """Handle empty queue by checking for pending async results."""
+        # TODO: Many duplicates here for processing functions, create a single function and set the priority of each optimization source
         if not self.line_profiler_done:
             return self._process_line_profiler_results()
         if len(self.future_all_code_repair) > 0:
             return self._process_code_repair()
         if self.line_profiler_done and not self.refinement_done:
             return self._process_refinement_results()
+        if len(self.future_adaptive_optimizations) > 0:
+            return self._process_adaptive_optimizations()
         return None  # All done
 
     def _process_line_profiler_results(self) -> CandidateNode | None:
@@ -313,12 +320,33 @@ class CandidateProcessor:
 
         return self.get_next_candidate()
 
+    def _process_adaptive_optimizations(self) -> CandidateNode | None:
+        logger.info(f"loading|Applying adaptive optimizations to {len(self.future_adaptive_optimizations)} candidates")
+        concurrent.futures.wait(self.future_adaptive_optimizations)
+        candidates_added = 0
+        for future_adaptive_optimization in self.future_adaptive_optimizations:
+            possible_adaptive_optimization = future_adaptive_optimization.result()
+            if possible_adaptive_optimization:
+                self.forest.add(possible_adaptive_optimization)
+                self.candidate_queue.put(possible_adaptive_optimization)
+                self.candidate_len += 1
+                candidates_added += 1
+
+        if candidates_added > 0:
+            logger.info(
+                f"Added {candidates_added} candidates from adaptive optimizations, total candidates now: {self.candidate_len}"
+            )
+        self.future_adaptive_optimizations = []
+
+        return self.get_next_candidate()
+
     def is_done(self) -> bool:
         """Check if processing is complete."""
         return (
             self.line_profiler_done
             and self.refinement_done
             and len(self.future_all_code_repair) == 0
+            and len(self.future_adaptive_optimizations) == 0
             and self.candidate_queue.empty()
         )
 
@@ -371,6 +399,7 @@ class FunctionOptimizer:
         )
         self.optimization_review = ""
         self.future_all_code_repair: list[concurrent.futures.Future] = []
+        self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
@@ -807,7 +836,7 @@ class FunctionOptimizer:
 
     def process_single_candidate(
         self,
-        candidate: OptimizedCandidate,
+        candidate_node: CandidateNode,
         candidate_index: int,
         total_candidates: int,
         code_context: CodeOptimizationContext,
@@ -829,6 +858,7 @@ class FunctionOptimizer:
         get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
 
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
+        candidate = candidate_node.candidate
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}.py",
@@ -917,6 +947,16 @@ class FunctionOptimizer:
                 eval_ctx=eval_ctx,
             )
             eval_ctx.valid_optimizations.append(best_optimization)
+            # Queue adaptive optimization
+            future_optimization = self.call_adaptive_optimize(
+                trace_id=self.get_trace_id(exp_type),
+                original_source_code=code_context.read_writable_code.markdown,
+                candidate_node=candidate_node,
+                eval_ctx=eval_ctx,
+                ai_service_client=self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client,
+            )
+            if future_optimization:
+                self.future_adaptive_optimizations.append(future_optimization)
 
             # Queue refinement for non-refined candidates
             if candidate.source != OptimizedCandidateSource.REFINE:
@@ -969,6 +1009,7 @@ class FunctionOptimizer:
         eval_ctx = CandidateEvaluationContext()
         all_refinements_data: list[AIServiceRefinerRequest] = []
         self.future_all_code_repair.clear()
+        self.future_adaptive_optimizations.clear()
         self.repair_counter = 0
 
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
@@ -995,6 +1036,7 @@ class FunctionOptimizer:
             self.aiservice_client,
             self.executor,
             self.future_all_code_repair,
+            self.future_adaptive_optimizations,
         )
         candidate_index = 0
 
@@ -1007,9 +1049,8 @@ class FunctionOptimizer:
 
             try:
                 candidate_index += 1
-                print(f"node ancestry: {[c.optimization_id for c in candidate_node.path_to_root()]}")
                 self.process_single_candidate(
-                    candidate=candidate_node.candidate,
+                    candidate_node=candidate_node,
                     candidate_index=candidate_index,
                     total_candidates=processor.candidate_len,
                     code_context=code_context,
@@ -1049,6 +1090,41 @@ class FunctionOptimizer:
             )
 
         return best_optimization
+
+    def call_adaptive_optimize(
+        self,
+        trace_id: str,
+        original_source_code: str,
+        candidate_node: CandidateNode,
+        eval_ctx: CandidateEvaluationContext,
+        ai_service_client: AiServiceClient,
+    ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
+        prev_candidates = candidate_node.path_to_root()
+        adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
+
+        if adaptive_count >= 2:  # TODO (ali): make this configurable with effort arg
+            return None
+
+        request_candidates = []
+
+        for c in prev_candidates:
+            speedup = eval_ctx.get_speedup_ratio(c.optimization_id)
+            if not speedup:
+                continue
+            request_candidates.append(
+                AdaptiveOptimizedCandidate(
+                    optimization_id=c.optimization_id,
+                    source_code=c.source_code.markdown,
+                    explanation=c.explanation,
+                    source=c.source,
+                    speedup=f"Performance gain: {int(speedup * 100 + 0.5)}%",
+                )
+            )
+
+        request = AIServiceAdaptiveOptimizeRequest(
+            trace_id=trace_id, original_source_code=original_source_code, candidates=request_candidates
+        )
+        return self.executor.submit(ai_service_client.adaptive_optimize, request=request)
 
     def repair_optimization(
         self,

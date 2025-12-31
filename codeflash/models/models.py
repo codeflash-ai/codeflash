@@ -48,6 +48,23 @@ class AIServiceRefinerRequest:
     function_references: str | None = None
 
 
+# this should be possible to auto serialize
+@dataclass(frozen=True)
+class AdaptiveOptimizedCandidate:
+    optimization_id: str
+    source_code: str
+    explanation: str
+    source: OptimizedCandidateSource
+    speedup: str
+
+
+@dataclass(frozen=True)
+class AIServiceAdaptiveOptimizeRequest:
+    trace_id: str
+    original_source_code: str
+    candidates: list[AdaptiveOptimizedCandidate]
+
+
 class TestDiffScope(str, Enum):
     RETURN_VALUE = "return_value"
     STDOUT = "stdout"
@@ -441,6 +458,9 @@ class CandidateEvaluationContext:
             "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
         }
 
+    def get_speedup_ratio(self, optimization_id: str) -> float | None:
+        return self.speedup_ratios.get(optimization_id)
+
 
 @dataclass(frozen=True)
 class TestsInFile:
@@ -455,6 +475,7 @@ class OptimizedCandidateSource(str, Enum):
     OPTIMIZE_LP = "OPTIMIZE_LP"
     REFINE = "REFINE"
     REPAIR = "REPAIR"
+    ADAPTIVE = "ADAPTIVE"
 
 
 @dataclass(frozen=True)
