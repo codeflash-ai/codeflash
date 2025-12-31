@@ -473,8 +473,6 @@ class FunctionOptimizer:
             )
             # Generate tests and optimizations in parallel
             future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
-            # Generate tests and optimizations in parallel
-            future_tests = self.executor.submit(self.generate_and_instrument_tests, code_context)
             future_optimizations = self.executor.submit(
                 self.generate_optimizations,
                 read_writable_code=code_context.read_writable_code,
