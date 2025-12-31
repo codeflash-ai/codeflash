@@ -866,30 +866,30 @@ def create_jit_sync_helper() -> ast.FunctionDef:
         lineno=lineno,
     )
 
-    # MLX sync block
-    mlx_sync = ast.Try(
-        body=[
-            ast.Import(names=[ast.alias(name="mlx.core", asname="mx")], lineno=lineno),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(value=ast.Name(id="mx", ctx=ast.Load()), attr="synchronize", ctx=ast.Load()),
-                    args=[],
-                    keywords=[],
-                )
-            ),
-        ],
-        handlers=[
-            ast.ExceptHandler(
-                type=ast.Name(id="ImportError", ctx=ast.Load()),
-                name=None,
-                body=[ast.Pass(lineno=lineno)],
-                lineno=lineno,
-            )
-        ],
-        orelse=[],
-        finalbody=[],
-        lineno=lineno,
-    )
+    # # MLX sync block
+    # mlx_sync = ast.Try(
+    #     body=[
+    #         ast.Import(names=[ast.alias(name="mlx.core", asname="mx")], lineno=lineno),
+    #         ast.Expr(
+    #             value=ast.Call(
+    #                 func=ast.Attribute(value=ast.Name(id="mx", ctx=ast.Load()), attr="synchronize", ctx=ast.Load()),
+    #                 args=[],
+    #                 keywords=[],
+    #             )
+    #         ),
+    #     ],
+    #     handlers=[
+    #         ast.ExceptHandler(
+    #             type=ast.Name(id="ImportError", ctx=ast.Load()),
+    #             name=None,
+    #             body=[ast.Pass(lineno=lineno)],
+    #             lineno=lineno,
+    #         )
+    #     ],
+    #     orelse=[],
+    #     finalbody=[],
+    #     lineno=lineno,
+    # )
 
     # TensorFlow sync block - sync XLA/TPU devices
     tensorflow_sync = ast.Try(
@@ -969,7 +969,8 @@ def create_jit_sync_helper() -> ast.FunctionDef:
         args=ast.arguments(
             args=[], vararg=None, kwarg=None, posonlyargs=[], kwonlyargs=[], kw_defaults=[], defaults=[]
         ),
-        body=[pytorch_sync, jax_sync, mlx_sync, tensorflow_sync],
+        # body=[pytorch_sync, jax_sync, mlx_sync, tensorflow_sync],
+        body=[pytorch_sync, jax_sync, tensorflow_sync],
         decorator_list=[],
         returns=None,
         lineno=lineno,
