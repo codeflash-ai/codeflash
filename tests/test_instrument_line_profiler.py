@@ -55,6 +55,7 @@ def hi():
 
 
 class BubbleSortClass:
+    @codeflash_line_profile
     def __init__(self):
         pass
 
@@ -117,7 +118,9 @@ def sort_classmethod(x):
     return y.sorter(x)
 """
         assert code_path.read_text("utf-8") == expected_code_main
-        assert code_context.helper_functions.__len__() == 0
+        # WrapperClass.__init__ is now detected as a helper since WrapperClass.BubbleSortClass() instantiates it
+        assert len(code_context.helper_functions) == 1
+        assert code_context.helper_functions[0].qualified_name == "WrapperClass.__init__"
     finally:
         func_optimizer.write_code_and_helpers(
             func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
@@ -283,6 +286,7 @@ def sorter(arr):
     ans = helper(arr)
     return ans
 class helper:
+    @codeflash_line_profile
     def __init__(self, arr):
         return arr.sort()
 """
