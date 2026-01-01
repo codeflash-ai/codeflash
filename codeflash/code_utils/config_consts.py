@@ -35,6 +35,9 @@ N_CANDIDATES_LP_LSP = 3
 REPAIR_UNMATCHED_PERCENTAGE_LIMIT = 0.4  # if the percentage of unmatched tests is greater than this, we won't fix it (lowering this value makes the repair more stricted)
 MAX_REPAIRS_PER_TRACE = 4  # maximum number of repairs we will do for each function
 
+# 2-stage tracing
+DEFAULT_TOP_N_FUNCTIONS = None  # None means no limit, optimize all above threshold
+
 MAX_N_CANDIDATES = 5
 MAX_N_CANDIDATES_LP = 6
 
