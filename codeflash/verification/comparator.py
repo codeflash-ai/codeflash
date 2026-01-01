@@ -24,7 +24,6 @@ HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
-HAS_MLX = find_spec("mlx") is not None
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
@@ -139,17 +138,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
                 return comparator(orig.to_list(), new.to_list(), superset_obj)
 
-        if HAS_MLX:
-            import mlx.core as mx  # type: ignore  # noqa: PGH003
-
-            if isinstance(orig, mx.array):
-                if orig.dtype != new.dtype:
-                    return False
-                if orig.shape != new.shape:
-                    return False
-                # MLX allclose handles NaN comparison via equal_nan parameter
-                return bool(mx.allclose(orig, new, equal_nan=True))
-
         if HAS_SQLALCHEMY:
             import sqlalchemy  # type: ignore  # noqa: PGH003
 
@@ -234,6 +222,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 if orig.dtype != new.dtype:
                     return False
                 return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
+
+            # Handle np.dtype instances (including numpy.dtypes.* classes like Float64DType, Int64DType, etc.)
+            if isinstance(orig, np.dtype):
+                return orig == new
 
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
