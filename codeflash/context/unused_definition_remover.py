@@ -223,6 +223,18 @@ class DependencyCollector(cst.CSTVisitor):
             self.current_class = class_name
             self.current_top_level_name = class_name
 
+            # Track base classes as dependencies
+            for base in node.bases:
+                if isinstance(base.value, cst.Name):
+                    base_name = base.value.value
+                    if base_name in self.definitions and class_name in self.definitions:
+                        self.definitions[class_name].dependencies.add(base_name)
+                elif isinstance(base.value, cst.Attribute):
+                    # Handle cases like module.ClassName
+                    attr_name = base.value.attr.value
+                    if attr_name in self.definitions and class_name in self.definitions:
+                        self.definitions[class_name].dependencies.add(attr_name)
+
         self.class_depth += 1
 
     def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
