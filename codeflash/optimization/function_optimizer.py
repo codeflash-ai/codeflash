@@ -934,22 +934,23 @@ class FunctionOptimizer:
                 eval_ctx=eval_ctx,
             )
             eval_ctx.valid_optimizations.append(best_optimization)
-            # Queue adaptive optimization
-            future_adaptive_optimization = self.call_adaptive_optimize(
-                trace_id=self.get_trace_id(exp_type),
-                original_source_code=code_context.read_writable_code.markdown,
-                candidate_node=candidate_node,
-                eval_ctx=eval_ctx,
-                ai_service_client=self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client,
-            )
-            if future_adaptive_optimization:
-                self.future_adaptive_optimizations.append(future_adaptive_optimization)
 
-            # Queue refinement for non-refined candidates
+            current_tree_candidates = candidate_node.path_to_root()
             is_candidate_refined_before = any(
-                c.source == OptimizedCandidateSource.REFINE for c in candidate_node.path_to_root()
+                c.source == OptimizedCandidateSource.REFINE for c in current_tree_candidates
             )
-            if not is_candidate_refined_before:
+
+            if is_candidate_refined_before:
+                future_adaptive_optimization = self.call_adaptive_optimize(
+                    trace_id=self.get_trace_id(exp_type),
+                    original_source_code=code_context.read_writable_code.markdown,
+                    prev_candidates=current_tree_candidates,
+                    eval_ctx=eval_ctx,
+                    ai_service_client=self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client,
+                )
+                if future_adaptive_optimization:
+                    self.future_adaptive_optimizations.append(future_adaptive_optimization)
+            else:
                 all_refinements_data.append(
                     AIServiceRefinerRequest(
                         optimization_id=best_optimization.candidate.optimization_id,
@@ -1085,7 +1086,7 @@ class FunctionOptimizer:
         self,
         trace_id: str,
         original_source_code: str,
-        candidate_node: CandidateNode,
+        prev_candidates: list[OptimizedCandidate],
         eval_ctx: CandidateEvaluationContext,
         ai_service_client: AiServiceClient,
     ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
@@ -1093,11 +1094,6 @@ class FunctionOptimizer:
             logger.debug(
                 f"Max adaptive optimizations reached for {self.function_to_optimize.qualified_name}: {self.adaptive_optimization_counter}"
             )
-            return None
-
-        prev_candidates = candidate_node.path_to_root()
-        if len(prev_candidates) == 1:
-            # we already have the refinement going for this single candidate tree, no need to do adaptive optimize
             return None
 
         adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
