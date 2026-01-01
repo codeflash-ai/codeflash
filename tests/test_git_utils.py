@@ -67,6 +67,8 @@ class TestGitUtils(unittest.TestCase):
     @patch("codeflash.code_utils.git_utils.Confirm.ask", return_value=True)
     def test_check_and_push_branch(self, mock_confirm, mock_isatty, mock_repo):
         mock_repo_instance = mock_repo.return_value
+        # Mock HEAD not being detached
+        mock_repo_instance.head.is_detached = False
         mock_repo_instance.active_branch.name = "test-branch"
         mock_repo_instance.refs = []
 
@@ -87,6 +89,8 @@ class TestGitUtils(unittest.TestCase):
     @patch("codeflash.code_utils.git_utils.sys.__stdin__.isatty", return_value=False)
     def test_check_and_push_branch_non_tty(self, mock_isatty, mock_repo):
         mock_repo_instance = mock_repo.return_value
+        # Mock HEAD not being detached
+        mock_repo_instance.head.is_detached = False
         mock_repo_instance.active_branch.name = "test-branch"
         mock_repo_instance.refs = []
 
@@ -96,6 +100,19 @@ class TestGitUtils(unittest.TestCase):
         assert not check_and_push_branch(mock_repo_instance)
         mock_origin.push.assert_not_called()
         mock_origin.push.reset_mock()
+
+    @patch("codeflash.code_utils.git_utils.git.Repo")
+    def test_check_and_push_branch_detached_head(self, mock_repo):
+        mock_repo_instance = mock_repo.return_value
+        # Mock HEAD being detached
+        mock_repo_instance.head.is_detached = True
+
+        mock_origin = mock_repo_instance.remote.return_value
+        mock_origin.push.return_value = None
+
+        # Should return False when HEAD is detached
+        assert not check_and_push_branch(mock_repo_instance)
+        mock_origin.push.assert_not_called()
 
 
 if __name__ == "__main__":

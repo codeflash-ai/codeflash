@@ -46,6 +46,7 @@ class AIServiceRefinerRequest:
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     function_references: str | None = None
+    call_sequence: int | None = None
 
 
 # this should be possible to auto serialize
@@ -485,6 +486,7 @@ class OptimizedCandidate:
     optimization_id: str
     source: OptimizedCandidateSource
     parent_id: str | None = None
+    model: str | None = None  # Which LLM model generated this candidate
 
 
 @dataclass(frozen=True)
