@@ -316,7 +316,7 @@ class CandidateProcessor:
             logger.info(
                 f"Added {candidates_added} candidates from code repair, total candidates now: {self.candidate_len}"
             )
-        self.future_all_code_repair = []
+        self.future_all_code_repair.clear()
 
         return self.get_next_candidate()
 
@@ -336,7 +336,7 @@ class CandidateProcessor:
             logger.info(
                 f"Added {candidates_added} candidates from adaptive optimizations, total candidates now: {self.candidate_len}"
             )
-        self.future_adaptive_optimizations = []
+        self.future_adaptive_optimizations.clear()
 
         return self.get_next_candidate()
 
@@ -948,18 +948,21 @@ class FunctionOptimizer:
             )
             eval_ctx.valid_optimizations.append(best_optimization)
             # Queue adaptive optimization
-            future_optimization = self.call_adaptive_optimize(
+            future_adaptive_optimization = self.call_adaptive_optimize(
                 trace_id=self.get_trace_id(exp_type),
                 original_source_code=code_context.read_writable_code.markdown,
                 candidate_node=candidate_node,
                 eval_ctx=eval_ctx,
                 ai_service_client=self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client,
             )
-            if future_optimization:
-                self.future_adaptive_optimizations.append(future_optimization)
+            if future_adaptive_optimization:
+                self.future_adaptive_optimizations.append(future_adaptive_optimization)
 
             # Queue refinement for non-refined candidates
-            if candidate.source != OptimizedCandidateSource.REFINE:
+            is_candidate_refined_before = any(
+                c.source == OptimizedCandidateSource.REFINE for c in candidate_node.path_to_root()
+            )
+            if not is_candidate_refined_before:
                 all_refinements_data.append(
                     AIServiceRefinerRequest(
                         optimization_id=best_optimization.candidate.optimization_id,
@@ -1100,24 +1103,30 @@ class FunctionOptimizer:
         ai_service_client: AiServiceClient,
     ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
         prev_candidates = candidate_node.path_to_root()
-        adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
+        if len(prev_candidates) == 1:
+            # we already have the refinement going for this single candidate tree, no need to do adaptive optimize
+            return None
 
-        if adaptive_count >= 2:  # TODO (ali): make this configurable with effort arg
+        adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
+        # is_candidate_refined = any(c.source == OptimizedCandidateSource.REFINE for c in prev_candidates)
+
+        # TODO (ali): make this configurable with effort arg
+        if adaptive_count >= 2:
             return None
 
         request_candidates = []
 
         for c in prev_candidates:
             speedup = eval_ctx.get_speedup_ratio(c.optimization_id)
-            if not speedup:
-                continue
             request_candidates.append(
                 AdaptiveOptimizedCandidate(
                     optimization_id=c.optimization_id,
                     source_code=c.source_code.markdown,
                     explanation=c.explanation,
                     source=c.source,
-                    speedup=f"Performance gain: {int(speedup * 100 + 0.5)}%",
+                    speedup=f"Performance gain: {int(speedup * 100 + 0.5)}%"
+                    if speedup
+                    else "Candidate didn't match the behavior of the original code",
                 )
             )
 

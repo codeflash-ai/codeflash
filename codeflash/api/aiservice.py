@@ -253,7 +253,7 @@ class AiServiceClient:
                 "original_source_code": request.original_source_code,
                 "candidates": request.candidates,
             }
-            response = self.make_ai_service_request("/adaptive-optimize", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=120)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating adaptive optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
