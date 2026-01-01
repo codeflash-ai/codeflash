@@ -43,8 +43,10 @@ from codeflash.code_utils.code_utils import (
     unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
+    ADAPTIVE_OPTIMIZATION_THRESHOLD,
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
+    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE,
     MAX_REPAIRS_PER_TRACE,
     N_TESTS_TO_GENERATE_EFFECTIVE,
     REFINE_ALL_THRESHOLD,
@@ -385,6 +387,7 @@ class FunctionOptimizer:
         self.future_all_code_repair: list[concurrent.futures.Future] = []
         self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
+        self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -843,7 +846,6 @@ class FunctionOptimizer:
 
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
-        print(f" {' -> '.join([c.source for c in candidate_node.path_to_root()])}")
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}.py",
@@ -999,6 +1001,7 @@ class FunctionOptimizer:
         self.future_all_code_repair.clear()
         self.future_adaptive_optimizations.clear()
         self.repair_counter = 0
+        self.adaptive_optimization_counter = 0
 
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
@@ -1086,16 +1089,20 @@ class FunctionOptimizer:
         eval_ctx: CandidateEvaluationContext,
         ai_service_client: AiServiceClient,
     ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
+        if self.adaptive_optimization_counter >= MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE:
+            logger.debug(
+                f"Max adaptive optimizations reached for {self.function_to_optimize.qualified_name}: {self.adaptive_optimization_counter}"
+            )
+            return None
+
         prev_candidates = candidate_node.path_to_root()
         if len(prev_candidates) == 1:
             # we already have the refinement going for this single candidate tree, no need to do adaptive optimize
             return None
 
         adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
-        # is_candidate_refined = any(c.source == OptimizedCandidateSource.REFINE for c in prev_candidates)
 
-        # TODO (ali): make this configurable with effort arg
-        if adaptive_count >= 2:
+        if adaptive_count >= ADAPTIVE_OPTIMIZATION_THRESHOLD:
             return None
 
         request_candidates = []
@@ -1117,6 +1124,7 @@ class FunctionOptimizer:
         request = AIServiceAdaptiveOptimizeRequest(
             trace_id=trace_id, original_source_code=original_source_code, candidates=request_candidates
         )
+        self.adaptive_optimization_counter += 1
         return self.executor.submit(ai_service_client.adaptive_optimize, request=request)
 
     def repair_optimization(
