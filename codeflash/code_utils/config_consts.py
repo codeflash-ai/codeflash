@@ -13,6 +13,13 @@ MIN_TESTCASE_PASSED_THRESHOLD = 6
 REPEAT_OPTIMIZATION_PROBABILITY = 0.1
 DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 
+# pytest loop stability
+# For now, we use strict thresholds (large windows and low tolerances), since this is still experimental.
+STABILITY_WINDOW_SIZE = 0.35  # 35% of total window
+STABILITY_CENTER_TOLERANCE = 0.0025  # ±0.25% around median
+STABILITY_SPREAD_TOLERANCE = 0.0025  # 0.25% window spread
+
+# Refinement
 REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more important than diff by a factor of 2
 
 # LSP-specific

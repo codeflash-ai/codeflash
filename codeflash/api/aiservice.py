@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import time
+from itertools import count
 from typing import TYPE_CHECKING, Any, cast
 
 import requests
@@ -39,6 +40,11 @@ class AiServiceClient:
     def __init__(self) -> None:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
+        self.llm_call_counter = count(1)
+
+    def get_next_sequence(self) -> int:
+        """Get the next LLM call sequence number."""
+        return next(self.llm_call_counter)
 
     def get_aiservice_base_url(self) -> str:
         if os.environ.get("CODEFLASH_AIS_SERVER", default="prod").lower() == "local":
@@ -105,6 +111,7 @@ class AiServiceClient:
                     optimization_id=opt["optimization_id"],
                     source=source,
                     parent_id=opt.get("parent_id", None),
+                    model=opt.get("model"),
                 )
             )
         return candidates
@@ -114,7 +121,6 @@ class AiServiceClient:
         source_code: str,
         dependency_code: str,
         trace_id: str,
-        num_candidates: int = 10,
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         is_async: bool = False,
@@ -126,21 +132,22 @@ class AiServiceClient:
         - source_code (str): The python code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
-        - num_candidates (int): Number of optimization variants to generate. Default is 10.
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+        - is_async (bool): Whether the function being optimized is async
 
         Returns
         -------
         - List[OptimizationCandidate]: A list of Optimization Candidates.
 
         """
+        logger.info("Generating optimized candidates…")
+        console.rule()
         start_time = time.perf_counter()
         git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
 
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
-            "n_candidates": num_candidates,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
@@ -149,22 +156,25 @@ class AiServiceClient:
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
             "is_async": is_async,
+            "lsp_mode": is_LSP_enabled(),
+            "call_sequence": self.get_next_sequence(),
         }
+        logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
 
-        logger.info("!lsp|Generating optimized candidates…")
-        console.rule()
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
+            console.rule()
             return []
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            console.rule()
             end_time = time.perf_counter()
             logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
+            logger.info(f"!lsp|Received {len(optimizations_json)} optimization candidates.")
+            console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
         try:
             error = response.json()["error"]
@@ -184,14 +194,14 @@ class AiServiceClient:
         num_candidates: int = 8,
         experiment_metadata: ExperimentMetadata | None = None,
     ) -> list[OptimizedCandidate]:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+        """Optimize the given python code for performance using line profiler results.
 
         Parameters
         ----------
         - source_code (str): The python code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
-        - num_candidates (int): Number of optimization variants to generate. Default is 10.
+        - line_profiler_results (str): Line profiler output to guide optimization
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
 
         Returns
@@ -199,6 +209,13 @@ class AiServiceClient:
         - List[OptimizationCandidate]: A list of Optimization Candidates.
 
         """
+        if line_profiler_results == "":
+            logger.info("No LineProfiler results were provided, Skipping optimization.")
+            return []
+
+        logger.info("Generating optimized candidates with line profiler…")
+        console.rule()
+
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
@@ -209,25 +226,20 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "lsp_mode": is_LSP_enabled(),
+            "call_sequence": self.get_next_sequence(),
         }
 
-        console.rule()
-        if line_profiler_results == "":
-            logger.info("No LineProfiler results were provided, Skipping optimization.")
-            console.rule()
-            return []
         try:
             response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
+            console.rule()
             return []
 
         if response.status_code == 200:
             optimizations_json = response.json()["optimizations"]
-            logger.info(
-                f"!lsp|Generated {len(optimizations_json)} candidate optimizations using line profiler information."
-            )
+            logger.info(f"!lsp|Received {len(optimizations_json)} line profiler optimization candidates.")
             console.rule()
             return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE_LP)
         try:
@@ -265,6 +277,7 @@ class AiServiceClient:
                 "trace_id": opt.trace_id,
                 "function_references": opt.function_references,
                 "python_version": platform.python_version(),
+                "call_sequence": self.get_next_sequence(),
             }
             for opt in request
         ]
@@ -399,6 +412,7 @@ class AiServiceClient:
             "throughput_improvement": throughput_improvement,
             "function_references": function_references,
             "codeflash_version": codeflash_version,
+            "call_sequence": self.get_next_sequence(),
         }
         logger.info("loading|Generating explanation")
         console.rule()
@@ -561,6 +575,7 @@ class AiServiceClient:
             "python_version": platform.python_version(),
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
+            "call_sequence": self.get_next_sequence(),
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
@@ -647,6 +662,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
             "python_version": platform.python_version(),
+            "call_sequence": self.get_next_sequence(),
         }
         console.rule()
         try:
