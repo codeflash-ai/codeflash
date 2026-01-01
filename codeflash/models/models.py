@@ -54,6 +54,7 @@ class AIServiceRefinerRequest:
 class AdaptiveOptimizedCandidate:
     optimization_id: str
     source_code: str
+    # TODO: introduce repair explanation for code repair candidates to help the llm understand the full process
     explanation: str
     source: OptimizedCandidateSource
     speedup: str

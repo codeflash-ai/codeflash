@@ -9,7 +9,7 @@ import subprocess
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
 from rich.console import Group
@@ -220,32 +220,65 @@ class CandidateProcessor:
 
     def _handle_empty_queue(self) -> CandidateNode | None:
         """Handle empty queue by checking for pending async results."""
-        # TODO: Many duplicates here for processing functions, create a single function and set the priority of each optimization source
         if not self.line_profiler_done:
-            return self._process_line_profiler_results()
+            return self._process_candidates(
+                [self.future_line_profile_results],
+                "all candidates processed, await candidates from line profiler",
+                "Added results from line profiler to candidates, total candidates now: {1}",
+                lambda: setattr(self, "line_profiler_done", True),
+            )
         if len(self.future_all_code_repair) > 0:
-            return self._process_code_repair()
+            return self._process_candidates(
+                self.future_all_code_repair,
+                "Repairing {0} candidates",
+                "Added {0} candidates from repair, total candidates now: {1}",
+                lambda: self.future_all_code_repair.clear(),
+            )
         if self.line_profiler_done and not self.refinement_done:
             return self._process_refinement_results()
         if len(self.future_adaptive_optimizations) > 0:
-            return self._process_adaptive_optimizations()
+            return self._process_candidates(
+                self.future_adaptive_optimizations,
+                "Applying adaptive optimizations to {0} candidates",
+                "Added {0} candidates from adaptive optimization, total candidates now: {1}",
+                lambda: self.future_adaptive_optimizations.clear(),
+            )
         return None  # All done
 
-    def _process_line_profiler_results(self) -> CandidateNode | None:
-        """Process line profiler results and add to queue."""
-        logger.debug("all candidates processed, await candidates from line profiler")
-        concurrent.futures.wait([self.future_line_profile_results])
-        line_profile_results = self.future_line_profile_results.result()
+    def _process_candidates(
+        self,
+        future_candidates: list[concurrent.futures.Future],
+        loading_msg: str,
+        success_msg: str,
+        callback: Callable[[], None],
+    ) -> CandidateNode | None:
+        if len(future_candidates) == 0:
+            return None
+        with progress_bar(
+            loading_msg.format(len(future_candidates)), transient=True, revert_to_print=bool(get_pr_number())
+        ):
+            concurrent.futures.wait(future_candidates)
+            candidates: list[OptimizedCandidate] = []
+            for future_c in future_candidates:
+                candidate_result = future_c.result()
+                if not candidate_result:
+                    continue
 
-        for candidate in line_profile_results:
-            self.forest.add(candidate)
-            self.candidate_queue.put(candidate)
+                if isinstance(candidate_result, list):
+                    candidates.extend(candidate_result)
+                else:
+                    candidates.append(candidate_result)
 
-        self.candidate_len += len(line_profile_results)
-        logger.info(f"Added results from line profiler to candidates, total candidates now: {self.candidate_len}")
-        self.line_profiler_done = True
+            for candidate in candidates:
+                self.forest.add(candidate)
+                self.candidate_queue.put(candidate)
+                self.candidate_len += 1
 
-        return self.get_next_candidate()
+            if len(candidates) > 0:
+                logger.info(success_msg.format(len(candidates), self.candidate_len))
+
+            callback()
+            return self.get_next_candidate()
 
     def refine_optimizations(self, request: list[AIServiceRefinerRequest]) -> concurrent.futures.Future:
         return self.executor.submit(self.ai_service_client.optimize_python_code_refinement, request=request)
@@ -284,70 +317,12 @@ class CandidateProcessor:
         # Track total refinement calls made
         self.refinement_calls_count = refinement_call_index
 
-        if future_refinements:
-            logger.info("loading|Refining generated code for improved quality and performance...")
-
-        concurrent.futures.wait(future_refinements)
-        refinement_response = []
-
-        for f in future_refinements:
-            possible_refinement = f.result()
-            if len(possible_refinement) > 0:
-                refinement_response.append(possible_refinement[0])
-
-        for candidate in refinement_response:
-            self.forest.add(candidate)
-            self.candidate_queue.put(candidate)
-
-        self.candidate_len += len(refinement_response)
-        if len(refinement_response) > 0:
-            logger.info(
-                f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
-            )
-            console.rule()
-        self.refinement_done = True
-
-        return self.get_next_candidate()
-
-    def _process_code_repair(self) -> CandidateNode | None:
-        logger.info(f"loading|Repairing {len(self.future_all_code_repair)} candidates")
-        concurrent.futures.wait(self.future_all_code_repair)
-        candidates_added = 0
-        for future_code_repair in self.future_all_code_repair:
-            possible_code_repair = future_code_repair.result()
-            if possible_code_repair:
-                self.forest.add(possible_code_repair)
-                self.candidate_queue.put(possible_code_repair)
-                self.candidate_len += 1
-                candidates_added += 1
-
-        if candidates_added > 0:
-            logger.info(
-                f"Added {candidates_added} candidates from code repair, total candidates now: {self.candidate_len}"
-            )
-        self.future_all_code_repair.clear()
-
-        return self.get_next_candidate()
-
-    def _process_adaptive_optimizations(self) -> CandidateNode | None:
-        logger.info(f"loading|Applying adaptive optimizations to {len(self.future_adaptive_optimizations)} candidates")
-        concurrent.futures.wait(self.future_adaptive_optimizations)
-        candidates_added = 0
-        for future_adaptive_optimization in self.future_adaptive_optimizations:
-            possible_adaptive_optimization = future_adaptive_optimization.result()
-            if possible_adaptive_optimization:
-                self.forest.add(possible_adaptive_optimization)
-                self.candidate_queue.put(possible_adaptive_optimization)
-                self.candidate_len += 1
-                candidates_added += 1
-
-        if candidates_added > 0:
-            logger.info(
-                f"Added {candidates_added} candidates from adaptive optimizations, total candidates now: {self.candidate_len}"
-            )
-        self.future_adaptive_optimizations.clear()
-
-        return self.get_next_candidate()
+        return self._process_candidates(
+            future_refinements,
+            "Refining generated code for improved quality and performance...",
+            "Added {0} candidates from refinement, total candidates now: {1}",
+            lambda: setattr(self, "refinement_done", True),
+        )
 
     def is_done(self) -> bool:
         """Check if processing is complete."""
@@ -868,6 +843,7 @@ class FunctionOptimizer:
 
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
+        print(f" {' -> '.join([c.source for c in candidate_node.path_to_root()])}")
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}.py",
