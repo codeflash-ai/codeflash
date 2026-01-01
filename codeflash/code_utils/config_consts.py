@@ -14,6 +14,12 @@ REPEAT_OPTIMIZATION_PROBABILITY = 0.1
 DEFAULT_IMPORTANCE_THRESHOLD = 0.001
 N_CANDIDATES_LP = 6
 
+# pytest loop stability
+# For now, we use strict thresholds (large windows and low tolerances), since this is still experimental.
+STABILITY_WINDOW_SIZE = 0.35  # 35% of total window
+STABILITY_CENTER_TOLERANCE = 0.0025  # ±0.25% around median
+STABILITY_SPREAD_TOLERANCE = 0.0025  # 0.25% window spread
+
 # Refinement
 REFINE_ALL_THRESHOLD = 2  # when valid optimizations count is 2 or less, refine all optimizations
 REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more important than diff by a factor of 2

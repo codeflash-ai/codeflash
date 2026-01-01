@@ -12,6 +12,7 @@ import sqlite3
 import sys
 import threading
 import time
+import warnings
 from collections import defaultdict
 from importlib.util import find_spec
 from pathlib import Path
@@ -25,6 +26,10 @@ from rich.text import Text
 from codeflash.cli_cmds.console import console
 from codeflash.picklepatch.pickle_patcher import PicklePatcher
 from codeflash.tracing.tracing_utils import FunctionModules, filter_files_optimized, module_name_from_file_path
+
+# Suppress dill PicklingWarning
+warnings.filterwarnings("ignore", message="Cannot locate reference to")
+warnings.filterwarnings("ignore", message="Cannot pickle.*recursive self-references")
 
 if TYPE_CHECKING:
     from types import FrameType, TracebackType

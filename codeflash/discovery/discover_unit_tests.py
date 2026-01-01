@@ -751,6 +751,7 @@ def process_test_files(
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
+    console.rule()
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,

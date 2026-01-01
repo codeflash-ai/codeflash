@@ -7,11 +7,15 @@ import inspect
 import os
 import sqlite3
 import time
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Callable
 
 import dill as pickle
+from dill import PicklingWarning
+
+warnings.filterwarnings("ignore", category=PicklingWarning)
 
 
 class VerificationType(str, Enum):
