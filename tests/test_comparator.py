@@ -2423,3 +2423,63 @@ def test_numpy_0d_array() -> None:
     y = np.array([5])
     # Different shapes
     assert not comparator(x, y)
+
+def test_numpy_dtypes() -> None:
+    """Test comparator for numpy.dtypes types like Float64DType, Int64DType, etc."""
+    try:
+        import numpy as np
+        import numpy.dtypes as dtypes
+    except ImportError:
+        pytest.skip("numpy not available")
+
+    # Test Float64DType
+    a = dtypes.Float64DType()
+    b = dtypes.Float64DType()
+    assert comparator(a, b)
+
+    # Test Int64DType
+    c = dtypes.Int64DType()
+    d = dtypes.Int64DType()
+    assert comparator(c, d)
+
+    # Test different DType classes should not be equal
+    assert not comparator(a, c)  # Float64DType vs Int64DType
+
+    # Test various numeric DType classes
+    assert comparator(dtypes.Int8DType(), dtypes.Int8DType())
+    assert comparator(dtypes.Int16DType(), dtypes.Int16DType())
+    assert comparator(dtypes.Int32DType(), dtypes.Int32DType())
+    assert comparator(dtypes.UInt8DType(), dtypes.UInt8DType())
+    assert comparator(dtypes.UInt16DType(), dtypes.UInt16DType())
+    assert comparator(dtypes.UInt32DType(), dtypes.UInt32DType())
+    assert comparator(dtypes.UInt64DType(), dtypes.UInt64DType())
+    assert comparator(dtypes.Float32DType(), dtypes.Float32DType())
+    assert comparator(dtypes.Complex64DType(), dtypes.Complex64DType())
+    assert comparator(dtypes.Complex128DType(), dtypes.Complex128DType())
+    assert comparator(dtypes.BoolDType(), dtypes.BoolDType())
+
+    # Test cross-type comparisons should be False
+    assert not comparator(dtypes.Int32DType(), dtypes.Int64DType())
+    assert not comparator(dtypes.Float32DType(), dtypes.Float64DType())
+    assert not comparator(dtypes.UInt32DType(), dtypes.Int32DType())
+
+    # Test regular np.dtype instances
+    e = np.dtype('float64')
+    f = np.dtype('float64')
+    assert comparator(e, f)
+
+    g = np.dtype('int64')
+    h = np.dtype('int64')
+    assert comparator(g, h)
+
+    assert not comparator(e, g)  # float64 vs int64
+
+    # Test DType class instances vs regular np.dtype (they should be equal if same underlying type)
+    assert comparator(dtypes.Float64DType(), np.dtype('float64'))
+    assert comparator(dtypes.Int64DType(), np.dtype('int64'))
+    assert comparator(dtypes.Int32DType(), np.dtype('int32'))
+    assert comparator(dtypes.BoolDType(), np.dtype('bool'))
+
+    # Test that DType and np.dtype of different types are not equal
+    assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
+    assert not comparator(dtypes.Int32DType(), np.dtype('float32'))

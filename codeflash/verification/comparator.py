@@ -223,6 +223,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
                 return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
 
+            # Handle np.dtype instances (including numpy.dtypes.* classes like Float64DType, Int64DType, etc.)
+            if isinstance(orig, np.dtype):
+                return orig == new
+
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
                 return False
