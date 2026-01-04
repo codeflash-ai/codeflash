@@ -223,6 +223,23 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
                 return all(comparator(orig[field], new[field], superset_obj) for field in orig.dtype.fields)
 
+            # Handle np.dtype instances (including numpy.dtypes.* classes like Float64DType, Int64DType, etc.)
+            if isinstance(orig, np.dtype):
+                return orig == new
+
+            # Handle numpy random generators
+            if isinstance(orig, np.random.Generator):
+                # Compare the underlying BitGenerator state
+                orig_state = orig.bit_generator.state
+                new_state = new.bit_generator.state
+                return comparator(orig_state, new_state, superset_obj)
+
+            if isinstance(orig, np.random.RandomState):
+                # Compare the internal state
+                orig_state = orig.get_state(legacy=False)
+                new_state = new.get_state(legacy=False)
+                return comparator(orig_state, new_state, superset_obj)
+
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
                 return False
