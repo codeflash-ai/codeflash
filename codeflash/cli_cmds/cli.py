@@ -67,6 +67,13 @@ def parse_args() -> Namespace:
         default=SUPPRESS,
     )
     parser.add_argument(
+        "--top-n-functions",
+        type=int,
+        default=None,
+        help="Limit optimization to Top N functions by addressable time. Uses fast cProfile profiling to identify "
+        "high-impact functions before detailed tracing. Best used with --all to focus on highest-impact functions.",
+    )
+    parser.add_argument(
         "--module-root",
         type=str,
         help="Path to the project's Python module that you want to optimize."

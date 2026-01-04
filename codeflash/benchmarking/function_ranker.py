@@ -223,3 +223,16 @@ class FunctionRanker:
             f"Function ranking order: {[f'{func.function_name} (addressable_time={self.get_function_addressable_time(func):.2f}ns)' for func in ranked]}"
         )
         return ranked
+
+    def get_top_n_functions(self, functions_to_optimize: list[FunctionToOptimize], n: int) -> list[FunctionToOptimize]:
+        if n <= 0:
+            return []
+
+        if not self._function_stats:
+            logger.warning("No function stats available, returning first N functions")
+            return functions_to_optimize[:n]
+
+        sorted_funcs = sorted(functions_to_optimize, key=self.get_function_addressable_time, reverse=True)
+        top_n = sorted_funcs[:n]
+        logger.info(f"Selected Top {len(top_n)} functions by addressable time")
+        return top_n

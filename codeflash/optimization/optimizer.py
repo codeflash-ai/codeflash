@@ -55,6 +55,7 @@ class Optimizer:
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.replay_tests_dir = None
         self.trace_file: Path | None = None
+        self.cprofile_trace_file: Path | None = None  # For 2-stage tracing
         self.functions_checkpoint: CodeflashRunCheckpoint | None = None
         self.current_function_being_optimized: FunctionToOptimize | None = None  # current only for the LSP
         self.current_function_optimizer: FunctionOptimizer | None = None
@@ -123,6 +124,29 @@ class Optimizer:
                         f.write(file_path_to_source_code[file])
         console.rule()
         return function_benchmark_timings, total_benchmark_timings
+
+    def run_cprofile_stage1(self) -> Path | None:
+        from codeflash.benchmarking.cprofile_stage import run_cprofile_stage
+
+        console.rule()
+        logger.info("Running cProfile to identify high-impact functions...")
+        self.cprofile_trace_file = get_run_tmp_file(Path("cprofile_stage1.trace"))
+        if self.cprofile_trace_file.exists():
+            self.cprofile_trace_file.unlink()
+
+        success = run_cprofile_stage(
+            test_root=self.test_cfg.tests_root,
+            project_root=self.args.project_root,
+            output_trace_file=self.cprofile_trace_file,
+        )
+
+        if success and self.cprofile_trace_file.exists():
+            console.rule()
+            return self.cprofile_trace_file
+
+        logger.warning("Stage 1 cProfile profiling failed, falling back to default ranking")
+        console.rule()
+        return None
 
     def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
         """Discover functions to optimize."""
@@ -322,7 +346,10 @@ class Optimizer:
             console.print(f"[dim]... and {len(globally_ranked) - display_count} more functions[/dim]")
 
     def rank_all_functions_globally(
-        self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], trace_file_path: Path | None
+        self,
+        file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]],
+        trace_file_path: Path | None,
+        top_n: int | None = None,
     ) -> list[tuple[Path, FunctionToOptimize]]:
         """Rank all functions globally across all files based on trace data.
 
@@ -332,6 +359,7 @@ class Optimizer:
         Args:
             file_to_funcs_to_optimize: Mapping of file paths to functions to optimize
             trace_file_path: Path to trace file with performance data
+            top_n: If set, limit to Top N functions by addressable time (bypasses threshold)
 
         Returns:
             List of (file_path, function) tuples in globally ranked order by addressable time.
@@ -342,9 +370,11 @@ class Optimizer:
         for file_path, functions in file_to_funcs_to_optimize.items():
             all_functions.extend((file_path, func) for func in functions)
 
-        # If no trace file, return in original order
+        # If no trace file, return in original order (limited to top_n if set)
         if not trace_file_path or not trace_file_path.exists():
             logger.debug("No trace file available, using original function order")
+            if top_n is not None and top_n > 0:
+                return all_functions[:top_n]
             return all_functions
 
         try:
@@ -359,8 +389,11 @@ class Optimizer:
             # Extract just the functions for ranking (without file paths)
             functions_only = [func for _, func in all_functions]
 
-            # Rank globally
-            ranked_functions = ranker.rank_functions(functions_only)
+            # Use Top N selection if specified, otherwise use threshold-based ranking
+            if top_n is not None and top_n > 0:
+                ranked_functions = ranker.get_top_n_functions(functions_only, top_n)
+            else:
+                ranked_functions = ranker.rank_functions(functions_only)
 
             # Reconstruct with file paths by looking up original file for each ranked function
             # Build reverse mapping: function -> file path
@@ -378,10 +411,16 @@ class Optimizer:
                     globally_ranked.append((file_path, func))
 
             console.rule()
-            logger.info(
-                f"Globally ranked {len(ranked_functions)} functions by addressable time "
-                f"(filtered {len(functions_only) - len(ranked_functions)} low-importance functions)"
-            )
+            if top_n is not None and top_n > 0:
+                logger.info(
+                    f"Selected Top {len(ranked_functions)} functions by addressable time "
+                    f"(from {len(functions_only)} total functions)"
+                )
+            else:
+                logger.info(
+                    f"Globally ranked {len(ranked_functions)} functions by addressable time "
+                    f"(filtered {len(functions_only) - len(ranked_functions)} low-importance functions)"
+                )
 
             # Display ranking table for user visibility
             self.display_global_ranking(globally_ranked, ranker)
@@ -436,6 +475,16 @@ class Optimizer:
         self.test_cfg.concolic_test_root_dir = Path(
             tempfile.mkdtemp(dir=self.args.tests_root, prefix="codeflash_concolic_")
         )
+
+        # Get top_n_functions from args (for 2-stage tracing)
+        top_n_functions = getattr(self.args, "top_n_functions", None)
+
+        # Run cProfile Stage 1 if top_n_functions is specified and no existing trace
+        if top_n_functions is not None and top_n_functions > 0 and not trace_file_path:
+            cprofile_trace = self.run_cprofile_stage1()
+            if cprofile_trace:
+                trace_file_path = cprofile_trace
+
         try:
             ph("cli-optimize-functions-to-optimize", {"num_functions": num_optimizable_functions})
             if num_optimizable_functions == 0:
@@ -447,7 +496,9 @@ class Optimizer:
                 self.functions_checkpoint = CodeflashRunCheckpoint(self.args.module_root)
 
             # GLOBAL RANKING: Rank all functions together before optimizing
-            globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
+            globally_ranked_functions = self.rank_all_functions_globally(
+                file_to_funcs_to_optimize, trace_file_path, top_n=top_n_functions
+            )
             # Cache for module preparation (avoid re-parsing same files)
             prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module]] = {}
 
@@ -570,6 +621,9 @@ class Optimizer:
         if self.trace_file and self.trace_file.exists():
             logger.debug(f"Cleaning up trace file: {self.trace_file}")
             paths_to_cleanup.append(self.trace_file)
+        if self.cprofile_trace_file and self.cprofile_trace_file.exists():
+            logger.debug(f"Cleaning up cProfile trace file: {self.cprofile_trace_file}")
+            paths_to_cleanup.append(self.cprofile_trace_file)
         if paths_to_cleanup:
             cleanup_paths(paths_to_cleanup)
 
@@ -590,6 +644,8 @@ class Optimizer:
         paths_to_cleanup = [self.replay_tests_dir]
         if self.trace_file:
             paths_to_cleanup.append(self.trace_file)
+        if self.cprofile_trace_file:
+            paths_to_cleanup.append(self.cprofile_trace_file)
         if self.test_cfg.tests_root.exists():
             for trace_file in self.test_cfg.tests_root.glob("*.trace"):
                 if trace_file not in paths_to_cleanup:
