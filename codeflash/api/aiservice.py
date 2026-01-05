@@ -32,7 +32,11 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
-    from codeflash.models.models import AIServiceCodeRepairRequest, AIServiceRefinerRequest
+    from codeflash.models.models import (
+        AIServiceAdaptiveOptimizeRequest,
+        AIServiceCodeRepairRequest,
+        AIServiceRefinerRequest,
+    )
     from codeflash.result.explanation import Explanation
 
 
@@ -250,6 +254,38 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
+
+    def adaptive_optimize(self, request: AIServiceAdaptiveOptimizeRequest) -> OptimizedCandidate | None:
+        try:
+            payload = {
+                "trace_id": request.trace_id,
+                "original_source_code": request.original_source_code,
+                "candidates": request.candidates,
+            }
+            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=120)
+        except (requests.exceptions.RequestException, TypeError) as e:
+            logger.exception(f"Error generating adaptive optimized candidates: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return None
+
+        if response.status_code == 200:
+            fixed_optimization = response.json()
+            console.rule()
+
+            valid_candidates = self._get_valid_candidates([fixed_optimization], OptimizedCandidateSource.ADAPTIVE)
+            if not valid_candidates:
+                logger.error("Adaptive optimization failed to generate a valid candidate.")
+                return None
+
+            return valid_candidates[0]
+
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        return None
 
     def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
