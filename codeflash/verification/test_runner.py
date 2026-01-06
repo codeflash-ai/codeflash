@@ -130,12 +130,8 @@ def run_behavioral_tests(
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
 
-        # On Windows, previously used --capture=no to avoid deadlocks with subprocess.run
-        # Now using Popen.communicate() which handles buffering correctly, so we can use capture=tee-sys
-        capture_mode = "--capture=tee-sys"
-
         common_pytest_args = [
-            capture_mode,
+            "--capture=tee-sys",
             "-q",
             "--codeflash_loops_scope=session",
             "--codeflash_min_loops=1",
