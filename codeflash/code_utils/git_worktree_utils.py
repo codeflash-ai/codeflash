@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 
 import git
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 
@@ -302,6 +303,7 @@ def create_diff_patch_from_worktree(
     uni_diff_text = repository.git.diff(None, "HEAD", *files, ignore_blank_lines=True, ignore_space_at_eol=True)
 
     if not uni_diff_text:
+        logger.warning("No changes found in worktree.")
         return None
 
     if not uni_diff_text.endswith("\n"):
