@@ -55,6 +55,13 @@ Optimizations run in isolated worktrees:
 from codeflash.code_utils.git_worktree_utils import create_detached_worktree, remove_worktree
 ```
 
+## Git Commits & Pull Requests
+
+- Use conventional commit format: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
+- Keep commits atomic - one logical change per commit
+- Commit message body should be concise (1-2 sentences max)
+- PR titles should also use conventional format (e.g., `fix: resolve base class dependency tracking`)
+
 ## Code Style & Conventions
 
 - **Tooling**: Ruff for linting/formatting, mypy strict mode, pre-commit hooks

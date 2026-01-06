@@ -35,6 +35,14 @@ N_CANDIDATES_LP_LSP = 3
 REPAIR_UNMATCHED_PERCENTAGE_LIMIT = 0.4  # if the percentage of unmatched tests is greater than this, we won't fix it (lowering this value makes the repair more stricted)
 MAX_REPAIRS_PER_TRACE = 4  # maximum number of repairs we will do for each function
 
+# Adaptive optimization
+# TODO (ali): make this configurable with effort arg once the PR is merged
+ADAPTIVE_OPTIMIZATION_THRESHOLD = 2  # Max adaptive optimizations per single candidate tree (for example : optimize -> refine -> adaptive -> another adaptive).
+# MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = 4  # maximum number of adaptive optimizations we will do for each function (this can be 2 adaptive optimizations for 2 candidates for example)
+MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = (
+    0  # disable adaptive optimizations until we have this value controlled by the effort arg
+)
+
 MAX_N_CANDIDATES = 5
 MAX_N_CANDIDATES_LP = 6
 
