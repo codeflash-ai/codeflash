@@ -26,6 +26,9 @@ REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more i
 # LSP-specific
 TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in increase in performance reporting
 
+# setting this value to 1 will disable repair if there is at least one correct candidate
+MIN_CORRECT_CANDIDATES = 2
+
 try:
     from codeflash.lsp.helpers import is_LSP_enabled
 
