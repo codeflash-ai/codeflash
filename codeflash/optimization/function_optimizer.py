@@ -43,10 +43,8 @@ from codeflash.code_utils.code_utils import (
     unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
-    ADAPTIVE_OPTIMIZATION_THRESHOLD,
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
@@ -1018,7 +1016,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.args.effort),
+            n_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.args.effort),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
@@ -1097,7 +1095,9 @@ class FunctionOptimizer:
         eval_ctx: CandidateEvaluationContext,
         ai_service_client: AiServiceClient,
     ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
-        if self.adaptive_optimization_counter >= MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE:
+        if self.adaptive_optimization_counter >= get_effort_value(
+            EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE, self.args.effort
+        ):
             logger.debug(
                 f"Max adaptive optimizations reached for {self.function_to_optimize.qualified_name}: {self.adaptive_optimization_counter}"
             )
@@ -1105,7 +1105,7 @@ class FunctionOptimizer:
 
         adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
 
-        if adaptive_count >= ADAPTIVE_OPTIMIZATION_THRESHOLD:
+        if adaptive_count >= get_effort_value(EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD, self.args.effort):
             return None
 
         request_candidates = []
@@ -1492,7 +1492,7 @@ class FunctionOptimizer:
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
-        # n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.args.effort)
+        n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.args.effort)
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
             read_writable_code.markdown,
@@ -1500,6 +1500,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
+            n_candidates=n_candidates,
         )
 
         future_references = self.executor.submit(
@@ -1522,6 +1523,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
+                n_candidates=n_candidates,
             )
             futures.append(future_candidates_exp)
 

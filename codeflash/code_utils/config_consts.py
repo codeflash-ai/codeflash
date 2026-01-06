@@ -25,14 +25,6 @@ REFINED_CANDIDATE_RANKING_WEIGHTS = (2, 1)  # (runtime, diff), runtime is more i
 # LSP-specific
 TOTAL_LOOPING_TIME_LSP = 10.0  # Kept same timing for LSP mode to avoid in increase in performance reporting
 
-# Adaptive optimization
-# TODO (ali): make this configurable with effort arg once the PR is merged
-ADAPTIVE_OPTIMIZATION_THRESHOLD = 2  # Max adaptive optimizations per single candidate tree (for example : optimize -> refine -> adaptive -> another adaptive).
-# MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = 4  # maximum number of adaptive optimizations we will do for each function (this can be 2 adaptive optimizations for 2 candidates for example)
-MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = (
-    0  # disable adaptive optimizations until we have this value controlled by the effort arg
-)
-
 try:
     from codeflash.lsp.helpers import is_LSP_enabled
 
@@ -58,11 +50,13 @@ class EffortKeys(StrEnum):
     MAX_CODE_REPAIRS_PER_TRACE = auto()
     REPAIR_UNMATCHED_PERCENTAGE_LIMIT = auto()
     TOP_VALID_CANDIDATES_FOR_REFINEMENT = auto()
+    ADAPTIVE_OPTIMIZATION_THRESHOLD = auto()
+    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = auto()
 
 
 EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
-    EffortKeys.N_OPTIMIZER_CANDIDATES.value: {EffortLevel.LOW: 3, EffortLevel.MEDIUM: 4, EffortLevel.HIGH: 5},
-    EffortKeys.N_OPTIMIZER_LP_CANDIDATES.value: {EffortLevel.LOW: 3, EffortLevel.MEDIUM: 5, EffortLevel.HIGH: 6},
+    EffortKeys.N_OPTIMIZER_CANDIDATES.value: {EffortLevel.LOW: 3, EffortLevel.MEDIUM: 5, EffortLevel.HIGH: 6},
+    EffortKeys.N_OPTIMIZER_LP_CANDIDATES.value: {EffortLevel.LOW: 4, EffortLevel.MEDIUM: 6, EffortLevel.HIGH: 7},
     # we don't use effort with generated tests for now
     EffortKeys.N_GENERATED_TESTS.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 2, EffortLevel.HIGH: 2},
     # maximum number of repairs we will do for each function
@@ -76,6 +70,12 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
     },
     # Top valid candidates for refinements
     EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
+    EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD.value: {EffortLevel.LOW: 0, EffortLevel.MEDIUM: 1, EffortLevel.HIGH: 3},
+    EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE.value: {
+        EffortLevel.LOW: 0,
+        EffortLevel.MEDIUM: 3,
+        EffortLevel.HIGH: 10,
+    },
 }
 
 
