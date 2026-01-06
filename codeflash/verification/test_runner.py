@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
@@ -157,9 +158,10 @@ def run_behavioral_tests(
                     with contextlib.suppress(PermissionError, OSError):
                         coverage_database_file.unlink()
             else:
-                execute_test_subprocess(
+                cov_erase = execute_test_subprocess(
                     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
                 )
+                logger.debug(cov_erase)
 
             coverage_cmd = [
                 SAFE_SYS_EXECUTABLE,
@@ -179,6 +181,10 @@ def run_behavioral_tests(
 
             final_cmd = coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files
             results = execute_test_subprocess(final_cmd, cwd=cwd, env=pytest_test_env, timeout=600)
+            logger.debug(
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
+            )
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
 
@@ -188,6 +194,10 @@ def run_behavioral_tests(
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
+            )
+            logger.debug(
+                f"Result return code: {results.returncode}, "
+                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
             )
     else:
         msg = f"Unsupported test framework: {test_framework}"
