@@ -105,10 +105,7 @@ def run_behavioral_tests(
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
-    """Run behavioral tests with optional coverage.
-
-    On Windows, uses --capture=no to avoid subprocess output deadlocks.
-    """
+    """Run behavioral tests with optional coverage."""
     is_windows = sys.platform == "win32"
 
     if test_framework in {"pytest", "unittest"}:
@@ -194,7 +191,7 @@ def run_behavioral_tests(
                 final_cmd,
                 cwd=cwd,
                 env=pytest_test_env,
-                timeout=60,  # TODO: Make this dynamic
+                timeout=600,  # TODO: Make this dynamic
             )
     else:
         msg = f"Unsupported test framework: {test_framework}"
@@ -250,7 +247,7 @@ def run_line_profile_tests(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
             cwd=cwd,
             env=pytest_test_env,
-            timeout=60,  # TODO: Make this dynamic
+            timeout=600,  # TODO: Make this dynamic
         )
     else:
         msg = f"Unsupported test framework: {test_framework}"
