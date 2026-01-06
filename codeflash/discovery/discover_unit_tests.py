@@ -604,29 +604,11 @@ def discover_tests_pytest(
         result = subprocess.run(cmd_list, check=False, **run_kwargs)
 
     try:
-        # Check if pickle file exists before trying to read it
-        if not tmp_pickle_path.exists():
-            tests, pytest_rootdir = [], None
-            logger.error(
-                f"Test discovery pickle file not found. "
-                f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
-            )
-            exitcode = result.returncode if result.returncode != 0 else -1
-        else:
-            with tmp_pickle_path.open(mode="rb") as f:
-                exitcode, tests, pytest_rootdir = pickle.load(f)
-            # Log error if subprocess failed even though pickle file exists
-            if exitcode != 0:
-                logger.error(
-                    f"Test discovery subprocess returned non-zero exit code: {exitcode}. "
-                    f"Subprocess return code: {result.returncode}, stdout: {result.stdout[:500]}, stderr: {result.stderr[:500]}"
-                )
+        with tmp_pickle_path.open(mode="rb") as f:
+            exitcode, tests, pytest_rootdir = pickle.load(f)
     except Exception as e:
         tests, pytest_rootdir = [], None
-        logger.exception(
-            f"Failed to discover tests: {e}. "
-            f"Subprocess return code: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}"
-        )
+        logger.exception(f"Failed to discover tests: {e}")
         exitcode = -1
     finally:
         tmp_pickle_path.unlink(missing_ok=True)
