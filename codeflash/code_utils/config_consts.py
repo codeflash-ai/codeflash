@@ -1,4 +1,5 @@
-from enum import StrEnum, auto
+from enum import Enum
+from typing import Any
 
 MAX_TEST_RUN_ITERATIONS = 5
 INDIVIDUAL_TESTCASE_TIMEOUT = 15
@@ -37,24 +38,24 @@ TOTAL_LOOPING_TIME_EFFECTIVE = TOTAL_LOOPING_TIME_LSP if _IS_LSP_ENABLED else TO
 MAX_CONTEXT_LEN_REVIEW = 1000
 
 
-class EffortLevel(StrEnum):
-    LOW = auto()
-    MEDIUM = auto()
-    HIGH = auto()
+class EffortLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
-class EffortKeys(StrEnum):
-    N_OPTIMIZER_CANDIDATES = auto()
-    N_OPTIMIZER_LP_CANDIDATES = auto()
-    N_GENERATED_TESTS = auto()
-    MAX_CODE_REPAIRS_PER_TRACE = auto()
-    REPAIR_UNMATCHED_PERCENTAGE_LIMIT = auto()
-    TOP_VALID_CANDIDATES_FOR_REFINEMENT = auto()
-    ADAPTIVE_OPTIMIZATION_THRESHOLD = auto()
-    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = auto()
+class EffortKeys(str, Enum):
+    N_OPTIMIZER_CANDIDATES = "N_OPTIMIZER_CANDIDATES"
+    N_OPTIMIZER_LP_CANDIDATES = "N_OPTIMIZER_LP_CANDIDATES"
+    N_GENERATED_TESTS = "N_GENERATED_TESTS"
+    MAX_CODE_REPAIRS_PER_TRACE = "MAX_CODE_REPAIRS_PER_TRACE"
+    REPAIR_UNMATCHED_PERCENTAGE_LIMIT = "REPAIR_UNMATCHED_PERCENTAGE_LIMIT"
+    TOP_VALID_CANDIDATES_FOR_REFINEMENT = "TOP_VALID_CANDIDATES_FOR_REFINEMENT"
+    ADAPTIVE_OPTIMIZATION_THRESHOLD = "ADAPTIVE_OPTIMIZATION_THRESHOLD"
+    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE = "MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE"
 
 
-EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
+EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
     EffortKeys.N_OPTIMIZER_CANDIDATES.value: {EffortLevel.LOW: 3, EffortLevel.MEDIUM: 5, EffortLevel.HIGH: 6},
     EffortKeys.N_OPTIMIZER_LP_CANDIDATES.value: {EffortLevel.LOW: 4, EffortLevel.MEDIUM: 6, EffortLevel.HIGH: 7},
     # we don't use effort with generated tests for now
@@ -79,7 +80,7 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, any]] = {
 }
 
 
-def get_effort_value(key: EffortKeys, effort: EffortLevel) -> any:
+def get_effort_value(key: EffortKeys, effort: EffortLevel) -> Any:  # noqa: ANN401
     key_str = key.value
     if key_str in EFFORT_VALUES:
         if effort in EFFORT_VALUES[key_str]:
