@@ -48,6 +48,7 @@ from codeflash.code_utils.config_consts import (
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE,
     MAX_REPAIRS_PER_TRACE,
+    MIN_CORRECT_CANDIDATES,
     N_TESTS_TO_GENERATE_EFFECTIVE,
     REFINE_ALL_THRESHOLD,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
@@ -890,6 +891,7 @@ class FunctionOptimizer:
             baseline_results=original_code_baseline,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
+            eval_ctx=eval_ctx,
             code_context=code_context,
             candidate=candidate,
             exp_type=exp_type,
@@ -2057,6 +2059,7 @@ class FunctionOptimizer:
         self,
         candidate: OptimizedCandidate,
         diffs: list[TestDiff],
+        eval_ctx: CandidateEvaluationContext,
         code_context: CodeOptimizationContext,
         test_results_count: int,
         exp_type: str,
@@ -2064,6 +2067,12 @@ class FunctionOptimizer:
         if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
             logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
             return
+
+        successful_candidates_count = sum(1 for is_correct in eval_ctx.is_correct.values() if is_correct)
+        if successful_candidates_count >= MIN_CORRECT_CANDIDATES:
+            logger.debug(f"{successful_candidates_count} of the candidates were correct, no need to repair")
+            return
+
         if candidate.source not in (OptimizedCandidateSource.OPTIMIZE, OptimizedCandidateSource.OPTIMIZE_LP):
             # only repair the first pass of the candidates for now
             logger.debug(f"Candidate is a result of {candidate.source.value}, skipping repair")
@@ -2101,6 +2110,7 @@ class FunctionOptimizer:
         baseline_results: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        eval_ctx: CandidateEvaluationContext,
         code_context: CodeOptimizationContext,
         candidate: OptimizedCandidate,
         exp_type: str,
@@ -2156,7 +2166,9 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                self.repair_if_possible(candidate, diffs, code_context, len(candidate_behavior_results), exp_type)
+                self.repair_if_possible(
+                    candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
+                )
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
