@@ -446,31 +446,45 @@ def get_function_sources_from_jedi(
                     definition_path = definition.module_path
 
                     # The definition is part of this project and not defined within the original function
-                    if (
+                    is_valid_definition = (
                         str(definition_path).startswith(str(project_root_path) + os.sep)
                         and not path_belongs_to_site_packages(definition_path)
                         and definition.full_name
-                        and definition.type == "function"
                         and not belongs_to_function_qualified(definition, qualified_function_name)
                         and definition.full_name.startswith(definition.module_name)
+                    )
+                    if is_valid_definition and definition.type == "function":
+                        qualified_name = get_qualified_name(definition.module_name, definition.full_name)
                         # Avoid nested functions or classes. Only class.function is allowed
-                        and len(
-                            (qualified_name := get_qualified_name(definition.module_name, definition.full_name)).split(
-                                "."
+                        if len(qualified_name.split(".")) <= 2:
+                            function_source = FunctionSource(
+                                file_path=definition_path,
+                                qualified_name=qualified_name,
+                                fully_qualified_name=definition.full_name,
+                                only_function_name=definition.name,
+                                source_code=definition.get_line_code(),
+                                jedi_definition=definition,
                             )
+                            file_path_to_function_source[definition_path].add(function_source)
+                            function_source_list.append(function_source)
+                    # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
+                    # This ensures the class definition with constructor is included in testgen context
+                    elif is_valid_definition and definition.type == "class":
+                        init_qualified_name = get_qualified_name(
+                            definition.module_name, f"{definition.full_name}.__init__"
                         )
-                        <= 2
-                    ):
-                        function_source = FunctionSource(
-                            file_path=definition_path,
-                            qualified_name=qualified_name,
-                            fully_qualified_name=definition.full_name,
-                            only_function_name=definition.name,
-                            source_code=definition.get_line_code(),
-                            jedi_definition=definition,
-                        )
-                        file_path_to_function_source[definition_path].add(function_source)
-                        function_source_list.append(function_source)
+                        # Only include if it's a top-level class (not nested)
+                        if len(init_qualified_name.split(".")) <= 2:
+                            function_source = FunctionSource(
+                                file_path=definition_path,
+                                qualified_name=init_qualified_name,
+                                fully_qualified_name=f"{definition.full_name}.__init__",
+                                only_function_name="__init__",
+                                source_code=definition.get_line_code(),
+                                jedi_definition=definition,
+                            )
+                            file_path_to_function_source[definition_path].add(function_source)
+                            function_source_list.append(function_source)
 
     return file_path_to_function_source, function_source_list
 
@@ -647,7 +661,10 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
 
     if isinstance(node, cst.FunctionDef):
         qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        if qualified_name in target_functions:
+        # For hashing, exclude __init__ methods even if in target_functions
+        # because they don't affect the semantic behavior being hashed
+        # But include other dunder methods like __call__ which do affect behavior
+        if qualified_name in target_functions and node.name.value != "__init__":
             new_body = remove_docstring_from_body(node.body) if isinstance(node.body, cst.IndentedBlock) else node.body
             return node.with_changes(body=new_body), True
         return None, False
@@ -666,7 +683,9 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
         for stmt in node.body.body:
             if isinstance(stmt, cst.FunctionDef):
                 qualified_name = f"{class_prefix}.{stmt.name.value}"
-                if qualified_name in target_functions:
+                # For hashing, exclude __init__ methods even if in target_functions
+                # but include other methods like __call__ which affect behavior
+                if qualified_name in target_functions and stmt.name.value != "__init__":
                     stmt_with_changes = stmt.with_changes(
                         body=remove_docstring_from_body(cast("cst.IndentedBlock", stmt.body))
                     )
