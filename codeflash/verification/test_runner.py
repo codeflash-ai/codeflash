@@ -285,6 +285,7 @@ def run_benchmarking_tests(
             f"--codeflash_min_loops={pytest_min_loops}",
             f"--codeflash_max_loops={pytest_max_loops}",
             f"--codeflash_seconds={pytest_target_runtime_seconds}",
+            "--codeflash_stability_check=true",
         ]
         if pytest_timeout is not None:
             pytest_args.append(f"--timeout={pytest_timeout}")
