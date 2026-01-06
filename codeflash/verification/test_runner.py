@@ -39,21 +39,16 @@ def execute_test_subprocess(
             # WINDOWS SUBPROCESS FIX:
             # On Windows, running pytest with coverage can hang indefinitely due to multiple issues:
             #
-            # Problem 1: Pipe buffer deadlocks
-            #   - subprocess.run() with file handles can deadlock when the child process
-            #     produces output faster than the parent can read it
-            #   - Solution: Use Popen.communicate() which properly drains both stdout/stderr
-            #     concurrently using threads internally
-            #
-            # Problem 2: Child process waiting for stdin
+            # Problem 1: Child process waiting for stdin
             #   - Some Windows processes (especially pytest) may wait for console input
             #   - Solution: Use stdin=subprocess.DEVNULL to explicitly close stdin
             #
-            # Problem 3: Orphaned child processes after timeout
+            # Problem 2: Orphaned child processes after timeout
             #   - When killing a process on Windows, child processes may not be terminated
             #   - Solution: Use CREATE_NEW_PROCESS_GROUP to allow proper process tree termination
             #
-            # See: https://docs.python.org/3/library/subprocess.html#subprocess.Popen.communicate
+            # We use Popen directly (instead of subprocess.run) to have explicit control over
+            # process group creation and timeout handling, though both use communicate() internally.
 
             # CREATE_NEW_PROCESS_GROUP: Creates process in new group for proper termination
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
