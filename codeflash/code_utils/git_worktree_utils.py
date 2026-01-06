@@ -62,6 +62,7 @@ def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> 
 
 def create_detached_worktree(module_root: Path) -> Optional[Path]:
     if not check_running_in_git_repo(module_root):
+        logger.warning("Module is not in a git repository. Skipping worktree creation.")
         return None
     git_root = git_root_dir()
     current_time_str = time.strftime("%Y%m%d-%H%M%S")
@@ -79,6 +80,7 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
     )
 
     if not uni_diff_text.strip():
+        logger.info("!lsp|No uncommitted changes to copy to worktree.")
         return worktree_dir
 
     # Write the diff to a temporary file
