@@ -601,23 +601,7 @@ def discover_tests_pytest(
 
     cmd_list = [SAFE_SYS_EXECUTABLE, discovery_script, str(project_root), str(tests_root), str(tmp_pickle_path)]
     with custom_addopts():
-        try:
-            result = subprocess.run(cmd_list, check=False, **run_kwargs)
-        except subprocess.TimeoutExpired:
-            logger.error(
-                f"Test discovery subprocess timed out after {run_kwargs.get('timeout', 600)} seconds. "
-                f"Command: {discovery_script}"
-            )
-            # Preserve command args for better error context
-            result = subprocess.CompletedProcess(args=cmd_list, returncode=-1, stdout="", stderr="Timeout")
-        except (OSError, subprocess.SubprocessError, ValueError) as e:
-            logger.error(
-                f"Test discovery subprocess failed with error: {e}. "
-                f"Command: {discovery_script}, "
-                f"Project root: {project_root}, Tests root: {tests_root}"
-            )
-            # Preserve command args for better error context
-            result = subprocess.CompletedProcess(args=cmd_list, returncode=-1, stdout="", stderr=str(e))
+        result = subprocess.run(cmd_list, check=False, **run_kwargs)
 
     try:
         # Check if pickle file exists before trying to read it
