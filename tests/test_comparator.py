@@ -360,6 +360,81 @@ def test_numpy():
     assert not comparator(a_void, c_void)
 
 
+def test_numpy_random_generator():
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip()
+
+    # Test numpy.random.Generator (modern API)
+    # Same seed should produce equal generators
+    rng1 = np.random.default_rng(seed=42)
+    rng2 = np.random.default_rng(seed=42)
+    assert comparator(rng1, rng2)
+
+    # Different seeds should produce non-equal generators
+    rng3 = np.random.default_rng(seed=123)
+    assert not comparator(rng1, rng3)
+
+    # After generating numbers, state changes
+    rng4 = np.random.default_rng(seed=42)
+    rng5 = np.random.default_rng(seed=42)
+    rng4.random()  # Advance state
+    assert not comparator(rng4, rng5)
+
+    # Both advanced by same amount should be equal
+    rng5.random()
+    assert comparator(rng4, rng5)
+
+    # Test with different bit generators
+    from numpy.random import PCG64, MT19937
+    rng_pcg1 = np.random.Generator(PCG64(seed=42))
+    rng_pcg2 = np.random.Generator(PCG64(seed=42))
+    assert comparator(rng_pcg1, rng_pcg2)
+
+    rng_mt1 = np.random.Generator(MT19937(seed=42))
+    rng_mt2 = np.random.Generator(MT19937(seed=42))
+    assert comparator(rng_mt1, rng_mt2)
+
+    # Different bit generator types should not be equal
+    assert not comparator(rng_pcg1, rng_mt1)
+
+
+def test_numpy_random_state():
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip()
+
+    # Test numpy.random.RandomState (legacy API)
+    # Same seed should produce equal states
+    rs1 = np.random.RandomState(seed=42)
+    rs2 = np.random.RandomState(seed=42)
+    assert comparator(rs1, rs2)
+
+    # Different seeds should produce non-equal states
+    rs3 = np.random.RandomState(seed=123)
+    assert not comparator(rs1, rs3)
+
+    # After generating numbers, state changes
+    rs4 = np.random.RandomState(seed=42)
+    rs5 = np.random.RandomState(seed=42)
+    rs4.random()  # Advance state
+    assert not comparator(rs4, rs5)
+
+    # Both advanced by same amount should be equal
+    rs5.random()
+    assert comparator(rs4, rs5)
+
+    # Test state restoration
+    rs6 = np.random.RandomState(seed=42)
+    state = rs6.get_state()
+    rs6.random()  # Advance state
+    rs7 = np.random.RandomState(seed=42)
+    rs7.set_state(state)
+    # rs6 advanced, rs7 restored to original state
+    assert not comparator(rs6, rs7)
+
 
 def test_scipy():
     try:
@@ -2423,3 +2498,63 @@ def test_numpy_0d_array() -> None:
     y = np.array([5])
     # Different shapes
     assert not comparator(x, y)
+
+def test_numpy_dtypes() -> None:
+    """Test comparator for numpy.dtypes types like Float64DType, Int64DType, etc."""
+    try:
+        import numpy as np
+        import numpy.dtypes as dtypes
+    except ImportError:
+        pytest.skip("numpy not available")
+
+    # Test Float64DType
+    a = dtypes.Float64DType()
+    b = dtypes.Float64DType()
+    assert comparator(a, b)
+
+    # Test Int64DType
+    c = dtypes.Int64DType()
+    d = dtypes.Int64DType()
+    assert comparator(c, d)
+
+    # Test different DType classes should not be equal
+    assert not comparator(a, c)  # Float64DType vs Int64DType
+
+    # Test various numeric DType classes
+    assert comparator(dtypes.Int8DType(), dtypes.Int8DType())
+    assert comparator(dtypes.Int16DType(), dtypes.Int16DType())
+    assert comparator(dtypes.Int32DType(), dtypes.Int32DType())
+    assert comparator(dtypes.UInt8DType(), dtypes.UInt8DType())
+    assert comparator(dtypes.UInt16DType(), dtypes.UInt16DType())
+    assert comparator(dtypes.UInt32DType(), dtypes.UInt32DType())
+    assert comparator(dtypes.UInt64DType(), dtypes.UInt64DType())
+    assert comparator(dtypes.Float32DType(), dtypes.Float32DType())
+    assert comparator(dtypes.Complex64DType(), dtypes.Complex64DType())
+    assert comparator(dtypes.Complex128DType(), dtypes.Complex128DType())
+    assert comparator(dtypes.BoolDType(), dtypes.BoolDType())
+
+    # Test cross-type comparisons should be False
+    assert not comparator(dtypes.Int32DType(), dtypes.Int64DType())
+    assert not comparator(dtypes.Float32DType(), dtypes.Float64DType())
+    assert not comparator(dtypes.UInt32DType(), dtypes.Int32DType())
+
+    # Test regular np.dtype instances
+    e = np.dtype('float64')
+    f = np.dtype('float64')
+    assert comparator(e, f)
+
+    g = np.dtype('int64')
+    h = np.dtype('int64')
+    assert comparator(g, h)
+
+    assert not comparator(e, g)  # float64 vs int64
+
+    # Test DType class instances vs regular np.dtype (they should be equal if same underlying type)
+    assert comparator(dtypes.Float64DType(), np.dtype('float64'))
+    assert comparator(dtypes.Int64DType(), np.dtype('int64'))
+    assert comparator(dtypes.Int32DType(), np.dtype('int32'))
+    assert comparator(dtypes.BoolDType(), np.dtype('bool'))
+
+    # Test that DType and np.dtype of different types are not equal
+    assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
+    assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
