@@ -517,10 +517,7 @@ def get_function_sources_from_jedi(
     return file_path_to_function_source, function_source_list
 
 
-def get_imported_class_definitions(
-    code_context: CodeStringsMarkdown,
-    project_root_path: Path,
-) -> CodeStringsMarkdown:
+def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
     """Extract class definitions for imported types from project modules.
 
     This function analyzes the imports in the extracted code context and fetches
@@ -534,6 +531,7 @@ def get_imported_class_definitions(
 
     Returns:
         CodeStringsMarkdown containing class definitions from imported project modules
+
     """
     import jedi
 
@@ -611,17 +609,9 @@ def get_imported_class_definitions(
                     # Also extract any necessary imports for the class (base classes, type hints)
                     class_imports = _extract_imports_for_class(module_tree, node, module_source)
 
-                    if class_imports:
-                        full_source = class_imports + "\n\n" + class_source
-                    else:
-                        full_source = class_source
+                    full_source = class_imports + "\n\n" + class_source if class_imports else class_source
 
-                    class_code_strings.append(
-                        CodeString(
-                            code=full_source,
-                            file_path=module_path,
-                        )
-                    )
+                    class_code_strings.append(CodeString(code=full_source, file_path=module_path))
                     extracted_classes.add((module_path, name))
                     break
 
@@ -643,10 +633,9 @@ def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef
     for base in class_node.bases:
         if isinstance(base, ast.Name):
             needed_names.add(base.id)
-        elif isinstance(base, ast.Attribute):
+        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
             # For things like abc.ABC, we need the module name
-            if isinstance(base.value, ast.Name):
-                needed_names.add(base.value.id)
+            needed_names.add(base.value.id)
 
     # Find imports that provide these names
     import_lines: list[str] = []
