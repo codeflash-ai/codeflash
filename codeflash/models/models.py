@@ -81,7 +81,7 @@ class TestDiff:
 
     original_value: str | None = None
     candidate_value: str | None = None
-    test_src_code: str = ""
+    test_src_code: Optional[str] = None
     candidate_pytest_error: Optional[str] = None
     original_pytest_error: Optional[str] = None
 
@@ -652,14 +652,14 @@ class InvocationId:
                 return stmt
         return None
 
-    def get_src_code(self, test_path: Path) -> str:
+    def get_src_code(self, test_path: Path) -> Optional[str]:
         if not test_path.exists():
-            return ""
+            return None
         try:
             test_src = test_path.read_text(encoding="utf-8")
             module_node = cst.parse_module(test_src)
         except Exception:
-            return ""
+            return None
 
         if self.test_class_name:
             for stmt in module_node.body:
@@ -667,14 +667,13 @@ class InvocationId:
                     func_node = self.find_func_in_class(stmt, self.test_function_name)
                     if func_node:
                         return module_node.code_for_node(func_node).strip()
-            # class not found
-            return ""
+            return None
 
         # Otherwise, look for a top level function
         for stmt in module_node.body:
             if isinstance(stmt, cst.FunctionDef) and stmt.name.value == self.test_function_name:
                 return module_node.code_for_node(stmt).strip()
-        return ""
+        return None
 
     @staticmethod
     def from_str_id(string_id: str, iteration_id: str | None = None) -> InvocationId:
