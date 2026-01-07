@@ -45,6 +45,8 @@ class AiServiceClient:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
         self.llm_call_counter = count(1)
+        self.is_local = self.base_url == "http://localhost:8000"
+        self.timeout: float | None = None if self.is_local else 90
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
@@ -166,7 +168,7 @@ class AiServiceClient:
         logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
 
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -232,7 +234,7 @@ class AiServiceClient:
         }
 
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -260,7 +262,7 @@ class AiServiceClient:
                 "original_source_code": request.original_source_code,
                 "candidates": request.candidates,
             }
-            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating adaptive optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -316,7 +318,7 @@ class AiServiceClient:
             for opt in request
         ]
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -356,7 +358,7 @@ class AiServiceClient:
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
             }
-            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating optimization repair: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -451,7 +453,7 @@ class AiServiceClient:
         logger.info("loading|Generating explanation")
         console.rule()
         try:
-            response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/explain", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating explanations: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -503,7 +505,7 @@ class AiServiceClient:
         logger.info("loading|Generating ranking")
         console.rule()
         try:
-            response = self.make_ai_service_request("/rank", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/rank", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating ranking: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -559,7 +561,7 @@ class AiServiceClient:
             "optimizations_post": optimizations_post,
         }
         try:
-            self.make_ai_service_request("/log_features", payload=payload, timeout=5)
+            self.make_ai_service_request("/log_features", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error logging features: {e}")
 
@@ -612,7 +614,7 @@ class AiServiceClient:
             "call_sequence": self.get_next_sequence(),
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
@@ -700,7 +702,7 @@ class AiServiceClient:
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -742,7 +744,7 @@ class AiServiceClient:
         )
 
         try:
-            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             # AI service unavailable - this is expected, will fall back to static workflow
             logger.debug(
