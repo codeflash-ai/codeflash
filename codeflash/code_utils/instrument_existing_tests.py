@@ -665,13 +665,43 @@ def inject_async_profiling_into_existing_test(
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
+def detect_frameworks_from_code(code: str) -> set[str]:
+    """Detect GPU/device frameworks (torch, tensorflow, jax) used in the code by analyzing imports."""
+    frameworks: set[str] = set()
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return frameworks
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name.split(".")[0]
+                if module_name == "torch":
+                    frameworks.add("torch")
+                elif module_name == "tensorflow":
+                    frameworks.add("tensorflow")
+                elif module_name == "jax":
+                    frameworks.add("jax")
+        elif isinstance(node, ast.ImportFrom):  # noqa: SIM102
+            if node.module:
+                module_name = node.module.split(".")[0]
+                if module_name == "torch":
+                    frameworks.add("torch")
+                elif module_name == "tensorflow":
+                    frameworks.add("tensorflow")
+                elif module_name == "jax":
+                    frameworks.add("jax")
+
+    return frameworks
+
+
 def inject_profiling_into_existing_test(
     test_path: Path,
     call_positions: list[CodePosition],
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
-    used_frameworks: set[str] | None = None,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
@@ -680,6 +710,8 @@ def inject_profiling_into_existing_test(
 
     with test_path.open(encoding="utf8") as f:
         test_code = f.read()
+
+    used_frameworks = detect_frameworks_from_code(test_code)
     try:
         tree = ast.parse(test_code)
     except SyntaxError:
