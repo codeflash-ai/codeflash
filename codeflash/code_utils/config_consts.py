@@ -65,22 +65,24 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
     EffortKeys.N_OPTIMIZER_LP_CANDIDATES.value: {EffortLevel.LOW: 4, EffortLevel.MEDIUM: 6, EffortLevel.HIGH: 7},
     # we don't use effort with generated tests for now
     EffortKeys.N_GENERATED_TESTS.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 2, EffortLevel.HIGH: 2},
-    # maximum number of repairs we will do for each function
-    EffortKeys.MAX_CODE_REPAIRS_PER_TRACE.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 4, EffortLevel.HIGH: 5},
+    # maximum number of repairs we will do for each function (in case the valid candidates is less than MIN_CORRECT_CANDIDATES)
+    EffortKeys.MAX_CODE_REPAIRS_PER_TRACE.value: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 5},
     # if the percentage of unmatched tests is greater than this, we won't fix it (lowering this value makes the repair more stricted)
     # on the low effort we lower the limit to 20% to be more strict (less repairs, less time)
     EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT.value: {
         EffortLevel.LOW: 0.2,
-        EffortLevel.MEDIUM: 0.4,
-        EffortLevel.HIGH: 0.5,
+        EffortLevel.MEDIUM: 0.3,
+        EffortLevel.HIGH: 0.4,
     },
     # Top valid candidates for refinements
     EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
-    EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD.value: {EffortLevel.LOW: 0, EffortLevel.MEDIUM: 1, EffortLevel.HIGH: 3},
+    # max number of adaptive optimization calls to make per a single candidates tree
+    EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD.value: {EffortLevel.LOW: 0, EffortLevel.MEDIUM: 1, EffortLevel.HIGH: 2},
+    # max number of adaptive optimization calls to make per a single trace
     EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE.value: {
         EffortLevel.LOW: 0,
-        EffortLevel.MEDIUM: 3,
-        EffortLevel.HIGH: 10,
+        EffortLevel.MEDIUM: 2,
+        EffortLevel.HIGH: 4,
     },
 }
 
