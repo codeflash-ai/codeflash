@@ -97,7 +97,7 @@ def run_behavioral_tests(
             else:
                 cov_erase = execute_test_subprocess(
                     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
-                )
+                )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
                 logger.debug(cov_erase)
 
             coverage_cmd = [
