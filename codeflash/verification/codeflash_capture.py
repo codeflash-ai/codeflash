@@ -9,7 +9,6 @@ import sqlite3
 import time
 import warnings
 from enum import Enum
-from pathlib import Path
 from typing import Callable
 
 import dill as pickle
@@ -34,6 +33,11 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
     line_id = ""
 
     # Get current frame and skip our own function's frame
+
+    # Precompute resolved tests_root as string for fast comparison
+    tests_root_resolved = os.path.normcase(os.path.abspath(tests_root))
+
+    # Get current frame and skip our own function's frame
     frame = inspect.currentframe()
     if frame is not None:
         frame = frame.f_back
@@ -47,9 +51,10 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
         # Check if function name indicates a test (e.g., starts with "test_")
         if function_name.startswith("test_"):
             test_name = function_name
-            test_module = inspect.getmodule(frame)
-            if hasattr(test_module, "__name__"):
-                test_module_name = test_module.__name__
+            # Faster direct lookup for module name from f_globals
+            test_module = frame.f_globals.get("__name__", None)
+            if isinstance(test_module, str):
+                test_module_name = test_module
             line_id = str(lineno)
 
             # Check if it's a method in a class
@@ -62,23 +67,28 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
             break
 
         # Check for instantiation on the module level
-        if (
-            "__name__" in frame.f_globals
-            and frame.f_globals["__name__"].split(".")[-1].startswith("test_")
-            and Path(filename).resolve().is_relative_to(Path(tests_root))
-            and function_name == "<module>"
-        ):
-            test_module_name = frame.f_globals["__name__"]
-            line_id = str(lineno)
 
-            #     # Check if it's a method in a class
-            if (
-                "self" in frame.f_locals
-                and hasattr(frame.f_locals["self"], "__class__")
-                and hasattr(frame.f_locals["self"].__class__, "__name__")
-            ):
-                test_class_name = frame.f_locals["self"].__class__.__name__
-            break
+        # Check for instantiation on the module level
+        fg = frame.f_globals
+        fn = fg.get("__name__") if "__name__" in fg else None
+        if fn is not None and fn.split(".")[-1].startswith("test_") and function_name == "<module>":
+            # Do a much faster relative path check using string ops
+            file_abs = os.path.normcase(os.path.abspath(filename))
+            try:
+                is_rel = os.path.commonpath([file_abs, tests_root_resolved]) == tests_root_resolved
+            except ValueError:  # If paths are on different drives, .commonpath raises ValueError
+                is_rel = False
+            if is_rel:
+                test_module_name = fg["__name__"]
+                line_id = str(lineno)
+
+                if (
+                    "self" in frame.f_locals
+                    and hasattr(frame.f_locals["self"], "__class__")
+                    and hasattr(frame.f_locals["self"].__class__, "__name__")
+                ):
+                    test_class_name = frame.f_locals["self"].__class__.__name__
+                break
 
         # Go to the previous frame
         frame = frame.f_back
