@@ -665,9 +665,15 @@ def inject_async_profiling_into_existing_test(
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
-def detect_frameworks_from_code(code: str) -> set[str]:
-    """Detect GPU/device frameworks (torch, tensorflow, jax) used in the code by analyzing imports."""
-    frameworks: set[str] = set()
+def detect_frameworks_from_code(code: str) -> dict[str, str]:
+    """Detect GPU/device frameworks (torch, tensorflow, jax) used in the code by analyzing imports.
+
+    Returns:
+        A dictionary mapping framework names to their import aliases.
+        For example: {"torch": "th", "tensorflow": "tf", "jax": "jax"}
+
+    """
+    frameworks: dict[str, str] = {}
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -678,20 +684,21 @@ def detect_frameworks_from_code(code: str) -> set[str]:
             for alias in node.names:
                 module_name = alias.name.split(".")[0]
                 if module_name == "torch":
-                    frameworks.add("torch")
+                    # Use asname if available, otherwise use the module name
+                    frameworks["torch"] = alias.asname if alias.asname else module_name
                 elif module_name == "tensorflow":
-                    frameworks.add("tensorflow")
+                    frameworks["tensorflow"] = alias.asname if alias.asname else module_name
                 elif module_name == "jax":
-                    frameworks.add("jax")
+                    frameworks["jax"] = alias.asname if alias.asname else module_name
         elif isinstance(node, ast.ImportFrom):  # noqa: SIM102
             if node.module:
                 module_name = node.module.split(".")[0]
-                if module_name == "torch":
-                    frameworks.add("torch")
-                elif module_name == "tensorflow":
-                    frameworks.add("tensorflow")
-                elif module_name == "jax":
-                    frameworks.add("jax")
+                if module_name == "torch" and "torch" not in frameworks:
+                    frameworks["torch"] = module_name
+                elif module_name == "tensorflow" and "tensorflow" not in frameworks:
+                    frameworks["tensorflow"] = module_name
+                elif module_name == "jax" and "jax" not in frameworks:
+                    frameworks["jax"] = module_name
 
     return frameworks
 
@@ -737,25 +744,21 @@ def inject_profiling_into_existing_test(
                 ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
             ]
         )
-    # Add conditional imports for device synchronization frameworks
-    if used_frameworks:
-        if "torch" in used_frameworks:
-            new_imports.append(ast.Import(names=[ast.alias(name="torch", asname="codeflash_torch")]))
-        if "tensorflow" in used_frameworks:
-            new_imports.append(ast.Import(names=[ast.alias(name="tensorflow", asname="codeflash_tf")]))
-        if "jax" in used_frameworks:
-            new_imports.append(ast.Import(names=[ast.alias(name="jax", asname="codeflash_jax")]))
     additional_functions = [create_wrapper_function(mode, used_frameworks)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
 
 
-def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_value: bool = False) -> list[ast.stmt]:  # noqa: FBT001, FBT002
+def _create_device_sync_statements(
+    used_frameworks: dict[str, str] | None,
+    for_return_value: bool = False,  # noqa: FBT001, FBT002
+) -> list[ast.stmt]:
     """Create AST statements for device synchronization based on used frameworks.
 
     Args:
-        used_frameworks: Set of framework names ('torch', 'tensorflow', 'jax')
+        used_frameworks: Dict mapping framework names to their import aliases
+                        (e.g., {'torch': 'th', 'tensorflow': 'tf', 'jax': 'jax'})
         for_return_value: If True, creates sync for after function call (includes JAX block_until_ready)
 
     Returns:
@@ -769,6 +772,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
 
     # PyTorch synchronization
     if "torch" in used_frameworks:
+        torch_alias = used_frameworks["torch"]
         # if torch.cuda.is_available() and torch.cuda.is_initialized():
         #     torch.cuda.synchronize()
         # elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
@@ -781,7 +785,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                     ast.Call(
                         func=ast.Attribute(
                             value=ast.Attribute(
-                                value=ast.Name(id="codeflash_torch", ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
                             ),
                             attr="is_available",
                             ctx=ast.Load(),
@@ -792,7 +796,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                     ast.Call(
                         func=ast.Attribute(
                             value=ast.Attribute(
-                                value=ast.Name(id="codeflash_torch", ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
                             ),
                             attr="is_initialized",
                             ctx=ast.Load(),
@@ -807,7 +811,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                     value=ast.Call(
                         func=ast.Attribute(
                             value=ast.Attribute(
-                                value=ast.Name(id="codeflash_torch", ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
                             ),
                             attr="synchronize",
                             ctx=ast.Load(),
@@ -826,9 +830,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                                 func=ast.Name(id="hasattr", ctx=ast.Load()),
                                 args=[
                                     ast.Attribute(
-                                        value=ast.Name(id="codeflash_torch", ctx=ast.Load()),
-                                        attr="backends",
-                                        ctx=ast.Load(),
+                                        value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="backends", ctx=ast.Load()
                                     ),
                                     ast.Constant(value="mps"),
                                 ],
@@ -838,7 +840,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                                 func=ast.Attribute(
                                     value=ast.Attribute(
                                         value=ast.Attribute(
-                                            value=ast.Name(id="codeflash_torch", ctx=ast.Load()),
+                                            value=ast.Name(id=torch_alias, ctx=ast.Load()),
                                             attr="backends",
                                             ctx=ast.Load(),
                                         ),
@@ -859,7 +861,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                                 func=ast.Name(id="hasattr", ctx=ast.Load()),
                                 args=[
                                     ast.Attribute(
-                                        value=ast.Name(id="codeflash_torch", ctx=ast.Load()), attr="mps", ctx=ast.Load()
+                                        value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="mps", ctx=ast.Load()
                                     ),
                                     ast.Constant(value="synchronize"),
                                 ],
@@ -870,7 +872,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                                     value=ast.Call(
                                         func=ast.Attribute(
                                             value=ast.Attribute(
-                                                value=ast.Name(id="codeflash_torch", ctx=ast.Load()),
+                                                value=ast.Name(id=torch_alias, ctx=ast.Load()),
                                                 attr="mps",
                                                 ctx=ast.Load(),
                                             ),
@@ -893,6 +895,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
 
     # JAX synchronization (only after function call, using block_until_ready on return value)
     if "jax" in used_frameworks and for_return_value:
+        jax_alias = used_frameworks["jax"]
         # return_value = jax.block_until_ready(return_value) if hasattr(return_value, 'block_until_ready') else return_value
         # Or more robustly: call block_until_ready on any jax arrays
         jax_sync = ast.If(
@@ -917,14 +920,14 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                 ast.If(
                     test=ast.Call(
                         func=ast.Name(id="hasattr", ctx=ast.Load()),
-                        args=[ast.Name(id="codeflash_jax", ctx=ast.Load()), ast.Constant(value="block_until_ready")],
+                        args=[ast.Name(id=jax_alias, ctx=ast.Load()), ast.Constant(value="block_until_ready")],
                         keywords=[],
                     ),
                     body=[
                         ast.Expr(
                             value=ast.Call(
                                 func=ast.Attribute(
-                                    value=ast.Name(id="codeflash_jax", ctx=ast.Load()),
+                                    value=ast.Name(id=jax_alias, ctx=ast.Load()),
                                     attr="block_until_ready",
                                     ctx=ast.Load(),
                                 ),
@@ -941,6 +944,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
 
     # TensorFlow synchronization using tf.test.experimental.sync_devices()
     if "tensorflow" in used_frameworks:
+        tf_alias = used_frameworks["tensorflow"]
         # tf.test.experimental.sync_devices() synchronizes all devices (CPU, GPU, TPU)
         # This ensures all pending operations are complete before/after timing
         tf_sync = ast.If(
@@ -952,7 +956,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                         args=[
                             ast.Attribute(
                                 value=ast.Attribute(
-                                    value=ast.Name(id="codeflash_tf", ctx=ast.Load()), attr="test", ctx=ast.Load()
+                                    value=ast.Name(id=tf_alias, ctx=ast.Load()), attr="test", ctx=ast.Load()
                                 ),
                                 attr="experimental",
                                 ctx=ast.Load(),
@@ -969,7 +973,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
                         func=ast.Attribute(
                             value=ast.Attribute(
                                 value=ast.Attribute(
-                                    value=ast.Name(id="codeflash_tf", ctx=ast.Load()), attr="test", ctx=ast.Load()
+                                    value=ast.Name(id=tf_alias, ctx=ast.Load()), attr="test", ctx=ast.Load()
                                 ),
                                 attr="experimental",
                                 ctx=ast.Load(),
@@ -990,7 +994,7 @@ def _create_device_sync_statements(used_frameworks: set[str] | None, for_return_
 
 
 def create_wrapper_function(
-    mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: set[str] | None = None
+    mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: dict[str, str] | None = None
 ) -> ast.FunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
