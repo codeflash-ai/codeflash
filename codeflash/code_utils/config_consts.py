@@ -77,11 +77,11 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
     # Top valid candidates for refinements
     EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT: {EffortLevel.LOW: 2, EffortLevel.MEDIUM: 3, EffortLevel.HIGH: 4},
     # max number of adaptive optimization calls to make per a single candidates tree
-    EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD.value: {EffortLevel.LOW: 0, EffortLevel.MEDIUM: 1, EffortLevel.HIGH: 2},
+    EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD.value: {EffortLevel.LOW: 0, EffortLevel.MEDIUM: 0, EffortLevel.HIGH: 2},
     # max number of adaptive optimization calls to make per a single trace
     EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE.value: {
         EffortLevel.LOW: 0,
-        EffortLevel.MEDIUM: 2,
+        EffortLevel.MEDIUM: 0,
         EffortLevel.HIGH: 4,
     },
 }
