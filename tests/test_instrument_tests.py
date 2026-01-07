@@ -10,6 +10,8 @@ import pytest
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
+    _create_device_sync_statements,
+    create_wrapper_function,
     inject_profiling_into_existing_test,
 )
 from codeflash.code_utils.line_profile_utils import add_decorator_imports
@@ -3310,3 +3312,403 @@ import unittest
 
     finally:
         test_path.unlink(missing_ok=True)
+
+
+# ============================================================================
+# Device Synchronization Tests
+# ============================================================================
+
+
+class TestDeviceSyncStatements:
+    """Tests for _create_device_sync_statements function."""
+
+    def test_no_frameworks_returns_empty_list(self):
+        """When no frameworks are specified, should return empty list."""
+        result = _create_device_sync_statements(None)
+        assert result == []
+
+        result = _create_device_sync_statements(set())
+        assert result == []
+
+    def test_torch_sync_generates_cuda_and_mps_checks(self):
+        """Torch framework should generate CUDA and MPS synchronization checks."""
+        result = _create_device_sync_statements({"torch"}, for_return_value=False)
+        assert len(result) == 1
+
+        # Unparse the AST to check the generated code
+        code = ast.unparse(result[0])
+        assert "codeflash_torch.cuda.is_available()" in code
+        assert "codeflash_torch.cuda.is_initialized()" in code
+        assert "codeflash_torch.cuda.synchronize()" in code
+        assert "codeflash_torch.backends" in code
+        assert "mps" in code
+        assert "codeflash_torch.mps.synchronize()" in code
+
+    def test_torch_sync_same_for_pre_and_post(self):
+        """Torch sync should be the same before and after function call."""
+        pre_sync = _create_device_sync_statements({"torch"}, for_return_value=False)
+        post_sync = _create_device_sync_statements({"torch"}, for_return_value=True)
+
+        # Both should have torch sync
+        assert len(pre_sync) == 1
+        assert len(post_sync) == 1
+
+        pre_code = ast.unparse(pre_sync[0])
+        post_code = ast.unparse(post_sync[0])
+        assert "codeflash_torch.cuda.synchronize()" in pre_code
+        assert "codeflash_torch.cuda.synchronize()" in post_code
+
+    def test_jax_sync_only_for_return_value(self):
+        """JAX sync should only be generated for post-function call (for_return_value=True)."""
+        pre_sync = _create_device_sync_statements({"jax"}, for_return_value=False)
+        post_sync = _create_device_sync_statements({"jax"}, for_return_value=True)
+
+        # Pre-sync should be empty for JAX (no pre-sync needed)
+        assert len(pre_sync) == 0
+
+        # Post-sync should have JAX block_until_ready
+        assert len(post_sync) == 1
+        code = ast.unparse(post_sync[0])
+        assert "block_until_ready" in code
+        assert "return_value" in code
+
+    def test_jax_sync_checks_hasattr(self):
+        """JAX sync should check if return_value has block_until_ready method."""
+        post_sync = _create_device_sync_statements({"jax"}, for_return_value=True)
+        code = ast.unparse(post_sync[0])
+
+        assert "hasattr(return_value, 'block_until_ready')" in code
+        assert "return_value.block_until_ready()" in code
+        # Fallback to jax.block_until_ready
+        assert "codeflash_jax" in code
+
+    def test_tensorflow_sync_uses_sync_devices(self):
+        """TensorFlow sync should use tf.test.experimental.sync_devices()."""
+        pre_sync = _create_device_sync_statements({"tensorflow"}, for_return_value=False)
+        post_sync = _create_device_sync_statements({"tensorflow"}, for_return_value=True)
+
+        # Both pre and post should have TF sync
+        assert len(pre_sync) == 1
+        assert len(post_sync) == 1
+
+        pre_code = ast.unparse(pre_sync[0])
+        post_code = ast.unparse(post_sync[0])
+
+        assert "codeflash_tf.test.experimental" in pre_code
+        assert "sync_devices" in pre_code
+        assert "codeflash_tf.test.experimental" in post_code
+        assert "sync_devices" in post_code
+
+    def test_tensorflow_sync_checks_hasattr(self):
+        """TensorFlow sync should check if sync_devices exists."""
+        sync = _create_device_sync_statements({"tensorflow"}, for_return_value=False)
+        code = ast.unparse(sync[0])
+
+        assert "hasattr(codeflash_tf.test.experimental, 'sync_devices')" in code
+
+    def test_multiple_frameworks_generates_all_syncs(self):
+        """Multiple frameworks should generate sync for all of them."""
+        post_sync = _create_device_sync_statements(
+            {"torch", "jax", "tensorflow"}, for_return_value=True
+        )
+
+        # Should have 3 sync statements (torch, jax, tensorflow)
+        assert len(post_sync) == 3
+
+        all_code = " ".join(ast.unparse(stmt) for stmt in post_sync)
+        assert "codeflash_torch" in all_code
+        assert "codeflash_jax" in all_code or "block_until_ready" in all_code
+        assert "codeflash_tf" in all_code
+
+    def test_multiple_frameworks_pre_sync_excludes_jax(self):
+        """Pre-sync should not include JAX (only post-sync for JAX)."""
+        pre_sync = _create_device_sync_statements(
+            {"torch", "jax", "tensorflow"}, for_return_value=False
+        )
+
+        # Should have 2 sync statements (torch, tensorflow) - no JAX for pre-sync
+        assert len(pre_sync) == 2
+
+        all_code = " ".join(ast.unparse(stmt) for stmt in pre_sync)
+        assert "codeflash_torch" in all_code
+        assert "codeflash_tf" in all_code
+        # JAX should not be in pre-sync
+        assert "codeflash_jax" not in all_code
+
+
+class TestCreateWrapperFunctionWithDeviceSync:
+    """Tests for create_wrapper_function with device synchronization."""
+
+    def test_wrapper_without_frameworks_has_no_sync(self):
+        """Wrapper without frameworks should not have any sync code."""
+        wrapper = create_wrapper_function(TestingMode.PERFORMANCE, None)
+        code = ast.unparse(wrapper)
+
+        assert "codeflash_torch" not in code
+        assert "codeflash_tf" not in code
+        assert "codeflash_jax" not in code
+        assert "synchronize" not in code
+        assert "block_until_ready" not in code
+        assert "sync_devices" not in code
+
+    def test_wrapper_with_torch_has_sync_before_and_after(self):
+        """Wrapper with torch should have sync before timer and after function call."""
+        wrapper = create_wrapper_function(TestingMode.PERFORMANCE, {"torch"})
+        code = ast.unparse(wrapper)
+
+        # Should have torch sync code
+        assert "codeflash_torch.cuda.synchronize()" in code
+        assert "codeflash_torch.mps.synchronize()" in code
+
+        # Check that sync appears twice (before timer and after function call)
+        assert code.count("codeflash_torch.cuda.synchronize()") == 2
+
+    def test_wrapper_with_jax_has_sync_after_function_call(self):
+        """Wrapper with JAX should have block_until_ready after function call."""
+        wrapper = create_wrapper_function(TestingMode.PERFORMANCE, {"jax"})
+        code = ast.unparse(wrapper)
+
+        assert "block_until_ready" in code
+        # JAX sync should only appear once (after function call)
+        assert code.count("block_until_ready") >= 1
+
+    def test_wrapper_with_tensorflow_has_sync_devices(self):
+        """Wrapper with TensorFlow should have sync_devices calls."""
+        wrapper = create_wrapper_function(TestingMode.PERFORMANCE, {"tensorflow"})
+        code = ast.unparse(wrapper)
+
+        assert "codeflash_tf.test.experimental.sync_devices()" in code
+        # Should appear twice (before timer and after function call)
+        assert code.count("sync_devices()") == 2
+
+    def test_wrapper_with_all_frameworks(self):
+        """Wrapper with all frameworks should have all sync types."""
+        wrapper = create_wrapper_function(
+            TestingMode.PERFORMANCE, {"torch", "jax", "tensorflow"}
+        )
+        code = ast.unparse(wrapper)
+
+        # Check all frameworks are present
+        assert "codeflash_torch.cuda.synchronize()" in code
+        assert "block_until_ready" in code
+        assert "codeflash_tf.test.experimental.sync_devices()" in code
+
+    def test_wrapper_behavior_mode_with_frameworks(self):
+        """Wrapper in BEHAVIOR mode should also have sync code when frameworks specified."""
+        wrapper = create_wrapper_function(TestingMode.BEHAVIOR, {"torch"})
+        code = ast.unparse(wrapper)
+
+        # Should have torch sync code even in behavior mode
+        assert "codeflash_torch.cuda.synchronize()" in code
+        # Behavior mode should also have the database code
+        assert "codeflash_cur" in code
+        assert "codeflash_con" in code
+
+    def test_wrapper_sync_placement_is_correct(self):
+        """Verify sync is placed correctly: before timer start and after function call."""
+        wrapper = create_wrapper_function(TestingMode.PERFORMANCE, {"torch"})
+        code = ast.unparse(wrapper)
+
+        # Find positions of key elements
+        first_sync_pos = code.find("codeflash_torch.cuda.synchronize()")
+        counter_pos = code.find("counter = time.perf_counter_ns()")
+        return_value_pos = code.find("return_value = codeflash_wrapped(")
+        second_sync_pos = code.find("codeflash_torch.cuda.synchronize()", first_sync_pos + 1)
+        duration_pos = code.find("codeflash_duration = time.perf_counter_ns()")
+
+        # Verify order: first_sync < counter < return_value < second_sync < duration
+        assert first_sync_pos < counter_pos, "First sync should be before counter"
+        assert counter_pos < return_value_pos, "Counter should be before function call"
+        assert return_value_pos < second_sync_pos, "Function call should be before second sync"
+        assert second_sync_pos < duration_pos, "Second sync should be before duration calculation"
+
+
+class TestInjectProfilingWithDeviceSync:
+    """Tests for inject_profiling_into_existing_test with device synchronization."""
+
+    def test_inject_profiling_with_torch_adds_import(self, tmp_dir):
+        """inject_profiling_into_existing_test with torch should add torch import."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.PERFORMANCE,
+            used_frameworks={"torch"},
+        )
+
+        assert success
+        assert new_test is not None
+        assert "import torch as codeflash_torch" in new_test
+        assert "codeflash_torch.cuda.synchronize()" in new_test
+
+    def test_inject_profiling_with_tensorflow_adds_import(self, tmp_dir):
+        """inject_profiling_into_existing_test with tensorflow should add tf import."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.PERFORMANCE,
+            used_frameworks={"tensorflow"},
+        )
+
+        assert success
+        assert new_test is not None
+        assert "import tensorflow as codeflash_tf" in new_test
+        assert "codeflash_tf.test.experimental.sync_devices()" in new_test
+
+    def test_inject_profiling_with_jax_adds_import(self, tmp_dir):
+        """inject_profiling_into_existing_test with jax should add jax import."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.PERFORMANCE,
+            used_frameworks={"jax"},
+        )
+
+        assert success
+        assert new_test is not None
+        assert "import jax as codeflash_jax" in new_test
+        assert "block_until_ready" in new_test
+
+    def test_inject_profiling_with_multiple_frameworks(self, tmp_dir):
+        """inject_profiling_into_existing_test with multiple frameworks adds all imports."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.PERFORMANCE,
+            used_frameworks={"torch", "jax", "tensorflow"},
+        )
+
+        assert success
+        assert new_test is not None
+        assert "import torch as codeflash_torch" in new_test
+        assert "import tensorflow as codeflash_tf" in new_test
+        assert "import jax as codeflash_jax" in new_test
+
+    def test_inject_profiling_without_frameworks_no_sync(self, tmp_dir):
+        """inject_profiling_into_existing_test without frameworks has no sync code."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.PERFORMANCE,
+            used_frameworks=None,
+        )
+
+        assert success
+        assert new_test is not None
+        assert "codeflash_torch" not in new_test
+        assert "codeflash_tf" not in new_test
+        assert "codeflash_jax" not in new_test
+        assert "synchronize" not in new_test
+        assert "sync_devices" not in new_test
+
+    def test_inject_profiling_behavior_mode_with_frameworks(self, tmp_dir):
+        """inject_profiling_into_existing_test in BEHAVIOR mode with frameworks."""
+        code = """import pytest
+
+def sorter(items):
+    return sorted(items)
+
+def test_sort():
+    result = sorter([3, 1, 2])
+    assert result == [1, 2, 3]
+"""
+        test_file = tmp_dir / "test_sort.py"
+        test_file.write_text(code)
+
+        func = FunctionToOptimize(function_name="sorter", parents=[], file_path=test_file)
+
+        success, new_test = inject_profiling_into_existing_test(
+            test_file,
+            [CodePosition(7, 13)],
+            func,
+            tmp_dir,
+            mode=TestingMode.BEHAVIOR,
+            used_frameworks={"torch"},
+        )
+
+        assert success
+        assert new_test is not None
+        # Should have torch sync in behavior mode too
+        assert "import torch as codeflash_torch" in new_test
+        assert "codeflash_torch.cuda.synchronize()" in new_test
+        # Should also have behavior mode specifics
+        assert "sqlite3" in new_test
