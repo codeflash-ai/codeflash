@@ -294,10 +294,7 @@ class CandidateProcessor:
         self.refinement_calls_count += len(candidates)
 
         top_n_candidates = int(
-            min(
-                int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)),
-                len(candidates),
-            )
+            min(int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)), len(candidates))
         )
 
         if len(candidates) == top_n_candidates:

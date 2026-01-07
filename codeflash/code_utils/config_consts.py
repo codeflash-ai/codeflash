@@ -85,13 +85,18 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
 }
 
 
-def get_effort_value(key: EffortKeys, effort: Union[EffortLevel,str]) -> Any:  # noqa: ANN401
+def get_effort_value(key: EffortKeys, effort: Union[EffortLevel, str]) -> Any:  # noqa: ANN401
     key_str = key.value
-    effort = effort.value if isinstance(effort, EffortLevel) else effort
-    if key_str in EFFORT_VALUES:
-        if effort in EFFORT_VALUES[key_str]:
-            return EFFORT_VALUES[key_str][effort]
-        msg = f"Invalid effort level: {effort}"
+
+    if isinstance(effort, str):
+        try:
+            effort = EffortLevel(effort)
+        except ValueError:
+            msg = f"Invalid effort level: {effort}"
+            raise ValueError(msg) from None
+
+    if key_str not in EFFORT_VALUES:
+        msg = f"Invalid key: {key_str}"
         raise ValueError(msg)
-    msg = f"Invalid key: {key_str}"
-    raise ValueError(msg)
+
+    return EFFORT_VALUES[key_str][effort]
