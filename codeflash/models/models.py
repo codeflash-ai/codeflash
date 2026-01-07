@@ -463,6 +463,9 @@ class CandidateEvaluationContext:
     def get_speedup_ratio(self, optimization_id: str) -> float | None:
         return self.speedup_ratios.get(optimization_id)
 
+    def get_optimized_runtime(self, optimization_id: str) -> float | None:
+        return self.optimized_runtimes.get(optimization_id)
+
 
 @dataclass(frozen=True)
 class TestsInFile:
