@@ -62,11 +62,14 @@ class DummyTask:
     def __init__(self) -> None:
         self.id = 0
 
+
 class DummyProgress:
     def __init__(self) -> None:
         pass
+
     def advance(self, task_id: TaskID, advance: int = 1) -> None:
         pass
+
 
 def lsp_log(message: LspMessage) -> None:
     if not is_LSP_enabled():
