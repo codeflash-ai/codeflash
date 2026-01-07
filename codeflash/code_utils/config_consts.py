@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum
-from typing import Any
+from typing import Any, Union
 
 MAX_TEST_RUN_ITERATIONS = 5
 INDIVIDUAL_TESTCASE_TIMEOUT = 15
@@ -83,8 +85,9 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
 }
 
 
-def get_effort_value(key: EffortKeys, effort: EffortLevel) -> Any:  # noqa: ANN401
+def get_effort_value(key: EffortKeys, effort: Union[EffortLevel,str]) -> Any:  # noqa: ANN401
     key_str = key.value
+    effort = effort.value if isinstance(effort, EffortLevel) else effort
     if key_str in EFFORT_VALUES:
         if effort in EFFORT_VALUES[key_str]:
             return EFFORT_VALUES[key_str][effort]

@@ -182,8 +182,8 @@ class CandidateProcessor:
         self,
         initial_candidates: list[OptimizedCandidate],
         future_line_profile_results: concurrent.futures.Future,
-        ai_service_client: AiServiceClient,
         eval_ctx: CandidateEvaluationContext,
+        effort: str,
         original_markdown_code: str,
         future_all_refinements: list[concurrent.futures.Future],
         future_all_code_repair: list[concurrent.futures.Future],
@@ -193,11 +193,11 @@ class CandidateProcessor:
         self.forest = CandidateForest()
         self.line_profiler_done = False
         self.refinement_done = False
+        self.eval_ctx = eval_ctx
+        self.effort = effort
         self.candidate_len = len(initial_candidates)
-        self.ai_service_client = ai_service_client
         self.refinement_calls_count = 0
         self.original_markdown_code = original_markdown_code
-        self.eval_ctx = eval_ctx
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
@@ -296,7 +296,7 @@ class CandidateProcessor:
         top_n_candidates = int(
             min(
                 int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)),
-                len(self.all_refinements_data),
+                len(candidates),
             )
         )
 
@@ -1045,12 +1045,11 @@ class FunctionOptimizer:
         processor = CandidateProcessor(
             candidates,
             future_line_profile_results,
-            self.aiservice_client,
             eval_ctx,
+            self.effort,
             code_context.read_writable_code.markdown,
             self.future_all_refinements,
             self.future_all_code_repair,
-            self.effort,
             self.future_adaptive_optimizations,
         )
         candidate_index = 0
