@@ -134,7 +134,7 @@ def get_optimizable_functions(params: OptimizableFunctionsParams) -> dict[str, l
     document_uri = params.textDocument.uri
     document = server.workspace.get_text_document(document_uri)
 
-    file_path = Path(document.path)
+    file_path = Path(document.path).resolve()
 
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}

@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text
@@ -29,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
@@ -331,8 +331,6 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Be conservative except when an alias is used (which requires exact method matching)
             for target_func in fnames:
                 if "." in target_func:
-                    # Split to extract class name; method name is intentionally discarded (leading underscore)
-                    # as we only need to check if the imported class matches the target function's class
                     class_name, _method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
                         self.found_any_target_function = True
@@ -586,23 +584,20 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
-    discovery_script = Path(__file__).parent / "pytest_new_process_discovery.py"
-
-    run_kwargs = {
-        "cwd": project_root,
-        "capture_output": True,
-        "text": True,
-        "stdin": subprocess.DEVNULL,
-        "timeout": 600,
-    }
-    if os.name == "nt":
-        # Prevent console window spawning on Windows which can cause hangs in LSP
-        run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
-    cmd_list = [SAFE_SYS_EXECUTABLE, discovery_script, str(project_root), str(tests_root), str(tmp_pickle_path)]
     with custom_addopts():
-        result = subprocess.run(cmd_list, check=False, **run_kwargs)
-
+        run_kwargs = get_cross_platform_subprocess_run_args(
+            cwd=project_root, check=False, text=True, capture_output=True
+        )
+        result = subprocess.run(  # noqa: PLW1510
+            [
+                SAFE_SYS_EXECUTABLE,
+                Path(__file__).parent / "pytest_new_process_discovery.py",
+                str(project_root),
+                str(tests_root),
+                str(tmp_pickle_path),
+            ],
+            **run_kwargs,
+        )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
             exitcode, tests, pytest_rootdir = pickle.load(f)

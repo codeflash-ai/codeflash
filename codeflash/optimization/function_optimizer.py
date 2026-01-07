@@ -392,7 +392,7 @@ class FunctionOptimizer:
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
-        logger.info(f"Function Trace ID: {self.function_trace_id}")
+        logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()

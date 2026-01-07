@@ -68,10 +68,7 @@ def generate_candidates(source_code_path: Path) -> set[str]:
 
 
 def prepare_coverage_files() -> tuple[Path, Path]:
-    """Prepare coverage configuration and output files.
-
-    Returns tuple of (coverage_database_file, coverage_config_file).
-    """
+    """Prepare coverage configuration and output files."""
     coverage_database_file = get_run_tmp_file(Path(".coverage"))
     coveragercfile = get_run_tmp_file(Path(".coveragerc"))
     coveragerc_content = f"[run]\n branch = True\ndata_file={coverage_database_file}\n"

@@ -652,51 +652,8 @@ class Optimizer:
 
 
 def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
-    # Resolve both paths to absolute paths to handle Windows path normalization issues
-    # This ensures paths with/without drive letters are handled correctly
-    try:
-        path_resolved = path.resolve()
-    except (OSError, RuntimeError):
-        # If resolve fails (e.g., path doesn't exist or is malformed), try absolute()
-        path_resolved = path.absolute() if not path.is_absolute() else path
-
-    try:
-        src_root_resolved = src_root.resolve()
-    except (OSError, RuntimeError):
-        src_root_resolved = src_root.absolute() if not src_root.is_absolute() else src_root
-
-    # Normalize paths using os.path.normpath and normcase for cross-platform compatibility
-    path_str = os.path.normpath(str(path_resolved))
-    src_root_str = os.path.normpath(str(src_root_resolved))
-
-    # Convert to lowercase for case-insensitive comparison on Windows
-    path_normalized = os.path.normcase(path_str)
-    src_root_normalized = os.path.normcase(src_root_str)
-
-    # Try using Path.relative_to with resolved paths first
-    try:
-        relative_path = path_resolved.relative_to(src_root_resolved)
-    except ValueError as err:
-        # If relative_to fails, manually extract the relative path using normalized strings
-        if path_normalized.startswith(src_root_normalized):
-            # Extract relative path manually
-            # Use the original path_str to preserve proper path format
-            if path_str.startswith(src_root_str):
-                relative_str = path_str[len(src_root_str) :].lstrip(os.sep)
-                relative_path = Path(relative_str)
-            else:
-                # Fallback: use normalized paths
-                relative_str = path_normalized[len(src_root_normalized) :].lstrip(os.sep)
-                relative_path = Path(relative_str)
-        else:
-            error_msg = (
-                f"Path {path_resolved} (normalized: {path_normalized}) is not relative to "
-                f"{src_root_resolved} (normalized: {src_root_normalized})"
-            )
-            raise ValueError(error_msg) from err
-
-    return dest_root / relative_path
-
+    relative_path = path.resolve().relative_to(src_root.resolve())
+    return Path(dest_root / relative_path)
 
 def run_with_args(args: Namespace) -> None:
     optimizer = None

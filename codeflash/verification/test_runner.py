@@ -12,6 +12,7 @@ from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -20,74 +21,17 @@ if TYPE_CHECKING:
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
-# Constant for subprocess drain timeout after killing
-SUBPROCESS_DRAIN_TIMEOUT_SECONDS = 5
-
 
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
-    """Execute a subprocess with the given command list, working directory, environment variables, and timeout.
-
-    On Windows, uses Popen with communicate() and process groups for proper cleanup.
-    On other platforms, uses subprocess.run with capture_output.
-    """
-    is_windows = sys.platform == "win32"
-
+    """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
+    logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
     with custom_addopts():
-        if is_windows:
-            # WINDOWS SUBPROCESS FIX:
-            # On Windows, running pytest with coverage can hang indefinitely due to multiple issues:
-            #
-            # Problem 1: Child process waiting for stdin
-            #   - Some Windows processes (especially pytest) may wait for console input
-            #   - Solution: Use stdin=subprocess.DEVNULL to explicitly close stdin
-            #
-            # Problem 2: Orphaned child processes after timeout
-            #   - When killing a process on Windows, child processes may not be terminated
-            #   - Solution: Use CREATE_NEW_PROCESS_GROUP to allow proper process tree termination
-            #
-            # We use Popen directly (instead of subprocess.run) to have explicit control over
-            # process group creation and timeout handling, though both use communicate() internally.
-
-            # CREATE_NEW_PROCESS_GROUP: Creates process in new group for proper termination
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-
-            process = subprocess.Popen(
-                cmd_list,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL,
-                cwd=cwd,
-                env=env,
-                text=True,
-                creationflags=creationflags,
-            )
-
-            try:
-                stdout_content, stderr_content = process.communicate(timeout=timeout)
-                returncode = process.returncode
-            except subprocess.TimeoutExpired:
-                # On Windows, terminate the entire process tree
-                with contextlib.suppress(OSError):
-                    process.kill()
-
-                # Drain remaining output after killing
-                try:
-                    stdout_content, stderr_content = process.communicate(timeout=SUBPROCESS_DRAIN_TIMEOUT_SECONDS)
-                except subprocess.TimeoutExpired:
-                    # Last resort: terminate and get partial output
-                    with contextlib.suppress(OSError):
-                        process.terminate()
-                    stdout_content, stderr_content = "", "Process killed after timeout"
-                raise subprocess.TimeoutExpired(
-                    cmd_list, timeout, output=stdout_content, stderr=stderr_content
-                ) from None
-
-            return subprocess.CompletedProcess(cmd_list, returncode, stdout_content, stderr_content)
-
-        # On Linux/Mac, use subprocess.run (works fine there)
-        return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=cwd, env=env, timeout=timeout, check=False, text=True, capture_output=True
+        )
+        return subprocess.run(cmd_list, **run_args)  # noqa: PLW1510
 
 
 def run_behavioral_tests(
@@ -102,8 +46,6 @@ def run_behavioral_tests(
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
-    is_windows = sys.platform == "win32"
-
     if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -146,9 +88,9 @@ def run_behavioral_tests(
         if enable_coverage:
             coverage_database_file, coverage_config_file = prepare_coverage_files()
 
-            # On Windows, delete coverage database file directly instead of using 'coverage erase'
-            # to avoid file locking issues
+            is_windows = sys.platform == "win32"
             if is_windows:
+                # On Windows, delete coverage database file directly instead of using 'coverage erase', to avoid locking issues
                 if coverage_database_file.exists():
                     with contextlib.suppress(PermissionError, OSError):
                         coverage_database_file.unlink()
@@ -173,9 +115,12 @@ def run_behavioral_tests(
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
-
-            final_cmd = coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files
-            results = execute_test_subprocess(final_cmd, cwd=cwd, env=pytest_test_env, timeout=600)
+            results = execute_test_subprocess(
+                coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
+                cwd=cwd,
+                env=pytest_test_env,
+                timeout=600,
+            )
             logger.debug(
                 f"Result return code: {results.returncode}, "
                 f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
@@ -183,16 +128,14 @@ def run_behavioral_tests(
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
 
-            final_cmd = pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files
             results = execute_test_subprocess(
-                final_cmd,
+                pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
             )
             logger.debug(
-                f"Result return code: {results.returncode}, "
-                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
+                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
             )
     else:
         msg = f"Unsupported test framework: {test_framework}"
