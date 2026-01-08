@@ -69,7 +69,9 @@ def codeflash_behavior_async(func: F) -> F:
 
         iteration = os.environ.get("CODEFLASH_TEST_ITERATION", "0")
         db_path = get_run_tmp_file(Path(f"test_return_values_{iteration}.sqlite"))
-        codeflash_con = sqlite3.connect(db_path, timeout=30.0)
+        # codeflash_con = sqlite3.connect(db_path, timeout=30.0)
+        codeflash_con = sqlite3.connect(db_path)
+
         # Enable WAL mode for better concurrent access
         codeflash_con.execute("PRAGMA journal_mode=WAL")
         codeflash_con.execute("PRAGMA synchronous=NORMAL")
