@@ -684,7 +684,8 @@ def filter_functions(
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep) for submodule_path in submodule_paths
+            file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep)
+            for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
