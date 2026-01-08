@@ -1850,6 +1850,32 @@ class FunctionOptimizer:
             logger.debug(f"optimization review response failed, investigate {e}")
         data["optimization_review"] = opt_review_response
         self.optimization_review = opt_review_response
+
+        # Display the reviewer result to the user
+        if opt_review_response:
+            review_display = {
+                "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
+                "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
+                "low": ("[bold red]Low[/bold red]", "red", "Not recommended to merge"),
+            }
+            display_info = review_display.get(
+                opt_review_response.lower(), ("[bold]Unknown[/bold]", "white", "")
+            )
+            if is_LSP_enabled():
+                lsp_log(
+                    LspMarkdownMessage(
+                        markdown=f"### Reviewer Assessment: {opt_review_response.capitalize()}\n{display_info[2]}"
+                    )
+                )
+            else:
+                console.print(
+                    Panel(
+                        f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}",
+                        title="Optimization Review",
+                        border_style=display_info[1],
+                    )
+                )
+
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
         if raise_pr and not staging_review and opt_review_response != "low":
