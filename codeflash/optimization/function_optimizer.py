@@ -636,6 +636,13 @@ class FunctionOptimizer:
                 tree.add(f"Optimized async throughput: {candidate_result.async_throughput} executions")
                 tree.add(f"Throughput improvement: {throughput_gain_value * 100:.1f}%")
                 tree.add(f"Throughput ratio: {throughput_gain_value + 1:.3f}X")
+
+                # Display concurrency metrics if available
+                if candidate_result.concurrency_metrics and original_code_baseline.concurrency_metrics:
+                    orig_ratio = original_code_baseline.concurrency_metrics.concurrency_ratio
+                    cand_ratio = candidate_result.concurrency_metrics.concurrency_ratio
+                    conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
+                    tree.add(f"Concurrency ratio: {orig_ratio:.1f}x → {cand_ratio:.1f}x ({conc_gain:+.1f}%)")
             else:
                 tree.add("This candidate is faster than the original code. 🚀")
                 tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
@@ -654,6 +661,14 @@ class FunctionOptimizer:
             )
             tree.add(f"Async throughput: {candidate_result.async_throughput} executions")
             tree.add(f"Throughput change: {throughput_gain_value * 100:.1f}%")
+
+            # Display concurrency metrics if available
+            if candidate_result.concurrency_metrics and original_code_baseline.concurrency_metrics:
+                orig_ratio = original_code_baseline.concurrency_metrics.concurrency_ratio
+                cand_ratio = candidate_result.concurrency_metrics.concurrency_ratio
+                conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
+                tree.add(f"Concurrency ratio: {orig_ratio:.1f}x → {cand_ratio:.1f}x ({conc_gain:+.1f}%)")
+
             tree.add(
                 f"(Runtime for reference: {humanize_runtime(candidate_result.best_test_runtime)} over "
                 f"{candidate_result.max_loop_count} loop{'s' if candidate_result.max_loop_count > 1 else ''})"
@@ -915,6 +930,8 @@ class FunctionOptimizer:
             best_runtime_until_now=None,
             original_async_throughput=original_code_baseline.async_throughput,
             best_throughput_until_now=None,
+            original_concurrency_metrics=original_code_baseline.concurrency_metrics,
+            best_concurrency_ratio_until_now=None,
         ) and quantity_of_tests_critic(candidate_result)
 
         tree = self.build_runtime_info_tree(

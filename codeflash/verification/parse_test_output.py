@@ -20,7 +20,14 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
+from codeflash.models.models import (
+    ConcurrencyMetrics,
+    FunctionTestInvocation,
+    InvocationId,
+    TestResults,
+    TestType,
+    VerificationType,
+)
 from codeflash.verification.coverage_utils import CoverageUtils
 
 if TYPE_CHECKING:
@@ -62,6 +69,54 @@ def calculate_function_throughput_from_test_results(test_results: TestResults, f
         if start_match in end_matches_set and len(start_match) > 2 and start_match[2] == function_name:
             function_throughput += 1
     return function_throughput
+
+
+# Pattern for concurrency benchmark output:
+# !@######CONC:module:class:test:function:loop_index:seq_time:conc_time:factor######@!
+_concurrency_pattern = re.compile(r"!@######CONC:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*):(\d+):(\d+):(\d+)######@!")
+
+
+def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> ConcurrencyMetrics | None:
+    """Parse concurrency benchmark results from test output.
+
+    Format: !@######CONC:module:class:test:function:loop_index:seq_time:conc_time:factor######@!
+
+    Returns ConcurrencyMetrics with:
+    - sequential_time_ns: Total time for N sequential executions
+    - concurrent_time_ns: Total time for N concurrent executions
+    - concurrency_factor: N (number of concurrent executions)
+    - concurrency_ratio: sequential_time / concurrent_time (higher = better concurrency)
+    """
+    if not test_results.perf_stdout:
+        return None
+
+    matches = _concurrency_pattern.findall(test_results.perf_stdout)
+    if not matches:
+        return None
+
+    # Aggregate metrics for the target function
+    total_seq, total_conc, factor, count = 0, 0, 0, 0
+    for match in matches:
+        # match[3] is function_name
+        if len(match) >= 8 and match[3] == function_name:
+            total_seq += int(match[5])
+            total_conc += int(match[6])
+            factor = int(match[7])
+            count += 1
+
+    if count == 0:
+        return None
+
+    avg_seq = total_seq / count
+    avg_conc = total_conc / count
+    ratio = avg_seq / avg_conc if avg_conc > 0 else 1.0
+
+    return ConcurrencyMetrics(
+        sequential_time_ns=int(avg_seq),
+        concurrent_time_ns=int(avg_conc),
+        concurrency_factor=factor,
+        concurrency_ratio=ratio,
+    )
 
 
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.models.models import (
     CodeOptimizationContext,
+    ConcurrencyMetrics,
     CoverageData,
     CoverageStatus,
     FunctionCoverage,
@@ -15,12 +16,14 @@ from codeflash.models.models import (
     TestType,
 )
 from codeflash.result.critic import (
+    concurrency_gain,
     coverage_critic,
     performance_gain,
     quantity_of_tests_critic,
     speedup_critic,
     throughput_gain,
 )
+from codeflash.verification.parse_test_output import parse_concurrency_metrics
 
 
 def test_performance_gain() -> None:
@@ -569,3 +572,218 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_throughput_until_now=None,
         disable_gh_action_noise=True
     )
+
+
+def test_concurrency_gain() -> None:
+    """Test concurrency_gain calculation."""
+    # Test basic concurrency improvement (blocking -> non-blocking)
+    original = ConcurrencyMetrics(
+        sequential_time_ns=10_000_000,  # 10ms
+        concurrent_time_ns=10_000_000,  # 10ms (no speedup - blocking)
+        concurrency_factor=10,
+        concurrency_ratio=1.0,  # sequential/concurrent = 1.0
+    )
+    optimized = ConcurrencyMetrics(
+        sequential_time_ns=10_000_000,  # 10ms
+        concurrent_time_ns=1_000_000,  # 1ms (10x speedup - non-blocking)
+        concurrency_factor=10,
+        concurrency_ratio=10.0,  # sequential/concurrent = 10.0
+    )
+    # 900% improvement: (10 - 1) / 1 = 9.0
+    assert concurrency_gain(original, optimized) == 9.0
+
+    # Test no improvement
+    same = ConcurrencyMetrics(
+        sequential_time_ns=10_000_000,
+        concurrent_time_ns=10_000_000,
+        concurrency_factor=10,
+        concurrency_ratio=1.0,
+    )
+    assert concurrency_gain(original, same) == 0.0
+
+    # Test slight improvement
+    slightly_better = ConcurrencyMetrics(
+        sequential_time_ns=10_000_000,
+        concurrent_time_ns=8_000_000,
+        concurrency_factor=10,
+        concurrency_ratio=1.25,
+    )
+    # 25% improvement: (1.25 - 1.0) / 1.0 = 0.25
+    assert concurrency_gain(original, slightly_better) == 0.25
+
+    # Test zero original ratio (edge case)
+    zero_ratio = ConcurrencyMetrics(
+        sequential_time_ns=0,
+        concurrent_time_ns=1_000_000,
+        concurrency_factor=10,
+        concurrency_ratio=0.0,
+    )
+    assert concurrency_gain(zero_ratio, optimized) == 0.0
+
+
+def test_speedup_critic_with_concurrency_metrics() -> None:
+    """Test speedup_critic with concurrency metrics evaluation."""
+    original_code_runtime = 10000  # 10 microseconds
+    original_async_throughput = 100
+
+    # Original concurrency metrics (blocking code - ratio ~= 1.0)
+    original_concurrency = ConcurrencyMetrics(
+        sequential_time_ns=10_000_000,
+        concurrent_time_ns=10_000_000,
+        concurrency_factor=10,
+        concurrency_ratio=1.0,
+    )
+
+    # Test case 1: Concurrency improves significantly (blocking -> non-blocking)
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=10000,  # Same runtime
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=10000,
+        async_throughput=100,  # Same throughput
+        concurrency_metrics=ConcurrencyMetrics(
+            sequential_time_ns=10_000_000,
+            concurrent_time_ns=1_000_000,  # 10x faster concurrent execution
+            concurrency_factor=10,
+            concurrency_ratio=10.0,  # 900% improvement
+        ),
+    )
+
+    # Should pass due to concurrency improvement even though runtime/throughput unchanged
+    assert speedup_critic(
+        candidate_result=candidate_result,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        original_concurrency_metrics=original_concurrency,
+        best_concurrency_ratio_until_now=None,
+        disable_gh_action_noise=True,
+    )
+
+    # Test case 2: No concurrency improvement (should fall back to other metrics)
+    candidate_result_no_conc = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=8000,  # 20% runtime improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=8000,
+        async_throughput=100,
+        concurrency_metrics=ConcurrencyMetrics(
+            sequential_time_ns=10_000_000,
+            concurrent_time_ns=10_000_000,
+            concurrency_factor=10,
+            concurrency_ratio=1.0,  # No improvement
+        ),
+    )
+
+    # Should pass due to runtime improvement
+    assert speedup_critic(
+        candidate_result=candidate_result_no_conc,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        original_concurrency_metrics=original_concurrency,
+        best_concurrency_ratio_until_now=None,
+        disable_gh_action_noise=True,
+    )
+
+    # Test case 3: Concurrency below threshold (20% required)
+    candidate_result_below_threshold = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=10000,  # Same runtime
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=10000,
+        async_throughput=100,  # Same throughput
+        concurrency_metrics=ConcurrencyMetrics(
+            sequential_time_ns=10_000_000,
+            concurrent_time_ns=9_000_000,  # Only 11% improvement
+            concurrency_factor=10,
+            concurrency_ratio=1.11,
+        ),
+    )
+
+    # Should fail - no metric improves enough
+    assert not speedup_critic(
+        candidate_result=candidate_result_below_threshold,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        original_concurrency_metrics=original_concurrency,
+        best_concurrency_ratio_until_now=None,
+        disable_gh_action_noise=True,
+    )
+
+    # Test case 4: best_concurrency_ratio_until_now comparison
+    candidate_result_good = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=10000,
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=10000,
+        async_throughput=100,
+        concurrency_metrics=ConcurrencyMetrics(
+            sequential_time_ns=10_000_000,
+            concurrent_time_ns=2_000_000,
+            concurrency_factor=10,
+            concurrency_ratio=5.0,
+        ),
+    )
+
+    # Should fail when there's a better concurrency ratio already
+    assert not speedup_critic(
+        candidate_result=candidate_result_good,
+        original_code_runtime=original_code_runtime,
+        best_runtime_until_now=None,
+        original_async_throughput=original_async_throughput,
+        best_throughput_until_now=None,
+        original_concurrency_metrics=original_concurrency,
+        best_concurrency_ratio_until_now=10.0,  # Better ratio already exists
+        disable_gh_action_noise=True,
+    )
+
+
+def test_parse_concurrency_metrics() -> None:
+    """Test parse_concurrency_metrics function."""
+    # Test with valid concurrency output
+    stdout = (
+        "!@######CONC:test_module:TestClass:test_func:my_function:0:10000000:1000000:10######@!\n"
+        "!@######CONC:test_module:TestClass:test_func:my_function:1:10000000:1000000:10######@!\n"
+    )
+    test_results = TestResults(perf_stdout=stdout)
+
+    metrics = parse_concurrency_metrics(test_results, "my_function")
+    assert metrics is not None
+    assert metrics.sequential_time_ns == 10_000_000  # Average of both matches
+    assert metrics.concurrent_time_ns == 1_000_000
+    assert metrics.concurrency_factor == 10
+    assert metrics.concurrency_ratio == 10.0  # 10000000 / 1000000
+
+    # Test with no matching function
+    metrics_wrong_func = parse_concurrency_metrics(test_results, "other_function")
+    assert metrics_wrong_func is None
+
+    # Test with empty stdout
+    empty_results = TestResults(perf_stdout="")
+    metrics_empty = parse_concurrency_metrics(empty_results, "my_function")
+    assert metrics_empty is None
+
+    # Test with None stdout
+    none_results = TestResults(perf_stdout=None)
+    metrics_none = parse_concurrency_metrics(none_results, "my_function")
+    assert metrics_none is None
+
+    # Test with no class name
+    stdout_no_class = "!@######CONC:test_module::test_func:my_function:0:5000000:2500000:10######@!\n"
+    test_results_no_class = TestResults(perf_stdout=stdout_no_class)
+    metrics_no_class = parse_concurrency_metrics(test_results_no_class, "my_function")
+    assert metrics_no_class is not None
+    assert metrics_no_class.concurrency_ratio == 2.0  # 5000000 / 2500000
