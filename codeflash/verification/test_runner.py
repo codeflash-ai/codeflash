@@ -78,7 +78,13 @@ def run_behavioral_tests(
 
         if enable_coverage:
             coverage_database_file, coverage_config_file = prepare_coverage_files()
-
+            # disable jit for coverage
+            pytest_test_env["NUMBA_DISABLE_JIT"] = 1
+            pytest_test_env["TORCHDYNAMO_DISABLE"] = 1
+            pytest_test_env["PYTORCH_JIT"] = 0
+            pytest_test_env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+            pytest_test_env["TF_ENABLE_ONEDNN_OPTS"] = 0
+            pytest_test_env["JAX_DISABLE_JIT"] = 0
             cov_erase = execute_test_subprocess(
                 shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
             )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
