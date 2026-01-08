@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
@@ -14,6 +15,28 @@ from codeflash.code_utils.formatter import sort_imports
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext
+
+# Regex pattern to detect JIT compilation decorators from numba, torch, tensorflow, and jax
+JIT_DECORATOR_PATTERN = re.compile(
+    r"@(?:"
+    # numba decorators
+    r"(?:numba\.)?(?:jit|njit|vectorize|guvectorize|stencil|cfunc|generated_jit)"
+    r"|numba\.cuda\.jit"
+    r"|cuda\.jit"
+    # torch decorators
+    r"|torch\.compile"
+    r"|torch\.jit\.(?:script|trace)"
+    # tensorflow decorators
+    r"|(?:tf|tensorflow)\.function"
+    # jax decorators
+    r"|jax\.jit"
+    r")"
+)
+
+
+def contains_jit_decorator(code: str) -> bool:
+    """Check if the code contains JIT compilation decorators from numba, torch, tensorflow, or jax."""
+    return bool(JIT_DECORATOR_PATTERN.search(code))
 
 
 class LineProfilerDecoratorAdder(cst.CSTTransformer):
