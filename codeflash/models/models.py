@@ -662,8 +662,11 @@ class InvocationId:
     def get_src_code(self, test_path: Path) -> Optional[str]:
         if not test_path.exists():
             return None
-        test_src = test_path.read_text(encoding="utf-8")
-        module_node = cst.parse_module(test_src)
+        try:
+            test_src = test_path.read_text(encoding="utf-8")
+            module_node = cst.parse_module(test_src)
+        except Exception:
+            return None
 
         if self.test_class_name:
             for stmt in module_node.body:
@@ -671,7 +674,6 @@ class InvocationId:
                     func_node = self.find_func_in_class(stmt, self.test_function_name)
                     if func_node:
                         return module_node.code_for_node(func_node).strip()
-            # class not found
             return None
 
         # Otherwise, look for a top level function

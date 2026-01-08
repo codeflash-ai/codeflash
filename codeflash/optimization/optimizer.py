@@ -652,8 +652,8 @@ class Optimizer:
 
 
 def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
-    relative_path = path.relative_to(src_root)
-    return dest_root / relative_path
+    relative_path = path.resolve().relative_to(src_root.resolve())
+    return Path(dest_root / relative_path)
 
 
 def run_with_args(args: Namespace) -> None:

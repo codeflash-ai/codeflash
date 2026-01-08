@@ -1184,6 +1184,136 @@ class MyClass:
         helper_path_1.unlink(missing_ok=True)
         helper_path_2.unlink(missing_ok=True)
 
+def test_get_stack_info_env_var_fallback() -> None:
+    """Test that get_test_info_from_stack falls back to environment variables when stack walking fails to find test_name.
+
+    At module level, stack walking finds test_module_name but NOT test_name.
+    The env var fallback should fill in test_name from CODEFLASH_TEST_FUNCTION.
+    """
+    test_code = """
+import os
+from sample_code import MyClass
+
+# Set environment variables before instantiation
+os.environ["CODEFLASH_TEST_FUNCTION"] = "test_env_fallback_function"
+os.environ["CODEFLASH_TEST_MODULE"] = "env_fallback_module"
+os.environ["CODEFLASH_TEST_CLASS"] = "EnvFallbackClass"
+
+# Instantiate at module level (stack walking won't find a test_ function name)
+obj = MyClass()
+
+def test_dummy():
+    # This test exists just to make pytest run the file
+    assert obj.x == 2
+"""
+    test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
+    sample_code = f"""
+from codeflash.verification.codeflash_capture import get_test_info_from_stack
+class MyClass:
+    def __init__(self):
+        self.x = 2
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.as_posix()}')}}|TEST_INFO_END")
+"""
+    test_file_name = "test_env_var_fallback_temp.py"
+
+    test_path = test_dir / test_file_name
+    sample_code_path = test_dir / "sample_code.py"
+    try:
+        with test_path.open("w") as f:
+            f.write(test_code)
+        with sample_code_path.open("w") as f:
+            f.write(sample_code)
+
+        # Make sure env vars are NOT set in the parent process (they should be set by the test file itself)
+        test_env = os.environ.copy()
+        test_env.pop("CODEFLASH_TEST_FUNCTION", None)
+        test_env.pop("CODEFLASH_TEST_MODULE", None)
+        test_env.pop("CODEFLASH_TEST_CLASS", None)
+
+        result = execute_test_subprocess(
+            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=test_env
+        )
+        assert result.returncode == 0
+        pattern = r"TEST_INFO_START\|\((.*?)\)\|TEST_INFO_END"
+        matches = re.finditer(pattern, result.stdout)
+        results = []
+        for match in matches:
+            values = [val.strip().strip("'") for val in match.group(1).split(",")]
+            results.append(values)
+
+        # Should have one result from the module-level instantiation
+        assert len(results) == 1
+
+        # test_name should come from env var (CODEFLASH_TEST_FUNCTION) since stack walking didn't find it
+        assert results[0][2] == "test_env_fallback_function"  # test_name from env var
+        # test_module_name is found via stack walking at module level, so env var doesn't override
+        assert results[0][0] == "code_to_optimize.tests.pytest.test_env_var_fallback_temp"  # from stack
+        # test_class_name should come from env var since stack walking didn't find a class
+        assert results[0][1] == "EnvFallbackClass"  # test_class_name from env var
+
+    finally:
+        test_path.unlink(missing_ok=True)
+        sample_code_path.unlink(missing_ok=True)
+
+
+def test_get_stack_info_env_var_fallback_partial() -> None:
+    """Test that env var fallback only fills in missing values, not overwriting stack-found values."""
+    test_code = """
+import os
+from sample_code import MyClass
+
+# Set environment variables
+os.environ["CODEFLASH_TEST_FUNCTION"] = "env_test_function"
+os.environ["CODEFLASH_TEST_MODULE"] = "env_test_module"
+os.environ["CODEFLASH_TEST_CLASS"] = "EnvTestClass"
+
+def test_real_test_function():
+    # Stack walking WILL find this test function
+    obj = MyClass()
+    assert obj.x == 2
+"""
+    test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
+    sample_code = f"""
+from codeflash.verification.codeflash_capture import get_test_info_from_stack
+class MyClass:
+    def __init__(self):
+        self.x = 2
+        print(f"TEST_INFO_START|{{get_test_info_from_stack('{test_dir.as_posix()}')}}|TEST_INFO_END")
+"""
+    test_file_name = "test_env_var_partial_temp.py"
+
+    test_path = test_dir / test_file_name
+    sample_code_path = test_dir / "sample_code.py"
+    try:
+        with test_path.open("w") as f:
+            f.write(test_code)
+        with sample_code_path.open("w") as f:
+            f.write(sample_code)
+
+        test_env = os.environ.copy()
+        result = execute_test_subprocess(
+            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=test_env
+        )
+        assert result.returncode == 0
+        pattern = r"TEST_INFO_START\|\((.*?)\)\|TEST_INFO_END"
+        matches = re.finditer(pattern, result.stdout)
+        results = []
+        for match in matches:
+            values = [val.strip().strip("'") for val in match.group(1).split(",")]
+            results.append(values)
+
+        assert len(results) == 1
+
+        # Stack walking should have found the test function, so env vars should NOT override
+        assert results[0][2] == "test_real_test_function"  # test_name from stack, not env var
+        assert results[0][0] == "code_to_optimize.tests.pytest.test_env_var_partial_temp"  # module from stack
+        assert results[0][1].strip() == "None"  # no class in this test
+
+    finally:
+        test_path.unlink(missing_ok=True)
+        sample_code_path.unlink(missing_ok=True)
+
+
 def test_instrument_codeflash_capture_and_run_tests_2() -> None:
     # End to end run that instruments code and runs tests. Made to be similar to code used in the optimizer.py
     test_code = """import math    
