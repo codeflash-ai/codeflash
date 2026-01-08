@@ -7,6 +7,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
 
 def trace_benchmarks_pytest(
@@ -17,7 +18,10 @@ def trace_benchmarks_pytest(
         benchmark_env["PYTHONPATH"] = str(project_root)
     else:
         benchmark_env["PYTHONPATH"] += os.pathsep + str(project_root)
-    result = subprocess.run(
+    run_args = get_cross_platform_subprocess_run_args(
+        cwd=project_root, env=benchmark_env, timeout=timeout, check=False, text=True, capture_output=True
+    )
+    result = subprocess.run(  # noqa: PLW1510
         [
             SAFE_SYS_EXECUTABLE,
             Path(__file__).parent / "pytest_new_process_trace_benchmarks.py",
@@ -25,12 +29,7 @@ def trace_benchmarks_pytest(
             tests_root,
             trace_file,
         ],
-        cwd=project_root,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=benchmark_env,
-        timeout=timeout,
+        **run_args,
     )
     if result.returncode != 0:
         if "ERROR collecting" in result.stdout:

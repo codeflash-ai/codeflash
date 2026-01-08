@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,6 +12,7 @@ from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
 from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -23,9 +26,12 @@ def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
+    logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
     with custom_addopts():
-        logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
-        return subprocess.run(cmd_list, capture_output=True, cwd=cwd, env=env, text=True, timeout=timeout, check=False)
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=cwd, env=env, timeout=timeout, check=False, text=True, capture_output=True
+        )
+        return subprocess.run(cmd_list, **run_args)  # noqa: PLW1510
 
 
 def run_behavioral_tests(
@@ -39,6 +45,7 @@ def run_behavioral_tests(
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
+    """Run behavioral tests with optional coverage."""
     if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -53,12 +60,14 @@ def run_behavioral_tests(
                     )
             else:
                 test_files.append(str(file.instrumented_behavior_file_path))
+
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
             else [SAFE_SYS_EXECUTABLE, "-m", *shlex.split(pytest_cmd, posix=IS_POSIX)]
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
+
         common_pytest_args = [
             "--capture=tee-sys",
             "-q",
@@ -78,12 +87,25 @@ def run_behavioral_tests(
 
         if enable_coverage:
             coverage_database_file, coverage_config_file = prepare_coverage_files()
+            # disable jit for coverage
+            pytest_test_env["NUMBA_DISABLE_JIT"] = str(1)
+            pytest_test_env["TORCHDYNAMO_DISABLE"] = str(1)
+            pytest_test_env["PYTORCH_JIT"] = str(0)
+            pytest_test_env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+            pytest_test_env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+            pytest_test_env["JAX_DISABLE_JIT"] = str(0)
 
-            cov_erase = execute_test_subprocess(
-                shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env
-            )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any,
-            # then the current run will be appended to the previous data, which skews the results
-            logger.debug(cov_erase)
+            is_windows = sys.platform == "win32"
+            if is_windows:
+                # On Windows, delete coverage database file directly instead of using 'coverage erase', to avoid locking issues
+                if coverage_database_file.exists():
+                    with contextlib.suppress(PermissionError, OSError):
+                        coverage_database_file.unlink()
+            else:
+                cov_erase = execute_test_subprocess(
+                    shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
+                )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
+                logger.debug(cov_erase)
             coverage_cmd = [
                 SAFE_SYS_EXECUTABLE,
                 "-m",
@@ -99,7 +121,6 @@ def run_behavioral_tests(
                 coverage_cmd.extend(shlex.split(pytest_cmd, posix=IS_POSIX)[1:])
 
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS if plugin != "cov"]
-
             results = execute_test_subprocess(
                 coverage_cmd + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
@@ -112,6 +133,7 @@ def run_behavioral_tests(
             )
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
+
             results = execute_test_subprocess(
                 pytest_cmd_list + common_pytest_args + blocklist_args + result_args + test_files,
                 cwd=cwd,
