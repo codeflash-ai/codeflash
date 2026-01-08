@@ -121,7 +121,7 @@ class Explanation:
             best_ratio = self.best_concurrency_metrics.concurrency_ratio
             performance_description = (
                 f"Concurrency ratio improved from {orig_ratio:.2f}x to {best_ratio:.2f}x "
-                f"(concurrent execution now {best_ratio:.1f}x faster than sequential)\n\n"
+                f"(concurrent execution now {best_ratio:.2f}x faster than sequential)\n\n"
             )
         elif (
             self.acceptance_reason == AcceptanceReason.THROUGHPUT
