@@ -901,44 +901,21 @@ def _create_device_sync_statements(
         jax_sync = ast.If(
             test=ast.Call(
                 func=ast.Name(id="hasattr", ctx=ast.Load()),
-                args=[ast.Name(id="return_value", ctx=ast.Load()), ast.Constant(value="block_until_ready")],
+                args=[ast.Name(id=jax_alias, ctx=ast.Load()), ast.Constant(value="block_until_ready")],
                 keywords=[],
             ),
             body=[
                 ast.Expr(
                     value=ast.Call(
                         func=ast.Attribute(
-                            value=ast.Name(id="return_value", ctx=ast.Load()), attr="block_until_ready", ctx=ast.Load()
+                            value=ast.Name(id=jax_alias, ctx=ast.Load()), attr="block_until_ready", ctx=ast.Load()
                         ),
-                        args=[],
+                        args=[ast.Name(id="return_value", ctx=ast.Load())],
                         keywords=[],
                     )
                 )
             ],
-            orelse=[
-                # Try jax.block_until_ready as a fallback
-                ast.If(
-                    test=ast.Call(
-                        func=ast.Name(id="hasattr", ctx=ast.Load()),
-                        args=[ast.Name(id=jax_alias, ctx=ast.Load()), ast.Constant(value="block_until_ready")],
-                        keywords=[],
-                    ),
-                    body=[
-                        ast.Expr(
-                            value=ast.Call(
-                                func=ast.Attribute(
-                                    value=ast.Name(id=jax_alias, ctx=ast.Load()),
-                                    attr="block_until_ready",
-                                    ctx=ast.Load(),
-                                ),
-                                args=[ast.Name(id="return_value", ctx=ast.Load())],
-                                keywords=[],
-                            )
-                        )
-                    ],
-                    orelse=[],
-                )
-            ],
+            orelse=[],
         )
         sync_statements.append(jax_sync)
 
