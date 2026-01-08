@@ -1830,10 +1830,7 @@ class FunctionOptimizer:
             )
             throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
 
-        if (
-            original_code_baseline.concurrency_metrics is not None
-            and best_optimization.concurrency_metrics is not None
-        ):
+        if original_code_baseline.concurrency_metrics is not None and best_optimization.concurrency_metrics is not None:
             original_concurrency_ratio_str = f"{original_code_baseline.concurrency_metrics.concurrency_ratio:.2f}x"
             optimized_concurrency_ratio_str = f"{best_optimization.concurrency_metrics.concurrency_ratio:.2f}x"
             conc_improvement_value = concurrency_gain(
