@@ -1,4 +1,3 @@
-import time
 import asyncio
 
 
@@ -12,5 +11,5 @@ async def retry_with_backoff(func, max_retries=3):
         except Exception as e:
             last_exception = e
             if attempt < max_retries - 1:
-                time.sleep(0.0001 * attempt)
+                await asyncio.sleep(0.0001 * attempt)
     raise last_exception
