@@ -98,6 +98,7 @@ from codeflash.models.models import (
 )
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import (
+    concurrency_gain,
     coverage_critic,
     get_acceptance_reason,
     performance_gain,
@@ -1812,6 +1813,9 @@ class FunctionOptimizer:
         original_throughput_str = None
         optimized_throughput_str = None
         throughput_improvement_str = None
+        original_concurrency_ratio_str = None
+        optimized_concurrency_ratio_str = None
+        concurrency_improvement_str = None
 
         if (
             self.function_to_optimize.is_async
@@ -1825,6 +1829,17 @@ class FunctionOptimizer:
                 optimized_throughput=best_optimization.async_throughput,
             )
             throughput_improvement_str = f"{throughput_improvement_value * 100:.1f}%"
+
+        if (
+            original_code_baseline.concurrency_metrics is not None
+            and best_optimization.concurrency_metrics is not None
+        ):
+            original_concurrency_ratio_str = f"{original_code_baseline.concurrency_metrics.concurrency_ratio:.2f}x"
+            optimized_concurrency_ratio_str = f"{best_optimization.concurrency_metrics.concurrency_ratio:.2f}x"
+            conc_improvement_value = concurrency_gain(
+                original_code_baseline.concurrency_metrics, best_optimization.concurrency_metrics
+            )
+            concurrency_improvement_str = f"{conc_improvement_value * 100:.1f}%"
 
         new_explanation_raw_str = self.aiservice_client.get_new_explanation(
             source_code=code_context.read_writable_code.flat,
@@ -1843,6 +1858,10 @@ class FunctionOptimizer:
             optimized_throughput=optimized_throughput_str,
             throughput_improvement=throughput_improvement_str,
             function_references=function_references,
+            acceptance_reason=explanation.acceptance_reason.value,
+            original_concurrency_ratio=original_concurrency_ratio_str,
+            optimized_concurrency_ratio=optimized_concurrency_ratio_str,
+            concurrency_improvement=concurrency_improvement_str,
         )
         new_explanation = Explanation(
             raw_explanation_message=new_explanation_raw_str or explanation.raw_explanation_message,
