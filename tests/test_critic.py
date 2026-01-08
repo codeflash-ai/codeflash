@@ -751,6 +751,26 @@ def test_speedup_critic_with_concurrency_metrics() -> None:
     )
 
 
+def test_concurrency_ratio_display_formatting() -> None:
+    orig_ratio = 0.05
+    cand_ratio = 0.15
+    conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
+    display_string = f"Concurrency ratio: {orig_ratio:.2f}x → {cand_ratio:.2f}x ({conc_gain:+.1f}%)"
+    assert display_string == "Concurrency ratio: 0.05x → 0.15x (+200.0%)"
+
+    orig_ratio = 1.0
+    cand_ratio = 10.0
+    conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
+    display_string = f"Concurrency ratio: {orig_ratio:.2f}x → {cand_ratio:.2f}x ({conc_gain:+.1f}%)"
+    assert display_string == "Concurrency ratio: 1.00x → 10.00x (+900.0%)"
+
+    orig_ratio = 0.01
+    cand_ratio = 0.03
+    conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
+    display_string = f"Concurrency ratio: {orig_ratio:.2f}x → {cand_ratio:.2f}x ({conc_gain:+.1f}%)"
+    assert display_string == "Concurrency ratio: 0.01x → 0.03x (+200.0%)"
+
+
 def test_parse_concurrency_metrics() -> None:
     """Test parse_concurrency_metrics function."""
     # Test with valid concurrency output

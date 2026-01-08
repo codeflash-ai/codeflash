@@ -647,7 +647,7 @@ class FunctionOptimizer:
                     orig_ratio = original_code_baseline.concurrency_metrics.concurrency_ratio
                     cand_ratio = candidate_result.concurrency_metrics.concurrency_ratio
                     conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
-                    tree.add(f"Concurrency ratio: {orig_ratio:.1f}x → {cand_ratio:.1f}x ({conc_gain:+.1f}%)")
+                    tree.add(f"Concurrency ratio: {orig_ratio:.2f}x → {cand_ratio:.2f}x ({conc_gain:+.1f}%)")
             else:
                 tree.add("This candidate is faster than the original code. 🚀")
                 tree.add(f"Original summed runtime: {humanize_runtime(original_code_baseline.runtime)}")
@@ -672,7 +672,7 @@ class FunctionOptimizer:
                 orig_ratio = original_code_baseline.concurrency_metrics.concurrency_ratio
                 cand_ratio = candidate_result.concurrency_metrics.concurrency_ratio
                 conc_gain = ((cand_ratio - orig_ratio) / orig_ratio * 100) if orig_ratio > 0 else 0
-                tree.add(f"Concurrency ratio: {orig_ratio:.1f}x → {cand_ratio:.1f}x ({conc_gain:+.1f}%)")
+                tree.add(f"Concurrency ratio: {orig_ratio:.2f}x → {cand_ratio:.2f}x ({conc_gain:+.1f}%)")
 
             tree.add(
                 f"(Runtime for reference: {humanize_runtime(candidate_result.best_test_runtime)} over "
