@@ -127,9 +127,20 @@ def get_code_optimization_context(
         remove_docstrings=False,
         code_context_type=CodeContextType.TESTGEN,
     )
+
+    # Extract class definitions for imported types from project modules
+    # This helps the LLM understand class constructors and structure
+    imported_class_context = get_imported_class_definitions(testgen_context, project_root_path)
+    if imported_class_context.code_strings:
+        # Merge imported class definitions into testgen context
+        testgen_context = CodeStringsMarkdown(
+            code_strings=testgen_context.code_strings + imported_class_context.code_strings
+        )
+
     testgen_markdown_code = testgen_context.markdown
     testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
     if testgen_code_token_length > testgen_token_limit:
+        # First try removing docstrings
         testgen_context = extract_code_markdown_context_from_files(
             helpers_of_fto_dict,
             helpers_of_helpers_dict,
@@ -137,10 +148,27 @@ def get_code_optimization_context(
             remove_docstrings=True,
             code_context_type=CodeContextType.TESTGEN,
         )
+        # Re-extract imported classes (they may still fit)
+        imported_class_context = get_imported_class_definitions(testgen_context, project_root_path)
+        if imported_class_context.code_strings:
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_context.code_strings + imported_class_context.code_strings
+            )
         testgen_markdown_code = testgen_context.markdown
         testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
         if testgen_code_token_length > testgen_token_limit:
-            raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+            # If still over limit, try without imported class definitions
+            testgen_context = extract_code_markdown_context_from_files(
+                helpers_of_fto_dict,
+                helpers_of_helpers_dict,
+                project_root_path,
+                remove_docstrings=True,
+                code_context_type=CodeContextType.TESTGEN,
+            )
+            testgen_markdown_code = testgen_context.markdown
+            testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
+            if testgen_code_token_length > testgen_token_limit:
+                raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
 
@@ -487,6 +515,147 @@ def get_function_sources_from_jedi(
                             function_source_list.append(function_source)
 
     return file_path_to_function_source, function_source_list
+
+
+def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
+    """Extract class definitions for imported types from project modules.
+
+    This function analyzes the imports in the extracted code context and fetches
+    class definitions for any classes imported from project modules. This helps
+    the LLM understand the actual class structure (constructors, methods, inheritance)
+    rather than just seeing import statements.
+
+    Args:
+        code_context: The already extracted code context containing imports
+        project_root_path: Root path of the project
+
+    Returns:
+        CodeStringsMarkdown containing class definitions from imported project modules
+
+    """
+    import jedi
+
+    # Collect all code from the context
+    all_code = "\n".join(cs.code for cs in code_context.code_strings)
+
+    # Parse to find import statements
+    try:
+        tree = ast.parse(all_code)
+    except SyntaxError:
+        return CodeStringsMarkdown(code_strings=[])
+
+    # Collect imported names and their source modules
+    imported_names: dict[str, str] = {}  # name -> module_path
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_names[imported_name] = node.module
+
+    if not imported_names:
+        return CodeStringsMarkdown(code_strings=[])
+
+    # Track which classes we've already extracted to avoid duplicates
+    extracted_classes: set[tuple[Path, str]] = set()  # (file_path, class_name)
+
+    # Also track what's already defined in the context
+    existing_definitions: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            existing_definitions.add(node.name)
+
+    class_code_strings: list[CodeString] = []
+
+    for name, module_name in imported_names.items():
+        # Skip if already defined in context
+        if name in existing_definitions:
+            continue
+
+        # Try to find the module file using Jedi
+        try:
+            # Create a script that imports the module to resolve it
+            test_code = f"import {module_name}"
+            script = jedi.Script(test_code, project=jedi.Project(path=project_root_path))
+            completions = script.goto(1, len(test_code))
+
+            if not completions:
+                continue
+
+            module_path = completions[0].module_path
+            if not module_path:
+                continue
+
+            # Check if this is a project module (not stdlib/third-party)
+            if not str(module_path).startswith(str(project_root_path) + os.sep):
+                continue
+            if path_belongs_to_site_packages(module_path):
+                continue
+
+            # Skip if we've already extracted this class
+            if (module_path, name) in extracted_classes:
+                continue
+
+            # Parse the module to find the class definition
+            module_source = module_path.read_text(encoding="utf-8")
+            module_tree = ast.parse(module_source)
+
+            for node in ast.walk(module_tree):
+                if isinstance(node, ast.ClassDef) and node.name == name:
+                    # Extract the class source code
+                    lines = module_source.split("\n")
+                    class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+
+                    # Also extract any necessary imports for the class (base classes, type hints)
+                    class_imports = _extract_imports_for_class(module_tree, node, module_source)
+
+                    full_source = class_imports + "\n\n" + class_source if class_imports else class_source
+
+                    class_code_strings.append(CodeString(code=full_source, file_path=module_path))
+                    extracted_classes.add((module_path, name))
+                    break
+
+        except Exception:
+            logger.debug(f"Error extracting class definition for {name} from {module_name}")
+            continue
+
+    return CodeStringsMarkdown(code_strings=class_code_strings)
+
+
+def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
+    """Extract import statements needed for a class definition.
+
+    This extracts imports for base classes and commonly used type annotations.
+    """
+    needed_names: set[str] = set()
+
+    # Get base class names
+    for base in class_node.bases:
+        if isinstance(base, ast.Name):
+            needed_names.add(base.id)
+        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            # For things like abc.ABC, we need the module name
+            needed_names.add(base.value.id)
+
+    # Find imports that provide these names
+    import_lines: list[str] = []
+    source_lines = module_source.split("\n")
+
+    for node in module_tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name.split(".")[0]
+                if name in needed_names:
+                    import_lines.append(source_lines[node.lineno - 1])
+                    break
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                name = alias.asname if alias.asname else alias.name
+                if name in needed_names:
+                    import_lines.append(source_lines[node.lineno - 1])
+                    break
+
+    return "\n".join(import_lines)
 
 
 def is_dunder_method(name: str) -> bool:
