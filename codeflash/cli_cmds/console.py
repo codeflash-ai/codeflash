@@ -58,6 +58,19 @@ for level in ("info", "debug", "warning", "error"):
     )
 
 
+class DummyTask:
+    def __init__(self) -> None:
+        self.id = 0
+
+
+class DummyProgress:
+    def __init__(self) -> None:
+        pass
+
+    def advance(self, task_id: TaskID, advance: int = 1) -> None:
+        pass
+
+
 def lsp_log(message: LspMessage) -> None:
     if not is_LSP_enabled():
         return
@@ -120,10 +133,6 @@ def progress_bar(
         logger.info(message)
 
         # Create a fake task ID since we still need to yield something
-        class DummyTask:
-            def __init__(self) -> None:
-                self.id = 0
-
         yield DummyTask().id
     else:
         progress = Progress(
@@ -141,6 +150,13 @@ def progress_bar(
 @contextmanager
 def test_files_progress_bar(total: int, description: str) -> Generator[tuple[Progress, TaskID], None, None]:
     """Progress bar for test files."""
+    if is_LSP_enabled():
+        lsp_log(LspTextMessage(text=description, takes_time=True))
+        dummy_progress = DummyProgress()
+        dummy_task = DummyTask()
+        yield dummy_progress, dummy_task.id
+        return
+
     with Progress(
         SpinnerColumn(next(spinners)),
         TextColumn("[progress.description]{task.description}"),

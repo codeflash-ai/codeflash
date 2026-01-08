@@ -411,13 +411,17 @@ def not_in_checkpoint_function():
 
         discovered = find_all_functions_in_file(test_file_path)
         modified_functions = {test_file_path: discovered[test_file_path]}
-        filtered, count = filter_functions(
-            modified_functions,
-            tests_root=Path("tests"),
-            ignore_paths=[],
-            project_root=temp_dir,
-            module_root=temp_dir,
-        )
+        # Use an absolute path for tests_root that won't match the temp directory
+        # This avoids path resolution issues in CI where the working directory might differ
+        tests_root_absolute = (temp_dir.parent / "nonexistent_tests_dir").resolve()
+        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}):
+            filtered, count = filter_functions(
+                modified_functions,
+                tests_root=tests_root_absolute,
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,
+            )
         function_names = [fn.function_name for fn in filtered.get(test_file_path, [])]
         assert "propagate_attributes" in function_names
         assert count == 3

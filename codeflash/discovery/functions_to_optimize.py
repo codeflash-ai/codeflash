@@ -175,7 +175,7 @@ class FunctionToOptimize:
 def get_functions_to_optimize(
     optimize_all: str | None,
     replay_test: list[Path] | None,
-    file: Path | None,
+    file: Path | str | None,
     only_get_this_function: str | None,
     test_cfg: TestConfig,
     ignore_paths: list[Path],
@@ -202,6 +202,7 @@ def get_functions_to_optimize(
         elif file is not None:
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
+            file = Path(file) if isinstance(file, str) else file
             functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
