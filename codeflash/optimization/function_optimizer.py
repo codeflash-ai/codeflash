@@ -99,6 +99,7 @@ from codeflash.models.models import (
 from codeflash.result.create_pr import check_create_pr, existing_tests_source_for
 from codeflash.result.critic import (
     coverage_critic,
+    get_acceptance_reason,
     performance_gain,
     quantity_of_tests_critic,
     speedup_critic,
@@ -740,6 +741,7 @@ class FunctionOptimizer:
             winning_benchmarking_test_results=candidate_result.benchmarking_test_results,
             winning_replay_benchmarking_test_results=candidate_result.benchmarking_test_results,
             async_throughput=candidate_result.async_throughput,
+            concurrency_metrics=candidate_result.concurrency_metrics,
         )
 
         return best_optimization, benchmark_tree
@@ -784,6 +786,7 @@ class FunctionOptimizer:
                 winning_benchmarking_test_results=valid_opt.winning_benchmarking_test_results,
                 winning_replay_benchmarking_test_results=valid_opt.winning_replay_benchmarking_test_results,
                 async_throughput=valid_opt.async_throughput,
+                concurrency_metrics=valid_opt.concurrency_metrics,
             )
             valid_candidates_with_shorter_code.append(new_best_opt)
             diff_lens_list.append(
@@ -1690,6 +1693,14 @@ class FunctionOptimizer:
                         fto_benchmark_timings=self.function_benchmark_timings,
                         total_benchmark_timings=self.total_benchmark_timings,
                     )
+                acceptance_reason = get_acceptance_reason(
+                    original_runtime_ns=original_code_baseline.runtime,
+                    optimized_runtime_ns=best_optimization.runtime,
+                    original_async_throughput=original_code_baseline.async_throughput,
+                    optimized_async_throughput=best_optimization.async_throughput,
+                    original_concurrency_metrics=original_code_baseline.concurrency_metrics,
+                    optimized_concurrency_metrics=best_optimization.concurrency_metrics,
+                )
                 explanation = Explanation(
                     raw_explanation_message=best_optimization.candidate.explanation,
                     winning_behavior_test_results=best_optimization.winning_behavior_test_results,
@@ -1701,6 +1712,9 @@ class FunctionOptimizer:
                     benchmark_details=processed_benchmark_info.benchmark_details if processed_benchmark_info else None,
                     original_async_throughput=original_code_baseline.async_throughput,
                     best_async_throughput=best_optimization.async_throughput,
+                    original_concurrency_metrics=original_code_baseline.concurrency_metrics,
+                    best_concurrency_metrics=best_optimization.concurrency_metrics,
+                    acceptance_reason=acceptance_reason,
                 )
 
                 self.replace_function_and_helpers_with_optimized_code(
@@ -1841,6 +1855,9 @@ class FunctionOptimizer:
             benchmark_details=explanation.benchmark_details,
             original_async_throughput=explanation.original_async_throughput,
             best_async_throughput=explanation.best_async_throughput,
+            original_concurrency_metrics=explanation.original_concurrency_metrics,
+            best_concurrency_metrics=explanation.best_concurrency_metrics,
+            acceptance_reason=explanation.acceptance_reason,
         )
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 

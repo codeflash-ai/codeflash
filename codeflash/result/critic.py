@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from codeflash.code_utils import env_utils
@@ -14,6 +15,13 @@ from codeflash.models import models
 
 if TYPE_CHECKING:
     from codeflash.models.models import ConcurrencyMetrics, CoverageData, OptimizedCandidateResult, OriginalCodeBaseline
+
+
+class AcceptanceReason(Enum):
+    RUNTIME = "runtime"
+    THROUGHPUT = "throughput"
+    CONCURRENCY = "concurrency"
+    NONE = "none"
 
 
 def performance_gain(*, original_runtime_ns: int, optimized_runtime_ns: int) -> float:
@@ -127,6 +135,58 @@ def speedup_critic(
         concurrency_acceptance = concurrency_improved and concurrency_is_best
         return throughput_acceptance or runtime_acceptance or concurrency_acceptance
     return runtime_improved and runtime_is_best
+
+
+def get_acceptance_reason(
+    original_runtime_ns: int,
+    optimized_runtime_ns: int,
+    *,
+    original_async_throughput: int | None = None,
+    optimized_async_throughput: int | None = None,
+    original_concurrency_metrics: ConcurrencyMetrics | None = None,
+    optimized_concurrency_metrics: ConcurrencyMetrics | None = None,
+) -> AcceptanceReason:
+    """Determine why an optimization was accepted.
+
+    Returns the primary reason for acceptance, with priority:
+    concurrency > throughput > runtime (for async code).
+    """
+    noise_floor = 3 * MIN_IMPROVEMENT_THRESHOLD if original_runtime_ns < 10000 else MIN_IMPROVEMENT_THRESHOLD
+    if env_utils.is_ci():
+        noise_floor = noise_floor * 2
+
+    perf_gain = performance_gain(original_runtime_ns=original_runtime_ns, optimized_runtime_ns=optimized_runtime_ns)
+    runtime_improved = perf_gain > noise_floor
+
+    throughput_improved = False
+    if (
+        original_async_throughput is not None
+        and optimized_async_throughput is not None
+        and original_async_throughput > 0
+    ):
+        throughput_gain_value = throughput_gain(
+            original_throughput=original_async_throughput, optimized_throughput=optimized_async_throughput
+        )
+        throughput_improved = throughput_gain_value > MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD
+
+    concurrency_improved = False
+    if original_concurrency_metrics is not None and optimized_concurrency_metrics is not None:
+        conc_gain = concurrency_gain(original_concurrency_metrics, optimized_concurrency_metrics)
+        concurrency_improved = conc_gain > MIN_CONCURRENCY_IMPROVEMENT_THRESHOLD
+
+    # Return reason with priority: concurrency > throughput > runtime
+    if original_async_throughput is not None and optimized_async_throughput is not None:
+        if concurrency_improved:
+            return AcceptanceReason.CONCURRENCY
+        if throughput_improved:
+            return AcceptanceReason.THROUGHPUT
+        if runtime_improved:
+            return AcceptanceReason.RUNTIME
+        return AcceptanceReason.NONE
+
+    if runtime_improved:
+        return AcceptanceReason.RUNTIME
+    return AcceptanceReason.NONE
 
 
 def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | OriginalCodeBaseline) -> bool:
