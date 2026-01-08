@@ -20,7 +20,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Optional, cast
+from typing import Annotated, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
@@ -93,6 +93,13 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+
+
+class OptimizationReviewResult(NamedTuple):
+    """Result from the optimization review API."""
+
+    review: str  # "high", "medium", "low", or ""
+    explanation: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully

@@ -17,12 +17,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-from codeflash.api.aiservice import (
-    AiServiceClient,
-    AIServiceRefinerRequest,
-    LocalAiServiceClient,
-    OptimizationReviewResult,
-)
+from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
@@ -90,6 +85,7 @@ from codeflash.models.models import (
     CodeOptimizationContext,
     GeneratedTests,
     GeneratedTestsList,
+    OptimizationReviewResult,
     OptimizationSet,
     OptimizedCandidate,
     OptimizedCandidateResult,

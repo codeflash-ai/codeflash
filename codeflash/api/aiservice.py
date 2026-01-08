@@ -5,7 +5,7 @@ import os
 import platform
 import time
 from itertools import count
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from pydantic.json import pydantic_encoder
@@ -23,6 +23,7 @@ from codeflash.models.models import (
     CodeStringsMarkdown,
     OptimizedCandidate,
     OptimizedCandidateSource,
+    OptimizationReviewResult,
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -38,13 +39,6 @@ if TYPE_CHECKING:
         AIServiceRefinerRequest,
     )
     from codeflash.result.explanation import Explanation
-
-
-class OptimizationReviewResult(NamedTuple):
-    """Result from the optimization review API."""
-
-    review: str  # "high", "medium", "low", or ""
-    explanation: str
 
 
 class AiServiceClient:
