@@ -17,7 +17,12 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.tree import Tree
 
-from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
+from codeflash.api.aiservice import (
+    AiServiceClient,
+    AIServiceRefinerRequest,
+    LocalAiServiceClient,
+    OptimizationReviewResult,
+)
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
@@ -1840,37 +1845,40 @@ class FunctionOptimizer:
 
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
-        opt_review_response = ""
+        opt_review_result = OptimizationReviewResult(review="", explanation="")
         # this will now run regardless of pr, staging review flags
         try:
-            opt_review_response = self.aiservice_client.get_optimization_review(
+            opt_review_result = self.aiservice_client.get_optimization_review(
                 **data, calling_fn_details=function_references
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
-        data["optimization_review"] = opt_review_response
-        self.optimization_review = opt_review_response
+        data["optimization_review"] = opt_review_result.review
+        self.optimization_review = opt_review_result.review
 
         # Display the reviewer result to the user
-        if opt_review_response:
+        if opt_review_result.review:
             review_display = {
                 "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
                 "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
                 "low": ("[bold red]Low[/bold red]", "red", "Not recommended to merge"),
             }
             display_info = review_display.get(
-                opt_review_response.lower(), ("[bold]Unknown[/bold]", "white", "")
+                opt_review_result.review.lower(), ("[bold]Unknown[/bold]", "white", "")
             )
+            explanation_text = opt_review_result.explanation.strip() if opt_review_result.explanation else ""
             if is_LSP_enabled():
-                lsp_log(
-                    LspMarkdownMessage(
-                        markdown=f"### Reviewer Assessment: {opt_review_response.capitalize()}\n{display_info[2]}"
-                    )
-                )
+                md_content = f"### Reviewer Assessment: {opt_review_result.review.capitalize()}\n{display_info[2]}"
+                if explanation_text:
+                    md_content += f"\n\n{explanation_text}"
+                lsp_log(LspMarkdownMessage(markdown=md_content))
             else:
+                panel_content = f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}"
+                if explanation_text:
+                    panel_content += f"\n\n[dim]{explanation_text}[/dim]"
                 console.print(
                     Panel(
-                        f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}",
+                        panel_content,
                         title="Optimization Review",
                         border_style=display_info[1],
                     )
@@ -1878,7 +1886,7 @@ class FunctionOptimizer:
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-        if raise_pr and not staging_review and opt_review_response != "low":
+        if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir()
