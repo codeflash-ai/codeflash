@@ -21,9 +21,9 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
     CodeStringsMarkdown,
+    OptimizationReviewResult,
     OptimizedCandidate,
     OptimizedCandidateSource,
-    OptimizationReviewResult,
 )
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
@@ -712,8 +712,7 @@ class AiServiceClient:
         if response.status_code == 200:
             data = response.json()
             return OptimizationReviewResult(
-                review=cast("str", data["review"]),
-                explanation=cast("str", data.get("review_explanation", "")),
+                review=cast("str", data["review"]), explanation=cast("str", data.get("review_explanation", ""))
             )
         try:
             error = cast("str", response.json()["error"])

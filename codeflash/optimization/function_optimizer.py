@@ -1859,9 +1859,7 @@ class FunctionOptimizer:
                 "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
                 "low": ("[bold red]Low[/bold red]", "red", "Not recommended to merge"),
             }
-            display_info = review_display.get(
-                opt_review_result.review.lower(), ("[bold]Unknown[/bold]", "white", "")
-            )
+            display_info = review_display.get(opt_review_result.review.lower(), ("[bold]Unknown[/bold]", "white", ""))
             explanation_text = opt_review_result.explanation.strip() if opt_review_result.explanation else ""
             if is_LSP_enabled():
                 md_content = f"### Reviewer Assessment: {opt_review_result.review.capitalize()}\n{display_info[2]}"
@@ -1872,13 +1870,7 @@ class FunctionOptimizer:
                 panel_content = f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}"
                 if explanation_text:
                     panel_content += f"\n\n[dim]{explanation_text}[/dim]"
-                console.print(
-                    Panel(
-                        panel_content,
-                        title="Optimization Review",
-                        border_style=display_info[1],
-                    )
-                )
+                console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
 
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
