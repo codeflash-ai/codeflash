@@ -132,6 +132,46 @@ async def async_function(x: int, y: int) -> int:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
+def test_async_decorator_application_concurrency_mode(temp_dir):
+    """Test that CONCURRENCY mode applies the codeflash_concurrency_async decorator."""
+    async_function_code = '''
+import asyncio
+
+async def async_function(x: int, y: int) -> int:
+    """Simple async function for testing."""
+    await asyncio.sleep(0.01)
+    return x * y
+'''
+
+    expected_decorated_code = '''
+import asyncio
+
+from codeflash.code_utils.codeflash_wrap_decorator import \\
+    codeflash_concurrency_async
+
+
+@codeflash_concurrency_async
+async def async_function(x: int, y: int) -> int:
+    """Simple async function for testing."""
+    await asyncio.sleep(0.01)
+    return x * y
+'''
+
+    test_file = temp_dir / "test_async.py"
+    test_file.write_text(async_function_code)
+
+    func = FunctionToOptimize(
+        function_name="async_function", file_path=test_file, parents=[], is_async=True
+    )
+
+    decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.CONCURRENCY)
+
+    assert decorator_added
+    modified_code = test_file.read_text()
+    assert modified_code.strip() == expected_decorated_code.strip()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_class_method_decorator_application(temp_dir):
     async_class_code = '''
 import asyncio

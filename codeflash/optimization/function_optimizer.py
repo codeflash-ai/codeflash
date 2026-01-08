@@ -110,7 +110,11 @@ from codeflash.verification.concolic_testing import generate_concolic_tests
 from codeflash.verification.equivalence import compare_test_results
 from codeflash.verification.instrument_codeflash_capture import instrument_codeflash_capture
 from codeflash.verification.parse_line_profile_test_output import parse_line_profile_results
-from codeflash.verification.parse_test_output import calculate_function_throughput_from_test_results, parse_test_results
+from codeflash.verification.parse_test_output import (
+    calculate_function_throughput_from_test_results,
+    parse_concurrency_metrics,
+    parse_test_results,
+)
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
@@ -123,6 +127,7 @@ if TYPE_CHECKING:
     from codeflash.models.models import (
         BenchmarkKey,
         CodeStringsMarkdown,
+        ConcurrencyMetrics,
         CoverageData,
         FunctionCalledInTest,
         FunctionSource,
@@ -2042,11 +2047,21 @@ class FunctionOptimizer:
         logger.debug(f"Total original code runtime (ns): {total_timing}")
 
         async_throughput = None
+        concurrency_metrics = None
         if self.function_to_optimize.is_async:
             async_throughput = calculate_function_throughput_from_test_results(
                 benchmarking_results, self.function_to_optimize.function_name
             )
             logger.debug(f"Original async function throughput: {async_throughput} calls/second")
+
+            concurrency_metrics = self.run_concurrency_benchmark(
+                code_context=code_context, original_helper_code=original_helper_code, test_env=test_env
+            )
+            if concurrency_metrics:
+                logger.debug(
+                    f"Original concurrency metrics: ratio={concurrency_metrics.concurrency_ratio:.2f}, "
+                    f"seq={concurrency_metrics.sequential_time_ns}ns, conc={concurrency_metrics.concurrent_time_ns}ns"
+                )
 
         if self.args.benchmark:
             replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
@@ -2062,6 +2077,7 @@ class FunctionOptimizer:
                     coverage_results=coverage_results,
                     line_profile_results=line_profile_results,
                     async_throughput=async_throughput,
+                    concurrency_metrics=concurrency_metrics,
                 ),
                 functions_to_remove,
             )
@@ -2227,11 +2243,22 @@ class FunctionOptimizer:
             logger.debug(f"Total optimized code {optimization_candidate_index} runtime (ns): {total_candidate_timing}")
 
             candidate_async_throughput = None
+            candidate_concurrency_metrics = None
             if self.function_to_optimize.is_async:
                 candidate_async_throughput = calculate_function_throughput_from_test_results(
                     candidate_benchmarking_results, self.function_to_optimize.function_name
                 )
                 logger.debug(f"Candidate async function throughput: {candidate_async_throughput} calls/second")
+
+                # Run concurrency benchmark for candidate
+                candidate_concurrency_metrics = self.run_concurrency_benchmark(
+                    code_context=code_context, original_helper_code=candidate_helper_code, test_env=test_env
+                )
+                if candidate_concurrency_metrics:
+                    logger.debug(
+                        f"Candidate concurrency metrics: ratio={candidate_concurrency_metrics.concurrency_ratio:.2f}, "
+                        f"seq={candidate_concurrency_metrics.sequential_time_ns}ns, conc={candidate_concurrency_metrics.concurrent_time_ns}ns"
+                    )
 
             if self.args.benchmark:
                 candidate_replay_benchmarking_results = candidate_benchmarking_results.group_by_benchmarks(
@@ -2253,6 +2280,7 @@ class FunctionOptimizer:
                     optimization_candidate_index=optimization_candidate_index,
                     total_candidate_timing=total_candidate_timing,
                     async_throughput=candidate_async_throughput,
+                    concurrency_metrics=candidate_concurrency_metrics,
                 )
             )
 
@@ -2440,3 +2468,57 @@ class FunctionOptimizer:
                 f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
             )
         return line_profile_results
+
+    def run_concurrency_benchmark(
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], test_env: dict[str, str]
+    ) -> ConcurrencyMetrics | None:
+        """Run concurrency benchmark to measure sequential vs concurrent execution for async functions.
+
+        This benchmark detects blocking vs non-blocking async code by comparing:
+        - Sequential execution time (running N iterations one after another)
+        - Concurrent execution time (running N iterations in parallel with asyncio.gather)
+
+        Blocking code (like time.sleep) will have similar sequential and concurrent times.
+        Non-blocking code (like asyncio.sleep) will be much faster when run concurrently.
+
+        Returns:
+            ConcurrencyMetrics if benchmark ran successfully, None otherwise.
+
+        """
+        if not self.function_to_optimize.is_async:
+            return None
+
+        from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
+
+        try:
+            # Add concurrency decorator to the source function
+            add_async_decorator_to_function(
+                self.function_to_optimize.file_path, self.function_to_optimize, TestingMode.CONCURRENCY
+            )
+
+            # Run the concurrency benchmark tests
+            concurrency_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.PERFORMANCE,  # Use performance mode for running
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=5.0,  # Short benchmark time
+                enable_coverage=False,
+                code_context=code_context,
+                pytest_min_loops=1,
+                pytest_max_loops=3,
+            )
+        except Exception as e:
+            logger.debug(f"Concurrency benchmark failed: {e}")
+            return None
+        finally:
+            # Restore original code
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+
+        # Parse concurrency metrics from stdout
+        if concurrency_results and concurrency_results.perf_stdout:
+            return parse_concurrency_metrics(concurrency_results, self.function_to_optimize.function_name)
+
+        return None

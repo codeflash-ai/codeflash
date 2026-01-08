@@ -621,6 +621,7 @@ class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
     LINE_PROFILE = "line_profile"
+    CONCURRENCY = "concurrency"
 
 
 # TODO this class is duplicated in codeflash_capture

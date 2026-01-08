@@ -1109,9 +1109,12 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
         self.added_decorator = False
 
         # Choose decorator based on mode
-        self.decorator_name = (
-            "codeflash_behavior_async" if mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-        )
+        if mode == TestingMode.BEHAVIOR:
+            self.decorator_name = "codeflash_behavior_async"
+        elif mode == TestingMode.CONCURRENCY:
+            self.decorator_name = "codeflash_concurrency_async"
+        else:
+            self.decorator_name = "codeflash_performance_async"
 
     def visit_ClassDef(self, node: cst.ClassDef) -> None:
         # Track when we enter a class
@@ -1154,12 +1157,14 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
                 "codeflash_trace_async",
                 "codeflash_behavior_async",
                 "codeflash_performance_async",
+                "codeflash_concurrency_async",
             }
         if isinstance(decorator_node, cst.Call) and isinstance(decorator_node.func, cst.Name):
             return decorator_node.func.value in {
                 "codeflash_trace_async",
                 "codeflash_behavior_async",
                 "codeflash_performance_async",
+                "codeflash_concurrency_async",
             }
         return False
 
@@ -1170,6 +1175,14 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
     def __init__(self, mode: TestingMode = TestingMode.BEHAVIOR) -> None:
         self.mode = mode
         self.has_import = False
+
+    def _get_decorator_name(self) -> str:
+        """Get the decorator name based on the testing mode."""
+        if self.mode == TestingMode.BEHAVIOR:
+            return "codeflash_behavior_async"
+        if self.mode == TestingMode.CONCURRENCY:
+            return "codeflash_concurrency_async"
+        return "codeflash_performance_async"
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
         # Check if the async decorator import is already present
@@ -1182,9 +1195,7 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
             and node.module.attr.value == "codeflash_wrap_decorator"
             and not isinstance(node.names, cst.ImportStar)
         ):
-            decorator_name = (
-                "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-            )
+            decorator_name = self._get_decorator_name()
             for import_alias in node.names:
                 if import_alias.name.value == decorator_name:
                     self.has_import = True
@@ -1195,9 +1206,7 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
             return updated_node
 
         # Choose import based on mode
-        decorator_name = (
-            "codeflash_behavior_async" if self.mode == TestingMode.BEHAVIOR else "codeflash_performance_async"
-        )
+        decorator_name = self._get_decorator_name()
 
         # Parse the import statement into a CST node
         import_node = cst.parse_statement(f"from codeflash.code_utils.codeflash_wrap_decorator import {decorator_name}")
