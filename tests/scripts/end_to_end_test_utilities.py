@@ -262,9 +262,9 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     if not functions_traced:
         logging.error("Failed to find traced functions in output")
         return False
-    if int(functions_traced.group(1)) != 7:
+    if int(functions_traced.group(1)) != 8:
         logging.error(functions_traced.groups())
-        logging.error("Expected 7 traced functions")
+        logging.error("Expected 8 traced functions")
         return False
 
     # Validate optimization results (from optimization phase)
