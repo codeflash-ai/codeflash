@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import shutil
 import subprocess
 import tempfile
 import time
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import git
+from git.exc import GitCommandError
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.compat import codeflash_cache_dir
@@ -95,12 +97,62 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         return worktree_dir
 
 
+def _fallback_remove_worktree(worktree_dir: Path) -> None:
+    """Fallback worktree removal using shutil.rmtree when git commands fail."""
+    if worktree_dir.exists():
+        shutil.rmtree(worktree_dir, ignore_errors=True)
+        logger.debug(f"Removed worktree directory using fallback method: {worktree_dir}")
+
+
 def remove_worktree(worktree_dir: Path) -> None:
+    """Remove a git worktree, with retry logic for Windows permission errors."""
+    # Try to get repository reference
     try:
         repository = git.Repo(worktree_dir, search_parent_directories=True)
-        repository.git.worktree("remove", "--force", worktree_dir)
+    except git.InvalidGitRepositoryError:
+        # Worktree is not a valid git repository (corrupted or partially created)
+        logger.debug(f"Worktree is not a valid git repository, using fallback deletion: {worktree_dir}")
+        _fallback_remove_worktree(worktree_dir)
+        return
     except Exception:
-        logger.exception(f"Failed to remove worktree: {worktree_dir}")
+        logger.exception(f"Failed to open worktree repository: {worktree_dir}")
+        _fallback_remove_worktree(worktree_dir)
+        return
+
+    # Try git worktree remove first
+    for attempt in range(2):
+        try:
+            repository.git.worktree("remove", "--force", worktree_dir)
+            logger.debug(f"Successfully removed worktree: {worktree_dir}")
+            return
+        except GitCommandError as e:
+            error_msg = str(e).lower()
+            # Check if it's a permission error or not a git repository error
+            if "permission denied" in error_msg or "failed to delete" in error_msg:
+                if attempt == 0:
+                    # Retry once with a small delay to allow file handles to close
+                    logger.debug(f"Permission error removing worktree (attempt {attempt + 1}), retrying after delay: {worktree_dir}")
+                    time.sleep(0.5)
+                    continue
+            elif "not a git repository" in error_msg:
+                # Worktree reference is broken, just delete the directory
+                logger.debug(f"Worktree git reference is broken, using fallback deletion: {worktree_dir}")
+                _fallback_remove_worktree(worktree_dir)
+                return
+            
+            # Fallback to shutil.rmtree for any persistent error
+            logger.warning(f"Git worktree remove failed, using fallback deletion: {worktree_dir}")
+            _fallback_remove_worktree(worktree_dir)
+            # Try to prune stale worktree references
+            try:
+                repository.git.worktree("prune")
+            except Exception:
+                pass
+            return
+        except Exception:
+            logger.exception(f"Failed to remove worktree: {worktree_dir}")
+            _fallback_remove_worktree(worktree_dir)
+            return
 
 
 def create_diff_patch_from_worktree(
