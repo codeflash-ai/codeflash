@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import configparser
-import os
 import shutil
 import stat
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import git
 
@@ -98,10 +97,12 @@ def create_detached_worktree(module_root: Path) -> Optional[Path]:
         return worktree_dir
 
 
-def _handle_remove_readonly(func, path, exc_info):
+def _handle_remove_readonly(
+    func: Callable[[str], None], path: str, exc_info: tuple[type[BaseException], BaseException, Any]
+) -> None:
     """Error handler for shutil.rmtree to handle read-only files on Windows."""
     if isinstance(exc_info[1], PermissionError):
-        os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+        Path(path).chmod(stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
         func(path)
     else:
         raise exc_info[1]
