@@ -20,6 +20,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
     CodeStringsMarkdown,
+    OptimizationReviewResult,
     OptimizedCandidate,
     OptimizedCandidateSource,
 )
@@ -44,6 +45,8 @@ class AiServiceClient:
         self.base_url = self.get_aiservice_base_url()
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
         self.llm_call_counter = count(1)
+        self.is_local = self.base_url == "http://localhost:8000"
+        self.timeout: float | None = None if self.is_local else 90
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
@@ -167,7 +170,7 @@ class AiServiceClient:
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
         try:
-            response = self.make_ai_service_request("/optimize", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/optimize", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -235,7 +238,7 @@ class AiServiceClient:
         }
 
         try:
-            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/optimize-line-profiler", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -263,7 +266,7 @@ class AiServiceClient:
                 "original_source_code": request.original_source_code,
                 "candidates": request.candidates,
             }
-            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/adaptive_optimize", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating adaptive optimized candidates: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -319,7 +322,7 @@ class AiServiceClient:
             for opt in request
         ]
         try:
-            response = self.make_ai_service_request("/refinement", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/refinement", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -359,7 +362,7 @@ class AiServiceClient:
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
             }
-            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
             logger.exception(f"Error generating optimization repair: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -454,7 +457,7 @@ class AiServiceClient:
         logger.info("loading|Generating explanation")
         console.rule()
         try:
-            response = self.make_ai_service_request("/explain", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/explain", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating explanations: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -506,7 +509,7 @@ class AiServiceClient:
         logger.info("loading|Generating ranking")
         console.rule()
         try:
-            response = self.make_ai_service_request("/rank", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/rank", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating ranking: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
@@ -562,7 +565,7 @@ class AiServiceClient:
             "optimizations_post": optimizations_post,
         }
         try:
-            self.make_ai_service_request("/log_features", payload=payload, timeout=5)
+            self.make_ai_service_request("/log_features", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error logging features: {e}")
 
@@ -615,7 +618,7 @@ class AiServiceClient:
             "call_sequence": self.get_next_sequence(),
         }
         try:
-            response = self.make_ai_service_request("/testgen", payload=payload, timeout=90)
+            response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating tests: {e}")
             ph("cli-testgen-error-caught", {"error": str(e)})
@@ -653,7 +656,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
-    ) -> str:
+    ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
         Args:
@@ -671,7 +674,7 @@ class AiServiceClient:
 
         Returns:
         -------
-        - 'high', 'medium' or 'low' optimization review
+        OptimizationReviewResult with review ('high', 'medium', 'low', or '') and explanation
 
         """
         diff_str = "\n".join(
@@ -703,14 +706,17 @@ class AiServiceClient:
         }
         console.rule()
         try:
-            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=120)
+            response = self.make_ai_service_request("/optimization_review", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return ""
+            return OptimizationReviewResult(review="", explanation="")
 
         if response.status_code == 200:
-            return cast("str", response.json()["review"])
+            data = response.json()
+            return OptimizationReviewResult(
+                review=cast("str", data["review"]), explanation=cast("str", data.get("review_explanation", ""))
+            )
         try:
             error = cast("str", response.json()["error"])
         except Exception:
@@ -718,7 +724,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return ""
+        return OptimizationReviewResult(review="", explanation="")
 
     def generate_workflow_steps(
         self,
@@ -745,7 +751,7 @@ class AiServiceClient:
         )
 
         try:
-            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/workflow-gen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             # AI service unavailable - this is expected, will fall back to static workflow
             logger.debug(

@@ -175,7 +175,7 @@ class FunctionToOptimize:
 def get_functions_to_optimize(
     optimize_all: str | None,
     replay_test: list[Path] | None,
-    file: Path | None,
+    file: Path | str | None,
     only_get_this_function: str | None,
     test_cfg: TestConfig,
     ignore_paths: list[Path],
@@ -202,6 +202,7 @@ def get_functions_to_optimize(
         elif file is not None:
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
+            file = Path(file) if isinstance(file, str) else file
             functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
@@ -665,30 +666,33 @@ def filter_functions(
     submodule_ignored_paths_count: int = 0
     blocklist_funcs_removed_count: int = 0
     previous_checkpoint_functions_removed_count: int = 0
-    tests_root_str = str(tests_root)
-    module_root_str = str(module_root)
+    # Normalize paths for case-insensitive comparison on Windows
+    tests_root_str = os.path.normcase(str(tests_root))
+    module_root_str = os.path.normcase(str(module_root))
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         file_path = str(file_path_path)
-        if file_path.startswith(tests_root_str + os.sep):
+        file_path_normalized = os.path.normcase(file_path)
+        if file_path_normalized.startswith(tests_root_str + os.sep):
             test_functions_removed_count += len(_functions)
             continue
         if file_path in ignore_paths or any(
-            file_path.startswith(str(ignore_path) + os.sep) for ignore_path in ignore_paths
+            file_path_normalized.startswith(os.path.normcase(str(ignore_path)) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
         if file_path in submodule_paths or any(
-            file_path.startswith(str(submodule_path) + os.sep) for submodule_path in submodule_paths
+            file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep)
+            for submodule_path in submodule_paths
         ):
             submodule_ignored_paths_count += 1
             continue
         if path_belongs_to_site_packages(Path(file_path)):
             site_packages_removed_count += len(_functions)
             continue
-        if not file_path.startswith(module_root_str + os.sep):
+        if not file_path_normalized.startswith(module_root_str + os.sep):
             non_modules_removed_count += len(_functions)
             continue
         try:

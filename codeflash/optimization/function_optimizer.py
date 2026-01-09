@@ -81,6 +81,7 @@ from codeflash.models.models import (
     CodeOptimizationContext,
     GeneratedTests,
     GeneratedTestsList,
+    OptimizationReviewResult,
     OptimizationSet,
     OptimizedCandidate,
     OptimizedCandidateResult,
@@ -400,7 +401,7 @@ class FunctionOptimizer:
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
-        logger.info(f"Function Trace ID: {self.function_trace_id}")
+        logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
@@ -1850,19 +1851,40 @@ class FunctionOptimizer:
 
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
-        opt_review_response = ""
+        opt_review_result = OptimizationReviewResult(review="", explanation="")
         # this will now run regardless of pr, staging review flags
         try:
-            opt_review_response = self.aiservice_client.get_optimization_review(
+            opt_review_result = self.aiservice_client.get_optimization_review(
                 **data, calling_fn_details=function_references
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
-        data["optimization_review"] = opt_review_response
-        self.optimization_review = opt_review_response
+        data["optimization_review"] = opt_review_result.review
+        self.optimization_review = opt_review_result.review
+
+        # Display the reviewer result to the user
+        if opt_review_result.review:
+            review_display = {
+                "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
+                "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
+                "low": ("[bold red]Low[/bold red]", "red", "Not recommended to merge"),
+            }
+            display_info = review_display.get(opt_review_result.review.lower(), ("[bold]Unknown[/bold]", "white", ""))
+            explanation_text = opt_review_result.explanation.strip() if opt_review_result.explanation else ""
+            if is_LSP_enabled():
+                md_content = f"### Reviewer Assessment: {opt_review_result.review.capitalize()}\n{display_info[2]}"
+                if explanation_text:
+                    md_content += f"\n\n{explanation_text}"
+                lsp_log(LspMarkdownMessage(markdown=md_content))
+            else:
+                panel_content = f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}"
+                if explanation_text:
+                    panel_content += f"\n\n[dim]{explanation_text}[/dim]"
+                console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
+
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-        if raise_pr and not staging_review and opt_review_response != "low":
+        if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir()
@@ -1944,6 +1966,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
+
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
