@@ -134,7 +134,7 @@ def get_optimizable_functions(params: OptimizableFunctionsParams) -> dict[str, l
     document_uri = params.textDocument.uri
     document = server.workspace.get_text_document(document_uri)
 
-    file_path = Path(document.path)
+    file_path = Path(document.path).resolve()
 
     if not server.optimizer:
         return {"status": "error", "message": "optimizer not initialized"}
@@ -517,7 +517,7 @@ def initialize_function_optimization(params: FunctionOptimizationInitParams) -> 
         files = [document.path]
 
         _, _, original_helpers = server.current_optimization_init_result
-        files.extend([str(helper_path) for helper_path in original_helpers])
+        files.extend([str(helper_path.resolve()) for helper_path in original_helpers])
 
         return {"functionName": params.functionName, "status": "success", "files_inside_context": files}
 

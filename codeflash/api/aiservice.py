@@ -21,6 +21,7 @@ from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
     CodeStringsMarkdown,
+    OptimizationReviewResult,
     OptimizedCandidate,
     OptimizedCandidateSource,
 )
@@ -664,7 +665,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
-    ) -> str:
+    ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
         Args:
@@ -682,7 +683,7 @@ class AiServiceClient:
 
         Returns:
         -------
-        - 'high', 'medium' or 'low' optimization review
+        OptimizationReviewResult with review ('high', 'medium', 'low', or '') and explanation
 
         """
         diff_str = "\n".join(
@@ -718,10 +719,13 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating optimization refinements: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
-            return ""
+            return OptimizationReviewResult(review="", explanation="")
 
         if response.status_code == 200:
-            return cast("str", response.json()["review"])
+            data = response.json()
+            return OptimizationReviewResult(
+                review=cast("str", data["review"]), explanation=cast("str", data.get("review_explanation", ""))
+            )
         try:
             error = cast("str", response.json()["error"])
         except Exception:
@@ -729,7 +733,7 @@ class AiServiceClient:
         logger.error(f"Error generating optimization review: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
-        return ""
+        return OptimizationReviewResult(review="", explanation="")
 
     def generate_workflow_steps(
         self,

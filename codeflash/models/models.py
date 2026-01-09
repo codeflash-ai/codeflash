@@ -20,7 +20,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Optional, cast
+from typing import Annotated, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
@@ -93,6 +93,13 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+
+
+class OptimizationReviewResult(NamedTuple):
+    """Result from the optimization review API."""
+
+    review: str  # "high", "medium", "low", or ""
+    explanation: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -667,8 +674,11 @@ class InvocationId:
     def get_src_code(self, test_path: Path) -> Optional[str]:
         if not test_path.exists():
             return None
-        test_src = test_path.read_text(encoding="utf-8")
-        module_node = cst.parse_module(test_src)
+        try:
+            test_src = test_path.read_text(encoding="utf-8")
+            module_node = cst.parse_module(test_src)
+        except Exception:
+            return None
 
         if self.test_class_name:
             for stmt in module_node.body:
@@ -676,7 +686,6 @@ class InvocationId:
                     func_node = self.find_func_in_class(stmt, self.test_function_name)
                     if func_node:
                         return module_node.code_for_node(func_node).strip()
-            # class not found
             return None
 
         # Otherwise, look for a top level function
