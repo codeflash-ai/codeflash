@@ -7,7 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
-from codeflash.context.code_context_extractor import get_code_optimization_context
+from codeflash.context.code_context_extractor import get_code_optimization_context, get_imported_class_definitions
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
@@ -2893,3 +2894,194 @@ def dump_layout(layout_type, layout):
     assert testgen_context.count("def __init__") >= 2, (
         "Both __init__ methods should be in testgen context"
     )
+
+
+def test_get_imported_class_definitions_extracts_project_classes(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions extracts class definitions from project modules."""
+    # Create a package structure with two modules
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with a class definition (simulating Element-like class)
+    elements_code = '''
+import abc
+
+class Element(abc.ABC):
+    """An element in the document."""
+
+    def __init__(self, element_id: str = None):
+        self._element_id = element_id
+        self.text = ""
+
+    def __str__(self):
+        return self.text
+
+
+class Text(Element):
+    """A text element."""
+
+    def __init__(self, text: str, element_id: str = None):
+        super().__init__(element_id)
+        self.text = text
+'''
+    elements_path = package_dir / "elements.py"
+    elements_path.write_text(elements_code, encoding="utf-8")
+
+    # Create another module that imports from elements
+    chunking_code = '''
+from mypackage.elements import Element
+
+class PreChunk:
+    def __init__(self, elements: list[Element]):
+        self._elements = elements
+
+class Accumulator:
+    def will_fit(self, chunk: PreChunk) -> bool:
+        return True
+'''
+    chunking_path = package_dir / "chunking.py"
+    chunking_path.write_text(chunking_code, encoding="utf-8")
+
+    # Create CodeStringsMarkdown from the chunking module (simulating testgen context)
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=chunking_code, file_path=chunking_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Verify Element class was extracted
+    assert len(result.code_strings) == 1, "Should extract exactly one class (Element)"
+    extracted_code = result.code_strings[0].code
+
+    # Verify the extracted code contains the Element class
+    assert "class Element" in extracted_code, "Should contain Element class definition"
+    assert "def __init__" in extracted_code, "Should contain __init__ method"
+    assert "element_id" in extracted_code, "Should contain constructor parameter"
+    assert "import abc" in extracted_code, "Should include necessary imports for base class"
+
+
+def test_get_imported_class_definitions_skips_existing_definitions(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions skips classes already defined in context."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with a class definition
+    elements_code = '''
+class Element:
+    def __init__(self, text: str):
+        self.text = text
+'''
+    elements_path = package_dir / "elements.py"
+    elements_path.write_text(elements_code, encoding="utf-8")
+
+    # Create code that imports Element but also redefines it locally
+    code_with_local_def = '''
+from mypackage.elements import Element
+
+# Local redefinition (this happens when LLM redefines classes)
+class Element:
+    def __init__(self, text: str):
+        self.text = text
+
+class User:
+    def process(self, elem: Element):
+        pass
+'''
+    code_path = package_dir / "user.py"
+    code_path.write_text(code_with_local_def, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code_with_local_def, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should NOT extract Element since it's already defined locally
+    assert len(result.code_strings) == 0, "Should not extract classes already defined in context"
+
+
+def test_get_imported_class_definitions_skips_third_party(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions skips third-party/stdlib imports."""
+    # Create a simple package
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Code with stdlib/third-party imports
+    code = '''
+from pathlib import Path
+from typing import Optional
+from dataclasses import dataclass
+
+class MyClass:
+    def __init__(self, path: Path):
+        self.path = path
+'''
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should not extract any classes (Path, Optional, dataclass are stdlib/third-party)
+    assert len(result.code_strings) == 0, "Should not extract stdlib/third-party classes"
+
+
+def test_get_imported_class_definitions_handles_multiple_imports(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions handles multiple class imports."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with multiple class definitions
+    types_code = '''
+class TypeA:
+    def __init__(self, value: int):
+        self.value = value
+
+class TypeB:
+    def __init__(self, name: str):
+        self.name = name
+
+class TypeC:
+    def __init__(self):
+        pass
+'''
+    types_path = package_dir / "types.py"
+    types_path.write_text(types_code, encoding="utf-8")
+
+    # Create code that imports multiple classes
+    code = '''
+from mypackage.types import TypeA, TypeB
+
+class Processor:
+    def process(self, a: TypeA, b: TypeB):
+        pass
+'''
+    code_path = package_dir / "processor.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should extract both TypeA and TypeB (but not TypeC since it's not imported)
+    assert len(result.code_strings) == 2, "Should extract exactly two classes (TypeA, TypeB)"
+
+    all_extracted_code = "\n".join(cs.code for cs in result.code_strings)
+    assert "class TypeA" in all_extracted_code, "Should contain TypeA class"
+    assert "class TypeB" in all_extracted_code, "Should contain TypeB class"
+    assert "class TypeC" not in all_extracted_code, "Should NOT contain TypeC (not imported)"

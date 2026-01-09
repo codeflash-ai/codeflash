@@ -63,7 +63,7 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
     future_tests = function_optimizer.executor.submit(ctx_tests.run, run_generate_tests)
     future_optimizations = function_optimizer.executor.submit(ctx_opts.run, run_generate_optimizations)
 
-    logger.info(f"loading|Generating new tests and optimizations for function '{params.functionName}'...")
+    logger.info(f"loading|Generating new tests and optimizations for function '{params.functionName}'")
     concurrent.futures.wait([future_tests, future_optimizations])
 
     test_setup_result = future_tests.result()
