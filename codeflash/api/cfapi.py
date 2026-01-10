@@ -342,15 +342,36 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         owner, repo = get_repo_owner_and_name()
         information = {"pr_number": pr_number, "repo_owner": owner, "repo_name": repo}
 
-        req = make_cfapi_request(endpoint="/verify-existing-optimizations", method="POST", payload=information)
-        req.raise_for_status()
+        req = make_cfapi_request(
+            endpoint="/verify-existing-optimizations", method="POST", payload=information, suppress_errors=True
+        )
+
+        if req.status_code >= 500:
+            logger.error(f"Server error getting blocklisted functions: {req.status_code}")
+            sentry_sdk.capture_message(f"Server error in verify-existing-optimizations: {req.status_code}")
+        elif req.status_code == 401:
+            logger.debug(f"Not authorized to check blocklisted functions for {owner}/{repo} PR #{pr_number}")
+        elif req.status_code == 404:
+            logger.debug(f"PR #{pr_number} not found for {owner}/{repo}")
+        elif not req.ok:
+            logger.warning(f"Unexpected response {req.status_code} from verify-existing-optimizations")
+
+        if not req.ok:
+            return {}
+
         content: dict[str, list[str]] = req.json()
+
+        if "error" in content:
+            logger.debug(f"No existing optimizations found for PR #{pr_number}")
+            return {}
+
+        logger.debug(f"Found {len(content)} files with blocklisted functions for PR #{pr_number}")
+        return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
+
     except Exception as e:
         logger.error(f"Error getting blocklisted functions: {e}")
         sentry_sdk.capture_exception(e)
         return {}
-
-    return {Path(k).name: {v.replace("()", "") for v in values} for k, values in content.items()}
 
 
 def is_function_being_optimized_again(
