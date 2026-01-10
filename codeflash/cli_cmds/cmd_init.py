@@ -4,34 +4,37 @@ import os
 import re
 import subprocess
 import sys
+import webbrowser
 from enum import Enum, auto
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
-import click
-import git
-import inquirer
-import inquirer.themes
 import tomlkit
-from git import InvalidGitRepositoryError, Repo
+from inquirer_textual.common.Choice import Choice
+from inquirer_textual.widgets.InquirerConfirm import InquirerConfirm
+from inquirer_textual.widgets.InquirerSelect import InquirerSelect
 from pydantic.dataclasses import dataclass
-from rich.console import Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 from codeflash.api.aiservice import AiServiceClient
-from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo, setup_github_actions
-from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.api.cfapi import get_user_id, setup_github_actions
+from codeflash.cli_cmds import themed_prompts as prompts
+from codeflash.cli_cmds.cli_common import apologize_and_exit, get_git_repo_or_none
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
-from codeflash.code_utils.code_utils import validate_relative_directory_path
+from codeflash.cli_cmds.validators import (
+    APIKeyValidator,
+    NotEqualPathValidator,
+    PathExistsValidator,
+    PyprojectTomlValidator,
+    RelativePathValidator,
+    TomlFileValidator,
+)
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed, get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_current_branch, get_git_remotes, get_repo_owner_and_name
-from codeflash.code_utils.github_utils import get_github_secrets_page_url
+from codeflash.code_utils.github_utils import get_github_secrets_page_url, install_github_app
 from codeflash.code_utils.oauth_handler import perform_oauth_signin
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell, save_api_key_to_rc
 from codeflash.either import is_successful
@@ -67,6 +70,17 @@ class CLISetupInfo:
 
 
 @dataclass(frozen=True)
+class ConfigAnswers:
+    """Parsed answers from the config widgets."""
+
+    module_root: Path
+    tests_root: Path
+    formatter: str
+    enable_telemetry: bool
+    git_remote: str
+
+
+@dataclass(frozen=True)
 class VsCodeSetupInfo:
     module_root: str
     tests_root: str
@@ -80,74 +94,201 @@ class DependencyManager(Enum):
     UNKNOWN = auto()
 
 
+def collect_config(curdir: Path, auth_status: str, project_name: str | None, git_remotes: list[str]) -> ConfigAnswers:
+    """Build config widgets, prompt user, and process results. Exits on cancellation."""
+    # Build options for module root
+    valid_module_subdirs, _ = get_suggestions(CommonSections.module_root)
+    curdir_option = f"current directory ({curdir})"
+    custom_module_dir_option = "enter a custom directory…"
+    module_subdir_options = [*valid_module_subdirs, curdir_option, custom_module_dir_option]
+    default_module_choice = project_name if project_name in module_subdir_options else module_subdir_options[0]
+
+    # Build options for tests root
+    tests_suggestions, default_tests_subdir = get_suggestions(CommonSections.tests_root)
+    create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
+    test_subdir_options: list[str | Choice] = list(tests_suggestions)
+    if "tests" not in tests_suggestions:
+        test_subdir_options.append(create_for_me_option)
+    custom_tests_dir_option = "📁 Enter a custom directory…"
+    test_subdir_options.append(custom_tests_dir_option)
+
+    # Formatter choices
+    formatter_choices = [
+        Choice("⚫ black", data="black"),
+        Choice("⚡ ruff", data="ruff"),
+        Choice("🔧 other", data="other"),
+        Choice("❌ don't use a formatter", data="don't use a formatter"),
+    ]
+
+    # Build widgets
+    widgets: list = [
+        InquirerSelect(
+            "Which Python module do you want me to optimize?",
+            choices=module_subdir_options,
+            default=default_module_choice,
+            mandatory=True,
+        ),
+        InquirerSelect(
+            "Where are your tests located?",
+            choices=test_subdir_options,
+            default=(default_tests_subdir or test_subdir_options[0]),
+            mandatory=True,
+        ),
+        InquirerSelect(
+            "Which code formatter do you use?", choices=formatter_choices, default=formatter_choices[0], mandatory=True
+        ),
+        InquirerConfirm("Help us improve Codeflash by sharing anonymous usage data?", default=True),
+    ]
+
+    has_multiple_remotes = len(git_remotes) > 1
+    if has_multiple_remotes:
+        git_remote_choices: list[str | Choice] = list(git_remotes)
+        widgets.append(
+            InquirerSelect(
+                "Which git remote should Codeflash use for Pull Requests?",
+                choices=git_remote_choices,
+                default="origin" if "origin" in git_remotes else git_remotes[0],
+                mandatory=True,
+            )
+        )
+
+    # Run prompt
+    header = f"{auth_status}\n\n⚙️ Project Configuration" if auth_status else "⚙️ Project Configuration"
+    result = prompts.multi(widgets, header=header)
+    if result.command is None:
+        apologize_and_exit()
+
+    # Unpack results
+    if has_multiple_remotes:
+        module_root_answer, tests_root_answer, formatter_answer, enable_telemetry, git_remote = result.value
+    else:
+        module_root_answer, tests_root_answer, formatter_answer, enable_telemetry = result.value
+        git_remote = git_remotes[0] if len(git_remotes) == 1 else ""
+
+    # Process module root
+    module_root = process_module_root_answer(module_root_answer, curdir_option, custom_module_dir_option)
+    ph("cli-project-root-provided")
+
+    # Process tests root
+    tests_root = process_tests_root_answer(
+        tests_root_answer, create_for_me_option, custom_tests_dir_option, curdir, default_tests_subdir, module_root
+    )
+    tests_root = tests_root.relative_to(curdir)
+    ph("cli-tests-root-provided")
+
+    # Extract formatter value
+    formatter = formatter_answer.data if isinstance(formatter_answer, Choice) else formatter_answer
+
+    return ConfigAnswers(
+        module_root=Path(module_root),
+        tests_root=tests_root,
+        formatter=cast("str", formatter),
+        enable_telemetry=enable_telemetry,
+        git_remote=str(git_remote),
+    )
+
+
 def init_codeflash() -> None:
     try:
-        welcome_panel = Panel(
-            Text(
-                "⚡️ Welcome to Codeflash!\n\nThis setup will take just a few minutes.",
-                style="bold cyan",
-                justify="center",
-            ),
-            title="🚀 Codeflash Setup",
-            border_style="bright_cyan",
-            padding=(1, 2),
-        )
-        console.print(welcome_panel)
-        console.print()
+        curdir = Path.cwd()
 
-        did_add_new_key = prompt_api_key()
+        try:
+            existing_api_key = get_codeflash_api_key()
+        except OSError:
+            existing_api_key = None
+
+        did_add_new_key = False
+        auth_status = ""
+        if existing_api_key:
+            auth_status = f"🔑 API Key found [{existing_api_key[:3]}****{existing_api_key[-4:]}]"
+        else:
+            auth_choices = [Choice("🔐 Login with Codeflash", data="oauth"), Choice("🔑 Use API key", data="api_key")]
+            method = prompts.select_or_exit(
+                "How would you like to authenticate?",
+                choices=auth_choices,
+                default=auth_choices[0],
+                header="⚡️ Welcome to Codeflash!\n\nThis setup will take just a few minutes.",
+            )
+            if method == "api_key":
+                enter_api_key_and_save_to_rc()
+                ph("cli-new-api-key-entered")
+            else:
+                api_key = perform_oauth_signin()
+                if not api_key:
+                    apologize_and_exit()
+                    return  # unreachable, satisfies type checker
+                save_api_key_and_set_env(api_key)
+                ph("cli-oauth-signin-completed")
+            auth_status = "✅ Signed in successfully!"
+            did_add_new_key = True
 
         should_modify, config = should_modify_pyproject_toml()
-
         git_remote = config.get("git_remote", "origin") if config else "origin"
 
         if should_modify:
-            setup_info: CLISetupInfo = collect_setup_info()
-            git_remote = setup_info.git_remote
-            configured = configure_pyproject_toml(setup_info)
-            if not configured:
+            if not os.access(curdir, os.W_OK):
+                console.print(
+                    f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}"
+                )
+                console.print("It's likely you don't have write permissions for this folder.")
+                sys.exit(1)
+
+            project_name = check_for_toml_or_setup_file()
+
+            repo = get_git_repo_or_none(curdir)
+            git_remotes = get_git_remotes(repo) if repo is not None else []
+
+            answers = collect_config(curdir, auth_status, project_name, git_remotes)
+            git_remote = answers.git_remote
+
+            setup_info = CLISetupInfo(
+                module_root=str(answers.module_root),
+                tests_root=str(answers.tests_root),
+                benchmarks_root=None,
+                ignore_paths=[],
+                formatter=answers.formatter,
+                git_remote=answers.git_remote,
+                enable_telemetry=answers.enable_telemetry,
+            )
+            if not configure_pyproject_toml(setup_info):
                 apologize_and_exit()
 
-        install_github_app(git_remote)
+        maybe_git_repo = get_git_repo_or_none()
+        in_git_repo = maybe_git_repo is not None
 
-        install_github_actions(override_formatter_check=True)
+        integration_options = [Choice("📦 VSCode Extension", data="vscode")]
+        if in_git_repo:
+            integration_options = [
+                Choice("🐙 GitHub App", data="github_app"),
+                Choice("⚙️ GitHub Actions", data="github_actions"),
+                *integration_options,
+            ]
 
-        install_vscode_extension()
+        integrations_header = "🔧 Optional Integrations\n\n💡 SPACE to select, ENTER to confirm."
+        if not should_modify and auth_status:
+            integrations_header = f"{auth_status}\n\n{integrations_header}"
 
-        module_string = ""
-        if "setup_info" in locals():
-            module_string = f" you selected ({setup_info.module_root})"
-
-        usage_table = Table(show_header=False, show_lines=False, border_style="dim")
-        usage_table.add_column("Command", style="cyan")
-        usage_table.add_column("Description", style="white")
-
-        usage_table.add_row(
-            "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function within a file"
+        selected = prompts.checkbox_or_default(
+            "Which integrations would you like to install?",
+            choices=integration_options,
+            default_on_cancel=[],
+            header=integrations_header,
         )
-        usage_table.add_row("codeflash optimize <myscript.py>", "Trace and find the best optimizations for a script")
-        usage_table.add_row("codeflash --all", "Optimize all functions in all files")
-        usage_table.add_row("codeflash --help", "See all available options")
+        for choice in selected:
+            if choice.data == "github_app":
+                if maybe_git_repo is not None:
+                    install_github_app(maybe_git_repo, git_remote)
+            elif choice.data == "github_actions":
+                install_github_actions(override_formatter_check=True)
+            elif choice.data == "vscode":
+                install_vscode_extension()
 
-        completion_message = "⚡️ Codeflash is now set up!\n\nYou can now run any of these commands:"
-
+        header = "🎉 Codeflash is now set up!\n\nCommands:\n  codeflash --file <path> --function <name>\n  codeflash optimize <script.py>\n  codeflash --all\n  codeflash --help"
         if did_add_new_key:
-            completion_message += (
-                "\n\n🐚 Don't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
-            )
-            if os.name == "nt":
-                reload_cmd = f". {get_shell_rc_path()}" if is_powershell() else f"call {get_shell_rc_path()}"
-            else:
-                reload_cmd = f"source {get_shell_rc_path()}"
-            completion_message += f"\nOr run: {reload_cmd}"
-
-        completion_panel = Panel(
-            Group(Text(completion_message, style="bold green"), Text(""), usage_table),
-            title="🎉 Setup Complete!",
-            border_style="bright_green",
-            padding=(1, 2),
-        )
-        console.print(completion_panel)
+            rc = get_shell_rc_path()
+            cmd = f". {rc}" if is_powershell() else f"call {rc}" if os.name == "nt" else f"source {rc}"
+            header += f"\n\n🐚 Restart your shell or run: {cmd}"
+        prompts.confirm("Ready to start optimizing?", default=True, header=header)
 
         ph("cli-installation-successful", {"did_add_new_key": did_add_new_key})
         sys.exit(0)
@@ -156,61 +297,17 @@ def init_codeflash() -> None:
 
 
 def ask_run_end_to_end_test(args: Namespace) -> None:
-    from rich.prompt import Confirm
-
-    run_tests = Confirm.ask(
+    result = prompts.select(
         "⚡️ Do you want to run a sample optimization to make sure everything's set up correctly? (takes about 3 minutes)",
-        choices=["y", "n"],
-        default="y",
-        show_choices=True,
-        show_default=False,
-        console=console,
+        choices=["Yes", "No"],
+        default="Yes",
     )
 
     console.rule()
 
-    if run_tests:
+    if result.command is not None and result.value == "Yes":
         file_path = create_find_common_tags_file(args, "find_common_tags.py")
         run_end_to_end_test(args, file_path)
-
-
-def config_found(pyproject_toml_path: Union[str, Path]) -> tuple[bool, str]:
-    pyproject_toml_path = Path(pyproject_toml_path)
-
-    if not pyproject_toml_path.exists():
-        return False, f"Configuration file not found: {pyproject_toml_path}"
-
-    if not pyproject_toml_path.is_file():
-        return False, f"Configuration file is not a file: {pyproject_toml_path}"
-
-    if pyproject_toml_path.suffix != ".toml":
-        return False, f"Configuration file is not a .toml file: {pyproject_toml_path}"
-
-    return True, ""
-
-
-def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool, dict[str, Any] | None, str]:
-    pyproject_toml_path = Path(pyproject_toml_path)
-    try:
-        config, _ = parse_config_file(pyproject_toml_path)
-    except Exception as e:
-        return False, None, f"Failed to parse configuration: {e}"
-
-    module_root = config.get("module_root")
-    if not module_root:
-        return False, config, "Missing required field: 'module_root'"
-
-    if not Path(module_root).is_dir():
-        return False, config, f"Invalid 'module_root': directory does not exist at {module_root}"
-
-    tests_root = config.get("tests_root")
-    if not tests_root:
-        return False, config, "Missing required field: 'tests_root'"
-
-    if not Path(tests_root).is_dir():
-        return False, config, f"Invalid 'tests_root': directory does not exist at {tests_root}"
-
-    return True, config, ""
 
 
 def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
@@ -218,37 +315,30 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
 
     If it does, ask the user if they want to re-configure it.
     """
-    from rich.prompt import Confirm
-
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
 
-    found, _ = config_found(pyproject_toml_path)
-    if not found:
+    toml_validator = TomlFileValidator()
+    toml_result = toml_validator.validate(str(pyproject_toml_path))
+    if not toml_result.is_valid:
+        return True, None  # File doesn't exist or isn't valid, needs configuration
+
+    config_validator = PyprojectTomlValidator()
+    config_result = config_validator.validate(str(pyproject_toml_path))
+    if not config_result.is_valid:
+        return True, None  # Configuration invalid, needs re-configuration
+
+    try:
+        config, _ = parse_config_file(pyproject_toml_path)
+    except Exception:
         return True, None
 
-    valid, config, _message = is_valid_pyproject_toml(pyproject_toml_path)
-    if not valid:
-        # needs to be re-configured
-        return True, None
-
-    return Confirm.ask(
+    answer = prompts.select_or_exit(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
-        default=False,
-        show_default=True,
-    ), config
+        choices=["Yes", "No"],
+        default="No",
+    )
 
-
-# Custom theme for better UX
-class CodeflashTheme(inquirer.themes.Default):
-    def __init__(self) -> None:
-        super().__init__()
-        self.Question.mark_color = inquirer.themes.term.yellow
-        self.Question.brackets_color = inquirer.themes.term.bright_blue
-        self.Question.default_color = inquirer.themes.term.bright_cyan
-        self.List.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selection_color = inquirer.themes.term.bright_blue
-        self.Checkbox.selected_icon = "✅"
-        self.Checkbox.unselected_icon = "⬜"
+    return answer == "Yes", config
 
 
 # common sections between normal mode and lsp mode
@@ -283,354 +373,135 @@ def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
     ]
 
 
-def get_suggestions(section: str) -> tuple[list[str], Optional[str]]:
+def get_suggestions(section: CommonSections | str) -> tuple[list[str], Optional[str]]:
     valid_subdirs = get_valid_subdirs()
-    if section == CommonSections.module_root:
+    section_value = section.value if isinstance(section, CommonSections) else section
+    if section_value == CommonSections.module_root.value:
         return [d for d in valid_subdirs if d != "tests"], None
-    if section == CommonSections.tests_root:
+    if section_value == CommonSections.tests_root.value:
         default = "tests" if "tests" in valid_subdirs else None
         return valid_subdirs, default
-    if section == CommonSections.formatter_cmds:
+    if section_value == CommonSections.formatter_cmds.value:
         return ["disabled", "ruff", "black"], "disabled"
     msg = f"Unknown section: {section}"
     raise ValueError(msg)
 
 
-def collect_setup_info() -> CLISetupInfo:
-    curdir = Path.cwd()
-    # Check if the cwd is writable
-    if not os.access(curdir, os.W_OK):
-        click.echo(f"❌ The current directory isn't writable, please check your folder permissions and try again.{LF}")
-        click.echo("It's likely you don't have write permissions for this folder.")
-        sys.exit(1)
+def prompt_custom_directory(message: str, title: str, additional_validators: list | None = None) -> Path | None:
+    validators = [PathExistsValidator(), RelativePathValidator()]
+    if additional_validators:
+        validators.extend(additional_validators)
 
-    # Check for the existence of pyproject.toml or setup.py
-    project_name = check_for_toml_or_setup_file()
-    valid_module_subdirs, _ = get_suggestions(CommonSections.module_root)
+    result = prompts.text("Enter the path to your directory", validators=validators, header=f"{title}\n\n{message}")
 
-    curdir_option = f"current directory ({curdir})"
-    custom_dir_option = "enter a custom directory…"
-    module_subdir_options = [*valid_module_subdirs, curdir_option, custom_dir_option]
+    if result.command is None:
+        return None
 
-    info_panel = Panel(
-        Text(
-            "📁 Let's identify your Python module directory.\n\n"
-            "This is usually the top-level directory containing all your Python source code.\n",
-            style="cyan",
-        ),
-        title="🔍 Module Discovery",
-        border_style="bright_blue",
-    )
-    console.print(info_panel)
-    console.print()
-    questions = [
-        inquirer.List(
-            "module_root",
-            message="Which Python module do you want me to optimize?",
-            choices=module_subdir_options,
-            default=(project_name if project_name in module_subdir_options else module_subdir_options[0]),
-            carousel=True,
+    return Path(result.value)
+
+
+def process_module_root_answer(answer: str, curdir_option: str, custom_option: str) -> str | Path:
+    """Process module root answer and return the path. Exits on cancellation."""
+    if answer == curdir_option:
+        return "."
+    if answer == custom_option:
+        custom_path = prompt_custom_directory(
+            "📂 Enter a custom module directory path.\n\nPlease provide the path to your Python module directory.",
+            "📂 Custom Directory",
         )
-    ]
+        if custom_path is None:
+            apologize_and_exit()
+        return custom_path  # type: ignore[return-value]  # apologize_and_exit() never returns
+    return answer
 
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
-    if not answers:
-        apologize_and_exit()
-    module_root_answer = answers["module_root"]
-    if module_root_answer == curdir_option:
-        module_root = "."
-    elif module_root_answer == custom_dir_option:
-        custom_panel = Panel(
-            Text(
-                "📂 Enter a custom module directory path.\n\nPlease provide the path to your Python module directory.",
-                style="yellow",
-            ),
-            title="📂 Custom Directory",
-            border_style="bright_yellow",
-        )
-        console.print(custom_panel)
-        console.print()
 
-        # Retry loop for custom module root path
-        module_root = None
-        while module_root is None:
-            custom_questions = [
-                inquirer.Path(
-                    "custom_path",
-                    message="Enter the path to your module directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
-
-            custom_answers = inquirer.prompt(custom_questions, theme=CodeflashTheme())
-            if not custom_answers:
-                apologize_and_exit()
-                return None  # unreachable but satisfies type checker
-
-            custom_path_str = str(custom_answers["custom_path"])
-            # Validate the path is safe
-            is_valid, error_msg = validate_relative_directory_path(custom_path_str)
-            if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
-                console.print()  # Add spacing before retry
-                continue  # Retry the prompt
-            module_root = Path(custom_path_str)
-    else:
-        module_root = module_root_answer
-    ph("cli-project-root-provided")
-
-    # Discover test directory
-    create_for_me_option = f"🆕 Create a new tests{os.pathsep} directory for me!"
-    tests_suggestions, default_tests_subdir = get_suggestions(CommonSections.tests_root)
-    test_subdir_options = [sub_dir for sub_dir in tests_suggestions if sub_dir != module_root]
-    if "tests" not in tests_suggestions:
-        test_subdir_options.append(create_for_me_option)
-    custom_dir_option = "📁 Enter a custom directory…"
-    test_subdir_options.append(custom_dir_option)
-
-    tests_panel = Panel(
-        Text(
-            "🧪 Now let's locate your test directory.\n\n"
-            "This is where all your test files are stored. If you don't have tests yet, "
-            "I can create a directory for you!",
-            style="green",
-        ),
-        title="🧪 Test Discovery",
-        border_style="bright_green",
-    )
-    console.print(tests_panel)
-    console.print()
-
-    tests_questions = [
-        inquirer.List(
-            "tests_root",
-            message="Where are your tests located?",
-            choices=test_subdir_options,
-            default=(default_tests_subdir or test_subdir_options[0]),
-            carousel=True,
-        )
-    ]
-
-    tests_answers = inquirer.prompt(tests_questions, theme=CodeflashTheme())
-    if not tests_answers:
-        apologize_and_exit()
-    tests_root_answer = tests_answers["tests_root"]
-
-    if tests_root_answer == create_for_me_option:
-        tests_root = Path(curdir) / (default_tests_subdir or "tests")
+def process_tests_root_answer(
+    answer: str,
+    create_option: str,
+    custom_option: str,
+    curdir: Path,
+    default_tests_subdir: str | None,
+    module_root: str | Path,
+) -> Path:
+    """Process tests root answer and return the path. Exits on cancellation."""
+    if answer == create_option:
+        tests_root = curdir / (default_tests_subdir or "tests")
         tests_root.mkdir()
-        click.echo(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
-    elif tests_root_answer == custom_dir_option:
-        custom_tests_panel = Panel(
-            Text(
-                "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
-                style="yellow",
-            ),
-            title="🧪 Custom Test Directory",
-            border_style="bright_yellow",
+        console.print(f"✅ Created directory {tests_root}{os.path.sep}{LF}")
+        return tests_root
+
+    if answer == custom_option:
+        resolved_module_root = (curdir / Path(module_root)).resolve()
+        custom_path = prompt_custom_directory(
+            "🧪 Enter a custom test directory path.\n\nPlease provide the path to your test directory, relative to the current directory.",
+            "🧪 Custom Test Directory",
+            additional_validators=[NotEqualPathValidator(resolved_module_root)],
         )
-        console.print(custom_tests_panel)
-        console.print()
+        if custom_path is None:
+            apologize_and_exit()
+        return curdir / custom_path  # type: ignore[operator]  # apologize_and_exit() never returns
 
-        # Retry loop for custom tests root path
-        tests_root = None
-        while tests_root is None:
-            custom_tests_questions = [
-                inquirer.Path(
-                    "custom_tests_path",
-                    message="Enter the path to your tests directory",
-                    path_type=inquirer.Path.DIRECTORY,
-                    exists=True,
-                )
-            ]
+    return curdir / Path(answer)
 
-            custom_tests_answers = inquirer.prompt(custom_tests_questions, theme=CodeflashTheme())
-            if not custom_tests_answers:
-                apologize_and_exit()
-                return None  # unreachable but satisfies type checker
 
-            custom_tests_path_str = str(custom_tests_answers["custom_tests_path"])
-            # Validate the path is safe
-            is_valid, error_msg = validate_relative_directory_path(custom_tests_path_str)
-            if not is_valid:
-                click.echo(f"❌ Invalid path: {error_msg}")
-                click.echo("Please enter a valid relative directory path.")
-                console.print()  # Add spacing before retry
-                continue  # Retry the prompt
-            tests_root = Path(curdir) / Path(custom_tests_path_str)
-    else:
-        tests_root = Path(curdir) / Path(cast("str", tests_root_answer))
+def detect_project_name(pyproject_path: Path, setup_py_path: Path) -> str | None:
+    """Detect project name from pyproject.toml or setup.py."""
+    if pyproject_path.exists():
+        try:
+            content = pyproject_path.read_text(encoding="utf8")
+            parsed = tomlkit.parse(content)
+            name = parsed.get("tool", {}).get("poetry", {}).get("name")  # type: ignore[union-attr]
+            if name:
+                console.print(f"✅ I found a pyproject.toml for your project {name}.")
+                ph("cli-pyproject-toml-found-name")
+                return cast("str", name)
+        except Exception:  # noqa: S110 - Intentionally silent, project name is optional
+            pass
+        console.print("✅ I found a pyproject.toml for your project.")
+        ph("cli-pyproject-toml-found")
+        return None
 
-    tests_root = tests_root.relative_to(curdir)
-
-    resolved_module_root = (Path(curdir) / Path(module_root)).resolve()
-    resolved_tests_root = (Path(curdir) / Path(tests_root)).resolve()
-    if resolved_module_root == resolved_tests_root:
-        logger.warning(
-            "It looks like your tests root is the same as your module root. This is not recommended and can lead to unexpected behavior."
-        )
-
-    ph("cli-tests-root-provided")
-
-    benchmarks_root = None
-
-    # TODO: Implement other benchmark framework options
-    # if benchmarks_root:
-    #     benchmarks_root = benchmarks_root.relative_to(curdir)
-    #
-    #     # Ask about benchmark framework
-    #     benchmark_framework_options = ["pytest-benchmark", "asv (Airspeed Velocity)", "custom/other"]
-    #     benchmark_framework = inquirer_wrapper(
-    #         inquirer.list_input,
-    #         message="Which benchmark framework do you use?",
-    #         choices=benchmark_framework_options,
-    #         default=benchmark_framework_options[0],
-    #         carousel=True,
-    #     )
-
-    formatter_panel = Panel(
-        Text(
-            "🎨 Let's configure your code formatter.\n\n"
-            "Code formatters help maintain consistent code style. "
-            "Codeflash will use this to format optimized code.",
-            style="magenta",
-        ),
-        title="🎨 Code Formatter",
-        border_style="bright_magenta",
-    )
-    console.print(formatter_panel)
-    console.print()
-
-    formatter_questions = [
-        inquirer.List(
-            "formatter",
-            message="Which code formatter do you use?",
-            choices=[
-                ("⚫ black", "black"),
-                ("⚡ ruff", "ruff"),
-                ("🔧 other", "other"),
-                ("❌ don't use a formatter", "don't use a formatter"),
-            ],
-            default="black",
-            carousel=True,
-        )
-    ]
-
-    formatter_answers = inquirer.prompt(formatter_questions, theme=CodeflashTheme())
-    if not formatter_answers:
-        apologize_and_exit()
-    formatter = formatter_answers["formatter"]
-
-    git_remote = ""
-    try:
-        repo = Repo(str(module_root), search_parent_directories=True)
-        git_remotes = get_git_remotes(repo)
-        if git_remotes:  # Only proceed if there are remotes
-            if len(git_remotes) > 1:
-                git_panel = Panel(
-                    Text(
-                        "🔗 Configure Git Remote for Pull Requests.\n\n"
-                        "Codeflash will use this remote to create pull requests with optimized code.",
-                        style="blue",
-                    ),
-                    title="🔗 Git Remote Setup",
-                    border_style="bright_blue",
-                )
-                console.print(git_panel)
-                console.print()
-
-                git_questions = [
-                    inquirer.List(
-                        "git_remote",
-                        message="Which git remote should Codeflash use for Pull Requests?",
-                        choices=git_remotes,
-                        default="origin",
-                        carousel=True,
-                    )
-                ]
-
-                git_answers = inquirer.prompt(git_questions, theme=CodeflashTheme())
-                git_remote = git_answers["git_remote"] if git_answers else git_remotes[0]
-            else:
-                git_remote = git_remotes[0]
-        else:
-            click.echo(
-                "No git remotes found. You can still use Codeflash locally, but you'll need to set up a remote "
-                "repository to use GitHub features."
-            )
-    except InvalidGitRepositoryError:
-        git_remote = ""
-
-    enable_telemetry = ask_for_telemetry()
-
-    ignore_paths: list[str] = []
-    return CLISetupInfo(
-        module_root=str(module_root),
-        tests_root=str(tests_root),
-        benchmarks_root=str(benchmarks_root) if benchmarks_root else None,
-        ignore_paths=ignore_paths,
-        formatter=cast("str", formatter),
-        git_remote=str(git_remote),
-        enable_telemetry=enable_telemetry,
-    )
+    if setup_py_path.exists():
+        content = setup_py_path.read_text(encoding="utf8")
+        match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", content, re.DOTALL)
+        if match:
+            name = match.group(1)
+            console.print(f"✅ Found setup.py for your project {name}")
+            ph("cli-setup-py-found-name")
+            return name
+        console.print("✅ Found setup.py.")
+        ph("cli-setup-py-found")
+    return None
 
 
 def check_for_toml_or_setup_file() -> str | None:
-    click.echo()
-    click.echo("Checking for pyproject.toml or setup.py…\r", nl=False)
+    """Check for pyproject.toml or setup.py and return project name if found."""
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
-    project_name = None
-    if pyproject_toml_path.exists():
-        try:
-            pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
-            project_name = tomlkit.parse(pyproject_toml_content)["tool"]["poetry"]["name"]
-            click.echo(f"✅ I found a pyproject.toml for your project {project_name}.")
-            ph("cli-pyproject-toml-found-name")
-        except Exception:
-            click.echo("✅ I found a pyproject.toml for your project.")
-            ph("cli-pyproject-toml-found")
-    else:
-        if setup_py_path.exists():
-            setup_py_content = setup_py_path.read_text(encoding="utf8")
-            project_name_match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL)
-            if project_name_match:
-                project_name = project_name_match.group(1)
-                click.echo(f"✅ Found setup.py for your project {project_name}")
-                ph("cli-setup-py-found-name")
-            else:
-                click.echo("✅ Found setup.py.")
-                ph("cli-setup-py-found")
-        toml_info_panel = Panel(
-            Text(
-                f"💡 No pyproject.toml found in {curdir}.\n\n"
-                "This file is essential for Codeflash to store its configuration.\n"
-                "Please ensure you are running `codeflash init` from your project's root directory.",
-                style="yellow",
-            ),
-            title="📋 pyproject.toml Required",
-            border_style="bright_yellow",
-        )
-        console.print(toml_info_panel)
-        console.print()
+
+    project_name = detect_project_name(pyproject_toml_path, setup_py_path)
+
+    # If no pyproject.toml exists, prompt to create one
+    if not pyproject_toml_path.exists():
         ph("cli-no-pyproject-toml-or-setup-py")
 
-        # Create a pyproject.toml file because it doesn't exist
-        toml_questions = [
-            inquirer.Confirm("create_toml", message="Create pyproject.toml in the current directory?", default=True)
-        ]
-
-        toml_answers = inquirer.prompt(toml_questions, theme=CodeflashTheme())
-        if not toml_answers:
+        answer = prompts.select_or_exit(
+            "Create pyproject.toml in the current directory?",
+            choices=["Yes", "No"],
+            default="Yes",
+            header=(
+                f"📋 pyproject.toml Required\n\n"
+                f"💡 No pyproject.toml found in {curdir}.\n\n"
+                "This file is essential for Codeflash to store its configuration.\n"
+                "Please ensure you are running `codeflash init` from your project's root directory."
+            ),
+        )
+        if answer == "No":
             apologize_and_exit()
-        create_toml = toml_answers["create_toml"]
-        if create_toml:
-            create_empty_pyproject_toml(pyproject_toml_path)
-    click.echo()
-    return cast("str", project_name)
+        create_empty_pyproject_toml(pyproject_toml_path)
+
+    return project_name
 
 
 def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
@@ -644,34 +515,29 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
 
         # Check if the pyproject.toml file was created
         if pyproject_toml_path.exists() and not lsp_mode:
-            success_panel = Panel(
-                Text(
+            prompts.confirm(
+                "Continue?",
+                default=True,
+                header=(
+                    f"🎉 Success!\n\n"
                     f"✅ Created a pyproject.toml file at {pyproject_toml_path}\n\n"
-                    "Your project is now ready for Codeflash configuration!",
-                    style="green",
-                    justify="center",
+                    "Your project is now ready for Codeflash configuration!"
                 ),
-                title="🎉 Success!",
-                border_style="bright_green",
             )
-            console.print(success_panel)
-            console.print("\n📍 Press any key to continue...")
-            console.input()
         ph("cli-created-pyproject-toml")
     except OSError:
-        click.echo("❌ Failed to create pyproject.toml. Please check your disk permissions and available space.")
+        console.print("❌ Failed to create pyproject.toml. Please check your disk permissions and available space.")
         apologize_and_exit()
 
 
 def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
-
         ph("cli-github-actions-install-started")
-        try:
-            repo = Repo(config["module_root"], search_parent_directories=True)
-        except git.InvalidGitRepositoryError:
-            click.echo(
+
+        repo = get_git_repo_or_none(Path(config["module_root"]))
+        if repo is None:
+            console.print(
                 "Skipping GitHub action installation for continuous optimization because you're not in a git repository."
             )
             return
@@ -680,26 +546,20 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         workflows_path = git_root / ".github" / "workflows"
         optimize_yaml_path = workflows_path / "codeflash.yaml"
 
-        # Check if workflow file already exists locally BEFORE showing prompt
+        # Check if workflow file already exists locally
         if optimize_yaml_path.exists():
-            # Workflow file already exists locally - skip prompt and setup
-            already_exists_message = "✅ GitHub Actions workflow file already exists.\n\n"
-            already_exists_message += "No changes needed - your repository is already configured!"
-
-            already_exists_panel = Panel(
-                Text(already_exists_message, style="green", justify="center"),
-                title="✅ Already Configured",
-                border_style="bright_green",
+            answer = prompts.select_or_exit(
+                f"GitHub Actions workflow already exists at {optimize_yaml_path}. Overwrite?",
+                choices=["No", "Yes"],
+                default="No",
             )
-            console.print(already_exists_panel)
-            console.print()
-
-            logger.info("[cmd_init.py:install_github_actions] Workflow file already exists locally, skipping setup")
-            return
+            if answer == "No":
+                ph("cli-github-workflow-skipped")
+                return
+            ph("cli-github-optimization-confirm-workflow-overwrite", {"confirm_overwrite": True})
 
         # Get repository information for API call
         git_remote = config.get("git_remote", "origin")
-        # get_current_branch handles detached HEAD and other edge cases internally
         try:
             base_branch = get_current_branch(repo)
         except Exception as e:
@@ -708,77 +568,48 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
             )
             base_branch = "main"
 
-        # Generate workflow content
-        from importlib.resources import files
-
-        benchmark_mode = False
-        benchmarks_root = config.get("benchmarks_root", "").strip()
-        if benchmarks_root and benchmarks_root != "":
-            benchmark_panel = Panel(
-                Text(
-                    "📊 Benchmark Mode Available\n\n"
-                    "I noticed you've configured a benchmarks_root in your config. "
-                    "Benchmark mode will show the performance impact of Codeflash's optimizations on your benchmarks.",
-                    style="cyan",
-                ),
-                title="📊 Benchmark Mode",
-                border_style="bright_cyan",
-            )
-            console.print(benchmark_panel)
-            console.print()
-
-            benchmark_questions = [
-                inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
-            ]
-
-            benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
-            benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
-
-        # Show prompt only if workflow doesn't exist locally
-        actions_panel = Panel(
-            Text(
+        # Confirm setup
+        answer = prompts.select_or_exit(
+            "Set up GitHub Actions for continuous optimization?",
+            choices=["Yes", "No"],
+            default="Yes",
+            header=(
                 "🤖 GitHub Actions Setup\n\n"
                 "GitHub Actions will automatically optimize your code in every pull request. "
-                "This is the recommended way to use Codeflash for continuous optimization.",
-                style="blue",
+                "This is the recommended way to use Codeflash for continuous optimization."
             ),
-            title="🤖 Continuous Optimization",
-            border_style="bright_blue",
         )
-        console.print(actions_panel)
-        console.print()
-
-        creation_questions = [
-            inquirer.Confirm(
-                "confirm_creation",
-                message="Set up GitHub Actions for continuous optimization? We'll open a pull request with the workflow file.",
-                default=True,
-            )
-        ]
-
-        creation_answers = inquirer.prompt(creation_questions, theme=CodeflashTheme())
-        if not creation_answers or not creation_answers["confirm_creation"]:
-            skip_panel = Panel(
-                Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
-            )
-            console.print(skip_panel)
+        if answer == "No":
             ph("cli-github-workflow-skipped")
             return
-        ph(
-            "cli-github-optimization-confirm-workflow-creation",
-            {"confirm_creation": creation_answers["confirm_creation"]},
-        )
 
-        # Generate workflow content AFTER user confirmation
-        logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
-        optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
-        )
-        materialized_optimize_yml_content = generate_dynamic_workflow_content(
-            optimize_yml_content, config, git_root, benchmark_mode
-        )
-
+        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": True})
         workflows_path.mkdir(parents=True, exist_ok=True)
+
+        # Check for benchmark mode
+        benchmark_mode = False
+        benchmarks_root = config.get("benchmarks_root", "").strip()
+        if benchmarks_root:
+            answer = prompts.select_or_exit(
+                "Run GitHub Actions in benchmark mode?",
+                choices=["Yes", "No"],
+                default="Yes",
+                header=(
+                    "📊 Benchmark Mode Available\n\n"
+                    "I noticed you've configured a benchmarks_root in your config. "
+                    "Benchmark mode will show the performance impact of Codeflash's optimizations on your benchmarks."
+                ),
+            )
+            benchmark_mode = answer == "Yes"
+
+        # Generate workflow content
+        logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
+        from importlib.resources import files
+
+        optimize_yml_content = (files("codeflash") / "cli_cmds" / "workflows" / "codeflash-optimize.yaml").read_text(
+            encoding="utf-8"
+        )
+        materialized_content = generate_dynamic_workflow_content(optimize_yml_content, config, git_root, benchmark_mode)
 
         pr_created_via_api = False
         pr_url = None
@@ -788,35 +619,19 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         except Exception as e:
             logger.error(f"[cmd_init.py:install_github_actions] Failed to get repository owner and name: {e}")
             # Fall back to local file creation
-            workflows_path.mkdir(parents=True, exist_ok=True)
-            with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-                optimize_yml_file.write(materialized_optimize_yml_content)
-            workflow_success_panel = Panel(
-                Text(
-                    f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
-                    "Your repository is now configured for continuous optimization!",
-                    style="green",
-                    justify="center",
-                ),
-                title="🎉 Workflow Created!",
-                border_style="bright_green",
-            )
-            console.print(workflow_success_panel)
-            console.print()
+            optimize_yaml_path.write_text(materialized_content, encoding="utf8")
+            console.print(f"✅ Created GitHub action workflow at {optimize_yaml_path}")
+            console.print("Your repository is now configured for continuous optimization!")
         else:
             # Try to create PR via API
             try:
-                # Workflow file doesn't exist on remote or content differs - proceed with PR creation
                 console.print("Creating PR with GitHub Actions workflow...")
                 logger.info(
                     f"[cmd_init.py:install_github_actions] Calling setup_github_actions API for {owner}/{repo_name} on branch {base_branch}"
                 )
 
                 response = setup_github_actions(
-                    owner=owner,
-                    repo=repo_name,
-                    base_branch=base_branch,
-                    workflow_content=materialized_optimize_yml_content,
+                    owner=owner, repo=repo_name, base_branch=base_branch, workflow_content=materialized_content
                 )
 
                 if response.status_code == 200:
@@ -826,264 +641,155 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
                         if pr_url:
                             pr_created_via_api = True
-                            success_message = f"✅ PR created: {pr_url}\n\n"
-                            success_message += "Your repository is now configured for continuous optimization!"
-
-                            workflow_success_panel = Panel(
-                                Text(success_message, style="green", justify="center"),
-                                title="🎉 Workflow PR Created!",
-                                border_style="bright_green",
-                            )
-                            console.print(workflow_success_panel)
-                            console.print()
-
+                            console.print(f"✅ PR created: {pr_url}")
+                            console.print("Your repository is now configured for continuous optimization!")
                             logger.info(
                                 f"[cmd_init.py:install_github_actions] Successfully created PR #{response_data.get('pr_number')} for {owner}/{repo_name}"
                             )
                         else:
                             # File already exists with same content
-                            pr_created_via_api = True  # Mark as handled (no PR needed)
-                            already_exists_message = "✅ Workflow file already exists with the same content.\n\n"
-                            already_exists_message += "No changes needed - your repository is already configured!"
-
-                            already_exists_panel = Panel(
-                                Text(already_exists_message, style="green", justify="center"),
-                                title="✅ Already Configured",
-                                border_style="bright_green",
-                            )
-                            console.print(already_exists_panel)
-                            console.print()
+                            pr_created_via_api = True
+                            console.print("✅ Workflow file already exists with the same content.")
+                            console.print("No changes needed - your repository is already configured!")
                     else:
                         # API returned success=false, extract error details
                         error_data = response_data
                         error_msg = error_data.get("error", "Unknown error")
                         error_message = error_data.get("message", error_msg)
-                        error_help = error_data.get("help", "")
                         installation_url = error_data.get("installation_url")
 
-                        # For permission errors, don't fall back - show a focused message and abort early
+                        # For permission errors, show message and abort
                         if response.status_code == 403:
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
                             )
-                            # Extract installation_url if available, otherwise use default
                             installation_url_403 = error_data.get(
                                 "installation_url", "https://github.com/apps/codeflash-ai/installations/select_target"
                             )
-
-                            permission_error_panel = Panel(
-                                Text(
-                                    "❌ Access Denied\n\n"
-                                    f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
-                                    "💡 To fix this:\n"
-                                    "1. Install the CodeFlash GitHub App on your repository\n"
-                                    "2. Ensure the app has 'Contents: write', 'Workflows: write', and 'Pull requests: write' permissions\n"
-                                    "3. Make sure you have write access to the repository\n\n"
-                                    f"🔗 Install GitHub App: {installation_url_403}",
-                                    style="red",
-                                ),
-                                title="❌ Setup Failed",
-                                border_style="red",
-                            )
-                            console.print(permission_error_panel)
-                            console.print()
-                            click.echo(
-                                f"Please install the CodeFlash GitHub App and ensure it has the required permissions.{LF}"
-                                f"Visit: {installation_url_403}{LF}"
+                            console.print(
+                                f"❌ Access Denied\n\n"
+                                f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
+                                f"Please install the CodeFlash GitHub App: {installation_url_403}"
                             )
                             apologize_and_exit()
 
-                        # Show detailed error panel for all other errors
-                        error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
-                        if error_help:
-                            error_panel_text += f"\n💡 {error_help}\n"
-                        if installation_url:
-                            error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
-
-                        error_panel = Panel(
-                            Text(error_panel_text, style="red"), title="❌ Setup Failed", border_style="red"
-                        )
-                        console.print(error_panel)
-                        console.print()
-
-                        # For GitHub App not installed, don't fall back - show clear instructions
+                        # For GitHub App not installed, show clear instructions
                         if response.status_code == 404 and installation_url:
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] GitHub App not installed on {owner}/{repo_name}"
                             )
-                            click.echo(
-                                f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
-                                f"Visit: {installation_url}{LF}"
+                            console.print(
+                                f"Please install the CodeFlash GitHub App on your repository to continue.\n"
+                                f"Visit: {installation_url}"
                             )
                             return
 
                         # For other errors, fall back to local file creation
                         raise Exception(error_message)  # noqa: TRY002, TRY301
                 else:
-                    # API call returned non-200 status, try to parse error response
+                    # API call returned non-200 status
                     try:
                         error_data = response.json()
                         error_msg = error_data.get("error", "API request failed")
                         error_message = error_data.get("message", f"API returned status {response.status_code}")
-                        error_help = error_data.get("help", "")
                         installation_url = error_data.get("installation_url")
 
-                        # For permission errors, don't fall back - show a focused message and abort early
                         if response.status_code == 403:
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Permission denied for {owner}/{repo_name}"
                             )
-                            # Extract installation_url if available, otherwise use default
                             installation_url_403 = error_data.get(
                                 "installation_url", "https://github.com/apps/codeflash-ai/installations/select_target"
                             )
-
-                            permission_error_panel = Panel(
-                                Text(
-                                    "❌ Access Denied\n\n"
-                                    f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
-                                    "💡 To fix this:\n"
-                                    "1. Install the CodeFlash GitHub App on your repository\n"
-                                    "2. Ensure the app has 'Contents: write', 'Workflows: write', and 'Pull requests: write' permissions\n"
-                                    "3. Make sure you have write access to the repository\n\n"
-                                    f"🔗 Install GitHub App: {installation_url_403}",
-                                    style="red",
-                                ),
-                                title="❌ Setup Failed",
-                                border_style="red",
-                            )
-                            console.print(permission_error_panel)
-                            console.print()
-                            click.echo(
-                                f"Please install the CodeFlash GitHub App and ensure it has the required permissions.{LF}"
-                                f"Visit: {installation_url_403}{LF}"
+                            console.print(
+                                f"❌ Access Denied\n\n"
+                                f"The GitHub App may not be installed on {owner}/{repo_name}, or it doesn't have the required permissions.\n\n"
+                                f"Please install the CodeFlash GitHub App: {installation_url_403}"
                             )
                             apologize_and_exit()
 
-                        # Show detailed error panel for all other errors
-                        error_panel_text = f"❌ {error_msg}\n\n{error_message}\n"
-                        if error_help:
-                            error_panel_text += f"\n💡 {error_help}\n"
-                        if installation_url:
-                            error_panel_text += f"\n🔗 Install GitHub App: {installation_url}"
-
-                        error_panel = Panel(
-                            Text(error_panel_text, style="red"), title="❌ Setup Failed", border_style="red"
-                        )
-                        console.print(error_panel)
-                        console.print()
-
-                        # For GitHub App not installed, don't fall back - show clear instructions
                         if response.status_code == 404 and installation_url:
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] GitHub App not installed on {owner}/{repo_name}"
                             )
-                            click.echo(
-                                f"Please install the CodeFlash GitHub App on your repository to continue.{LF}"
-                                f"Visit: {installation_url}{LF}"
+                            console.print(
+                                f"Please install the CodeFlash GitHub App on your repository to continue.\n"
+                                f"Visit: {installation_url}"
                             )
                             return
 
-                        # For authentication errors, don't fall back
                         if response.status_code == 401:
                             logger.error(
                                 f"[cmd_init.py:install_github_actions] Authentication failed for {owner}/{repo_name}"
                             )
-                            click.echo(f"Authentication failed. Please check your API key and try again.{LF}")
+                            console.print("Authentication failed. Please check your API key and try again.")
                             return
 
-                        # For other errors, fall back to local file creation
                         raise Exception(error_message)  # noqa: TRY002
                     except (ValueError, KeyError) as parse_error:
-                        # Couldn't parse error response, use generic message
                         status_msg = f"API returned status {response.status_code}"
                         raise Exception(status_msg) from parse_error  # noqa: TRY002
 
             except Exception as api_error:
-                # Fall back to local file creation if API call fails (for non-critical errors)
+                # Fall back to local file creation if API call fails
                 logger.warning(
                     f"[cmd_init.py:install_github_actions] API call failed, falling back to local file creation: {api_error}"
                 )
-                workflows_path.mkdir(parents=True, exist_ok=True)
-                with optimize_yaml_path.open("w", encoding="utf8") as optimize_yml_file:
-                    optimize_yml_file.write(materialized_optimize_yml_content)
-                workflow_success_panel = Panel(
-                    Text(
-                        f"✅ Created GitHub action workflow at {optimize_yaml_path}\n\n"
-                        "Your repository is now configured for continuous optimization!",
-                        style="green",
-                        justify="center",
-                    ),
-                    title="🎉 Workflow Created!",
-                    border_style="bright_green",
-                )
-                console.print(workflow_success_panel)
-                console.print()
+                optimize_yaml_path.write_text(materialized_content, encoding="utf8")
+                console.print(f"✅ Created GitHub action workflow at {optimize_yaml_path}")
+                console.print("Your repository is now configured for continuous optimization!")
 
         # Show appropriate message based on whether PR was created via API
         if pr_created_via_api:
             if pr_url:
-                click.echo(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                    f"Once you merge the PR, the workflow will be active.{LF}"
+                console.print(
+                    "🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
+                    "Once you merge the PR, the workflow will be active."
                 )
             else:
-                # File already exists
-                click.echo(
-                    f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
-                    f"The workflow is ready to use.{LF}"
+                console.print(
+                    "🚀 Codeflash is now configured to automatically optimize new Github PRs!\n"
+                    "The workflow is ready to use."
                 )
         else:
-            # Fell back to local file creation
-            click.echo(
-                f"Please edit, commit and push this GitHub actions file to your repo, and you're all set!{LF}"
-                f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
+            console.print(
+                "Please edit, commit and push this GitHub actions file to your repo, and you're all set!\n"
+                "🚀 Codeflash is now configured to automatically optimize new Github PRs!"
             )
 
-        # Show GitHub secrets setup panel (needed in both cases - PR created via API or local file)
+        # Guide user to add GitHub secret
         try:
             existing_api_key = get_codeflash_api_key()
         except OSError:
             existing_api_key = None
 
-        # GitHub secrets setup panel - always shown since secrets are required for the workflow to work
-        secrets_message = (
+        secrets_url = get_github_secrets_page_url(repo)
+        secrets_header = (
             "🔐 Next Step: Add API Key as GitHub Secret\n\n"
             "You'll need to add your CODEFLASH_API_KEY as a secret to your GitHub repository.\n\n"
             "📋 Steps:\n"
-            "1. Press Enter to open your repo's secrets page\n"
+            "1. Select Yes to open your repo's secrets page\n"
             "2. Click 'New repository secret'\n"
             "3. Add your API key with the variable name CODEFLASH_API_KEY"
         )
-
         if existing_api_key:
-            secrets_message += f"\n\n🔑 Your API Key: {existing_api_key}"
+            secrets_header += f"\n\n🔑 Your API Key: {existing_api_key}"
 
-        secrets_panel = Panel(
-            Text(secrets_message, style="blue"), title="🔐 GitHub Secrets Setup", border_style="bright_blue"
+        open_secrets = prompts.select_or_exit(
+            f"Open GitHub secrets page? ({secrets_url})", choices=["Yes", "No"], default="Yes", header=secrets_header
         )
-        console.print(secrets_panel)
+        if open_secrets == "Yes":
+            webbrowser.open(secrets_url)
 
-        console.print(f"\n📍 Press Enter to open: {get_github_secrets_page_url(repo)}")
-        console.input()
-
-        click.launch(get_github_secrets_page_url(repo))
-
-        # Post-launch message panel
-        launch_panel = Panel(
-            Text(
-                "🐙 I opened your GitHub secrets page!\n\n"
-                "Note: If you see a 404, you probably don't have access to this repo's secrets. "
-                "Ask a repo admin to add it for you, or (not recommended) you can temporarily "
-                "hard-code your API key into the workflow file.",
-                style="cyan",
+        prompts.confirm(
+            "Continue?",
+            default=True,
+            header=(
+                "🚀 Almost done!\n\n"
+                "Note: If you see a 404 on the secrets page, you probably don't have access to this repo's secrets. "
+                "Ask a repo admin to add it for you."
             ),
-            title="🌐 Browser Opened",
-            border_style="bright_cyan",
         )
-        console.print(launch_panel)
-        click.pause()
-        console.print()
         ph("cli-github-workflow-created")
     except KeyboardInterrupt:
         apologize_and_exit()
@@ -1127,7 +833,7 @@ def get_codeflash_github_action_command(dep_manager: DependencyManager) -> str:
     return "codeflash"
 
 
-def get_dependency_installation_commands(dep_manager: DependencyManager) -> tuple[str, str]:
+def get_dependency_installation_commands(dep_manager: DependencyManager) -> str:
     """Generate commands to install the dependency manager and project dependencies."""
     if dep_manager == DependencyManager.POETRY:
         return """|
@@ -1252,14 +958,14 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
 
 def generate_dynamic_workflow_content(
     optimize_yml_content: str,
-    config: tuple[dict[str, Any], Path],
+    config: dict[str, Any],
     git_root: Path,
     benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     """Generate workflow content with dynamic steps from AI service, falling back to static template.
 
     :param optimize_yml_content: Base workflow template content
-    :param config: Codeflash configuration tuple (dict, Path)
+    :param config: Codeflash configuration dict
     :param git_root: Root directory of the git repository
     :param benchmark_mode: Whether to enable benchmark mode
     :return: Complete workflow YAML content
@@ -1274,7 +980,7 @@ def generate_dynamic_workflow_content(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -1379,7 +1085,7 @@ def generate_dynamic_workflow_content(
 
 def customize_codeflash_yaml_content(
     optimize_yml_content: str,
-    config: tuple[dict[str, Any], Path],
+    config: dict[str, Any],
     git_root: Path,
     benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
@@ -1392,7 +1098,7 @@ def customize_codeflash_yaml_content(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -1424,7 +1130,7 @@ def get_formatter_cmds(formatter: str) -> list[str]:
     if formatter == "ruff":
         return ["ruff check --exit-zero --fix $file", "ruff format $file"]
     if formatter == "other":
-        click.echo(
+        console.print(
             "🔧 In pyproject.toml, please replace 'your-formatter' with the command you use to format your code."
         )
         return ["your-formatter $file"]
@@ -1445,7 +1151,7 @@ def configure_pyproject_toml(
         with toml_path.open(encoding="utf8") as pyproject_file:
             pyproject_data = tomlkit.parse(pyproject_file.read())
     except FileNotFoundError:
-        click.echo(
+        console.print(
             f"I couldn't find a pyproject.toml in the current directory.{LF}"
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
@@ -1459,13 +1165,14 @@ def configure_pyproject_toml(
             if hasattr(setup_info, section.value):
                 codeflash_section[section.get_toml_key()] = getattr(setup_info, section.value)
     else:
-        codeflash_section["module-root"] = setup_info.module_root
-        codeflash_section["tests-root"] = setup_info.tests_root
-        codeflash_section["ignore-paths"] = setup_info.ignore_paths
-        if not setup_info.enable_telemetry:
-            codeflash_section["disable-telemetry"] = not setup_info.enable_telemetry
-        if setup_info.git_remote not in ["", "origin"]:
-            codeflash_section["git-remote"] = setup_info.git_remote
+        cli_info = cast("CLISetupInfo", setup_info)
+        codeflash_section["module-root"] = cli_info.module_root
+        codeflash_section["tests-root"] = cli_info.tests_root
+        codeflash_section["ignore-paths"] = cli_info.ignore_paths
+        if not cli_info.enable_telemetry:
+            codeflash_section["disable-telemetry"] = not cli_info.enable_telemetry
+        if cli_info.git_remote not in ["", "origin"]:
+            codeflash_section["git-remote"] = cli_info.git_remote
 
     formatter = setup_info.formatter
 
@@ -1490,200 +1197,58 @@ def configure_pyproject_toml(
 
     with toml_path.open("w", encoding="utf8") as pyproject_file:
         pyproject_file.write(tomlkit.dumps(pyproject_data))
-    click.echo(f"Added Codeflash configuration to {toml_path}")
-    click.echo()
+    console.print(f"Added Codeflash configuration to {toml_path}")
+    console.print()
     return True
 
 
-def install_github_app(git_remote: str) -> None:
-    try:
-        git_repo = git.Repo(search_parent_directories=True)
-    except git.InvalidGitRepositoryError:
-        click.echo("Skipping GitHub app installation because you're not in a git repository.")
-        return
-
-    if git_remote not in get_git_remotes(git_repo):
-        click.echo(f"Skipping GitHub app installation, remote ({git_remote}) does not exist in this repository.")
-        return
-
-    owner, repo = get_repo_owner_and_name(git_repo, git_remote)
-
-    if is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-        click.echo(
-            f"🐙 Looks like you've already installed the Codeflash GitHub app on this repository ({owner}/{repo})! Continuing…"
-        )
-
-    else:
-        try:
-            click.prompt(
-                f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
-                f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                f"Please, press ENTER to open the app installation page{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix=">>> ",
-                show_default=False,
-            )
-            click.launch("https://github.com/apps/codeflash-ai/installations/select_target")
-            click.prompt(
-                f"Please, press ENTER once you've finished installing the github app from https://github.com/apps/codeflash-ai/installations/select_target{LF}",
-                default="",
-                type=click.STRING,
-                prompt_suffix=">>> ",
-                show_default=False,
-            )
-
-            count = 2
-            while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
-                if count == 0:
-                    click.echo(
-                        f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                        f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
-                        f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
-                    )
-                    break
-                click.prompt(
-                    f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                    f"Please install it from https://github.com/apps/codeflash-ai/installations/select_target {LF}"
-                    f"Please, press ENTER to continue once you've finished installing the github app…{LF}",
-                    default="",
-                    type=click.STRING,
-                    prompt_suffix=">>> ",
-                    show_default=False,
-                )
-                count -= 1
-        except (KeyboardInterrupt, EOFError, click.exceptions.Abort):
-            # leave empty line for the next prompt to be properly rendered
-            click.echo()
-
-
-class CFAPIKeyType(click.ParamType):
-    name = "cfapi-key"
-
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str | None:
-        value = value.strip()
-        if not value.startswith("cf-") and value != "":
-            self.fail(
-                f"That key [{value}] seems to be invalid. It should start with a 'cf-' prefix. Please try again.",
-                param,
-                ctx,
-            )
-        return value
-
-
-# Returns True if the user entered a new API key, False if they used an existing one
-def prompt_api_key() -> bool:
-    """Prompt user for API key via OAuth or manual entry."""
-    # Check for existing API key
-    try:
-        existing_api_key = get_codeflash_api_key()
-    except OSError:
-        existing_api_key = None
-
-    if existing_api_key:
-        display_key = f"{existing_api_key[:3]}****{existing_api_key[-4:]}"
-        api_key_panel = Panel(
-            Text(
-                f"🔑 I found a CODEFLASH_API_KEY in your environment [{display_key}]!\n\n"
-                "✅ You're all set with API authentication!",
-                style="green",
-                justify="center",
-            ),
-            title="🔑 API Key Found",
-            border_style="bright_green",
-        )
-        console.print(api_key_panel)
-        console.print()
-        return False
-
-    # Prompt for authentication method
-    auth_choices = ["🔐 Login in with Codeflash", "🔑 Use Codeflash API key"]
-
-    questions = [
-        inquirer.List(
-            "auth_method",
-            message="How would you like to authenticate?",
-            choices=auth_choices,
-            default=auth_choices[0],
-            carousel=True,
-        )
-    ]
-
-    answers = inquirer.prompt(questions, theme=CodeflashTheme())
-    if not answers:
-        apologize_and_exit()
-
-    method = answers["auth_method"]
-
-    if method == auth_choices[1]:
-        enter_api_key_and_save_to_rc()
-        ph("cli-new-api-key-entered")
-        return True
-
-    # Perform OAuth sign-in
-    api_key = perform_oauth_signin()
-
-    if not api_key:
-        apologize_and_exit()
-
-    # Save API key
+def save_api_key_and_set_env(api_key: str) -> None:
+    """Save API key to shell RC and set env var."""
     shell_rc_path = get_shell_rc_path()
     if not shell_rc_path.exists() and os.name == "nt":
+        shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
         shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
+        console.print(f"✅ Created {shell_rc_path}")
 
     result = save_api_key_to_rc(api_key)
     if is_successful(result):
-        click.echo(result.unwrap())
-        click.echo("✅ Signed in successfully and API key saved!")
+        console.print(result.unwrap())
     else:
-        click.echo(result.failure())
-        click.pause()
+        console.print(result.failure())
+        console.input("Press Enter to continue...")
 
     os.environ["CODEFLASH_API_KEY"] = api_key
-    ph("cli-oauth-signin-completed")
-    return True
 
 
 def enter_api_key_and_save_to_rc() -> None:
+    """Prompt for API key and save to shell RC."""
     browser_launched = False
     api_key = ""
+
     while api_key == "":
-        api_key = click.prompt(
+        result = prompts.text(
             f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
-            hide_input=False,
-            default="",
-            type=CFAPIKeyType(),
-            show_default=False,
-        ).strip()
-        if api_key:
-            break
-        if not browser_launched:
-            click.echo(
+            validators=APIKeyValidator(),
+        )
+        if result.command is None:
+            apologize_and_exit()
+            return
+
+        api_key = result.value.strip()
+
+        # If empty, open browser and try again
+        if not api_key and not browser_launched:
+            console.print(
                 f"Opening your Codeflash API key page. Grab a key from there!{LF}"
                 "You can also open this link manually: https://app.codeflash.ai/app/apikeys"
             )
-            click.launch("https://app.codeflash.ai/app/apikeys")
+            webbrowser.open("https://app.codeflash.ai/app/apikeys")
             browser_launched = True  # This does not work on remote consoles
-    shell_rc_path = get_shell_rc_path()
-    if not shell_rc_path.exists() and os.name == "nt":
-        # On Windows, create the appropriate file (PowerShell .ps1 or CMD .bat) in the user's home directory
-        shell_rc_path.parent.mkdir(parents=True, exist_ok=True)
-        shell_rc_path.touch()
-        click.echo(f"✅ Created {shell_rc_path}")
     get_user_id(api_key=api_key)  # Used to verify whether the API key is valid.
-    result = save_api_key_to_rc(api_key)
-    if is_successful(result):
-        click.echo(result.unwrap())
-    else:
-        click.echo(result.failure())
-        click.pause()
-
-    os.environ["CODEFLASH_API_KEY"] = api_key
+    save_api_key_and_set_env(api_key)
 
 
-def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
-    find_common_tags_content = """from __future__ import annotations
+find_common_tags_content = """from __future__ import annotations
 
 
 def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
@@ -1696,15 +1261,15 @@ def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     return set(common_tags)
 """
 
+
+def create_find_common_tags_file(args: Namespace, file_name: str) -> Path:
     file_path = Path(args.module_root) / file_name
     lsp_enabled = is_LSP_enabled()
     if file_path.exists() and not lsp_enabled:
-        from rich.prompt import Confirm
-
-        overwrite = Confirm.ask(
-            f"🤔 {file_path} already exists. Do you want to overwrite it?", default=True, show_default=False
+        answer = prompts.select_or_exit(
+            f"🤔 {file_path} already exists. Do you want to overwrite it?", choices=["Yes", "No"], default="Yes"
         )
-        if not overwrite:
+        if answer == "No":
             apologize_and_exit()
         console.rule()
 
@@ -1714,8 +1279,7 @@ def find_common_tags(articles: list[dict[str, list[str]]]) -> set[str]:
     return file_path
 
 
-def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
-    bubble_sort_content = """from typing import Union, List
+bubble_sort_content = """from typing import Union, List
 def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
     for i in range(len(arr)):
         for j in range(len(arr) - 1):
@@ -1725,6 +1289,9 @@ def sorter(arr: Union[List[int],List[float]]) -> Union[List[int],List[float]]:
                 arr[j + 1] = temp
     return arr
 """
+
+
+def create_bubble_sort_file_and_test(args: Namespace) -> tuple[str, str]:
     # Always use pytest for tests
     bubble_sort_test_content = f"""from {Path(args.module_root).name}.bubble_sort import sorter
 
@@ -1744,12 +1311,10 @@ def test_sort():
 
     bubble_sort_path = Path(args.module_root) / "bubble_sort.py"
     if bubble_sort_path.exists():
-        from rich.prompt import Confirm
-
-        overwrite = Confirm.ask(
-            f"🤔 {bubble_sort_path} already exists. Do you want to overwrite it?", default=True, show_default=False
+        answer = prompts.select_or_exit(
+            f"🤔 {bubble_sort_path} already exists. Do you want to overwrite it?", choices=["Yes", "No"], default="Yes"
         )
-        if not overwrite:
+        if answer == "No":
             apologize_and_exit()
         console.rule()
 
@@ -1807,14 +1372,3 @@ def run_end_to_end_test(args: Namespace, find_common_tags_path: Path) -> None:
         logger.info("🧹 Cleaning up…")
         find_common_tags_path.unlink(missing_ok=True)
         logger.info(f"🗑️  Deleted {find_common_tags_path}")
-
-
-def ask_for_telemetry() -> bool:
-    """Prompt the user to enable or disable telemetry."""
-    from rich.prompt import Confirm
-
-    return Confirm.ask(
-        "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g. errors encountered)?",
-        default=True,
-        show_default=True,
-    )

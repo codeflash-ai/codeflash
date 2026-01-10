@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import shutil
 import sys
-from typing import Callable, cast
-
-import click
-import inquirer
+from typing import TYPE_CHECKING, Any, Optional
 
 from codeflash.cli_cmds.console import console, logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from git import Repo
 
 
 def apologize_and_exit() -> None:
@@ -20,78 +21,44 @@ def apologize_and_exit() -> None:
     sys.exit(1)
 
 
-def inquirer_wrapper(func: Callable[..., str | bool], *args: str | bool, **kwargs: str | bool) -> str | bool:
-    new_args = []
-    new_kwargs = {}
+def get_git_repo_or_none(search_path: Optional[Path] = None) -> Optional[Repo]:
+    """Get git repository or None if not in a git repo."""
+    import git
 
-    if len(args) == 1:
-        message = str(args[0])
-    else:
-        message = str(kwargs["message"])
-        new_kwargs = kwargs.copy()
-    split_messages = split_string_to_cli_width(message, is_confirm=func == inquirer.confirm)
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-
-    if len(args) == 1:
-        new_args.append(last_message)
-    else:
-        new_kwargs["message"] = last_message
-
-    return func(*new_args, **new_kwargs)
+    try:
+        if search_path:
+            return git.Repo(search_path, search_parent_directories=True)
+        return git.Repo(search_parent_directories=True)
+    except git.InvalidGitRepositoryError:
+        return None
 
 
-def split_string_to_cli_width(string: str, is_confirm: bool = False) -> list[str]:  # noqa: FBT001, FBT002
-    cli_width, _ = shutil.get_terminal_size()
-    # split string to lines that accommodate "[?] " prefix
-    cli_width -= len("[?] ")
-    lines = split_string_to_fit_width(string, cli_width)
-
-    # split last line to additionally accommodate ": " or " (y/N): " suffix
-    cli_width -= len(" (y/N):") if is_confirm else len(": ")
-    last_lines = split_string_to_fit_width(lines[-1], cli_width)
-
-    lines = lines[:-1] + last_lines
-
-    if len(lines) > 1:
-        for i in range(len(lines[:-1])):
-            # Add yellow color to question mark in "[?] " prefix
-            lines[i] = "[\033[33m?\033[0m] " + lines[i]
-    return lines
-
-
-def inquirer_wrapper_path(*args: str, **kwargs: str) -> dict[str, str] | None:
-    new_args = []
-    message = kwargs["message"]
-    new_kwargs = kwargs.copy()
-    split_messages = split_string_to_cli_width(message)
-    for split_message in split_messages[:-1]:
-        click.echo(split_message)
-
-    last_message = split_messages[-1]
-    new_kwargs["message"] = last_message
-    new_args.append(args[0])
-
-    return cast("dict[str, str]", inquirer.prompt([inquirer.Path(*new_args, **new_kwargs)]))
-
-
-def split_string_to_fit_width(string: str, width: int) -> list[str]:
-    words = string.split()
-    lines = []
-    current_line = [words[0]]
-    current_length = len(words[0])
-
-    for word in words[1:]:
-        word_length = len(word)
-        if current_length + word_length + 1 <= width:
-            current_line.append(word)
-            current_length += word_length + 1
+def require_git_repo_or_exit(search_path: Optional[Path] = None, error_message: Optional[str] = None) -> Repo:
+    """Get git repository or exit with error."""
+    repo = get_git_repo_or_none(search_path)
+    if repo is None:
+        if error_message:
+            logger.error(error_message)
         else:
-            lines.append(" ".join(current_line))
-            current_line = [word]
-            current_length = word_length
+            logger.error(
+                "I couldn't find a git repository in the current directory. "
+                "A git repository is required for this operation."
+            )
+        apologize_and_exit()
+    # After checking for None and calling apologize_and_exit(), we know repo is not None
+    # but mypy doesn't understand apologize_and_exit() never returns, so we assert
+    assert repo is not None
+    return repo
 
-    lines.append(" ".join(current_line))
-    return lines
+
+def parse_config_file_or_exit(config_file: Optional[Path] = None, **kwargs: Any) -> tuple[dict[str, Any], Path]:  # noqa: ANN401
+    """Parse config file or exit with error."""
+    from codeflash.code_utils.code_utils import exit_with_message
+    from codeflash.code_utils.config_parser import parse_config_file
+
+    try:
+        return parse_config_file(config_file, **kwargs)
+    except ValueError as e:
+        exit_with_message(f"Error parsing config file: {e}", error_on_exit=True)
+        # exit_with_message never returns when error_on_exit=True, but mypy doesn't know that
+        raise  # pragma: no cover

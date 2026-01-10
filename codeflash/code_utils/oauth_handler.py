@@ -14,10 +14,10 @@ import time
 import urllib.parse
 import webbrowser
 
-import click
 import requests
 
 from codeflash.api.cfapi import get_cfapi_base_urls
+from codeflash.cli_cmds.console import console
 
 
 class OAuthHandler:
@@ -737,19 +737,19 @@ def perform_oauth_signin() -> str | None:
     try:
         httpd = oauth.start_local_server(port)
     except Exception:
-        click.echo("❌ Failed to start local server.")
+        console.print("❌ Failed to start local server.")
         return None
 
     if should_attempt_browser_launch():
         # Try to open browser
-        click.echo("🌐 Opening browser to sign in to CodeFlash…")
+        console.print("🌐 Opening browser to sign in to CodeFlash…")
         with contextlib.suppress(Exception):
             webbrowser.open(local_auth_url)
 
     # Show remote URL and start input thread
-    click.echo("\n📋 If browser didn't open, visit this URL:")
-    click.echo(f"\n{remote_auth_url}\n")
-    click.echo("Paste code here if prompted > ", nl=False)
+    console.print("\n📋 If browser didn't open, visit this URL:")
+    console.print(f"\n{remote_auth_url}\n")
+    console.print("Paste code here if prompted > ", end="")
 
     # Start thread to wait for manual input
     input_thread = threading.Thread(target=_wait_for_manual_code_input, args=(oauth,))
@@ -763,7 +763,7 @@ def perform_oauth_signin() -> str | None:
 
     if not oauth.is_complete:
         httpd.shutdown()
-        click.echo("\n❌ Authentication timed out.")
+        console.print("\n❌ Authentication timed out.")
         return None
 
     # Check which method completed
@@ -776,7 +776,7 @@ def perform_oauth_signin() -> str | None:
         # Browser callback received
         if oauth.error or not oauth.state or oauth.state != state:
             httpd.shutdown()
-            click.echo("\n❌ Unauthorized.")
+            console.print("\n❌ Unauthorized.")
             return None
 
         api_key = oauth.exchange_code_for_token(oauth.code, code_verifier, local_redirect_uri)
@@ -786,6 +786,6 @@ def perform_oauth_signin() -> str | None:
     httpd.shutdown()
 
     if not api_key:
-        click.echo("\n❌ Authentication failed.")
-    click.echo("\n")
+        console.print("\n❌ Authentication failed.")
+    console.print("\n")
     return api_key
