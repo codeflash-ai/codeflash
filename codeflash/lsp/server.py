@@ -7,6 +7,7 @@ from lsprotocol.types import LogMessageParams, MessageType
 from pygls.lsp.server import LanguageServer
 from pygls.protocol import LanguageServerProtocol
 
+from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.either import Result
 from codeflash.models.models import CodeOptimizationContext
 
@@ -37,6 +38,7 @@ class CodeflashLanguageServer(LanguageServer):
         args.config_file = config_file
         args.no_pr = True  # LSP server should not create PRs
         args.worktree = True
+        args.effort = EffortLevel.LOW.value  # low effort for high speed
         self.args = args
         # avoid initializing the optimizer during initialization, because it can cause an error if the api key is invalid
 
