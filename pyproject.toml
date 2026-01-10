@@ -86,7 +86,9 @@ tests = [
     "scipy>=1.13.1",
     "torch>=2.8.0",
     "xarray>=2024.7.0",
-    "eval_type_backport"
+    "eval_type_backport",
+    "numba>=0.60.0",
+    "tensorflow>=2.20.0",
 ]
 
 [tool.hatch.build.targets.sdist]
