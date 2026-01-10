@@ -744,6 +744,15 @@ def inject_profiling_into_existing_test(
                 ast.Import(names=[ast.alias(name="dill", asname="pickle")]),
             ]
         )
+    # Add framework imports for GPU sync code (needed when framework is only imported via submodule)
+    for framework_name, framework_alias in used_frameworks.items():
+        if framework_alias == framework_name:
+            # Only add import if we're using the framework name directly (not an alias)
+            # This handles cases like "from torch.nn import Module" where torch needs to be imported
+            new_imports.append(ast.Import(names=[ast.alias(name=framework_name)]))
+        else:
+            # If there's an alias, use it (e.g., "import torch as th")
+            new_imports.append(ast.Import(names=[ast.alias(name=framework_name, asname=framework_alias)]))
     additional_functions = [create_wrapper_function(mode, used_frameworks)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
