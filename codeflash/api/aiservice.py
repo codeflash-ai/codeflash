@@ -11,8 +11,6 @@ import requests
 from pydantic.json import pydantic_encoder
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_replacer import is_zero_diff
-from codeflash.code_utils.code_utils import unified_diff_strings
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
@@ -674,17 +672,15 @@ class AiServiceClient:
         OptimizationReviewResult with review ('high', 'medium', 'low', or '') and explanation
 
         """
-        diff_str = "\n".join(
-            [
-                unified_diff_strings(code1=original_code[p], code2=new_code[p])
-                for p in original_code
-                if not is_zero_diff(original_code[p], new_code[p])
-            ]
-        )
-        code_diff = f"```diff\n{diff_str}\n```"
+        # Extract complete code (new preferred format)
+        original_code_str = "\n\n".join([original_code[p] for p in original_code])
+        optimized_code_str = "\n\n".join([new_code[p] for p in new_code])
+
         logger.info("loading|Reviewing Optimization…")
         payload = {
-            "code_diff": code_diff,
+            # NEW: Send complete code (preferred by backend)
+            "original_code": original_code_str,
+            "optimized_code": optimized_code_str,
             "explanation": explanation.raw_explanation_message,
             "existing_tests": existing_tests_source,
             "generated_tests": generated_original_test_source,
