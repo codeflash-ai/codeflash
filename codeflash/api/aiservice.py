@@ -675,13 +675,11 @@ class AiServiceClient:
         OptimizationReviewResult with review ('high', 'medium', 'low', or '') and explanation
 
         """
-        # Extract complete code (new preferred format)
         original_code_str = "\n\n".join([original_code[p] for p in original_code])
         optimized_code_str = "\n\n".join([new_code[p] for p in new_code])
 
         logger.info("loading|Reviewing Optimization…")
         payload = {
-            # NEW: Send complete code (preferred by backend)
             "original_code": original_code_str,
             "optimized_code": optimized_code_str,
             "explanation": explanation.raw_explanation_message,
