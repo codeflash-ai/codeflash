@@ -14,7 +14,6 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -129,6 +128,7 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         is_async: bool = False,
+        n_candidates: int = 5,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -139,6 +139,7 @@ class AiServiceClient:
         - trace_id (str): Trace id of optimization run
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
         - is_async (bool): Whether the function being optimized is async
+        - n_candidates (int): Number of candidates to generate
 
         Returns
         -------
@@ -161,10 +162,10 @@ class AiServiceClient:
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
             "is_async": is_async,
-            "lsp_mode": is_LSP_enabled(),
             "call_sequence": self.get_next_sequence(),
+            "n_candidates": n_candidates,
         }
-        logger.debug(f"Sending optimize request: trace_id={trace_id}, lsp_mode={payload['lsp_mode']}")
+        logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
         try:
             response = self.make_ai_service_request("/optimize", payload=payload, timeout=self.timeout)
@@ -196,6 +197,7 @@ class AiServiceClient:
         dependency_code: str,
         trace_id: str,
         line_profiler_results: str,
+        n_candidates: int,
         experiment_metadata: ExperimentMetadata | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance using line profiler results.
@@ -207,6 +209,7 @@ class AiServiceClient:
         - trace_id (str): Trace id of optimization run
         - line_profiler_results (str): Line profiler output to guide optimization
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+        - n_candidates (int): Number of candidates to generate
 
         Returns
         -------
@@ -223,12 +226,12 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
+            "n_candidates": n_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
             "python_version": platform.python_version(),
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
-            "lsp_mode": is_LSP_enabled(),
             "call_sequence": self.get_next_sequence(),
         }
 
