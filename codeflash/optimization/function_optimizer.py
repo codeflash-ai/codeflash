@@ -62,7 +62,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.line_profile_utils import add_decorator_imports
+from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -2423,6 +2423,23 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
+        # Check if candidate code contains JIT decorators - line profiler doesn't work with JIT compiled code
+        candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
+        if contains_jit_decorator(candidate_fto_code):
+            logger.info(
+                f"Skipping line profiler for {self.function_to_optimize.function_name} - code contains JIT decorator"
+            )
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        # Check helper code for JIT decorators
+        for module_abspath in original_helper_code:
+            candidate_helper_code = Path(module_abspath).read_text("utf-8")
+            if contains_jit_decorator(candidate_helper_code):
+                logger.info(
+                    f"Skipping line profiler for {self.function_to_optimize.function_name} - helper code contains JIT decorator"
+                )
+                return {"timings": {}, "unit": 0, "str_out": ""}
+
         try:
             console.rule()
 
