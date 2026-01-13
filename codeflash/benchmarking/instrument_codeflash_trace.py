@@ -108,12 +108,10 @@ def instrument_codeflash_trace_decorator(file_to_funcs_to_optimize: dict[Path, l
         # Skip codeflash's own benchmarking and picklepatch modules to avoid circular imports
         # (codeflash_trace.py imports from picklepatch, and instrumenting these would cause
         # them to import codeflash_trace back, creating a circular import)
-        parts = file_path.parts
-        # Find the last "codeflash" in path (handles nested paths like .../codeflash/codeflash/...)
-        codeflash_indices = [i for i, p in enumerate(parts) if p == "codeflash"]
-        if codeflash_indices:
-            codeflash_idx = codeflash_indices[-1]  # Use the last occurrence (the module, not project dir)
-            submodule = parts[codeflash_idx + 1] if codeflash_idx + 1 < len(parts) else None
+        # Use rpartition to find the last "codeflash" in path (handles nested paths)
+        _, sep, after = file_path.as_posix().rpartition("/codeflash/")
+        if sep:
+            submodule = after.partition("/")[0]
             if submodule in ("benchmarking", "picklepatch"):
                 continue
         original_code = file_path.read_text(encoding="utf-8")
