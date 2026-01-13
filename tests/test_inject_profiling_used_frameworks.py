@@ -23,12 +23,25 @@ def normalize_instrumented_code(code: str) -> str:
     """Normalize instrumented code by replacing dynamic paths with placeholders.
 
     This allows comparing instrumented code across test runs where temp paths differ.
+    Also normalizes f-string quoting differences between Python versions (Python 3.12+
+    allows single quotes inside single-quoted f-strings via PEP 701, but libcst
+    generates double-quoted f-strings for compatibility with older versions).
     """
-    return re.sub(
+    # Normalize database path
+    code = re.sub(
         r"sqlite3\.connect\(f'[^']+'",
         "sqlite3.connect(f'{CODEFLASH_DB_PATH}'",
         code
     )
+    # Normalize f-string that contains the test_stdout_tag assignment
+    # This specific f-string has internal single quotes, so libcst uses double quotes
+    # on Python < 3.12, but single quotes on Python 3.12+
+    code = re.sub(
+        r'test_stdout_tag = f"([^"]+)"',
+        r"test_stdout_tag = f'\1'",
+        code
+    )
+    return code
 
 
 # ============================================================================
