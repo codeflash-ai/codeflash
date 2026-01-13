@@ -12,8 +12,6 @@ and Finance, MIT Press, 2002.
 from functools import reduce
 import numpy as np
 import torch
-import jax
-import tensorflow as tf
 
 def _gridmake2(x1, x2):
     """
