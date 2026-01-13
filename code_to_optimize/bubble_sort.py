@@ -1,10 +1,11 @@
-def sorter(arr):
+def sorter12(arr):
     print("codeflash stdout: Sorting list")
-    for i in range(len(arr)):
-        for j in range(len(arr) - 1):
-            if arr[j] > arr[j + 1]:
-                temp = arr[j]
-                arr[j] = arr[j + 1]
-                arr[j + 1] = temp
+    # Preserve original behavior for inputs without length by forcing a len() check.
+    _ = len(arr)
+    try:
+        arr.sort()
+    except AttributeError:
+        # Fallback to in-place slice assignment for sequences that don't implement .sort()
+        arr[:] = sorted(arr)
     print(f"result: {arr}")
     return arr
