@@ -1251,7 +1251,6 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    jit_warmup=True,
                 )
                 if not success:
                     continue
@@ -1261,7 +1260,6 @@ class FunctionOptimizer:
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
-                    jit_warmup=True,
                 )
                 if not success:
                     continue
