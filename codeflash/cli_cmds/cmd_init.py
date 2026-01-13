@@ -264,7 +264,7 @@ def init_codeflash() -> None:
                 *integration_options,
             ]
 
-        integrations_header = "🔧 Optional Integrations\n\n💡 SPACE to select, ENTER to confirm."
+        integrations_header = "🔧 Optional Integrations"
         if not should_modify and auth_status:
             integrations_header = f"{auth_status}\n\n{integrations_header}"
 

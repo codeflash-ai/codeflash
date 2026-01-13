@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from inquirer_textual.InquirerApp import InquirerApp
 from inquirer_textual.widgets.InquirerCheckbox import InquirerCheckbox
@@ -8,6 +8,7 @@ from inquirer_textual.widgets.InquirerConfirm import InquirerConfirm
 from inquirer_textual.widgets.InquirerMulti import InquirerMulti
 from inquirer_textual.widgets.InquirerSelect import InquirerSelect
 from inquirer_textual.widgets.InquirerText import InquirerText
+from textual.binding import Binding
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -16,8 +17,30 @@ if TYPE_CHECKING:
     from inquirer_textual.widgets.InquirerWidget import InquirerWidget
     from textual.validation import Validator
 
+# Keyboard hints for each widget type (styled dim)
+HINT_SELECT = "[dim]↑/↓ navigate • Enter confirm • Esc cancel[/dim]"
+HINT_CONFIRM = "[dim]y/n answer • Enter confirm • Esc cancel[/dim]"
+HINT_TEXT = "[dim]Enter confirm • Esc cancel[/dim]"
+HINT_CHECKBOX = "[dim]↑/↓ navigate • Space select • Enter confirm • Esc cancel[/dim]"
+
+
+def with_hint(message: str, hint: str) -> str:
+    """Append a keyboard hint to the message."""
+    return f"{message}  {hint}"
+
+
+def is_cancelled(result) -> bool:  # noqa: ANN001
+    """Check if the user cancelled the prompt (Esc, Ctrl+C, Ctrl+D)."""
+    return result.command is None or result.command == "quit"
+
 
 class CodeflashThemedApp(InquirerApp):
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("escape", "quit", "Cancel", show=False, priority=True),
+        Binding("ctrl+c", "quit", "Cancel", show=False, priority=True),
+        Binding("ctrl+d", "quit", "Cancel", show=False, priority=True),
+    ]
+
     CSS = """
         App {
             background: #1e293b;
@@ -66,6 +89,18 @@ class CodeflashThemedApp(InquirerApp):
         }
     """
 
+    def _update_bindings(self) -> None:
+        """Override to preserve our cancel bindings."""
+        super()._update_bindings()
+        for binding in self.BINDINGS:
+            self._bindings.bind(
+                binding.key,
+                binding.action,
+                description=binding.description,
+                show=binding.show,
+                priority=binding.priority,
+            )
+
     def get_theme_variable_defaults(self) -> dict[str, str]:
         return {
             "select-question-mark": "#FFC143",
@@ -94,13 +129,13 @@ def select(  # noqa: ANN201
     default: str | Choice | None = None,
     header: str | list[str] | None = None,
 ):  # type: ignore[no-untyped-def]
-    widget = InquirerSelect(message, choices, default, mandatory=True)
+    widget = InquirerSelect(with_hint(message, HINT_SELECT), choices, default, mandatory=True)
     app = create_app(widget, header=header)
     return app.run(inline=True)
 
 
 def confirm(message: str, *, default: bool = False, header: str | list[str] | None = None):  # noqa: ANN201  # type: ignore[no-untyped-def]
-    widget = InquirerConfirm(message, default=default, mandatory=True)
+    widget = InquirerConfirm(with_hint(message, HINT_CONFIRM), default=default, mandatory=True)
     app = create_app(widget, header=header)
     return app.run(inline=True)
 
@@ -108,7 +143,7 @@ def confirm(message: str, *, default: bool = False, header: str | list[str] | No
 def text(  # noqa: ANN201  # type: ignore[no-untyped-def]
     message: str, validators: Validator | Iterable[Validator] | None = None, header: str | list[str] | None = None
 ):
-    widget = InquirerText(message, validators=validators)
+    widget = InquirerText(with_hint(message, HINT_TEXT), validators=validators)
     app = create_app(widget, header=header)
     return app.run(inline=True)
 
@@ -119,7 +154,7 @@ def checkbox(  # noqa: ANN201
     enabled: list[str | Choice] | None = None,
     header: str | list[str] | None = None,
 ):  # type: ignore[no-untyped-def]
-    widget = InquirerCheckbox(message, choices, enabled)
+    widget = InquirerCheckbox(with_hint(message, HINT_CHECKBOX), choices, enabled)
     app = create_app(widget, header=header)
     return app.run(inline=True)
 
@@ -139,7 +174,7 @@ def select_or_exit(  # noqa: ANN201
 ):  # type: ignore[no-untyped-def]
     """Select with automatic exit on cancellation."""
     result = select(message, choices, default, header=header)
-    if result.command is None:
+    if is_cancelled(result):
         if exit_callback:
             exit_callback()
         else:
@@ -157,7 +192,7 @@ def text_or_exit(  # noqa: ANN201  # type: ignore[no-untyped-def]
 ):
     """Text input with automatic exit on cancellation."""
     result = text(message, validators, header=header)
-    if result.command is None:
+    if is_cancelled(result):
         if exit_callback:
             exit_callback()
         else:
@@ -176,6 +211,6 @@ def checkbox_or_default(  # noqa: ANN201
 ):  # type: ignore[no-untyped-def]
     """Checkbox with default value on cancellation."""
     result = checkbox(message, choices, enabled, header=header)
-    if result.command is None:
+    if is_cancelled(result):
         return default_on_cancel if default_on_cancel is not None else []
     return result.value
