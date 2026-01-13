@@ -15,6 +15,7 @@ Before installing Codeflash, ensure you have:
 3. **Project dependencies installed** in your virtual environment
 
 Good to have (optional):
+
 1. **Unit Tests** that Codeflash uses to ensure correctness of the optimizations
 
 <Warning>
@@ -27,11 +28,13 @@ source venv/bin/activate  # On Linux/Mac
 # or
 venv\Scripts\activate     # On Windows
 ```
+
 </Warning>
 <Steps>
 <Step title="Install Codeflash">
 
 You can install Codeflash locally for a project by running the following command in the project's virtual environment:
+
 ```bash
 pip install codeflash
 ```
@@ -51,6 +54,7 @@ uv add --dev codeflash
 ```bash poetry
 poetry add codeflash@latest --group dev
 ```
+
 </CodeGroup>
 </Tip>
 </Step>
@@ -69,20 +73,24 @@ If you don't have a pyproject.toml file yet, the codeflash init command will ask
 
 `pyproject.toml` is a configuration file that is used to specify build and tool settings for Python projects.
 `pyproject.toml` is the modern replacement for setup.py and requirements.txt files.
+
 </Info>
 
 When running `codeflash init`, you will see the following prompts:
 
 ```text
-1. Enter your Codeflash API key:
-2. Install the GitHub app.
-3. Which Python module do you want me to optimize going forward? (e.g. my_module)
-4. Where are your tests located? (e.g. tests/)
-5. Which test framework do you use? (pytest/unittest)
-6. Install GitHub actions for Continuous optimization?
+1. Enter your Codeflash API key (or login with Codeflash)
+2. Which Python module do you want me to optimize going forward? (e.g. my_module)
+3. Where are your tests located? (e.g. tests/)
+4. Which code formatter do you use? (black/ruff/other/disabled)
+5. Which git remote should Codeflash use for Pull Requests? (if multiple remotes exist)
+6. Help us improve Codeflash by sharing anonymous usage data?
+7. Install the GitHub app
+8. Install GitHub actions for Continuous optimization?
 ```
 
-  After you have answered these questions, the Codeflash configuration will be saved in the `pyproject.toml` file.
+After you have answered these questions, the Codeflash configuration will be saved in the `pyproject.toml` file.
+
 </Step>
 
 <Step title="Generate a Codeflash API Key">
@@ -96,6 +104,7 @@ Codeflash uses cloud-hosted AI models and integrations with GitHub. If you haven
 **Free Tier Available**
 
 Codeflash offers a **free tier** with a limited number of optimizations. Perfect for trying it out on small projects!
+
 </Note>
 </Step>
 
@@ -108,13 +117,12 @@ The Codeflash GitHub App allows access to your repository to the codeflash-ai bo
 Please [install the Codeflash GitHub
 app](https://github.com/apps/codeflash-ai/installations/select_target) by choosing the repository you want to install
 Codeflash on.
-</Step>
 
+</Step>
 
 </Steps>
 
 To understand the configuration options, and set more advanced options, see the [Manual Configuration](/configuration) page.
-
 
 ## Try It Out!
 
@@ -154,12 +162,8 @@ cd optimize-me
 </Step>
 
 <Step title="Set Up Environment">
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install codeflash
-```
+  ```bash python -m venv .venv source .venv/bin/activate pip install -r
+  requirements.txt pip install codeflash ```
 </Step>
 
 <Step title="Run Codeflash">
@@ -196,7 +200,7 @@ codeflash --all # optimize the entire repo
     ```bash
     codeflash optimize --verbose
     ```
-    
+
     This will show:
     - 🔍 Which functions are being analyzed
     - 🚫 Why certain functions were skipped
@@ -220,7 +224,6 @@ codeflash --all # optimize the entire repo
     ```
   </Accordion>
 </AccordionGroup>
-
 
 ### Next Steps
 

@@ -413,6 +413,15 @@ def get_all_replay_test_functions(
         logger.error("Could not find trace_file_path in replay test files.")
         exit_with_message("Could not find trace_file_path in replay test files.")
 
+    if not trace_file_path.exists():
+        logger.error(f"Trace file not found: {trace_file_path}")
+        exit_with_message(
+            f"Trace file not found: {trace_file_path}\n"
+            "The trace file referenced in the replay test no longer exists.\n"
+            "This can happen if the trace file was cleaned up after a previous optimization run.\n"
+            "Please regenerate the replay test by re-running 'codeflash optimize' with your command."
+        )
+
     function_tests, _, _ = discover_unit_tests(test_cfg, discover_only_these_tests=replay_test)
     # Get the absolute file paths for each function, excluding class name if present
     filtered_valid_functions = defaultdict(list)
