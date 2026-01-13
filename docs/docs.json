@@ -10,7 +10,7 @@
   "favicon": "/favicon.ico",
   "integrations": {
     "posthog": {
-        "apiKey": "phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol"
+      "apiKey": "phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol"
     }
   },
   "navigation": {
@@ -19,20 +19,20 @@
         "tab": "Documentation",
         "groups": [
           {
+            "group": "🚀 Quickstart",
+            "pages": ["getting-started/local-installation"]
+          },
+          {
             "group": "🏠 Overview",
             "pages": ["index"]
           },
           {
-            "group": "🚀 Quickstart",
-            "pages": [
-              "getting-started/local-installation"
-            ]
+            "group": "📖 CLI Reference",
+            "pages": ["cli-reference"]
           },
           {
             "group": "🛠 IDE Extensions",
-            "pages": [
-              "editor-plugins/vscode"
-            ]
+            "pages": ["editor-plugins/vscode"]
           },
           {
             "group": "⚡ Optimizing with Codeflash",
@@ -47,12 +47,15 @@
             "pages": [
               "optimizing-with-codeflash/codeflash-github-actions",
               "optimizing-with-codeflash/benchmarking",
-               "optimizing-with-codeflash/review-optimizations"
+              "optimizing-with-codeflash/review-optimizations"
             ]
           },
           {
             "group": "🧠 Core Concepts",
-            "pages": ["codeflash-concepts/how-codeflash-works", "codeflash-concepts/benchmarking"]
+            "pages": [
+              "codeflash-concepts/how-codeflash-works",
+              "codeflash-concepts/benchmarking"
+            ]
           },
           {
             "group": "⚙️ Configuration & Best Practices",
