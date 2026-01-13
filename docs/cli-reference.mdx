@@ -1,0 +1,672 @@
+---
+title: "CLI Reference"
+description: "Complete command-line reference for all Codeflash commands, flags, and options"
+icon: "terminal"
+sidebarTitle: "CLI Reference"
+keywords:
+  [
+    "CLI",
+    "command line",
+    "commands",
+    "flags",
+    "options",
+    "reference",
+    "terminal",
+  ]
+---
+
+# Codeflash CLI Reference
+
+This guide covers all Codeflash CLI commands with practical examples you can run directly in your terminal.
+
+<Info>
+  **Prerequisites** - Ensure Codeflash is installed in your Python environment
+  and you have a configured `pyproject.toml` in your project.
+</Info>
+
+---
+
+## Quick Start
+
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Activate virtual environment (if using one)
+    source .venv/bin/activate
+
+    # Verify installation
+    codeflash --version
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Activate virtual environment (if using one)
+    .venv\Scripts\activate
+
+    # Verify installation
+    codeflash --version
+    ```
+
+  </Tab>
+</Tabs>
+
+---
+
+## Core Commands
+
+### `codeflash init`
+
+Initialize Codeflash for your Python project. This creates the configuration in `pyproject.toml`.
+
+<CodeGroup>
+```bash Basic
+codeflash init
+```
+
+```bash With Formatter Override
+codeflash init --override-formatter-check
+```
+</CodeGroup>
+
+<Tip>
+  The `init` command will guide you through an interactive setup process,
+  including API key configuration, module selection, and GitHub App
+  installation.
+</Tip>
+
+---
+
+### `codeflash init-actions`
+
+Set up GitHub Actions workflow for continuous optimization on every pull request.
+
+```bash
+codeflash init-actions
+```
+
+This command:
+- Creates a workflow file in `.github/workflows/`
+- Opens a PR with the workflow configuration
+- Requires the Codeflash GitHub App to be installed
+
+---
+
+### `codeflash vscode-install`
+
+Install the Codeflash extension for VS Code, Cursor, or Windsurf.
+
+```bash
+codeflash vscode-install
+```
+
+---
+
+### `codeflash --verify-setup`
+
+Verify your Codeflash installation by running a sample optimization.
+
+```bash
+codeflash --verify-setup
+```
+
+<Note>
+  This command creates a temporary file, runs a sample optimization, and cleans
+  up afterward. It takes about 3 minutes to complete.
+</Note>
+
+---
+
+## Function Optimization
+
+### Optimize a Single Function
+
+Target a specific function in a file for optimization.
+
+```bash
+codeflash --file <path/to/file.py> --function <function_name>
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Basic optimization (creates PR)
+    codeflash --file src/utils.py --function calculate_metrics
+
+    # Local optimization only (no PR)
+    codeflash --file src/utils.py --function calculate_metrics --no-pr
+
+    # With verbose output
+    codeflash --file src/utils.py --function calculate_metrics --no-pr --verbose
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Basic optimization (creates PR)
+    codeflash --file src\utils.py --function calculate_metrics
+
+    # Local optimization only (no PR)
+    codeflash --file src\utils.py --function calculate_metrics --no-pr
+
+    # With verbose output
+    codeflash --file src\utils.py --function calculate_metrics --no-pr --verbose
+    ```
+
+  </Tab>
+</Tabs>
+</Accordion>
+
+<Warning>
+  **Important**: The file must be within your configured `module-root`
+  directory. Files outside `module-root` will be ignored with "Functions outside
+  module-root" message.
+</Warning>
+
+---
+
+### Optimize All Functions
+
+Optimize all functions in your entire codebase or a specific directory.
+
+```bash
+# Optimize entire codebase
+codeflash --all
+
+# Optimize specific directory
+codeflash --all src/core/
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Optimize all (creates PRs)
+    codeflash --all
+
+    # Optimize all locally (no PRs)
+    codeflash --all --no-pr
+
+    # Optimize specific directory
+    codeflash --all src/algorithms/ --no-pr
+
+    # Skip draft PRs in CI
+    codeflash --all --no-draft
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Optimize all (creates PRs)
+    codeflash --all
+
+    # Optimize all locally (no PRs)
+    codeflash --all --no-pr
+
+    # Optimize specific directory
+    codeflash --all src\algorithms\ --no-pr
+
+    # Skip draft PRs in CI
+    codeflash --all --no-draft
+    ```
+
+  </Tab>
+</Tabs>
+</Accordion>
+
+---
+
+## Trace & Optimize Workflows
+
+### `codeflash optimize`
+
+Trace a Python script's execution and optimize functions based on real-world usage.
+
+```bash
+codeflash optimize <script.py> [script_args]
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Basic trace and optimize
+    codeflash optimize app.py
+
+    # With script arguments
+    codeflash optimize process.py --input data.csv --output results.json
+
+    # Custom trace output file
+    codeflash optimize app.py --output custom_trace.trace
+
+    # With timeout (30 seconds)
+    codeflash optimize long_running_script.py --timeout 30
+
+    # Limit function trace count
+    codeflash optimize app.py --max-function-count 50
+
+    # Specify config file
+    codeflash optimize app.py --config-file-path pyproject.toml
+
+    # Local only (no PR)
+    codeflash optimize app.py --no-pr
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Basic trace and optimize
+    codeflash optimize app.py
+
+    # With script arguments
+    codeflash optimize process.py --input data.csv --output results.json
+
+    # Custom trace output file
+    codeflash optimize app.py --output custom_trace.trace
+
+    # With timeout (30 seconds)
+    codeflash optimize long_running_script.py --timeout 30
+
+    # Limit function trace count
+    codeflash optimize app.py --max-function-count 50
+
+    # Specify config file
+    codeflash optimize app.py --config-file-path pyproject.toml
+
+    # Local only (no PR)
+    codeflash optimize app.py --no-pr
+    ```
+
+  </Tab>
+</Tabs>
+</Accordion>
+
+---
+
+### Trace with pytest
+
+Optimize functions called during pytest test execution.
+
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Trace pytest tests
+    codeflash optimize -m pytest tests/
+
+    # Trace specific test file
+    codeflash optimize -m pytest tests/test_core.py
+
+    # With pytest arguments
+    codeflash optimize -m pytest tests/ -v --tb=short
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Trace pytest tests
+    codeflash optimize -m pytest tests\
+
+    # Trace specific test file
+    codeflash optimize -m pytest tests\test_core.py
+
+    # With pytest arguments
+    codeflash optimize -m pytest tests\ -v --tb=short
+    ```
+
+  </Tab>
+</Tabs>
+
+---
+
+### Trace Only (Generate Replay Tests)
+
+Create trace files and replay tests without running optimization.
+
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Trace only - generates replay test
+    codeflash optimize app.py --output trace_file.trace --trace-only
+
+    # Then optimize using the replay test
+    codeflash --replay-test tests/test_app_py__replay_test_0.py --no-pr
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Trace only - generates replay test
+    codeflash optimize app.py --output trace_file.trace --trace-only
+
+    # Then optimize using the replay test
+    codeflash --replay-test tests\test_app_py__replay_test_0.py --no-pr
+    ```
+
+  </Tab>
+</Tabs>
+
+<Note>
+  **Replay test naming**: Files are named based on the traced script path. For
+  `src/app.py`, the replay test will be named like
+  `test_srcapp_py__replay_test_0.py`.
+</Note>
+
+---
+
+## Benchmark Mode
+
+Optimize code based on performance benchmarks using pytest-benchmark format.
+
+```bash
+codeflash --file <file.py> --benchmark --benchmarks-root <path>
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # With benchmarks-root flag
+    codeflash --file src/core.py --benchmark --benchmarks-root tests/benchmarks --no-pr
+
+    # If benchmarks-root is in pyproject.toml
+    codeflash --file src/core.py --benchmark --no-pr
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # With benchmarks-root flag
+    codeflash --file src\core.py --benchmark --benchmarks-root tests\benchmarks --no-pr
+
+    # If benchmarks-root is in pyproject.toml
+    codeflash --file src\core.py --benchmark --no-pr
+    ```
+
+  </Tab>
+</Tabs>
+</Accordion>
+
+<Warning>
+  The `--benchmarks-root` directory must exist and be configured either via
+  `pyproject.toml` or the command-line flag.
+</Warning>
+
+---
+
+## Configuration Flags
+
+Override configuration settings from the command line.
+
+| Flag | Description |
+|------|-------------|
+| `--config-file` | Path to `pyproject.toml` with Codeflash config |
+| `--module-root` | Path to Python module to optimize |
+| `--tests-root` | Path to test directory |
+| `--benchmarks-root` | Path to benchmarks directory |
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Override config file location
+    codeflash --file src/app.py --function main --config-file configs/pyproject.toml --no-pr
+
+    # Override module root
+    codeflash --file src/app.py --function main --module-root src --no-pr
+
+    # Override tests root
+    codeflash --file src/app.py --function main --tests-root tests/unit --no-pr
+
+    # Combine multiple overrides
+    codeflash --file src/app.py --function main \
+      --module-root src \
+      --tests-root tests \
+      --no-pr
+    ```
+
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Override config file location
+    codeflash --file src\app.py --function main --config-file configs\pyproject.toml --no-pr
+
+    # Override module root
+    codeflash --file src\app.py --function main --module-root src --no-pr
+
+    # Override tests root
+    codeflash --file src\app.py --function main --tests-root tests\unit --no-pr
+    ```
+
+  </Tab>
+</Tabs>
+</Accordion>
+
+---
+
+## Behavior Flags
+
+| Flag | Description |
+|------|-------------|
+| `--no-pr` | Run locally without creating a pull request |
+| `--no-gen-tests` | Use only existing tests, skip test generation |
+| `--no-draft` | Skip optimization for draft PRs (CI mode) |
+| `--worktree` | Use git worktree for isolated optimization |
+| `--staging-review` | Upload optimizations to staging for review |
+| `--verbose` / `-v` | Enable verbose debug logging |
+
+<Accordion title="Complete Examples">
+```bash
+# Local optimization only
+codeflash --file src/app.py --function main --no-pr
+
+# Use only existing tests
+codeflash --file src/app.py --function main --no-gen-tests --no-pr
+
+# Enable verbose logging
+codeflash --file src/app.py --function main --verbose --no-pr
+
+# Use worktree for isolation
+codeflash --file src/app.py --function main --worktree --no-pr
+
+# Upload to staging
+codeflash --all --staging-review --no-pr
+```
+</Accordion>
+
+---
+
+## Help & Version
+
+```bash
+# Display version
+codeflash --version
+
+# Main help
+codeflash --help
+
+# Subcommand help
+codeflash optimize --help
+codeflash init --help
+```
+
+---
+
+## Complete Flag Reference
+
+### Main Command Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--file` | `PATH` | Optimize only this file |
+| `--function` | `NAME` | Optimize only this function (requires `--file`) |
+| `--all` | `[PATH]` | Optimize all functions. Optional path to start from |
+| `--replay-test` | `PATH` | Path to replay test file(s) |
+| `--benchmark` | flag | Enable benchmark mode |
+| `--no-pr` | flag | Don't create PR, update locally |
+| `--no-gen-tests` | flag | Don't generate tests |
+| `--no-draft` | flag | Skip draft PRs |
+| `--worktree` | flag | Use git worktree |
+| `--staging-review` | flag | Upload to staging |
+| `--verbose` / `-v` | flag | Verbose debug output |
+| `--verify-setup` | flag | Run setup verification |
+| `--version` | flag | Show version |
+
+### Configuration Override Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--config-file` | `PATH` | Path to pyproject.toml |
+| `--module-root` | `PATH` | Python module root directory |
+| `--tests-root` | `PATH` | Tests directory |
+| `--benchmarks-root` | `PATH` | Benchmarks directory |
+
+### Optimize Subcommand Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--output` | `PATH` | Trace file output path (default: `codeflash.trace`) |
+| `--timeout` | `INT` | Maximum trace time in seconds |
+| `--max-function-count` | `INT` | Max times to trace a function (default: 100) |
+| `--config-file-path` | `PATH` | Path to pyproject.toml |
+| `--trace-only` | flag | Only trace, don't optimize |
+
+---
+
+## Common Workflows
+
+### 1. First-Time Setup
+
+<Steps>
+<Step title="Install Codeflash">
+```bash
+pip install codeflash
+```
+</Step>
+<Step title="Initialize Project">
+```bash
+codeflash init
+```
+</Step>
+<Step title="Verify Setup">
+```bash
+codeflash --verify-setup
+```
+</Step>
+<Step title="Run First Optimization">
+```bash
+codeflash --file src/main.py --function my_function --no-pr
+```
+</Step>
+</Steps>
+
+---
+
+### 2. Optimize a Workflow
+
+<Steps>
+<Step title="Trace Your Script">
+```bash
+codeflash optimize my_script.py --arg1 value1
+```
+</Step>
+<Step title="Review Optimizations">
+Check the generated PR or local changes for optimization suggestions.
+</Step>
+</Steps>
+
+---
+
+### 3. CI/CD Integration
+
+<Steps>
+<Step title="Set Up GitHub Actions">
+```bash
+codeflash init-actions
+```
+</Step>
+<Step title="Merge the Workflow PR">
+Review and merge the generated GitHub Actions workflow.
+</Step>
+<Step title="Automatic Optimization">
+Codeflash will now optimize code in every PR automatically!
+</Step>
+</Steps>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="'Functions outside module-root' Error">
+    **Problem**: Function not found because file is outside `module-root`.
+    
+    **Solution**: Ensure your file is within the `module-root` directory specified in `pyproject.toml`.
+    
+    ```bash
+    # Check your module-root
+    grep "module-root" pyproject.toml
+    
+    # Use the correct path (e.g., if module-root is "src")
+    codeflash --file src/myfile.py --function my_function --no-pr
+    ```
+  </Accordion>
+  
+  <Accordion title="'benchmarks-root must be specified' Error">
+    **Problem**: Using `--benchmark` without specifying benchmarks directory.
+    
+    **Solution**: Either add `benchmarks-root` to `pyproject.toml` or use the flag:
+    
+    ```bash
+    codeflash --file src/app.py --benchmark --benchmarks-root tests/benchmarks --no-pr
+    ```
+  </Accordion>
+  
+  <Accordion title="Replay Test File Not Found">
+    **Problem**: Replay test filename doesn't match expected path.
+    
+    **Solution**: Replay tests include the module path in their name. Check the actual filename:
+    
+    ```bash
+    # Linux/macOS
+    ls tests/test_*replay*.py
+    
+    # Windows
+    dir tests\test_*replay*.py
+    ```
+  </Accordion>
+  
+  <Accordion title="GitHub App Required">
+    **Problem**: PR creation fails due to missing GitHub App.
+    
+    **Solution**: Install the Codeflash GitHub App or use `--no-pr` for local optimization:
+    
+    ```bash
+    # Local optimization
+    codeflash --file src/app.py --function main --no-pr
+    
+    # Or install the GitHub App
+    # https://github.com/apps/codeflash-ai/installations/select_target
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Optimize a Function" icon="bullseye" href="/optimizing-with-codeflash/one-function">
+    Learn how to optimize individual functions
+  </Card>
+  <Card title="Trace & Optimize" icon="route" href="/optimizing-with-codeflash/trace-and-optimize">
+    Optimize entire workflows with tracing
+  </Card>
+  <Card title="GitHub Actions" icon="github" href="/optimizing-with-codeflash/codeflash-github-actions">
+    Set up continuous optimization
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Advanced configuration options
+  </Card>
+</CardGroup>
+
