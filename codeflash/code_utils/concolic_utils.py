@@ -39,29 +39,6 @@ class AssertCleanup:
 
         return None
 
-    def _split_top_level_args(self, args_str: str) -> list[str]:
-        result = []
-        current = []
-        depth = 0
-
-        for char in args_str:
-            if char in "([{":
-                depth += 1
-                current.append(char)
-            elif char in ")]}":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                result.append("".join(current).strip())
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            result.append("".join(current).strip())
-
-        return result
-
     def __init__(self) -> None:
         # Pre-compiling regular expressions for faster execution
         self.assert_re = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
