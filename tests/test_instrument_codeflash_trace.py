@@ -545,3 +545,55 @@ def target_function():
 """
 
     assert modified_code.strip() == expected_code.strip()
+
+
+def test_instrument_codeflash_trace_skips_benchmarking_module() -> None:
+    """Test that files in codeflash/benchmarking/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/benchmarking/
+        benchmarking_dir = Path(temp_dir) / "codeflash" / "benchmarking"
+        benchmarking_dir.mkdir(parents=True)
+
+        test_file_path = benchmarking_dir / "some_module.py"
+        original_content = """
+def some_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="some_function",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_skips_picklepatch_module() -> None:
+    """Test that files in codeflash/picklepatch/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/picklepatch/
+        picklepatch_dir = Path(temp_dir) / "codeflash" / "picklepatch"
+        picklepatch_dir.mkdir(parents=True)
+
+        test_file_path = picklepatch_dir / "patcher.py"
+        original_content = """
+def patch_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="patch_function",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
