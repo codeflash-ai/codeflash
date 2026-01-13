@@ -43,19 +43,15 @@ from codeflash.code_utils.code_utils import (
     unified_diff_strings,
 )
 from codeflash.code_utils.config_consts import (
-    ADAPTIVE_OPTIMIZATION_THRESHOLD,
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE,
-    MAX_REPAIRS_PER_TRACE,
     MIN_CORRECT_CANDIDATES,
-    N_TESTS_TO_GENERATE_EFFECTIVE,
-    REFINE_ALL_THRESHOLD,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
-    REPAIR_UNMATCHED_PERCENTAGE_LIMIT,
     REPEAT_OPTIMIZATION_PROBABILITY,
-    TOP_N_REFINEMENTS,
     TOTAL_LOOPING_TIME_EFFECTIVE,
+    EffortKeys,
+    EffortLevel,
+    get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
@@ -66,7 +62,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.line_profile_utils import add_decorator_imports
+from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -187,8 +183,8 @@ class CandidateProcessor:
         self,
         initial_candidates: list[OptimizedCandidate],
         future_line_profile_results: concurrent.futures.Future,
-        ai_service_client: AiServiceClient,
         eval_ctx: CandidateEvaluationContext,
+        effort: str,
         original_markdown_code: str,
         future_all_refinements: list[concurrent.futures.Future],
         future_all_code_repair: list[concurrent.futures.Future],
@@ -198,11 +194,11 @@ class CandidateProcessor:
         self.forest = CandidateForest()
         self.line_profiler_done = False
         self.refinement_done = False
+        self.eval_ctx = eval_ctx
+        self.effort = effort
         self.candidate_len = len(initial_candidates)
-        self.ai_service_client = ai_service_client
         self.refinement_calls_count = 0
         self.original_markdown_code = original_markdown_code
-        self.eval_ctx = eval_ctx
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
@@ -298,8 +294,14 @@ class CandidateProcessor:
         """We generate a weighted ranking based on the runtime and diff lines and select the best of valid optimizations to be tested."""
         self.refinement_calls_count += len(candidates)
 
-        if len(candidates) <= REFINE_ALL_THRESHOLD:
+        top_n_candidates = int(
+            min(int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)), len(candidates))
+        )
+
+        if len(candidates) == top_n_candidates:
+            # no need for ranking since we will return all candidates
             return candidates
+
         diff_lens_list = []
         runtimes_list = []
         for c in candidates:
@@ -326,7 +328,6 @@ class CandidateProcessor:
         diffs_norm = normalize_by_max(diff_lens_list)
         # the lower the better
         score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
-        top_n_candidates = int((TOP_N_REFINEMENTS * len(runtimes_list)) + 0.5)
         top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
 
         return [candidates[idx] for idx in top_indecies]
@@ -377,6 +378,9 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
+
+        self.effort = getattr(args, "effort", EffortLevel.MEDIUM.value) if args else EffortLevel.MEDIUM.value
+
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
@@ -384,7 +388,7 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
@@ -437,7 +441,7 @@ class FunctionOptimizer:
         str,
     ]:
         """Generate and instrument tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -1028,6 +1032,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+            n_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.effort),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
@@ -1038,8 +1043,8 @@ class FunctionOptimizer:
         processor = CandidateProcessor(
             candidates,
             future_line_profile_results,
-            self.aiservice_client,
             eval_ctx,
+            self.effort,
             code_context.read_writable_code.markdown,
             self.future_all_refinements,
             self.future_all_code_repair,
@@ -1105,7 +1110,9 @@ class FunctionOptimizer:
         eval_ctx: CandidateEvaluationContext,
         ai_service_client: AiServiceClient,
     ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
-        if self.adaptive_optimization_counter >= MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE:
+        if self.adaptive_optimization_counter >= get_effort_value(
+            EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE, self.effort
+        ):
             logger.debug(
                 f"Max adaptive optimizations reached for {self.function_to_optimize.qualified_name}: {self.adaptive_optimization_counter}"
             )
@@ -1113,7 +1120,7 @@ class FunctionOptimizer:
 
         adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
 
-        if adaptive_count >= ADAPTIVE_OPTIMIZATION_THRESHOLD:
+        if adaptive_count >= get_effort_value(EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD, self.effort):
             return None
 
         request_candidates = []
@@ -1433,7 +1440,7 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
         """Generate unit tests and concolic tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         assert len(generated_test_paths) == n_tests
 
         if not self.args.no_gen_tests:
@@ -1500,6 +1507,7 @@ class FunctionOptimizer:
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
+        n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
             read_writable_code.markdown,
@@ -1507,6 +1515,7 @@ class FunctionOptimizer:
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
+            n_candidates=n_candidates,
         )
 
         future_references = self.executor.submit(
@@ -1529,6 +1538,7 @@ class FunctionOptimizer:
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
+                n_candidates=n_candidates,
             )
             futures.append(future_candidates_exp)
 
@@ -2087,8 +2097,9 @@ class FunctionOptimizer:
         test_results_count: int,
         exp_type: str,
     ) -> None:
-        if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
-            logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
+        max_repairs = get_effort_value(EffortKeys.MAX_CODE_REPAIRS_PER_TRACE, self.effort)
+        if self.repair_counter >= max_repairs:
+            logger.debug(f"Repair counter reached {max_repairs}, skipping repair")
             return
 
         successful_candidates_count = sum(1 for is_correct in eval_ctx.is_correct.values() if is_correct)
@@ -2104,7 +2115,7 @@ class FunctionOptimizer:
             logger.debug("No diffs found, skipping repair")
             return
         result_unmatched_perc = len(diffs) / test_results_count
-        if result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT:
+        if result_unmatched_perc > get_effort_value(EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT, self.effort):
             logger.debug(f"Result unmatched percentage is {result_unmatched_perc * 100}%, skipping repair")
             return
 
@@ -2412,6 +2423,23 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
+        # Check if candidate code contains JIT decorators - line profiler doesn't work with JIT compiled code
+        candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
+        if contains_jit_decorator(candidate_fto_code):
+            logger.info(
+                f"Skipping line profiler for {self.function_to_optimize.function_name} - code contains JIT decorator"
+            )
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        # Check helper code for JIT decorators
+        for module_abspath in original_helper_code:
+            candidate_helper_code = Path(module_abspath).read_text("utf-8")
+            if contains_jit_decorator(candidate_helper_code):
+                logger.info(
+                    f"Skipping line profiler for {self.function_to_optimize.function_name} - helper code contains JIT decorator"
+                )
+                return {"timings": {}, "unit": 0, "str_out": ""}
+
         try:
             console.rule()
 

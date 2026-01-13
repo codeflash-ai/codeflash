@@ -107,6 +107,9 @@ def parse_args() -> Namespace:
         action="store_true",
         help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
     )
+    parser.add_argument(
+        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
