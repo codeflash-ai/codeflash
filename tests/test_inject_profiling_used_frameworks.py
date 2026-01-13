@@ -55,7 +55,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     gc.disable()
@@ -109,7 +109,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
@@ -173,7 +173,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = th.cuda.is_available() and th.cuda.is_initialized()
@@ -238,7 +238,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
@@ -302,7 +302,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_tf = hasattr(tensorflow.test.experimental, 'sync_devices')
@@ -361,7 +361,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_tf = hasattr(tf.test.experimental, 'sync_devices')
@@ -420,7 +420,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_jax = hasattr(jax, 'block_until_ready')
@@ -477,7 +477,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_jax = hasattr(jnp, 'block_until_ready')
@@ -535,7 +535,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
@@ -606,7 +606,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
@@ -678,7 +678,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     gc.disable()
@@ -719,7 +719,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
@@ -770,7 +770,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_tf = hasattr(tensorflow.test.experimental, 'sync_devices')
@@ -816,7 +816,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_jax = hasattr(jax, 'block_until_ready')
@@ -862,7 +862,7 @@ def codeflash_wrap(codeflash_wrapped, codeflash_test_module_name, codeflash_test
         codeflash_wrap.index[test_id] = 0
     codeflash_test_index = codeflash_wrap.index[test_id]
     invocation_id = f'{codeflash_line_id}_{codeflash_test_index}'
-    test_stdout_tag = f"{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}"
+    test_stdout_tag = f'{codeflash_test_module_name}:{(codeflash_test_class_name + '.' if codeflash_test_class_name else '')}{codeflash_test_name}:{codeflash_function_name}:{codeflash_loop_index}:{invocation_id}'
     print(f'!$######{test_stdout_tag}######$!')
     exception = None
     _codeflash_should_sync_cuda = torch.cuda.is_available() and torch.cuda.is_initialized()
