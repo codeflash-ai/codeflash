@@ -57,6 +57,9 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         default=None,
     )
     parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
+    )
 
     if args is not None:
         parsed_args = args
@@ -106,7 +109,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             test_paths = []
             replay_test_paths = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:])
+                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
                 if pytest_splits is None or test_paths is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
