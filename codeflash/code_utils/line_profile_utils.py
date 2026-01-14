@@ -93,10 +93,11 @@ class JitDecoratorDetector(ast.NodeVisitor):
 
     def _check_name_decorator(self, name: str) -> bool:
         """Check if a simple name decorator (e.g., @jit) is a JIT decorator."""
-        if name not in self.import_aliases:
+        alias_info = self.import_aliases.get(name)
+        if alias_info is None:
             return False
 
-        module, imported_name = self.import_aliases[name]
+        module, imported_name = alias_info
 
         if imported_name is None:
             # This is a module import used as decorator (unlikely but possible)
@@ -107,46 +108,54 @@ class JitDecoratorDetector(ast.NodeVisitor):
 
     def _check_attribute_decorator(self, node: ast.Attribute) -> bool:
         """Check if an attribute decorator (e.g., @numba.jit) is a JIT decorator."""
-        # Build the full attribute chain
-        parts = self._get_attribute_parts(node)
+        # Build the attribute chain inline to avoid function call overhead
+        parts = []
+        current = node
+
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+
+        if not isinstance(current, ast.Name):
+            return False
+
+        first_part = current.id
+
         if not parts:
             return False
 
-        # The first part might be an alias
-        first_part = parts[0]
-        rest_parts = parts[1:]
+        # parts is in reverse order, so decorator_name is first element
+        decorator_name = parts[0]
 
         # Check if first_part is an imported alias
-        if first_part in self.import_aliases:
-            module, imported_name = self.import_aliases[first_part]
+        alias_info = self.import_aliases.get(first_part)
+
+        if alias_info is not None:
+            module, imported_name = alias_info
 
             if imported_name is None:
                 # It's a module import (e.g., import numba as nb)
                 # The full path is module + rest_parts
-                if rest_parts:
+                if len(parts) > 1:
+                    # Build full_module by joining in reverse order (excluding decorator_name)
+                    full_module = f"{module}.{'.'.join(reversed(parts[1:]))}"
+                else:
                     full_module = module
-                    decorator_name = rest_parts[-1]
-                    if len(rest_parts) > 1:
-                        full_module = f"{module}.{'.'.join(rest_parts[:-1])}"
-                    return self._is_known_jit_decorator(full_module, decorator_name)
+                return self._is_known_jit_decorator(full_module, decorator_name)
             # It's a from import of something that has attributes
             # e.g., from torch import jit; @jit.script
-            elif rest_parts:
+            if len(parts) > 1:
+                full_module = f"{module}.{imported_name}.{'.'.join(reversed(parts[1:]))}"
+            else:
                 full_module = f"{module}.{imported_name}"
-                decorator_name = rest_parts[-1]
-                if len(rest_parts) > 1:
-                    full_module = f"{full_module}.{'.'.join(rest_parts[:-1])}"
-                return self._is_known_jit_decorator(full_module, decorator_name)
+            return self._is_known_jit_decorator(full_module, decorator_name)
         # first_part is used directly (e.g., @numba.jit without import alias)
         # Reconstruct the full path
-        elif rest_parts:
+        if len(parts) > 1:
+            full_module = f"{first_part}.{'.'.join(reversed(parts[1:]))}"
+        else:
             full_module = first_part
-            if len(rest_parts) > 1:
-                full_module = f"{first_part}.{'.'.join(rest_parts[:-1])}"
-            decorator_name = rest_parts[-1]
-            return self._is_known_jit_decorator(full_module, decorator_name)
-
-        return False
+        return self._is_known_jit_decorator(full_module, decorator_name)
 
     def _get_attribute_parts(self, node: ast.Attribute) -> list[str]:
         """Get all parts of an attribute chain (e.g., ['numba', 'cuda', 'jit'])."""
