@@ -67,14 +67,6 @@ class JitDecoratorDetector(ast.NodeVisitor):
                 return
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """Check async function decorators for JIT decorators."""
-        for decorator in node.decorator_list:
-            if self._is_jit_decorator(decorator):
-                self.found_jit_decorator = True
-                return
-        self.generic_visit(node)
-
     def _is_jit_decorator(self, node: ast.expr) -> bool:
         """Check if a decorator node is a known JIT decorator."""
         # Handle Call nodes (e.g., @jit() or @numba.jit(nopython=True))
