@@ -578,13 +578,16 @@ class Optimizer:
             get_run_tmp_file.tmpdir.cleanup()
             del get_run_tmp_file.tmpdir
 
+        # Always clean up concolic test directory
+        cleanup_paths([self.test_cfg.concolic_test_root_dir])
+
         if self.current_worktree:
             remove_worktree(self.current_worktree)
             return
 
         if self.current_function_optimizer:
             self.current_function_optimizer.cleanup_generated_files()
-        paths_to_cleanup = [self.test_cfg.concolic_test_root_dir, self.replay_tests_dir]
+        paths_to_cleanup = [self.replay_tests_dir]
         if self.trace_file:
             paths_to_cleanup.append(self.trace_file)
         if self.test_cfg.tests_root.exists():
@@ -649,8 +652,8 @@ class Optimizer:
 
 
 def mirror_path(path: Path, src_root: Path, dest_root: Path) -> Path:
-    relative_path = path.relative_to(src_root)
-    return dest_root / relative_path
+    relative_path = path.resolve().relative_to(src_root.resolve())
+    return Path(dest_root / relative_path)
 
 
 def run_with_args(args: Namespace) -> None:

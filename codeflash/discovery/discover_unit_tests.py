@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Callable, Optional, final
 
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
 from pydantic.dataclasses import dataclass
 from rich.panel import Panel
 from rich.text import Text
@@ -29,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
@@ -331,7 +331,7 @@ class ImportAnalyzer(ast.NodeVisitor):
             # Be conservative except when an alias is used (which requires exact method matching)
             for target_func in fnames:
                 if "." in target_func:
-                    class_name, method_name = target_func.split(".", 1)
+                    class_name, _method_name = target_func.split(".", 1)
                     if aname == class_name and not alias.asname:
                         self.found_any_target_function = True
                         self.found_qualified_name = target_func
@@ -585,7 +585,10 @@ def discover_tests_pytest(
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
     with custom_addopts():
-        result = subprocess.run(
+        run_kwargs = get_cross_platform_subprocess_run_args(
+            cwd=project_root, check=False, text=True, capture_output=True
+        )
+        result = subprocess.run(  # noqa: PLW1510
             [
                 SAFE_SYS_EXECUTABLE,
                 Path(__file__).parent / "pytest_new_process_discovery.py",
@@ -593,10 +596,7 @@ def discover_tests_pytest(
                 str(tests_root),
                 str(tmp_pickle_path),
             ],
-            cwd=project_root,
-            check=False,
-            capture_output=True,
-            text=True,
+            **run_kwargs,
         )
     try:
         with tmp_pickle_path.open(mode="rb") as f:
@@ -751,6 +751,7 @@ def process_test_files(
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
+    console.rule()
     with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,

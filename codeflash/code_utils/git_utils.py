@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 import time
 from functools import cache
 from io import StringIO
@@ -16,7 +13,6 @@ from rich.prompt import Confirm
 from unidiff import PatchSet
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.config_consts import N_CANDIDATES_EFFECTIVE
 
 if TYPE_CHECKING:
     from git import Repo
@@ -34,7 +30,7 @@ def get_git_diff(
             only_this_commit + "^1", only_this_commit, ignore_blank_lines=True, ignore_space_at_eol=True
         )
     elif uncommitted_changes:
-        uni_diff_text = repository.git.diff(None, "HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
+        uni_diff_text = repository.git.diff("HEAD", ignore_blank_lines=True, ignore_space_at_eol=True)
     else:
         uni_diff_text = repository.git.diff(
             commit.hexsha + "^1", commit.hexsha, ignore_blank_lines=True, ignore_space_at_eol=True
@@ -193,36 +189,6 @@ def check_and_push_branch(repo: git.Repo, git_remote: str | None = "origin", *, 
         return False
     logger.debug(f"The branch '{current_branch_name}' is present in the remote repository.")
     return True
-
-
-def create_worktree_root_dir(module_root: Path) -> tuple[Path | None, Path | None]:
-    git_root = git_root_dir() if check_running_in_git_repo(module_root) else None
-    worktree_root_dir = Path(tempfile.mkdtemp()) if git_root else None
-    return git_root, worktree_root_dir
-
-
-def create_git_worktrees(
-    git_root: Path | None, worktree_root_dir: Path | None, module_root: Path
-) -> tuple[Path | None, list[Path]]:
-    if git_root and worktree_root_dir:
-        worktree_root = Path(tempfile.mkdtemp(dir=worktree_root_dir))
-        worktrees = [Path(tempfile.mkdtemp(dir=worktree_root)) for _ in range(N_CANDIDATES_EFFECTIVE + 1)]
-        for worktree in worktrees:
-            subprocess.run(["git", "worktree", "add", "-d", worktree], cwd=module_root, check=True)
-    else:
-        worktree_root = None
-        worktrees = []
-    return worktree_root, worktrees
-
-
-def remove_git_worktrees(worktree_root: Path | None, worktrees: list[Path]) -> None:
-    try:
-        for worktree in worktrees:
-            subprocess.run(["git", "worktree", "remove", "-f", worktree], check=True)
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"Error removing worktrees: {e}")
-    if worktree_root:
-        shutil.rmtree(worktree_root)
 
 
 def get_last_commit_author_if_pr_exists(repo: Repo | None = None) -> str | None:

@@ -20,7 +20,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, Optional, cast
+from typing import Annotated, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
@@ -46,6 +46,25 @@ class AIServiceRefinerRequest:
     original_line_profiler_results: str
     optimized_line_profiler_results: str
     function_references: str | None = None
+    call_sequence: int | None = None
+
+
+# this should be possible to auto serialize
+@dataclass(frozen=True)
+class AdaptiveOptimizedCandidate:
+    optimization_id: str
+    source_code: str
+    # TODO: introduce repair explanation for code repair candidates to help the llm understand the full process
+    explanation: str
+    source: OptimizedCandidateSource
+    speedup: str
+
+
+@dataclass(frozen=True)
+class AIServiceAdaptiveOptimizeRequest:
+    trace_id: str
+    original_source_code: str
+    candidates: list[AdaptiveOptimizedCandidate]
 
 
 class TestDiffScope(str, Enum):
@@ -74,6 +93,13 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+
+
+class OptimizationReviewResult(NamedTuple):
+    """Result from the optimization review API."""
+
+    review: str  # "high", "medium", "low", or ""
+    explanation: str
 
 
 # If the method spam is in the class Ham, which is at the top level of the module eggs in the package foo, the fully
@@ -441,6 +467,12 @@ class CandidateEvaluationContext:
             "diff_len": diff_length(candidate.source_code.flat, code_context.read_writable_code.flat),
         }
 
+    def get_speedup_ratio(self, optimization_id: str) -> float | None:
+        return self.speedup_ratios.get(optimization_id)
+
+    def get_optimized_runtime(self, optimization_id: str) -> float | None:
+        return self.optimized_runtimes.get(optimization_id)
+
 
 @dataclass(frozen=True)
 class TestsInFile:
@@ -455,6 +487,7 @@ class OptimizedCandidateSource(str, Enum):
     OPTIMIZE_LP = "OPTIMIZE_LP"
     REFINE = "REFINE"
     REPAIR = "REPAIR"
+    ADAPTIVE = "ADAPTIVE"
 
 
 @dataclass(frozen=True)
@@ -464,6 +497,7 @@ class OptimizedCandidate:
     optimization_id: str
     source: OptimizedCandidateSource
     parent_id: str | None = None
+    model: str | None = None  # Which LLM model generated this candidate
 
 
 @dataclass(frozen=True)
@@ -628,8 +662,11 @@ class InvocationId:
     def get_src_code(self, test_path: Path) -> Optional[str]:
         if not test_path.exists():
             return None
-        test_src = test_path.read_text(encoding="utf-8")
-        module_node = cst.parse_module(test_src)
+        try:
+            test_src = test_path.read_text(encoding="utf-8")
+            module_node = cst.parse_module(test_src)
+        except Exception:
+            return None
 
         if self.test_class_name:
             for stmt in module_node.body:
@@ -637,7 +674,6 @@ class InvocationId:
                     func_node = self.find_func_in_class(stmt, self.test_function_name)
                     if func_node:
                         return module_node.code_for_node(func_node).strip()
-            # class not found
             return None
 
         # Otherwise, look for a top level function

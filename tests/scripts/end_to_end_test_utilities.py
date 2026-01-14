@@ -36,6 +36,7 @@ class TestConfig:
     coverage_expectations: list[CoverageExpectation] = field(default_factory=list)
     benchmarks_root: Optional[pathlib.Path] = None
     use_worktree: bool = False
+    no_gen_tests: bool = False
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -84,6 +85,11 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
 
     return True
 
+def validate_no_gen_tests(stdout: str) -> bool:
+    if "Generated '0' tests for" not in stdout:
+        logging.error("Tests generated even when flag was on")
+        return False
+    return True
 
 def run_codeflash_command(
     cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int, expected_in_stdout: list[str] = None
@@ -156,6 +162,8 @@ def build_command(
         base_command.extend(["--benchmark", "--benchmarks-root", str(benchmarks_root)])
     if config.use_worktree:
         base_command.append("--worktree")
+    if config.no_gen_tests:
+        base_command.append("--no-gen-tests")
     return base_command
 
 
@@ -214,6 +222,9 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
     if config.coverage_expectations:
         validate_coverage(stdout, config.coverage_expectations)
 
+    if config.no_gen_tests:
+        validate_no_gen_tests(stdout)
+
     logging.info(f"Success: Performance improvement is {improvement_pct}%")
     return True
 
@@ -251,9 +262,9 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     if not functions_traced:
         logging.error("Failed to find traced functions in output")
         return False
-    if int(functions_traced.group(1)) != 13:
+    if int(functions_traced.group(1)) != 8:
         logging.error(functions_traced.groups())
-        logging.error("Expected 13 traced functions")
+        logging.error("Expected 8 traced functions")
         return False
 
     # Validate optimization results (from optimization phase)

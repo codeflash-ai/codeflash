@@ -9,7 +9,7 @@ import subprocess
 import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
 from rich.console import Group
@@ -45,16 +45,13 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
-    MAX_REPAIRS_PER_TRACE,
-    N_CANDIDATES_EFFECTIVE,
-    N_CANDIDATES_LP_EFFECTIVE,
-    N_TESTS_TO_GENERATE_EFFECTIVE,
-    REFINE_ALL_THRESHOLD,
+    MIN_CORRECT_CANDIDATES,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
-    REPAIR_UNMATCHED_PERCENTAGE_LIMIT,
     REPEAT_OPTIMIZATION_PROBABILITY,
-    TOP_N_REFINEMENTS,
     TOTAL_LOOPING_TIME_EFFECTIVE,
+    EffortKeys,
+    EffortLevel,
+    get_effort_value,
 )
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
@@ -65,7 +62,7 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.code_utils.line_profile_utils import add_decorator_imports
+from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -76,12 +73,15 @@ from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
+    AdaptiveOptimizedCandidate,
+    AIServiceAdaptiveOptimizeRequest,
     AIServiceCodeRepairRequest,
     BestOptimization,
     CandidateEvaluationContext,
     CodeOptimizationContext,
     GeneratedTests,
     GeneratedTestsList,
+    OptimizationReviewResult,
     OptimizationSet,
     OptimizedCandidate,
     OptimizedCandidateResult,
@@ -128,137 +128,209 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+class CandidateNode:
+    __slots__ = ("candidate", "children", "parent")
+
+    def __init__(self, candidate: OptimizedCandidate) -> None:
+        self.candidate = candidate
+        self.parent: CandidateNode | None = None
+        self.children: list[CandidateNode] = []
+
+    def is_leaf(self) -> bool:
+        return not self.children
+
+    def path_to_root(self) -> list[OptimizedCandidate]:
+        path = []
+        node: CandidateNode | None = self
+        while node:
+            path.append(node.candidate)
+            node = node.parent
+        return path[::-1]
+
+
+class CandidateForest:
+    def __init__(self) -> None:
+        self.nodes: dict[str, CandidateNode] = {}
+
+    def add(self, candidate: OptimizedCandidate) -> CandidateNode:
+        cid = candidate.optimization_id
+        pid = candidate.parent_id
+
+        node = self.nodes.get(cid)
+        if node is None:
+            node = CandidateNode(candidate)
+            self.nodes[cid] = node
+
+        if pid is not None:
+            parent = self.nodes.get(pid)
+            if parent is None:
+                parent = CandidateNode(candidate=None)  # placeholder
+                self.nodes[pid] = parent
+
+            node.parent = parent
+            parent.children.append(node)
+
+        return node
+
+    def get_node(self, cid: str) -> CandidateNode | None:
+        return self.nodes.get(cid)
+
+
 class CandidateProcessor:
     """Handles candidate processing using a queue-based approach."""
 
     def __init__(
         self,
-        initial_candidates: list,
+        initial_candidates: list[OptimizedCandidate],
         future_line_profile_results: concurrent.futures.Future,
-        all_refinements_data: list[AIServiceRefinerRequest],
-        ai_service_client: AiServiceClient,
-        executor: concurrent.futures.ThreadPoolExecutor,
+        eval_ctx: CandidateEvaluationContext,
+        effort: str,
+        original_markdown_code: str,
+        future_all_refinements: list[concurrent.futures.Future],
         future_all_code_repair: list[concurrent.futures.Future],
+        future_adaptive_optimizations: list[concurrent.futures.Future],
     ) -> None:
         self.candidate_queue = queue.Queue()
+        self.forest = CandidateForest()
         self.line_profiler_done = False
         self.refinement_done = False
+        self.eval_ctx = eval_ctx
+        self.effort = effort
         self.candidate_len = len(initial_candidates)
-        self.ai_service_client = ai_service_client
-        self.executor = executor
+        self.refinement_calls_count = 0
+        self.original_markdown_code = original_markdown_code
 
         # Initialize queue with initial candidates
         for candidate in initial_candidates:
+            self.forest.add(candidate)
             self.candidate_queue.put(candidate)
 
         self.future_line_profile_results = future_line_profile_results
-        self.all_refinements_data = all_refinements_data
+        self.future_all_refinements = future_all_refinements
         self.future_all_code_repair = future_all_code_repair
+        self.future_adaptive_optimizations = future_adaptive_optimizations
 
-    def get_next_candidate(self) -> OptimizedCandidate | None:
+    def get_total_llm_calls(self) -> int:
+        return self.refinement_calls_count
+
+    def get_next_candidate(self) -> CandidateNode | None:
         """Get the next candidate from the queue, handling async results as needed."""
         try:
-            return self.candidate_queue.get_nowait()
+            return self.forest.get_node(self.candidate_queue.get_nowait().optimization_id)
         except queue.Empty:
             return self._handle_empty_queue()
 
-    def _handle_empty_queue(self) -> OptimizedCandidate | None:
+    def _handle_empty_queue(self) -> CandidateNode | None:
         """Handle empty queue by checking for pending async results."""
         if not self.line_profiler_done:
-            return self._process_line_profiler_results()
+            return self._process_candidates(
+                [self.future_line_profile_results],
+                "all candidates processed, await candidates from line profiler",
+                "Added results from line profiler to candidates, total candidates now: {1}",
+                lambda: setattr(self, "line_profiler_done", True),
+            )
         if len(self.future_all_code_repair) > 0:
-            return self._process_code_repair()
+            return self._process_candidates(
+                self.future_all_code_repair,
+                "Repairing {0} candidates",
+                "Added {0} candidates from repair, total candidates now: {1}",
+                lambda: self.future_all_code_repair.clear(),
+            )
         if self.line_profiler_done and not self.refinement_done:
-            return self._process_refinement_results()
+            return self._process_candidates(
+                self.future_all_refinements,
+                "Refining generated code for improved quality and performance...",
+                "Added {0} candidates from refinement, total candidates now: {1}",
+                lambda: setattr(self, "refinement_done", True),
+                filter_candidates_func=self._filter_refined_candidates,
+            )
+        if len(self.future_adaptive_optimizations) > 0:
+            return self._process_candidates(
+                self.future_adaptive_optimizations,
+                "Applying adaptive optimizations to {0} candidates",
+                "Added {0} candidates from adaptive optimization, total candidates now: {1}",
+                lambda: self.future_adaptive_optimizations.clear(),
+            )
         return None  # All done
 
-    def _process_line_profiler_results(self) -> OptimizedCandidate | None:
-        """Process line profiler results and add to queue."""
-        logger.debug("all candidates processed, await candidates from line profiler")
-        concurrent.futures.wait([self.future_line_profile_results])
-        line_profile_results = self.future_line_profile_results.result()
+    def _process_candidates(
+        self,
+        future_candidates: list[concurrent.futures.Future],
+        loading_msg: str,
+        success_msg: str,
+        callback: Callable[[], None],
+        filter_candidates_func: Callable[[list[OptimizedCandidate]], list[OptimizedCandidate]] | None = None,
+    ) -> CandidateNode | None:
+        if len(future_candidates) == 0:
+            return None
+        with progress_bar(
+            loading_msg.format(len(future_candidates)), transient=True, revert_to_print=bool(get_pr_number())
+        ):
+            concurrent.futures.wait(future_candidates)
+            candidates: list[OptimizedCandidate] = []
+            for future_c in future_candidates:
+                candidate_result = future_c.result()
+                if not candidate_result:
+                    continue
 
-        for candidate in line_profile_results:
-            self.candidate_queue.put(candidate)
+                if isinstance(candidate_result, list):
+                    candidates.extend(candidate_result)
+                else:
+                    candidates.append(candidate_result)
 
-        self.candidate_len += len(line_profile_results)
-        logger.info(f"Added results from line profiler to candidates, total candidates now: {self.candidate_len}")
-        self.line_profiler_done = True
-
-        return self.get_next_candidate()
-
-    def refine_optimizations(self, request: list[AIServiceRefinerRequest]) -> concurrent.futures.Future:
-        return self.executor.submit(self.ai_service_client.optimize_python_code_refinement, request=request)
-
-    def _process_refinement_results(self) -> OptimizedCandidate | None:
-        """Process refinement results and add to queue. We generate a weighted ranking based on the runtime and diff lines and select the best (round of 45%) of valid optimizations to be refined."""
-        future_refinements: list[concurrent.futures.Future] = []
-
-        if len(self.all_refinements_data) <= REFINE_ALL_THRESHOLD:
-            for data in self.all_refinements_data:
-                future_refinements.append(self.refine_optimizations([data]))  # noqa: PERF401
-        else:
-            diff_lens_list = []
-            runtimes_list = []
-            for c in self.all_refinements_data:
-                diff_lens_list.append(diff_length(c.original_source_code, c.optimized_source_code))
-                runtimes_list.append(c.optimized_code_runtime)
-
-            runtime_w, diff_w = REFINED_CANDIDATE_RANKING_WEIGHTS
-            weights = choose_weights(runtime=runtime_w, diff=diff_w)
-
-            runtime_norm = normalize_by_max(runtimes_list)
-            diffs_norm = normalize_by_max(diff_lens_list)
-            # the lower the better
-            score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
-            top_n_candidates = int((TOP_N_REFINEMENTS * len(runtimes_list)) + 0.5)
-            top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
-
-            for idx in top_indecies:
-                data = self.all_refinements_data[idx]
-                future_refinements.append(self.refine_optimizations([data]))
-
-        if future_refinements:
-            logger.info("loading|Refining generated code for improved quality and performance...")
-
-        concurrent.futures.wait(future_refinements)
-        refinement_response = []
-
-        for f in future_refinements:
-            possible_refinement = f.result()
-            if len(possible_refinement) > 0:
-                refinement_response.append(possible_refinement[0])
-
-        for candidate in refinement_response:
-            self.candidate_queue.put(candidate)
-
-        self.candidate_len += len(refinement_response)
-        if len(refinement_response) > 0:
-            logger.info(
-                f"Added {len(refinement_response)} candidates from refinement, total candidates now: {self.candidate_len}"
-            )
-        self.refinement_done = True
-
-        return self.get_next_candidate()
-
-    def _process_code_repair(self) -> OptimizedCandidate | None:
-        logger.info(f"loading|Repairing {len(self.future_all_code_repair)} candidates")
-        concurrent.futures.wait(self.future_all_code_repair)
-        candidates_added = 0
-        for future_code_repair in self.future_all_code_repair:
-            possible_code_repair = future_code_repair.result()
-            if possible_code_repair:
-                self.candidate_queue.put(possible_code_repair)
+            candidates = filter_candidates_func(candidates) if filter_candidates_func else candidates
+            for candidate in candidates:
+                self.forest.add(candidate)
+                self.candidate_queue.put(candidate)
                 self.candidate_len += 1
-                candidates_added += 1
 
-        if candidates_added > 0:
-            logger.info(
-                f"Added {candidates_added} candidates from code repair, total candidates now: {self.candidate_len}"
+            if len(candidates) > 0:
+                logger.info(success_msg.format(len(candidates), self.candidate_len))
+
+            callback()
+            return self.get_next_candidate()
+
+    def _filter_refined_candidates(self, candidates: list[OptimizedCandidate]) -> list[OptimizedCandidate]:
+        """We generate a weighted ranking based on the runtime and diff lines and select the best of valid optimizations to be tested."""
+        self.refinement_calls_count += len(candidates)
+
+        top_n_candidates = int(
+            min(int(get_effort_value(EffortKeys.TOP_VALID_CANDIDATES_FOR_REFINEMENT, self.effort)), len(candidates))
+        )
+
+        if len(candidates) == top_n_candidates:
+            # no need for ranking since we will return all candidates
+            return candidates
+
+        diff_lens_list = []
+        runtimes_list = []
+        for c in candidates:
+            # current refined candidates is not benchmarked yet, a close values we would expect to be the parent candidate
+            parent_id = c.parent_id
+            parent_candidate_node = self.forest.get_node(parent_id)
+            parent_optimized_runtime = self.eval_ctx.get_optimized_runtime(parent_id)
+            if not parent_optimized_runtime or not parent_candidate_node:
+                continue
+            diff_lens_list.append(
+                diff_length(self.original_markdown_code, parent_candidate_node.candidate.source_code.markdown)
             )
-        self.future_all_code_repair = []
+            runtimes_list.append(parent_optimized_runtime)
 
-        return self.get_next_candidate()
+        if not runtimes_list or not diff_lens_list:
+            # should not happen
+            logger.warning("No valid candidates for refinement while filtering")
+            return candidates
+
+        runtime_w, diff_w = REFINED_CANDIDATE_RANKING_WEIGHTS
+        weights = choose_weights(runtime=runtime_w, diff=diff_w)
+
+        runtime_norm = normalize_by_max(runtimes_list)
+        diffs_norm = normalize_by_max(diff_lens_list)
+        # the lower the better
+        score_dict = create_score_dictionary_from_metrics(weights, runtime_norm, diffs_norm)
+        top_indecies = sorted(score_dict, key=score_dict.get)[:top_n_candidates]
+
+        return [candidates[idx] for idx in top_indecies]
 
     def is_done(self) -> bool:
         """Check if processing is complete."""
@@ -266,6 +338,7 @@ class CandidateProcessor:
             self.line_profiler_done
             and self.refinement_done
             and len(self.future_all_code_repair) == 0
+            and len(self.future_adaptive_optimizations) == 0
             and self.candidate_queue.empty()
         )
 
@@ -305,6 +378,9 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
+
+        self.effort = getattr(args, "effort", EffortLevel.MEDIUM.value) if args else EffortLevel.MEDIUM.value
+
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
         self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
@@ -312,17 +388,20 @@ class FunctionOptimizer:
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
         self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
         )
         self.optimization_review = ""
         self.future_all_code_repair: list[concurrent.futures.Future] = []
+        self.future_all_refinements: list[concurrent.futures.Future] = []
+        self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
+        self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
-        logger.debug(f"Function Trace ID: {self.function_trace_id}")
+        logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
@@ -362,7 +441,7 @@ class FunctionOptimizer:
         str,
     ]:
         """Generate and instrument tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
@@ -775,7 +854,7 @@ class FunctionOptimizer:
 
     def process_single_candidate(
         self,
-        candidate: OptimizedCandidate,
+        candidate_node: CandidateNode,
         candidate_index: int,
         total_candidates: int,
         code_context: CodeOptimizationContext,
@@ -783,7 +862,6 @@ class FunctionOptimizer:
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
         eval_ctx: CandidateEvaluationContext,
-        all_refinements_data: list[AIServiceRefinerRequest],
         exp_type: str,
         function_references: str,
     ) -> BestOptimization | None:
@@ -797,6 +875,7 @@ class FunctionOptimizer:
         get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite")).unlink(missing_ok=True)
 
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
+        candidate = candidate_node.candidate
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}.py",
@@ -838,6 +917,7 @@ class FunctionOptimizer:
             baseline_results=original_code_baseline,
             original_helper_code=original_helper_code,
             file_path_to_helper_classes=file_path_to_helper_classes,
+            eval_ctx=eval_ctx,
             code_context=code_context,
             candidate=candidate,
             exp_type=exp_type,
@@ -886,24 +966,45 @@ class FunctionOptimizer:
             )
             eval_ctx.valid_optimizations.append(best_optimization)
 
-            # Queue refinement for non-refined candidates
-            if candidate.source != OptimizedCandidateSource.REFINE:
-                all_refinements_data.append(
-                    AIServiceRefinerRequest(
-                        optimization_id=best_optimization.candidate.optimization_id,
-                        original_source_code=code_context.read_writable_code.markdown,
-                        read_only_dependency_code=code_context.read_only_context_code,
-                        original_code_runtime=original_code_baseline.runtime,
-                        optimized_source_code=best_optimization.candidate.source_code.markdown,
-                        optimized_explanation=best_optimization.candidate.explanation,
-                        optimized_code_runtime=best_optimization.runtime,
-                        speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
-                        trace_id=self.get_trace_id(exp_type),
-                        original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                        optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-                        function_references=function_references,
-                    )
+            current_tree_candidates = candidate_node.path_to_root()
+            is_candidate_refined_before = any(
+                c.source == OptimizedCandidateSource.REFINE for c in current_tree_candidates
+            )
+
+            aiservice_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
+
+            if is_candidate_refined_before:
+                future_adaptive_optimization = self.call_adaptive_optimize(
+                    trace_id=self.get_trace_id(exp_type),
+                    original_source_code=code_context.read_writable_code.markdown,
+                    prev_candidates=current_tree_candidates,
+                    eval_ctx=eval_ctx,
+                    ai_service_client=aiservice_client,
                 )
+                if future_adaptive_optimization:
+                    self.future_adaptive_optimizations.append(future_adaptive_optimization)
+            else:
+                future_refinement = self.executor.submit(
+                    aiservice_client.optimize_python_code_refinement,
+                    request=[
+                        AIServiceRefinerRequest(
+                            optimization_id=best_optimization.candidate.optimization_id,
+                            original_source_code=code_context.read_writable_code.markdown,
+                            read_only_dependency_code=code_context.read_only_context_code,
+                            original_code_runtime=original_code_baseline.runtime,
+                            optimized_source_code=best_optimization.candidate.source_code.markdown,
+                            optimized_explanation=best_optimization.candidate.explanation,
+                            optimized_code_runtime=best_optimization.runtime,
+                            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+                            trace_id=self.get_trace_id(exp_type),
+                            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+                            function_references=function_references,
+                        )
+                    ],
+                )
+                self.future_all_refinements.append(future_refinement)
+
         # Display runtime information
         if is_LSP_enabled():
             lsp_log(LspMarkdownMessage(markdown=tree_to_markdown(tree)))
@@ -935,9 +1036,13 @@ class FunctionOptimizer:
 
         # Initialize evaluation context and async tasks
         eval_ctx = CandidateEvaluationContext()
-        all_refinements_data: list[AIServiceRefinerRequest] = []
+
+        self.future_all_refinements.clear()
         self.future_all_code_repair.clear()
+        self.future_adaptive_optimizations.clear()
+
         self.repair_counter = 0
+        self.adaptive_optimization_counter = 0
 
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
@@ -948,7 +1053,7 @@ class FunctionOptimizer:
             dependency_code=code_context.read_only_context_code,
             trace_id=self.get_trace_id(exp_type),
             line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-            num_candidates=N_CANDIDATES_LP_EFFECTIVE,
+            n_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.effort),
             experiment_metadata=ExperimentMetadata(
                 id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
             )
@@ -959,24 +1064,26 @@ class FunctionOptimizer:
         processor = CandidateProcessor(
             candidates,
             future_line_profile_results,
-            all_refinements_data,
-            self.aiservice_client,
-            self.executor,
+            eval_ctx,
+            self.effort,
+            code_context.read_writable_code.markdown,
+            self.future_all_refinements,
             self.future_all_code_repair,
+            self.future_adaptive_optimizations,
         )
         candidate_index = 0
 
         # Process candidates using queue-based approach
         while not processor.is_done():
-            candidate = processor.get_next_candidate()
-            if candidate is None:
+            candidate_node = processor.get_next_candidate()
+            if candidate_node is None:
                 logger.debug("everything done, exiting")
                 break
 
             try:
                 candidate_index += 1
                 self.process_single_candidate(
-                    candidate=candidate,
+                    candidate_node=candidate_node,
                     candidate_index=candidate_index,
                     total_candidates=processor.candidate_len,
                     code_context=code_context,
@@ -984,7 +1091,6 @@ class FunctionOptimizer:
                     original_helper_code=original_helper_code,
                     file_path_to_helper_classes=file_path_to_helper_classes,
                     eval_ctx=eval_ctx,
-                    all_refinements_data=all_refinements_data,
                     exp_type=exp_type,
                     function_references=function_references,
                 )
@@ -1016,6 +1122,49 @@ class FunctionOptimizer:
             )
 
         return best_optimization
+
+    def call_adaptive_optimize(
+        self,
+        trace_id: str,
+        original_source_code: str,
+        prev_candidates: list[OptimizedCandidate],
+        eval_ctx: CandidateEvaluationContext,
+        ai_service_client: AiServiceClient,
+    ) -> concurrent.futures.Future[OptimizedCandidate | None] | None:
+        if self.adaptive_optimization_counter >= get_effort_value(
+            EffortKeys.MAX_ADAPTIVE_OPTIMIZATIONS_PER_TRACE, self.effort
+        ):
+            logger.debug(
+                f"Max adaptive optimizations reached for {self.function_to_optimize.qualified_name}: {self.adaptive_optimization_counter}"
+            )
+            return None
+
+        adaptive_count = sum(1 for c in prev_candidates if c.source == OptimizedCandidateSource.ADAPTIVE)
+
+        if adaptive_count >= get_effort_value(EffortKeys.ADAPTIVE_OPTIMIZATION_THRESHOLD, self.effort):
+            return None
+
+        request_candidates = []
+
+        for c in prev_candidates:
+            speedup = eval_ctx.get_speedup_ratio(c.optimization_id)
+            request_candidates.append(
+                AdaptiveOptimizedCandidate(
+                    optimization_id=c.optimization_id,
+                    source_code=c.source_code.markdown,
+                    explanation=c.explanation,
+                    source=c.source,
+                    speedup=f"Performance gain: {int(speedup * 100 + 0.5)}%"
+                    if speedup
+                    else "Candidate didn't match the behavior of the original code",
+                )
+            )
+
+        request = AIServiceAdaptiveOptimizeRequest(
+            trace_id=trace_id, original_source_code=original_source_code, candidates=request_candidates
+        )
+        self.adaptive_optimization_counter += 1
+        return self.executor.submit(ai_service_client.adaptive_optimize, request=request)
 
     def repair_optimization(
         self,
@@ -1227,7 +1376,6 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
-            console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
@@ -1313,57 +1461,62 @@ class FunctionOptimizer:
         generated_perf_test_paths: list[Path],
     ) -> Result[tuple[int, GeneratedTestsList, dict[str, set[FunctionCalledInTest]], str], str]:
         """Generate unit tests and concolic tests for the function."""
-        n_tests = N_TESTS_TO_GENERATE_EFFECTIVE
+        n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         assert len(generated_test_paths) == n_tests
 
-        # Submit test generation tasks
-        future_tests = self.submit_test_generation_tasks(
-            self.executor,
-            testgen_context.markdown,
-            [definition.fully_qualified_name for definition in helper_functions],
-            generated_test_paths,
-            generated_perf_test_paths,
-        )
+        if not self.args.no_gen_tests:
+            # Submit test generation tasks
+            future_tests = self.submit_test_generation_tasks(
+                self.executor,
+                testgen_context.markdown,
+                [definition.fully_qualified_name for definition in helper_functions],
+                generated_test_paths,
+                generated_perf_test_paths,
+            )
 
         future_concolic_tests = self.executor.submit(
             generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
         )
 
-        # Wait for test futures to complete
-        concurrent.futures.wait([*future_tests, future_concolic_tests])
-
+        if not self.args.no_gen_tests:
+            # Wait for test futures to complete
+            concurrent.futures.wait([*future_tests, future_concolic_tests])
+        else:
+            concurrent.futures.wait([future_concolic_tests])
         # Process test generation results
         tests: list[GeneratedTests] = []
-        for future in future_tests:
-            res = future.result()
-            if res:
-                (
-                    generated_test_source,
-                    instrumented_behavior_test_source,
-                    instrumented_perf_test_source,
-                    test_behavior_path,
-                    test_perf_path,
-                ) = res
-                tests.append(
-                    GeneratedTests(
-                        generated_original_test_source=generated_test_source,
-                        instrumented_behavior_test_source=instrumented_behavior_test_source,
-                        instrumented_perf_test_source=instrumented_perf_test_source,
-                        behavior_file_path=test_behavior_path,
-                        perf_file_path=test_perf_path,
+        if not self.args.no_gen_tests:
+            for future in future_tests:
+                res = future.result()
+                if res:
+                    (
+                        generated_test_source,
+                        instrumented_behavior_test_source,
+                        instrumented_perf_test_source,
+                        test_behavior_path,
+                        test_perf_path,
+                    ) = res
+                    tests.append(
+                        GeneratedTests(
+                            generated_original_test_source=generated_test_source,
+                            instrumented_behavior_test_source=instrumented_behavior_test_source,
+                            instrumented_perf_test_source=instrumented_perf_test_source,
+                            behavior_file_path=test_behavior_path,
+                            perf_file_path=test_perf_path,
+                        )
                     )
-                )
 
-        if not tests:
-            logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
-            return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
+            if not tests:
+                logger.warning(f"Failed to generate and instrument tests for {self.function_to_optimize.function_name}")
+                return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
 
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
         count_tests = len(tests)
         if concolic_test_str:
             count_tests += 1
 
-        logger.info(f"!lsp|Generated '{count_tests}' tests for '{self.function_to_optimize.function_name}'")
+        logger.info(f"!lsp|Generated {count_tests} tests for '{self.function_to_optimize.function_name}'")
+        console.rule()
 
         generated_tests = GeneratedTestsList(generated_tests=tests)
         return Success((count_tests, generated_tests, function_to_concolic_tests, concolic_test_str))
@@ -1374,17 +1527,16 @@ class FunctionOptimizer:
         read_only_context_code: str,
         run_experiment: bool = False,  # noqa: FBT001, FBT002
     ) -> Result[tuple[OptimizationSet, str], str]:
-        """Generate optimization candidates for the function."""
-        n_candidates = N_CANDIDATES_EFFECTIVE
-
+        """Generate optimization candidates for the function. Backend handles multi-model diversity."""
+        n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,
             read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
-            n_candidates,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
+            n_candidates=n_candidates,
         )
 
         future_references = self.executor.submit(
@@ -1405,23 +1557,25 @@ class FunctionOptimizer:
                 read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
-                n_candidates,
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
                 is_async=self.function_to_optimize.is_async,
+                n_candidates=n_candidates,
             )
             futures.append(future_candidates_exp)
 
         # Wait for optimization futures to complete
         concurrent.futures.wait(futures)
 
-        # Retrieve results
-        candidates: list[OptimizedCandidate] = future_optimization_candidates.result()
-        logger.info(f"!lsp|Generated '{len(candidates)}' candidate optimizations.")
+        # Retrieve results - optimize_python_code returns list of candidates
+        candidates = future_optimization_candidates.result()
 
         if not candidates:
             return Failure(f"/!\\ NO OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}")
 
-        candidates_experiment = future_candidates_exp.result() if future_candidates_exp else None
+        # Handle experiment results
+        candidates_experiment = None
+        if future_candidates_exp:
+            candidates_experiment = future_candidates_exp.result()
         function_references = future_references.result()
 
         return Success((OptimizationSet(control=candidates, experiment=candidates_experiment), function_references))
@@ -1718,19 +1872,40 @@ class FunctionOptimizer:
 
         raise_pr = not self.args.no_pr
         staging_review = self.args.staging_review
-        opt_review_response = ""
+        opt_review_result = OptimizationReviewResult(review="", explanation="")
         # this will now run regardless of pr, staging review flags
         try:
-            opt_review_response = self.aiservice_client.get_optimization_review(
+            opt_review_result = self.aiservice_client.get_optimization_review(
                 **data, calling_fn_details=function_references
             )
         except Exception as e:
             logger.debug(f"optimization review response failed, investigate {e}")
-        data["optimization_review"] = opt_review_response
-        self.optimization_review = opt_review_response
+        data["optimization_review"] = opt_review_result.review
+        self.optimization_review = opt_review_result.review
+
+        # Display the reviewer result to the user
+        if opt_review_result.review:
+            review_display = {
+                "high": ("[bold green]High[/bold green]", "green", "Recommended to merge"),
+                "medium": ("[bold yellow]Medium[/bold yellow]", "yellow", "Review recommended before merging"),
+                "low": ("[bold red]Low[/bold red]", "red", "Not recommended to merge"),
+            }
+            display_info = review_display.get(opt_review_result.review.lower(), ("[bold]Unknown[/bold]", "white", ""))
+            explanation_text = opt_review_result.explanation.strip() if opt_review_result.explanation else ""
+            if is_LSP_enabled():
+                md_content = f"### Reviewer Assessment: {opt_review_result.review.capitalize()}\n{display_info[2]}"
+                if explanation_text:
+                    md_content += f"\n\n{explanation_text}"
+                lsp_log(LspMarkdownMessage(markdown=md_content))
+            else:
+                panel_content = f"Reviewer Assessment: {display_info[0]}\n{display_info[2]}"
+                if explanation_text:
+                    panel_content += f"\n\n[dim]{explanation_text}[/dim]"
+                console.print(Panel(panel_content, title="Optimization Review", border_style=display_info[1]))
+
         if raise_pr or staging_review:
             data["root_dir"] = git_root_dir()
-        if raise_pr and not staging_review and opt_review_response != "low":
+        if raise_pr and not staging_review and opt_review_result.review != "low":
             # Ensure root_dir is set for PR creation (needed for async functions that skip opt_review)
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir()
@@ -1812,6 +1987,7 @@ class FunctionOptimizer:
                 instrument_codeflash_capture(
                     self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                 )
+
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
@@ -1908,7 +2084,6 @@ class FunctionOptimizer:
                 benchmarking_results, self.function_to_optimize.function_name
             )
             logger.debug(f"Original async function throughput: {async_throughput} calls/second")
-            console.rule()
 
         if self.args.benchmark:
             replay_benchmarking_test_results = benchmarking_results.group_by_benchmarks(
@@ -1938,13 +2113,21 @@ class FunctionOptimizer:
         self,
         candidate: OptimizedCandidate,
         diffs: list[TestDiff],
+        eval_ctx: CandidateEvaluationContext,
         code_context: CodeOptimizationContext,
         test_results_count: int,
         exp_type: str,
     ) -> None:
-        if self.repair_counter >= MAX_REPAIRS_PER_TRACE:
-            logger.debug(f"Repair counter reached {MAX_REPAIRS_PER_TRACE}, skipping repair")
+        max_repairs = get_effort_value(EffortKeys.MAX_CODE_REPAIRS_PER_TRACE, self.effort)
+        if self.repair_counter >= max_repairs:
+            logger.debug(f"Repair counter reached {max_repairs}, skipping repair")
             return
+
+        successful_candidates_count = sum(1 for is_correct in eval_ctx.is_correct.values() if is_correct)
+        if successful_candidates_count >= MIN_CORRECT_CANDIDATES:
+            logger.debug(f"{successful_candidates_count} of the candidates were correct, no need to repair")
+            return
+
         if candidate.source not in (OptimizedCandidateSource.OPTIMIZE, OptimizedCandidateSource.OPTIMIZE_LP):
             # only repair the first pass of the candidates for now
             logger.debug(f"Candidate is a result of {candidate.source.value}, skipping repair")
@@ -1953,7 +2136,7 @@ class FunctionOptimizer:
             logger.debug("No diffs found, skipping repair")
             return
         result_unmatched_perc = len(diffs) / test_results_count
-        if result_unmatched_perc > REPAIR_UNMATCHED_PERCENTAGE_LIMIT:
+        if result_unmatched_perc > get_effort_value(EffortKeys.REPAIR_UNMATCHED_PERCENTAGE_LIMIT, self.effort):
             logger.debug(f"Result unmatched percentage is {result_unmatched_perc * 100}%, skipping repair")
             return
 
@@ -1982,6 +2165,7 @@ class FunctionOptimizer:
         baseline_results: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
         file_path_to_helper_classes: dict[Path, set[str]],
+        eval_ctx: CandidateEvaluationContext,
         code_context: CodeOptimizationContext,
         candidate: OptimizedCandidate,
         exp_type: str,
@@ -2037,10 +2221,13 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                self.repair_if_possible(candidate, diffs, code_context, len(candidate_behavior_results), exp_type)
+                self.repair_if_possible(
+                    candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
+                )
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
+            console.rule()
 
             # For async functions, instrument at definition site for performance benchmarking
             if self.function_to_optimize.is_async:
@@ -2257,6 +2444,23 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
+        # Check if candidate code contains JIT decorators - line profiler doesn't work with JIT compiled code
+        candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
+        if contains_jit_decorator(candidate_fto_code):
+            logger.info(
+                f"Skipping line profiler for {self.function_to_optimize.function_name} - code contains JIT decorator"
+            )
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        # Check helper code for JIT decorators
+        for module_abspath in original_helper_code:
+            candidate_helper_code = Path(module_abspath).read_text("utf-8")
+            if contains_jit_decorator(candidate_helper_code):
+                logger.info(
+                    f"Skipping line profiler for {self.function_to_optimize.function_name} - helper code contains JIT decorator"
+                )
+                return {"timings": {}, "unit": 0, "str_out": ""}
+
         try:
             console.rule()
 

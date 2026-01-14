@@ -46,18 +46,13 @@ def apply_formatter_cmds(
     print_status: bool,  # noqa
     exit_on_failure: bool = True,  # noqa
 ) -> tuple[Path, str, bool]:
-    should_make_copy = False
-    file_path = path
-
-    if test_dir_str:
-        should_make_copy = True
-        file_path = Path(test_dir_str) / "temp.py"
-
     if not path.exists():
         msg = f"File {path} does not exist. Cannot apply formatter commands."
         raise FileNotFoundError(msg)
 
-    if should_make_copy:
+    file_path = path
+    if test_dir_str:
+        file_path = Path(test_dir_str) / "temp.py"
         shutil.copy2(path, file_path)
 
     file_token = "$file"  # noqa: S105

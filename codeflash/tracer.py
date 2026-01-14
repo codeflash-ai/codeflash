@@ -24,6 +24,7 @@ from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.pytest_parallelization import pytest_split
 
@@ -56,6 +57,9 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         default=None,
     )
     parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
+    )
 
     if args is not None:
         parsed_args = args
@@ -105,7 +109,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             test_paths = []
             replay_test_paths = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:])
+                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
                 if pytest_splits is None or test_paths is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
@@ -214,6 +218,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
                 from codeflash.optimization import optimizer
 
+                args.effort = EffortLevel.HIGH.value
                 optimizer.run_with_args(args)
 
                 # Delete the trace file and the replay test file if they exist

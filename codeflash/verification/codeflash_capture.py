@@ -7,11 +7,15 @@ import inspect
 import os
 import sqlite3
 import time
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Callable
 
 import dill as pickle
+from dill import PicklingWarning
+
+warnings.filterwarnings("ignore", category=PicklingWarning)
 
 
 class VerificationType(str, Enum):
@@ -78,6 +82,17 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
 
         # Go to the previous frame
         frame = frame.f_back
+
+    # If stack walking didn't find test info, fall back to environment variables
+    if not test_name:
+        env_test_function = os.environ.get("CODEFLASH_TEST_FUNCTION")
+        if env_test_function:
+            test_name = env_test_function
+            if not test_module_name:
+                test_module_name = os.environ.get("CODEFLASH_TEST_MODULE", "")
+            if not test_class_name:
+                env_class = os.environ.get("CODEFLASH_TEST_CLASS")
+                test_class_name = env_class if env_class else None
 
     return test_module_name, test_class_name, test_name, line_id
 

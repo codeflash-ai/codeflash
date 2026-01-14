@@ -7,7 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
-from codeflash.context.code_context_extractor import get_code_optimization_context
+from codeflash.context.code_context_extractor import get_code_optimization_context, get_imported_class_definitions
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
 from codeflash.optimization.optimizer import Optimizer
@@ -84,7 +85,8 @@ def test_code_replacement10() -> None:
 
     code_ctx = get_code_optimization_context(function_to_optimize=func_top_optimize, project_root_path=file_path.parent)
     qualified_names = {func.qualified_name for func in code_ctx.helper_functions}
-    assert qualified_names == {"HelperClass.helper_method"}  # Nested method should not be in here
+    # HelperClass.__init__ is now tracked because HelperClass(self.name) instantiates the class
+    assert qualified_names == {"HelperClass.helper_method", "HelperClass.__init__"}  # Nested method should not be in here
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
 
@@ -569,6 +571,8 @@ _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
 class AbstractCacheBackend(CacheBackend, Protocol[_KEY_T, _STORE_T]):
     """Interface for cache backends used by the persistent cache decorator."""
+
+    def __init__(self) -> None: ...
 
     def hash_key(
         self,
@@ -1296,6 +1300,8 @@ class DataProcessor:
 ```
 ```python:{path_to_transform_utils.relative_to(project_root)}
 class DataTransformer:
+    def __init__(self):
+        self.data = None
 
     def transform(self, data):
         self.data = data
@@ -1599,7 +1605,11 @@ class DataProcessor:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
         return f"DataProcessor(default_prefix={{self.default_prefix!r}})"
 ```
-
+```python:{path_to_transform_utils.relative_to(project_root)}
+class DataTransformer:
+    def __init__(self):
+        self.data = None
+```
 """
     expected_hashing_context = f"""
 ```python:utils.py
@@ -1705,12 +1715,18 @@ def test_direct_module_import() -> None:
 
     expected_read_only_context = """
 ```python:utils.py
+import math
 from transform_utils import DataTransformer
 
 class DataProcessor:
     \"\"\"A class for processing data.\"\"\"
 
     number = 1
+
+    def __init__(self, default_prefix: str = "PREFIX_"):
+        \"\"\"Initialize the DataProcessor with a default prefix.\"\"\"
+        self.default_prefix = default_prefix
+        self.number += math.log(self.number)
 
     def __repr__(self) -> str:
         \"\"\"Return a string representation of the DataProcessor.\"\"\"
@@ -2727,3 +2743,345 @@ FINAL_ASSIGNMENT = {"data": "value"}
     # Verify correct order
     expected_order = ["GLOBAL_CONSTANT", "ANOTHER_CONSTANT", "FINAL_ASSIGNMENT"]
     assert collector.assignment_order == expected_order
+
+
+def test_class_instantiation_includes_init_as_helper(tmp_path: Path) -> None:
+    """Test that when a class is instantiated, its __init__ method is tracked as a helper.
+
+    This test verifies the fix for the bug where class constructors were not
+    included in the context when only the class instantiation was called
+    (not any other methods). This caused LLMs to not know the constructor
+    signatures when generating tests.
+    """
+    code = '''
+class DataDumper:
+    """A class that dumps data."""
+
+    def __init__(self, data):
+        """Initialize with data."""
+        self.data = data
+
+    def dump(self):
+        """Dump the data."""
+        return self.data
+
+
+def target_function():
+    # Only instantiates DataDumper, doesn't call any other methods
+    dumper = DataDumper({"key": "value"})
+    return dumper
+'''
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
+        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="target_function",
+        file_path=file_path,
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+
+    # The __init__ method should be tracked as a helper since DataDumper() instantiates the class
+    qualified_names = {func.qualified_name for func in code_ctx.helper_functions}
+    assert "DataDumper.__init__" in qualified_names, (
+        "DataDumper.__init__ should be tracked as a helper when the class is instantiated"
+    )
+
+    # The testgen context should contain the class with __init__ (critical for LLM to know constructor)
+    testgen_context = code_ctx.testgen_context.markdown
+    assert "class DataDumper:" in testgen_context, "DataDumper class should be in testgen context"
+    assert "def __init__(self, data):" in testgen_context, (
+        "__init__ method should be included in testgen context"
+    )
+
+    # The hashing context should NOT contain __init__ (excluded for stability)
+    hashing_context = code_ctx.hashing_code_context
+    assert "__init__" not in hashing_context, (
+        "__init__ should NOT be in hashing context (excluded for hash stability)"
+    )
+
+
+def test_class_instantiation_preserves_full_class_in_testgen(tmp_path: Path) -> None:
+    """Test that instantiated classes are fully preserved in testgen context.
+
+    This is specifically for the unstructured LayoutDumper bug where helper classes
+    that were instantiated but had no other methods called were being excluded
+    from the testgen context.
+    """
+    code = '''
+class LayoutDumper:
+    """Base class for layout dumpers."""
+    layout_source: str = "unknown"
+
+    def __init__(self, layout):
+        self._layout = layout
+
+    def dump(self) -> dict:
+        raise NotImplementedError()
+
+
+class ObjectDetectionLayoutDumper(LayoutDumper):
+    """Specific dumper for object detection layouts."""
+
+    def __init__(self, layout):
+        super().__init__(layout)
+
+    def dump(self) -> dict:
+        return {"type": "object_detection", "layout": self._layout}
+
+
+def dump_layout(layout_type, layout):
+    """Dump a layout based on its type."""
+    if layout_type == "object_detection":
+        dumper = ObjectDetectionLayoutDumper(layout)
+    else:
+        dumper = LayoutDumper(layout)
+    return dumper.dump()
+'''
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+    opt = Optimizer(
+        Namespace(
+            project_root=file_path.parent.resolve(),
+            disable_telemetry=True,
+            tests_root="tests",
+            test_framework="pytest",
+            pytest_cmd="pytest",
+            experiment_id=None,
+            test_project_root=Path().resolve(),
+        )
+    )
+    function_to_optimize = FunctionToOptimize(
+        function_name="dump_layout",
+        file_path=file_path,
+        parents=[],
+        starting_line=None,
+        ending_line=None,
+    )
+
+    code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
+    qualified_names = {func.qualified_name for func in code_ctx.helper_functions}
+
+    # Both class __init__ methods should be tracked as helpers
+    assert "ObjectDetectionLayoutDumper.__init__" in qualified_names, (
+        "ObjectDetectionLayoutDumper.__init__ should be tracked"
+    )
+    assert "LayoutDumper.__init__" in qualified_names, (
+        "LayoutDumper.__init__ should be tracked"
+    )
+
+    # The testgen context should include both classes with their __init__ methods
+    testgen_context = code_ctx.testgen_context.markdown
+    assert "class LayoutDumper:" in testgen_context, "LayoutDumper should be in testgen context"
+    assert "class ObjectDetectionLayoutDumper" in testgen_context, (
+        "ObjectDetectionLayoutDumper should be in testgen context"
+    )
+
+    # Both __init__ methods should be in the testgen context (so LLM knows constructor signatures)
+    assert testgen_context.count("def __init__") >= 2, (
+        "Both __init__ methods should be in testgen context"
+    )
+
+
+def test_get_imported_class_definitions_extracts_project_classes(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions extracts class definitions from project modules."""
+    # Create a package structure with two modules
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with a class definition (simulating Element-like class)
+    elements_code = '''
+import abc
+
+class Element(abc.ABC):
+    """An element in the document."""
+
+    def __init__(self, element_id: str = None):
+        self._element_id = element_id
+        self.text = ""
+
+    def __str__(self):
+        return self.text
+
+
+class Text(Element):
+    """A text element."""
+
+    def __init__(self, text: str, element_id: str = None):
+        super().__init__(element_id)
+        self.text = text
+'''
+    elements_path = package_dir / "elements.py"
+    elements_path.write_text(elements_code, encoding="utf-8")
+
+    # Create another module that imports from elements
+    chunking_code = '''
+from mypackage.elements import Element
+
+class PreChunk:
+    def __init__(self, elements: list[Element]):
+        self._elements = elements
+
+class Accumulator:
+    def will_fit(self, chunk: PreChunk) -> bool:
+        return True
+'''
+    chunking_path = package_dir / "chunking.py"
+    chunking_path.write_text(chunking_code, encoding="utf-8")
+
+    # Create CodeStringsMarkdown from the chunking module (simulating testgen context)
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=chunking_code, file_path=chunking_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Verify Element class was extracted
+    assert len(result.code_strings) == 1, "Should extract exactly one class (Element)"
+    extracted_code = result.code_strings[0].code
+
+    # Verify the extracted code contains the Element class
+    assert "class Element" in extracted_code, "Should contain Element class definition"
+    assert "def __init__" in extracted_code, "Should contain __init__ method"
+    assert "element_id" in extracted_code, "Should contain constructor parameter"
+    assert "import abc" in extracted_code, "Should include necessary imports for base class"
+
+
+def test_get_imported_class_definitions_skips_existing_definitions(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions skips classes already defined in context."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with a class definition
+    elements_code = '''
+class Element:
+    def __init__(self, text: str):
+        self.text = text
+'''
+    elements_path = package_dir / "elements.py"
+    elements_path.write_text(elements_code, encoding="utf-8")
+
+    # Create code that imports Element but also redefines it locally
+    code_with_local_def = '''
+from mypackage.elements import Element
+
+# Local redefinition (this happens when LLM redefines classes)
+class Element:
+    def __init__(self, text: str):
+        self.text = text
+
+class User:
+    def process(self, elem: Element):
+        pass
+'''
+    code_path = package_dir / "user.py"
+    code_path.write_text(code_with_local_def, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code_with_local_def, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should NOT extract Element since it's already defined locally
+    assert len(result.code_strings) == 0, "Should not extract classes already defined in context"
+
+
+def test_get_imported_class_definitions_skips_third_party(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions skips third-party/stdlib imports."""
+    # Create a simple package
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Code with stdlib/third-party imports
+    code = '''
+from pathlib import Path
+from typing import Optional
+from dataclasses import dataclass
+
+class MyClass:
+    def __init__(self, path: Path):
+        self.path = path
+'''
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should not extract any classes (Path, Optional, dataclass are stdlib/third-party)
+    assert len(result.code_strings) == 0, "Should not extract stdlib/third-party classes"
+
+
+def test_get_imported_class_definitions_handles_multiple_imports(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions handles multiple class imports."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with multiple class definitions
+    types_code = '''
+class TypeA:
+    def __init__(self, value: int):
+        self.value = value
+
+class TypeB:
+    def __init__(self, name: str):
+        self.name = name
+
+class TypeC:
+    def __init__(self):
+        pass
+'''
+    types_path = package_dir / "types.py"
+    types_path.write_text(types_code, encoding="utf-8")
+
+    # Create code that imports multiple classes
+    code = '''
+from mypackage.types import TypeA, TypeB
+
+class Processor:
+    def process(self, a: TypeA, b: TypeB):
+        pass
+'''
+    code_path = package_dir / "processor.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(
+        code_strings=[CodeString(code=code, file_path=code_path)]
+    )
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should extract both TypeA and TypeB (but not TypeC since it's not imported)
+    assert len(result.code_strings) == 2, "Should extract exactly two classes (TypeA, TypeB)"
+
+    all_extracted_code = "\n".join(cs.code for cs in result.code_strings)
+    assert "class TypeA" in all_extracted_code, "Should contain TypeA class"
+    assert "class TypeB" in all_extracted_code, "Should contain TypeB class"
+    assert "class TypeC" not in all_extracted_code, "Should NOT contain TypeC (not imported)"

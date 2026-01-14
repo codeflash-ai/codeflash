@@ -337,6 +337,65 @@ def unused_function():
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     assert result.strip() == expected.strip()
 
+def test_base_class_inheritance() -> None:
+    """Test that base classes used only for inheritance are preserved."""
+    code = """
+class LayoutDumper:
+    def dump(self):
+        raise NotImplementedError
+
+class ObjectDetectionLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class ExtractedLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class UnusedClass:
+    pass
+
+def test_function():
+    dumper = ObjectDetectionLayoutDumper({})
+    return dumper.dump()
+"""
+
+    expected = """
+class LayoutDumper:
+    def dump(self):
+        raise NotImplementedError
+
+class ObjectDetectionLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class ExtractedLayoutDumper(LayoutDumper):
+    def __init__(self, data):
+        self.data = data
+    def dump(self):
+        return self.data
+
+class UnusedClass:
+    pass
+
+def test_function():
+    dumper = ObjectDetectionLayoutDumper({})
+    return dumper.dump()
+"""
+
+    qualified_functions = {"test_function"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # LayoutDumper should be preserved because ObjectDetectionLayoutDumper inherits from it
+    assert "class LayoutDumper" in result
+    assert "class ObjectDetectionLayoutDumper" in result
+
+
 def test_conditional_and_loop_variables() -> None:
     """Test handling of variables defined in if-else and while loops."""
     code = """

@@ -80,6 +80,9 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-pr", action="store_true", help="Do not create a PR for the optimization, only update the code locally."
     )
+    parser.add_argument(
+        "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
+    )
     parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
@@ -103,6 +106,9 @@ def parse_args() -> Namespace:
         default=False,
         action="store_true",
         help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
+    )
+    parser.add_argument(
+        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
     )
 
     args, unknown_args = parser.parse_known_args()
