@@ -808,7 +808,7 @@ import numba
 async def my_func():
     pass
 """
-        assert contains_jit_decorator(code)
+        assert contains_jit_decorator(code) is False
 
     def test_method_in_class_with_jit(self):
         code = """
