@@ -824,6 +824,50 @@ def test_torch():
     assert not comparator(gg, ii)
 
 
+def test_torch_device():
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    # Test torch.device comparisons - same device type
+    a = torch.device("cpu")
+    b = torch.device("cpu")
+    assert comparator(a, b)
+
+    # Test different device types
+    c = torch.device("cpu")
+    d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if torch.cuda.is_available():
+        assert not comparator(c, d)
+
+    # Test device with index
+    e = torch.device("cpu")
+    f = torch.device("cpu")
+    assert comparator(e, f)
+
+    # Test cuda devices with different indices (if multiple GPUs available)
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        g = torch.device("cuda:0")
+        h = torch.device("cuda:0")
+        i = torch.device("cuda:1")
+        assert comparator(g, h)
+        assert not comparator(g, i)
+
+    # Test cuda device with and without explicit index
+    if torch.cuda.is_available():
+        j = torch.device("cuda:0")
+        k = torch.device("cuda", 0)
+        assert comparator(j, k)
+
+    # Test meta device
+    l = torch.device("meta")
+    m = torch.device("meta")
+    n = torch.device("cpu")
+    assert comparator(l, m)
+    assert not comparator(l, n)
+
+
 def test_jax():
     try:
         import jax.numpy as jnp
