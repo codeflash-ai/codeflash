@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import logging
 import os
 import queue
 import random
@@ -15,13 +16,12 @@ import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_opt_review_metrics
 from codeflash.code_utils.code_replacer import (
@@ -131,38 +131,56 @@ if TYPE_CHECKING:
 
 
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
-    if not DEBUG_MODE:
+    """Log optimization context details when in verbose mode using Rich formatting."""
+    if logger.getEffectiveLevel() > logging.DEBUG:
         return
 
+    from rich.text import Text
+
+    token_limit = 16000
     read_writable_tokens = encoded_tokens_len(code_context.read_writable_code.markdown)
     read_only_tokens = (
         encoded_tokens_len(code_context.read_only_context_code) if code_context.read_only_context_code else 0
     )
     total_tokens = read_writable_tokens + read_only_tokens
+    token_pct = min(total_tokens / token_limit, 1.0)
 
-    table = Table(title=f"Optimization Context for [bold cyan]{function_name}[/]", show_header=False, box=None)
-    table.add_column("Property", style="dim")
-    table.add_column("Value")
+    # Token bar color based on usage
+    bar_color = "green" if token_pct < 0.7 else "yellow" if token_pct < 0.9 else "red"
 
-    table.add_row("Read-writable tokens", f"[green]{read_writable_tokens:,}[/]")
-    table.add_row("Read-only tokens", f"[yellow]{read_only_tokens:,}[/]")
-    table.add_row("Total tokens", f"[bold]{total_tokens:,}[/]")
-
+    # Build compact info line
     helper_names = [hf.qualified_name for hf in code_context.helper_functions]
-    if helper_names:
-        table.add_row("Helper functions", f"[magenta]{len(helper_names)}[/]: {', '.join(helper_names)}")
-    else:
-        table.add_row("Helper functions", "[dim]None[/]")
-
+    helpers_str = f"[magenta]{', '.join(helper_names)}[/]" if helper_names else "[dim]none[/]"
     read_writable_files = [str(cs.file_path) for cs in code_context.read_writable_code.code_strings]
-    table.add_row("Files", ", ".join(read_writable_files))
 
-    console.print(table)
+    # Create a tree view for the context
+    tree = Tree(f"[bold cyan]Context for {function_name}[/]")
+    tree.add(
+        Text.assemble(
+            ("Tokens: ", "dim"),
+            (f"{total_tokens:,}", "bold " + bar_color),
+            (f"/{token_limit:,} ", "dim"),
+            (f"({token_pct:.0%})", bar_color),
+            ("  [", "dim"),
+            (f"{read_writable_tokens:,}", "green"),
+            (" rw", "dim green"),
+            (" + ", "dim"),
+            (f"{read_only_tokens:,}", "yellow"),
+            (" ro", "dim yellow"),
+            ("]", "dim"),
+        )
+    )
+    tree.add(f"[dim]Helpers:[/] {helpers_str}")
+    files_branch = tree.add("[dim]Files:[/]")
+    for f in read_writable_files:
+        files_branch.add(f"[blue]{f}[/]")
+
+    console.print(tree)
 
     console.print(
         Panel(
             Syntax(code_context.read_writable_code.markdown, "markdown", theme="monokai", word_wrap=True),
-            title="[bold green]Read-Writable Code (sent to AI)[/]",
+            title="[green]Read-Writable Code[/]",
             border_style="green",
         )
     )
@@ -171,7 +189,7 @@ def log_optimization_context(function_name: str, code_context: CodeOptimizationC
         console.print(
             Panel(
                 Syntax(code_context.read_only_context_code, "markdown", theme="monokai", word_wrap=True),
-                title="[bold yellow]Read-Only Dependency Code (sent to AI)[/]",
+                title="[yellow]Read-Only Dependencies[/]",
                 border_style="yellow",
             )
         )
