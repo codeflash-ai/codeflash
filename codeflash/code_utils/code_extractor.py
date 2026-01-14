@@ -1261,8 +1261,10 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
     return numerical_names, modules_used
 
 
-def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.FunctionDef | None:
     """Find a function node in the AST given its qualified name parts.
+
+    Note: This function only finds regular (sync) functions, not async functions.
 
     Args:
         tree: The parsed AST module
@@ -1279,7 +1281,7 @@ def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.Function
         # Top-level function
         func_name = name_parts[0]
         for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == func_name:
+            if isinstance(node, ast.FunctionDef) and node.name == func_name:
                 return node
         return None
 
@@ -1289,10 +1291,7 @@ def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.Function
         for node in tree.body:
             if isinstance(node, ast.ClassDef) and node.name == class_name:
                 for class_node in node.body:
-                    if (
-                        isinstance(class_node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                        and class_node.name == method_name
-                    ):
+                    if isinstance(class_node, ast.FunctionDef) and class_node.name == method_name:
                         return class_node
         return None
 
