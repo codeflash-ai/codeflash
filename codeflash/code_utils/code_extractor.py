@@ -1205,7 +1205,8 @@ class NumericalUsageChecker(ast.NodeVisitor):
         if root_name and root_name in self.numerical_names:
             self.found_numerical = True
             return
-        self.generic_visit(node)
+        if root_name is None:
+            self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
         """Check name references for numerical library usage."""
@@ -1216,11 +1217,14 @@ class NumericalUsageChecker(ast.NodeVisitor):
 
     def _get_root_name(self, node: ast.expr) -> str | None:
         """Get the root name from an expression (e.g., 'np' from 'np.array')."""
-        if isinstance(node, ast.Name):
-            return node.id
-        if isinstance(node, ast.Attribute):
-            return self._get_root_name(node.value)
-        return None
+        # Iteratively descend through Attribute nodes to avoid recursion overhead
+        while True:
+            if isinstance(node, ast.Name):
+                return node.id
+            if isinstance(node, ast.Attribute):
+                node = node.value
+                continue
+            return None
 
 
 def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
