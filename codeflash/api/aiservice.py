@@ -55,7 +55,7 @@ class AiServiceClient:
             logger.info("Using local AI Service at http://localhost:8000")
             console.rule()
             return "http://localhost:8000"
-        return "http://localhost:8000"
+        return "https://app.codeflash.ai"
 
     def make_ai_service_request(
         self,
@@ -230,7 +230,7 @@ class AiServiceClient:
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
-            "n_candidates": N_CANDIDATES_EFFECTIVE,
+            "n_candidates": 1,
             "is_async": is_async,
         }
 
@@ -239,7 +239,7 @@ class AiServiceClient:
         try:
             response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
-            logger.exception(f"Error generating optimized candidates: {e}")
+            logger.exception(f"Error generating jit rewritten candidate: {e}")
             ph("cli-optimize-error-caught", {"error": str(e)})
             return []
 
@@ -247,13 +247,13 @@ class AiServiceClient:
             optimizations_json = response.json()["optimizations"]
             console.rule()
             end_time = time.perf_counter()
-            logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
-            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
+            logger.debug(f"!lsp|Generating jit rewritten code took {end_time - start_time:.2f} seconds.")
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.JIT_REWRITE)
         try:
             error = response.json()["error"]
         except Exception:
             error = response.text
-        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        logger.error(f"Error generating jit rewritten candidate: {response.status_code} - {error}")
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
