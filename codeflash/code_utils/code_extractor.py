@@ -1222,6 +1222,22 @@ class NumericalUsageChecker(ast.NodeVisitor):
             return self._get_root_name(node.value)
         return None
 
+    def visit_Name(self, node: ast.Name) -> None:
+        if node.id in self.numerical_names:
+            self.found_numerical = True
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if self.found_numerical:
+            return
+        # Check if the base of the attribute chain is numerical
+        base = node
+        while isinstance(base, ast.Attribute):
+            base = base.value
+        if isinstance(base, ast.Name) and base.id in self.numerical_names:
+            self.found_numerical = True
+        else:
+            self.generic_visit(node)
+
 
 def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
     """Collect names that reference numerical computing libraries from imports.
@@ -1342,13 +1358,11 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
     # Split the function name to handle class methods
     name_parts = function_name.split(".")
 
-    # Find the target function node
-    target_function = _find_function_node(tree, name_parts)
+    # Collect imports and find function in single pass
+    numerical_names, modules_used, target_function = _collect_imports_and_find_function(tree, name_parts)
+
     if target_function is None:
         return False
-
-    # Collect names that reference numerical modules from imports
-    numerical_names, modules_used = _collect_numerical_imports(tree)
 
     # Check if the function body uses any numerical library
     checker = NumericalUsageChecker(numerical_names)
@@ -1385,3 +1399,64 @@ def get_opt_review_metrics(
     end_time = time.perf_counter()
     logger.debug(f"Got function references in {end_time - start_time:.2f} seconds")
     return calling_fns_details
+
+
+def _process_import_node(node: ast.Import | ast.ImportFrom, numerical_names: set[str], modules_used: set[str]) -> None:
+    """Process an import node and update numerical_names and modules_used sets."""
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            module_root = alias.name.split(".")[0]
+            if module_root in NUMERICAL_MODULES:
+                name = alias.asname if alias.asname else alias.name.split(".")[0]
+                numerical_names.add(name)
+                modules_used.add(module_root)
+    elif isinstance(node, ast.ImportFrom) and node.module:
+        module_root = node.module.split(".")[0]
+        if module_root in NUMERICAL_MODULES:
+            for alias in node.names:
+                if alias.name == "*":
+                    numerical_names.add(module_root)
+                else:
+                    name = alias.asname if alias.asname else alias.name
+                    numerical_names.add(name)
+            modules_used.add(module_root)
+
+
+def _collect_imports_and_find_function(
+    tree: ast.Module, name_parts: list[str]
+) -> tuple[set[str], set[str], ast.FunctionDef | None]:
+    """Collect numerical imports and find function node in a single pass.
+
+    Returns:
+        A tuple of (numerical_names, modules_used, function_node)
+
+    """
+    numerical_names: set[str] = set()
+    modules_used: set[str] = set()
+    target_function: ast.FunctionDef | None = None
+
+    if not name_parts:
+        return numerical_names, modules_used, None
+
+    if len(name_parts) == 1:
+        # Top-level function
+        func_name = name_parts[0]
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                _process_import_node(node, numerical_names, modules_used)
+            elif isinstance(node, ast.FunctionDef) and node.name == func_name:
+                target_function = node
+
+    elif len(name_parts) == 2:
+        # Class method: ClassName.method_name
+        class_name, method_name = name_parts
+        for node in tree.body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                _process_import_node(node, numerical_names, modules_used)
+            elif isinstance(node, ast.ClassDef) and node.name == class_name:
+                for class_node in node.body:
+                    if isinstance(class_node, ast.FunctionDef) and class_node.name == method_name:
+                        target_function = class_node
+                        break
+
+    return numerical_names, modules_used, target_function
