@@ -160,6 +160,16 @@ def checkbox(  # noqa: ANN201
 
 
 def multi(widgets: list[InquirerWidget], header: str | list[str] | None = None):  # noqa: ANN201  # type: ignore[no-untyped-def]
+    # Add hints to each widget based on its type
+    for widget in widgets:
+        if isinstance(widget, InquirerSelect):
+            widget.message = with_hint(widget.message, HINT_SELECT)
+        elif isinstance(widget, InquirerConfirm):
+            widget.message = with_hint(widget.message, HINT_CONFIRM)
+        elif isinstance(widget, InquirerText):
+            widget.message = with_hint(widget.message, HINT_TEXT)
+        elif isinstance(widget, InquirerCheckbox):
+            widget.message = with_hint(widget.message, HINT_CHECKBOX)
     multi_widget = InquirerMulti(widgets)
     app = create_app(multi_widget, header=header)
     return app.run(inline=True)

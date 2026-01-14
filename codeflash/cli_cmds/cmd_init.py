@@ -155,7 +155,7 @@ def collect_config(curdir: Path, auth_status: str, project_name: str | None, git
     # Run prompt
     header = f"{auth_status}\n\n⚙️ Project Configuration" if auth_status else "⚙️ Project Configuration"
     result = prompts.multi(widgets, header=header)
-    if result.command is None:
+    if prompts.is_cancelled(result):
         apologize_and_exit()
 
     # Unpack results
@@ -394,7 +394,7 @@ def prompt_custom_directory(message: str, title: str, additional_validators: lis
 
     result = prompts.text("Enter the path to your directory", validators=validators, header=f"{title}\n\n{message}")
 
-    if result.command is None:
+    if prompts.is_cancelled(result):
         return None
 
     return Path(result.value)
