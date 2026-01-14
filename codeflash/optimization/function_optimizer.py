@@ -15,12 +15,13 @@ import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_opt_review_metrics
 from codeflash.code_utils.code_replacer import (
@@ -34,6 +35,7 @@ from codeflash.code_utils.code_utils import (
     create_rank_dictionary_compact,
     create_score_dictionary_from_metrics,
     diff_length,
+    encoded_tokens_len,
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -126,6 +128,53 @@ if TYPE_CHECKING:
         TestDiff,
     )
     from codeflash.verification.verification_utils import TestConfig
+
+
+def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
+    if not DEBUG_MODE:
+        return
+
+    read_writable_tokens = encoded_tokens_len(code_context.read_writable_code.markdown)
+    read_only_tokens = (
+        encoded_tokens_len(code_context.read_only_context_code) if code_context.read_only_context_code else 0
+    )
+    total_tokens = read_writable_tokens + read_only_tokens
+
+    table = Table(title=f"Optimization Context for [bold cyan]{function_name}[/]", show_header=False, box=None)
+    table.add_column("Property", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Read-writable tokens", f"[green]{read_writable_tokens:,}[/]")
+    table.add_row("Read-only tokens", f"[yellow]{read_only_tokens:,}[/]")
+    table.add_row("Total tokens", f"[bold]{total_tokens:,}[/]")
+
+    helper_names = [hf.qualified_name for hf in code_context.helper_functions]
+    if helper_names:
+        table.add_row("Helper functions", f"[magenta]{len(helper_names)}[/]: {', '.join(helper_names)}")
+    else:
+        table.add_row("Helper functions", "[dim]None[/]")
+
+    read_writable_files = [str(cs.file_path) for cs in code_context.read_writable_code.code_strings]
+    table.add_row("Files", ", ".join(read_writable_files))
+
+    console.print(table)
+
+    console.print(
+        Panel(
+            Syntax(code_context.read_writable_code.markdown, "markdown", theme="monokai", word_wrap=True),
+            title="[bold green]Read-Writable Code (sent to AI)[/]",
+            border_style="green",
+        )
+    )
+
+    if code_context.read_only_context_code:
+        console.print(
+            Panel(
+                Syntax(code_context.read_only_context_code, "markdown", theme="monokai", word_wrap=True),
+                title="[bold yellow]Read-Only Dependency Code (sent to AI)[/]",
+                border_style="yellow",
+            )
+        )
 
 
 class CandidateNode:
@@ -409,6 +458,7 @@ class FunctionOptimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
+        log_optimization_context(self.function_to_optimize.function_name, code_context)
         original_helper_code: dict[Path, str] = {}
         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
         for helper_function_path in helper_function_paths:
