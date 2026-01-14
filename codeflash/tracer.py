@@ -24,6 +24,7 @@ from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.pytest_parallelization import pytest_split
 
@@ -217,6 +218,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
                 from codeflash.optimization import optimizer
 
+                args.effort = EffortLevel.HIGH.value
                 optimizer.run_with_args(args)
 
                 # Delete the trace file and the replay test file if they exist
