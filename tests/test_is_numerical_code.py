@@ -1,12 +1,15 @@
 """Comprehensive unit tests for is_numerical_code function."""
 
+from unittest.mock import patch
+
 import pytest
 
 from codeflash.code_utils.code_extractor import is_numerical_code
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestBasicNumpyUsage:
-    """Test basic numpy library detection."""
+    """Test basic numpy library detection (with numba available)."""
 
     def test_numpy_with_standard_alias(self):
         code = """
@@ -49,8 +52,9 @@ def func(x):
         assert is_numerical_code(code, "func") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestNumpySubmodules:
-    """Test numpy submodule imports."""
+    """Test numpy submodule imports (with numba available)."""
 
     def test_numpy_linalg_direct(self):
         code = """
@@ -263,8 +267,9 @@ def func(x):
         assert is_numerical_code(code, "func") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestScipyUsage:
-    """Test SciPy library detection."""
+    """Test SciPy library detection (with numba available)."""
 
     def test_scipy_basic(self):
         code = """
@@ -299,8 +304,9 @@ def func(f, x0):
         assert is_numerical_code(code, "func") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestMathUsage:
-    """Test math standard library detection."""
+    """Test math standard library detection (with numba available)."""
 
     def test_math_basic(self):
         code = """
@@ -327,8 +333,9 @@ def calculate(x):
         assert is_numerical_code(code, "calculate") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestClassMethods:
-    """Test detection in class methods, staticmethods, and classmethods."""
+    """Test detection in class methods, staticmethods, and classmethods (with numba available)."""
 
     def test_regular_method_with_numpy(self):
         code = """
@@ -467,8 +474,9 @@ def func():
         assert is_numerical_code(code, "func") is False
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestEdgeCases:
-    """Test edge cases and special scenarios."""
+    """Test edge cases and special scenarios (with numba available)."""
 
     def test_nonexistent_function(self):
         code = """
@@ -529,8 +537,9 @@ async def async_process(x):
         assert is_numerical_code(code, "async_process") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestStarImports:
-    """Test handling of star imports.
+    """Test handling of star imports (with numba available).
 
     Note: Star imports are difficult to track precisely since we'd need to
     resolve what names are actually imported from the module. The current
@@ -568,8 +577,9 @@ def func(x):
         assert is_numerical_code(code, "func") is False
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestNestedUsage:
-    """Test nested numerical library usage patterns."""
+    """Test nested numerical library usage patterns (with numba available)."""
 
     def test_numpy_in_lambda(self):
         code = """
@@ -610,8 +620,9 @@ def func(x):
         assert is_numerical_code(code, "func") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestMultipleLibraries:
-    """Test code using multiple numerical libraries."""
+    """Test code using multiple numerical libraries (with numba available)."""
 
     def test_numpy_and_torch(self):
         code = """
@@ -634,8 +645,9 @@ def analyze(data):
         assert is_numerical_code(code, "analyze") is True
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
 class TestQualifiedNames:
-    """Test various qualified name patterns."""
+    """Test various qualified name patterns (with numba available)."""
 
     def test_simple_function_name(self):
         code = """
@@ -677,3 +689,131 @@ class ClassB:
 """
         assert is_numerical_code(code, "ClassA.method") is True
         assert is_numerical_code(code, "ClassB.method") is False
+
+
+@patch("codeflash.code_utils.code_extractor.has_numba", False)
+class TestNumbaNotAvailable:
+    """Test behavior when numba is NOT available in the environment.
+
+    When numba is not installed, code using only math/numpy/scipy should return False,
+    since numba is required to optimize such code. Code using torch/jax/tensorflow/numba
+    should still return True as these libraries don't require numba for optimization.
+    """
+
+    def test_numpy_returns_false_without_numba(self):
+        """Numpy usage should return False when numba is not available."""
+        code = """
+import numpy as np
+def process_data(x):
+    return np.sum(x)
+"""
+        assert is_numerical_code(code, "process_data") is False
+
+    def test_scipy_returns_false_without_numba(self):
+        """Scipy usage should return False when numba is not available."""
+        code = """
+from scipy import stats
+def analyze(data):
+    return stats.describe(data)
+"""
+        assert is_numerical_code(code, "analyze") is False
+
+    def test_math_returns_false_without_numba(self):
+        """Math usage should return False when numba is not available."""
+        code = """
+import math
+def calculate(x):
+    return math.sqrt(x)
+"""
+        assert is_numerical_code(code, "calculate") is False
+
+    def test_torch_returns_true_without_numba(self):
+        """Torch usage should return True even when numba is not available."""
+        code = """
+import torch
+def train_model(model):
+    return torch.nn.functional.relu(model)
+"""
+        assert is_numerical_code(code, "train_model") is True
+
+    def test_jax_returns_true_without_numba(self):
+        """JAX usage should return True even when numba is not available."""
+        code = """
+import jax
+def func(x):
+    return jax.grad(x)
+"""
+        assert is_numerical_code(code, "func") is True
+
+    def test_tensorflow_returns_true_without_numba(self):
+        """TensorFlow usage should return True even when numba is not available."""
+        code = """
+import tensorflow as tf
+def build_model():
+    return tf.keras.Sequential()
+"""
+        assert is_numerical_code(code, "build_model") is True
+
+    def test_numba_import_returns_true_without_numba(self):
+        """Code that imports numba should return True (numba is in modules_used)."""
+        code = """
+from numba import jit
+@jit
+def fast_func(x):
+    return x * 2
+"""
+        assert is_numerical_code(code, "fast_func") is True
+
+    def test_numpy_and_torch_returns_true_without_numba(self):
+        """Mixed numpy+torch usage should return True since torch doesn't require numba."""
+        code = """
+import numpy as np
+import torch
+def func(x):
+    arr = np.array(x)
+    return torch.from_numpy(arr)
+"""
+        # Returns True because torch is in modules_used and torch doesn't require numba
+        assert is_numerical_code(code, "func") is True
+
+    def test_numpy_and_jax_returns_true_without_numba(self):
+        """Mixed numpy+jax usage should return True since jax doesn't require numba."""
+        code = """
+import numpy as np
+import jax.numpy as jnp
+def func(x):
+    arr = np.array(x)
+    return jnp.sum(arr)
+"""
+        # Returns True because jax is in modules_used and jax doesn't require numba
+        assert is_numerical_code(code, "func") is True
+
+    def test_scipy_and_tensorflow_returns_true_without_numba(self):
+        """Mixed scipy+tensorflow usage should return True since tensorflow doesn't require numba."""
+        code = """
+from scipy import stats
+import tensorflow as tf
+def analyze_and_build(data):
+    result = stats.describe(data)
+    return tf.keras.Sequential()
+"""
+        # Returns True because tensorflow is in modules_used and doesn't require numba
+        assert is_numerical_code(code, "analyze_and_build") is True
+
+    def test_numpy_submodule_returns_false_without_numba(self):
+        """Numpy submodule usage should return False when numba is not available."""
+        code = """
+import numpy.linalg as la
+def func(x):
+    return la.norm(x)
+"""
+        assert is_numerical_code(code, "func") is False
+
+    def test_math_from_import_returns_false_without_numba(self):
+        """Math from import should return False when numba is not available."""
+        code = """
+from math import sqrt, sin, cos
+def calculate(x):
+    return sqrt(sin(x) ** 2 + cos(x) ** 2)
+"""
+        assert is_numerical_code(code, "calculate") is False

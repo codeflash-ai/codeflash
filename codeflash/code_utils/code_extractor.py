@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import time
 from dataclasses import dataclass
+from importlib.util import find_spec
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
@@ -1172,7 +1173,11 @@ def get_fn_references_jedi(
         return []
 
 
+has_numba = find_spec("numba") is not None
+
 NUMERICAL_MODULES = frozenset({"numpy", "torch", "numba", "jax", "tensorflow", "math", "scipy"})
+# Modules that require numba to be installed for optimization
+NUMBA_REQUIRED_MODULES = frozenset({"numpy", "math", "scipy"})
 
 
 class NumericalUsageChecker(ast.NodeVisitor):
@@ -1218,9 +1223,17 @@ class NumericalUsageChecker(ast.NodeVisitor):
         return None
 
 
-def _collect_numerical_imports(tree: ast.Module) -> set[str]:
-    """Collect names that reference numerical computing libraries from imports."""
+def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """Collect names that reference numerical computing libraries from imports.
+
+    Returns:
+        A tuple of (numerical_names, modules_used) where:
+        - numerical_names: set of names/aliases that reference numerical libraries
+        - modules_used: set of actual module names (e.g., "numpy", "math") being imported
+
+    """
     numerical_names: set[str] = set()
+    modules_used: set[str] = set()
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -1231,6 +1244,7 @@ def _collect_numerical_imports(tree: ast.Module) -> set[str]:
                     # Use the alias if present, otherwise the module name
                     name = alias.asname if alias.asname else alias.name.split(".")[0]
                     numerical_names.add(name)
+                    modules_used.add(module_root)
         elif isinstance(node, ast.ImportFrom) and node.module:
             module_root = node.module.split(".")[0]
             if module_root in NUMERICAL_MODULES:
@@ -1242,8 +1256,9 @@ def _collect_numerical_imports(tree: ast.Module) -> set[str]:
                     else:
                         name = alias.asname if alias.asname else alias.name
                         numerical_names.add(name)
+                modules_used.add(module_root)
 
-    return numerical_names
+    return numerical_names, modules_used
 
 
 def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
@@ -1290,6 +1305,9 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
     Detects usage of numpy, torch, numba, jax, tensorflow, scipy, and math libraries
     within the specified function.
 
+    Note: For math, numpy, and scipy usage, this function returns True only if numba
+    is installed in the environment, as numba is required to optimize such code.
+
     Args:
         code_string: The entire file's content as a string
         function_name: The name of the function to check. Can be a simple name like "foo"
@@ -1298,6 +1316,7 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
 
     Returns:
         True if the function uses any numerical computing library functions, False otherwise.
+        Returns False for math/numpy/scipy usage if numba is not installed.
 
     Examples:
         >>> code = '''
@@ -1305,7 +1324,7 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
         ... def process_data(x):
         ...     return np.sum(x)
         ... '''
-        >>> is_numerical_code(code, "process_data")
+        >>> is_numerical_code(code, "process_data")  # Returns True only if numba is installed
         True
 
         >>> code = '''
@@ -1330,13 +1349,21 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
         return False
 
     # Collect names that reference numerical modules from imports
-    numerical_names = _collect_numerical_imports(tree)
+    numerical_names, modules_used = _collect_numerical_imports(tree)
 
     # Check if the function body uses any numerical library
     checker = NumericalUsageChecker(numerical_names)
     checker.visit(target_function)
 
-    return checker.found_numerical
+    if not checker.found_numerical:
+        return False
+
+    # If numba is not installed and all modules used require numba for optimization,
+    # return False since we can't optimize this code
+    if not has_numba and modules_used.issubset(NUMBA_REQUIRED_MODULES):  # noqa : SIM103
+        return False
+
+    return True
 
 
 def get_opt_review_metrics(
