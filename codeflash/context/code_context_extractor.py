@@ -12,6 +12,7 @@ import libcst as cst
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
+from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
 from codeflash.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     extract_names_from_targets,
@@ -39,8 +40,8 @@ if TYPE_CHECKING:
 def get_code_optimization_context(
     function_to_optimize: FunctionToOptimize,
     project_root_path: Path,
-    optim_token_limit: int = 16000,
-    testgen_token_limit: int = 16000,
+    optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
+    testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
 ) -> CodeOptimizationContext:
     # Get FunctionSource representation of helpers of FTO
     helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
