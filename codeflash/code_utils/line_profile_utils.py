@@ -179,14 +179,132 @@ def contains_jit_decorator(code: str) -> bool:
     - They are imported directly (e.g., from numba import jit; @jit)
     - They are called with arguments (e.g., @jit(nopython=True))
     """
+    # Quick textual filters to avoid expensive AST parsing when impossible:
+    # If there are no decorators at all, we can return False immediately.
+    if "@" not in code:
+        return False
+
+    # Lowercase once for efficient substring checks
+    low = code.lower()
+
+    # If none of these substrings appear, it's extremely unlikely the module uses
+    # any of the targeted JIT decorators. This is conservative: whenever any of the
+    # keywords appears we fall back to parsing to guarantee correctness.
+    keywords = (
+        "numba",
+        "torch",
+        "tensorflow",
+        "jax",
+        "@jit",
+        "@njit",
+        "tf.function",
+        "@tf.function",
+        "torch.jit",
+        "jax.jit",
+        "from numba",
+        "from torch",
+        "from tensorflow",
+        "from jax",
+    )
+    if not any(k in low for k in keywords):
+        return False
+
     try:
         tree = ast.parse(code)
     except SyntaxError:
         return False
 
-    detector = JitDecoratorDetector()
-    detector.visit(tree)
-    return detector.found_jit_decorator
+    # Build import alias mapping: local name -> (module_root, original_name_or_none)
+    import_aliases: dict[str, tuple[str, str | None]] = {}
+    # Target modules and decorator names per module
+    target_modules = {"numba", "torch", "tensorflow", "jax"}
+    # decorator identifiers that indicate jit-like decorators
+    target_names = {
+        "jit",
+        "njit",
+        "function",
+        "script",
+        "compile",
+        "trace",
+        "stencil",
+        "vectorize",
+        "guvectorize",
+        "generated_jit",
+        "cfunc",
+    }
+
+    def _flatten_attribute(node: ast.AST) -> list[str] | None:
+        # Return dotted path components for Attribute/Name nodes, or None otherwise.
+        parts: list[str] = []
+        cur = node
+        while isinstance(cur, ast.Attribute):
+            parts.append(cur.attr)
+            cur = cur.value
+        if isinstance(cur, ast.Name):
+            parts.append(cur.id)
+            parts.reverse()
+            return parts
+        return None
+
+    # Single pass over tree; look for imports and decorator usages.
+    for node in ast.walk(tree):
+        # Collect imports for resolving aliases
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                # alias.name might be "numba" or "numba.submodule"; take root module
+                module_root = alias.name.split(".")[0]
+                local = alias.asname or module_root
+                import_aliases[local] = (module_root, None)
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module
+            # Skip relative imports without module name
+            if not mod:
+                continue
+            module_root = mod.split(".")[0]
+            for alias in node.names:
+                local = alias.asname or alias.name
+                import_aliases[local] = (module_root, alias.name)
+
+        # Check decorator lists on defs and classes
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for dec in node.decorator_list:
+                # Handle Call decorators (e.g., @jit(nopython=True))
+                if isinstance(dec, ast.Call):
+                    func = dec.func
+                else:
+                    func = dec
+
+                # Name: e.g., @jit or @my_jit
+                if isinstance(func, ast.Name):
+                    name = func.id
+                    mapped = import_aliases.get(name)
+                    if mapped:
+                        module, original = mapped
+                        if module in target_modules and original is not None and original.lower() in target_names:
+                            return True
+                    # If no mapping, a bare "jit" without import won't be considered a target
+                    continue
+
+                # Attribute: e.g., @nb.jit or @torch.jit.script
+                if isinstance(func, ast.Attribute):
+                    parts = _flatten_attribute(func)
+                    if not parts:
+                        continue
+                    root = parts[0]
+                    # Resolve module: if root is an import alias, use mapped module; otherwise use root
+                    mapped = import_aliases.get(root)
+                    module = mapped[0] if mapped else root
+                    if module in target_modules:
+                        # If any attribute component (excluding the module root) matches our target decorator names
+                        # e.g., ['nb', 'jit'] or ['torch', 'jit', 'script']
+                        for comp in parts[1:]:
+                            if comp.lower() in target_names:
+                                return True
+                        # Also handle the case where the module itself may be the decorator (unlikely), skip
+                    continue
+
+                # Other node types (e.g., Lambda) are irrelevant as decorators for our detection
+    return False
 
 
 class LineProfilerDecoratorAdder(cst.CSTTransformer):
