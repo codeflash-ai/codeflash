@@ -24,7 +24,6 @@ JIT_DECORATORS: dict[str, set[str]] = {
     "torch": {"compile"},
     "torch.jit": {"script", "trace"},
     "tensorflow": {"function"},
-    "tf": {"function"},
     "jax": {"jit"},
 }
 
