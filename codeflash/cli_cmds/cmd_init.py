@@ -1230,7 +1230,7 @@ def enter_api_key_and_save_to_rc() -> None:
             f"Enter your Codeflash API key{' [or press Enter to open your API key page]' if not browser_launched else ''}",
             validators=APIKeyValidator(),
         )
-        if result.command is None:
+        if prompts.is_cancelled(result):
             apologize_and_exit()
             return
 
