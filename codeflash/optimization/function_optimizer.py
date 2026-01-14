@@ -16,6 +16,7 @@ import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
@@ -48,6 +49,7 @@ from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MIN_CORRECT_CANDIDATES,
+    OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
@@ -135,15 +137,13 @@ def log_optimization_context(function_name: str, code_context: CodeOptimizationC
     if logger.getEffectiveLevel() > logging.DEBUG:
         return
 
-    from rich.text import Text
-
-    token_limit = 16000
+    console.rule()
     read_writable_tokens = encoded_tokens_len(code_context.read_writable_code.markdown)
     read_only_tokens = (
         encoded_tokens_len(code_context.read_only_context_code) if code_context.read_only_context_code else 0
     )
     total_tokens = read_writable_tokens + read_only_tokens
-    token_pct = min(total_tokens / token_limit, 1.0)
+    token_pct = min(total_tokens / OPTIMIZATION_CONTEXT_TOKEN_LIMIT, 1.0)
 
     # Token bar color based on usage
     bar_color = "green" if token_pct < 0.7 else "yellow" if token_pct < 0.9 else "red"
@@ -159,7 +159,7 @@ def log_optimization_context(function_name: str, code_context: CodeOptimizationC
         Text.assemble(
             ("Tokens: ", "dim"),
             (f"{total_tokens:,}", "bold " + bar_color),
-            (f"/{token_limit:,} ", "dim"),
+            (f"/{OPTIMIZATION_CONTEXT_TOKEN_LIMIT:,} ", "dim"),
             (f"({token_pct:.0%})", bar_color),
             ("  [", "dim"),
             (f"{read_writable_tokens:,}", "green"),
