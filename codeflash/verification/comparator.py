@@ -227,6 +227,19 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if isinstance(orig, np.dtype):
                 return orig == new
 
+            # Handle numpy random generators
+            if isinstance(orig, np.random.Generator):
+                # Compare the underlying BitGenerator state
+                orig_state = orig.bit_generator.state
+                new_state = new.bit_generator.state
+                return comparator(orig_state, new_state, superset_obj)
+
+            if isinstance(orig, np.random.RandomState):
+                # Compare the internal state
+                orig_state = orig.get_state(legacy=False)
+                new_state = new.get_state(legacy=False)
+                return comparator(orig_state, new_state, superset_obj)
+
         if HAS_SCIPY and isinstance(orig, scipy.sparse.spmatrix):
             if orig.dtype != new.dtype:
                 return False
@@ -281,6 +294,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return torch.allclose(orig, new, equal_nan=True)
 
             if isinstance(orig, torch.dtype):
+                return orig == new
+
+            if isinstance(orig, torch.device):
                 return orig == new
 
         if HAS_PYRSISTENT:
