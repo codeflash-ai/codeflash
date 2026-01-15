@@ -26,6 +26,9 @@ const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
 
+// Load the codeflash serializer for robust value serialization
+const serializer = require('./codeflash-serializer');
+
 // Try to load better-sqlite3, fall back to JSON if not available
 let Database;
 let useSqlite = false;
@@ -83,67 +86,43 @@ function initDatabase() {
 
 /**
  * Safely serialize a value for storage.
- * Uses JSON serialization with special handling for complex types.
+ * Uses the codeflash-serializer which:
+ * - Prefers V8 serialization (fast, handles all JS types natively)
+ * - Falls back to msgpack with custom extensions (for Bun/browser)
+ *
+ * This provides robust serialization for:
+ * - All primitive types (including NaN, Infinity, BigInt, Symbol)
+ * - Complex objects (Map, Set, Date, RegExp, Error)
+ * - TypedArrays and ArrayBuffer
+ * - Circular references
  *
  * @param {any} value - Value to serialize
  * @returns {Buffer} - Serialized value as Buffer
  */
 function safeSerialize(value) {
-    const seen = new WeakSet();
-
-    function serialize(val) {
-        // Handle primitives
-        if (val === null || val === undefined) return val;
-        if (typeof val === 'number') {
-            if (Number.isNaN(val)) return { __type: 'NaN' };
-            if (!Number.isFinite(val)) return { __type: val > 0 ? 'Infinity' : '-Infinity' };
-            return val;
-        }
-        if (typeof val === 'string' || typeof val === 'boolean') return val;
-        if (typeof val === 'bigint') return { __type: 'BigInt', value: val.toString() };
-        if (typeof val === 'symbol') return { __type: 'Symbol', description: val.description };
-        if (typeof val === 'function') return { __type: 'Function', name: val.name || 'anonymous' };
-
-        // Handle special objects
-        if (val instanceof Date) return { __type: 'Date', value: val.toISOString() };
-        if (val instanceof RegExp) return { __type: 'RegExp', source: val.source, flags: val.flags };
-        if (val instanceof Error) return { __type: 'Error', name: val.name, message: val.message };
-        if (val instanceof Map) return { __type: 'Map', entries: Array.from(val.entries()).map(([k, v]) => [serialize(k), serialize(v)]) };
-        if (val instanceof Set) return { __type: 'Set', values: Array.from(val).map(serialize) };
-        if (ArrayBuffer.isView(val)) return { __type: val.constructor.name, data: Array.from(val) };
-        if (val instanceof ArrayBuffer) return { __type: 'ArrayBuffer', byteLength: val.byteLength };
-        if (val instanceof Promise) return { __type: 'Promise' };
-
-        // Handle arrays
-        if (Array.isArray(val)) {
-            if (seen.has(val)) return { __type: 'CircularReference' };
-            seen.add(val);
-            return val.map(serialize);
-        }
-
-        // Handle objects
-        if (typeof val === 'object') {
-            if (seen.has(val)) return { __type: 'CircularReference' };
-            seen.add(val);
-            const result = {};
-            for (const key of Object.keys(val)) {
-                try {
-                    result[key] = serialize(val[key]);
-                } catch (e) {
-                    result[key] = { __type: 'UnserializableProperty', error: e.message };
-                }
-            }
-            return result;
-        }
-
-        return { __type: 'Unknown', typeof: typeof val };
-    }
-
     try {
-        const serialized = serialize(value);
-        return Buffer.from(JSON.stringify(serialized));
+        return serializer.serialize(value);
     } catch (e) {
+        // If serialization fails, return a JSON error marker
+        // This should be rare with the robust serializer
+        console.warn('[codeflash] Serialization failed:', e.message);
         return Buffer.from(JSON.stringify({ __type: 'SerializationError', error: e.message }));
+    }
+}
+
+/**
+ * Safely deserialize a buffer back to a value.
+ * Uses the codeflash-serializer to restore the original value.
+ *
+ * @param {Buffer|Uint8Array} buffer - Serialized buffer
+ * @returns {any} - Deserialized value
+ */
+function safeDeserialize(buffer) {
+    try {
+        return serializer.deserialize(buffer);
+    } catch (e) {
+        console.warn('[codeflash] Deserialization failed:', e.message);
+        return { __type: 'DeserializationError', error: e.message };
     }
 }
 
@@ -453,7 +432,10 @@ module.exports = {
     getResults,
     setTestName,
     safeSerialize,
+    safeDeserialize,
     initDatabase,
+    // Serializer info
+    getSerializerType: serializer.getSerializerType,
     // Constants
     LOOP_INDEX,
     OUTPUT_FILE,
