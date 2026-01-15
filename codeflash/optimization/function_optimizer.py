@@ -609,9 +609,7 @@ class FunctionOptimizer:
                 code_string=code_context.read_writable_code.flat
             ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
                 jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
-                    code_context.read_writable_code.markdown,
-                    code_context.read_only_context_code,
-                    self.function_trace_id,
+                    code_context.read_writable_code.markdown, self.function_trace_id
                 )
                 if jit_compiled_opt_candidate:  # jit rewrite was successful
                     # write files

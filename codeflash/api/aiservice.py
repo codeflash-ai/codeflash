@@ -194,7 +194,7 @@ class AiServiceClient:
     def get_jit_rewritten_code(  # noqa: D417
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+        """Rewrite the given python code for performance via jit compilation by making a request to the Django endpoint.
 
         Parameters
         ----------
