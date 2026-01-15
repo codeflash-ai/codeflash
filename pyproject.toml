@@ -302,13 +302,11 @@ __version__ = "{version}"
 
 
 [tool.codeflash]
+# All paths are relative to this pyproject.toml's directory.
 module-root = "codeflash"
-tests-root = "tests"
-benchmarks-root = "tests/benchmarks"
-formatter-cmds = [
-    "uvx ruff check --exit-zero --fix $file",
-    "uvx ruff format $file",
-]
+tests-root = "codeflash"
+ignore-paths = []
+formatter-cmds = ["disabled"]
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -317,6 +315,7 @@ filterwarnings = [
 markers = [
     "ci_skip: mark test to skip in CI environment",
 ]
+
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]

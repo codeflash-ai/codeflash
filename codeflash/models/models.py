@@ -222,16 +222,21 @@ def get_code_block_splitter(file_path: Path) -> str:
     return f"# file: {file_path.as_posix()}"
 
 
-markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
+# Pattern to match markdown code blocks with optional language tag and file path
+# Matches: ```language:filepath\ncode\n``` or ```language\ncode\n```
+markdown_pattern = re.compile(r"```(\w+)(?::([^\n]+))?\n(.*?)\n```", re.DOTALL)
+# Legacy pattern for backward compatibility (only python)
+markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
+    language: str = "python"  # Language for markdown code block tags
     _cache: dict = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
-        """Returns the combined Python module from all code blocks.
+        """Returns the combined source code module from all code blocks.
 
         Each block is prefixed by a file path comment to indicate its origin.
         This representation is syntactically valid Python code.
@@ -257,7 +262,9 @@ class CodeStringsMarkdown(BaseModel):
         """Returns a Markdown-formatted string containing all code blocks.
 
         Each block is enclosed in a triple-backtick code block with an optional
-        file path suffix (e.g., ```python:filename.py).
+        file path suffix (e.g., ```python:filename.py or ```javascript:file.js).
+
+        The language tag is determined by the `language` attribute.
 
         Returns:
             str: Markdown representation of the code blocks.
@@ -265,7 +272,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         return "\n".join(
             [
-                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```{self.language}{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
@@ -285,13 +292,14 @@ class CodeStringsMarkdown(BaseModel):
         return self._cache["file_to_path"]
 
     @staticmethod
-    def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+    def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
         """Parse a Markdown string into a CodeStringsMarkdown object.
 
         Extracts code blocks and their associated file paths and constructs a new CodeStringsMarkdown instance.
 
         Args:
             markdown_code (str): The Markdown-formatted string to parse.
+            expected_language (str): The expected language of code blocks (default: "python").
 
         Returns:
             CodeStringsMarkdown: Parsed object containing code blocks.
@@ -299,14 +307,22 @@ class CodeStringsMarkdown(BaseModel):
         """
         matches = markdown_pattern.findall(markdown_code)
         code_string_list = []
+        detected_language = expected_language
         try:
-            for file_path, code in matches:
-                path = file_path.strip()
-                code_string_list.append(CodeString(code=code, file_path=Path(path)))
-            return CodeStringsMarkdown(code_strings=code_string_list)
+            for language, file_path, code in matches:
+                # Use the first detected language or the expected language
+                if language:
+                    detected_language = language
+                if file_path:
+                    path = file_path.strip()
+                    code_string_list.append(CodeString(code=code, file_path=Path(path)))
+                else:
+                    # No file path specified - skip this block or create with None
+                    code_string_list.append(CodeString(code=code, file_path=None))
+            return CodeStringsMarkdown(code_strings=code_string_list, language=detected_language)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
-            return CodeStringsMarkdown()
+            return CodeStringsMarkdown(language=expected_language)
 
 
 class CodeOptimizationContext(BaseModel):

@@ -135,7 +135,10 @@ class FunctionToOptimize:
         parents: A list of parent scopes, which could be classes or functions.
         starting_line: The starting line number of the function in the file.
         ending_line: The ending line number of the function in the file.
+        starting_col: The starting column offset (for precise location in multi-line contexts).
+        ending_col: The ending column offset (for precise location in multi-line contexts).
         is_async: Whether this function is defined as async.
+        language: The programming language of this function (default: "python").
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -148,7 +151,10 @@ class FunctionToOptimize:
     parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
+    starting_col: Optional[int] = None  # Column offset for precise location
+    ending_col: Optional[int] = None    # Column offset for precise location
     is_async: bool = False
+    language: str = "python"  # Language identifier for multi-language support
 
     @property
     def top_level_parent_name(self) -> str:
