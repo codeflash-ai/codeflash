@@ -124,7 +124,10 @@ class Optimizer:
         console.rule()
         return function_benchmark_timings, total_benchmark_timings
 
-    def get_optimizable_functions(self) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
+    def get_optimizable_functions(
+        self,
+        must_return_a_value: bool = True,  # noqa: FBT001, FBT002
+    ) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
         """Discover functions to optimize."""
         from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 
@@ -137,7 +140,8 @@ class Optimizer:
             ignore_paths=self.args.ignore_paths,
             project_root=self.args.project_root,
             module_root=self.args.module_root,
-            previous_checkpoint_functions=self.args.previous_checkpoint_functions,
+            previous_checkpoint_functions=getattr(self.args, "previous_checkpoint_functions", None),
+            must_return_a_value=must_return_a_value,
         )
 
     def create_function_optimizer(
