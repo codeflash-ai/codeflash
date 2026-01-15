@@ -616,7 +616,6 @@ def discover_tests_for_language(
                         end_col=func.ending_col,
                         is_async=func.is_async,
                         is_method=bool(func.parents and any(p.type == "ClassDef" for p in func.parents)),
-                        class_name=func.parents[0].name if func.parents and func.parents[0].type == "ClassDef" else None,
                         parents=parents,
                         language=Language(language),
                     )

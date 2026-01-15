@@ -434,10 +434,14 @@ class FunctionOptimizer:
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
         if not function_to_optimize_ast:
-            original_module_ast = ast.parse(function_to_optimize_source_code)
-            self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
-                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-            )
+            # Skip Python AST parsing for JavaScript/TypeScript
+            if function_to_optimize.language in ("javascript", "typescript"):
+                self.function_to_optimize_ast = None
+            else:
+                original_module_ast = ast.parse(function_to_optimize_source_code)
+                self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
+                    function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+                )
         else:
             self.function_to_optimize_ast = function_to_optimize_ast
         self.function_to_tests = function_to_tests if function_to_tests else {}
@@ -450,7 +454,26 @@ class FunctionOptimizer:
 
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
-        self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
+        # For JavaScript/TypeScript, we need a relative path from the test file to the source file
+        # For Python, we use dot-separated module paths
+        if self.function_to_optimize.language in ("javascript", "typescript"):
+            # Compute relative path from tests directory to source file
+            # e.g., for source at /project/fibonacci.js and tests at /project/tests/
+            # the relative path should be ../fibonacci
+            try:
+                # Use os.path.relpath to compute relative path from tests_root to source file
+                import os
+                rel_path = os.path.relpath(
+                    str(self.function_to_optimize.file_path.with_suffix("")),
+                    str(test_cfg.tests_root)
+                )
+                self.original_module_path = rel_path
+            except ValueError:
+                # Fallback if paths are on different drives (Windows)
+                rel_path = self.function_to_optimize.file_path.relative_to(self.project_root)
+                self.original_module_path = "../" + rel_path.with_suffix("").as_posix()
+        else:
+            self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
 
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
@@ -510,15 +533,24 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        language = self.function_to_optimize.language
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                language=language,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                language=language,
             )
             for test_index in range(n_tests)
         ]
@@ -1370,7 +1402,8 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
         for helper_function in code_context.helper_functions:
-            if helper_function.jedi_definition.type != "class":
+            # Skip class definitions (jedi_definition may be None for non-Python languages)
+            if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
@@ -1423,6 +1456,12 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
+        # Skip existing test instrumentation for JavaScript/TypeScript - use generated tests only
+        elif self.function_to_optimize.language in ("javascript", "typescript"):
+            logger.info(
+                f"JavaScript/TypeScript detected - using generated tests only for '{func_qualname}'. "
+                "Existing test instrumentation not yet supported."
+            )
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
@@ -1577,11 +1616,12 @@ class FunctionOptimizer:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
         future_optimization_candidates = self.executor.submit(
-            self.aiservice_client.optimize_python_code,
+            self.aiservice_client.optimize_code,
             read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
+            language=self.function_to_optimize.language,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
         )
@@ -1600,11 +1640,12 @@ class FunctionOptimizer:
 
         if run_experiment:
             future_candidates_exp = self.executor.submit(
-                self.local_aiservice_client.optimize_python_code,
+                self.local_aiservice_client.optimize_code,
                 read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
+                language=self.function_to_optimize.language,
                 is_async=self.function_to_optimize.is_async,
                 n_candidates=n_candidates,
             )

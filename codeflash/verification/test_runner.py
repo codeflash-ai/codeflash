@@ -22,6 +22,27 @@ BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
 
+def _find_js_project_root(file_path: Path) -> Path | None:
+    """Find the JavaScript/TypeScript project root by looking for package.json.
+
+    Traverses up from the given file path to find the nearest directory
+    containing package.json or jest.config.js.
+
+    Args:
+        file_path: A file path within the JavaScript project.
+
+    Returns:
+        The project root directory, or None if not found.
+
+    """
+    current = file_path.parent if file_path.is_file() else file_path
+    while current != current.parent:  # Stop at filesystem root
+        if (current / "package.json").exists() or (current / "jest.config.js").exists():
+            return current
+        current = current.parent
+    return None
+
+
 def run_jest_behavioral_tests(
     test_paths: TestFiles,
     test_env: dict[str, str],
@@ -46,6 +67,17 @@ def run_jest_behavioral_tests(
     # Get test files to run
     test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
 
+    # Find the JavaScript project root from the test file paths
+    # Jest needs to run from the directory containing package.json or jest.config.js
+    js_project_root = None
+    if test_files:
+        first_test_file = Path(test_files[0])
+        js_project_root = _find_js_project_root(first_test_file)
+
+    # Use the detected JS project root, or fall back to provided cwd
+    effective_cwd = js_project_root if js_project_root else cwd
+    logger.debug(f"Jest working directory: {effective_cwd}")
+
     # Build Jest command
     jest_cmd = [
         "npx",
@@ -60,7 +92,7 @@ def run_jest_behavioral_tests(
     if test_files:
         # Jest uses regex for test path matching
         test_pattern = "|".join(str(Path(f).name) for f in test_files)
-        jest_cmd.append(f"--testPathPattern={test_pattern}")
+        jest_cmd.append(f"--testPathPatterns={test_pattern}")
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -75,7 +107,7 @@ def run_jest_behavioral_tests(
 
     try:
         run_args = get_cross_platform_subprocess_run_args(
-            cwd=cwd,
+            cwd=effective_cwd,
             env=jest_env,
             timeout=timeout or 600,
             check=False,

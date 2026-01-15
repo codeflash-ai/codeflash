@@ -129,7 +129,7 @@ class FunctionSource:
     fully_qualified_name: str
     only_function_name: str
     source_code: str
-    jedi_definition: Name
+    jedi_definition: Name | None = None  # None for non-Python languages
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
@@ -323,10 +323,10 @@ class CodeStringsMarkdown(BaseModel):
                     detected_language = language
                 if file_path:
                     path = file_path.strip()
-                    code_string_list.append(CodeString(code=code, file_path=Path(path)))
+                    code_string_list.append(CodeString(code=code, file_path=Path(path), language=detected_language))
                 else:
                     # No file path specified - skip this block or create with None
-                    code_string_list.append(CodeString(code=code, file_path=None))
+                    code_string_list.append(CodeString(code=code, file_path=None, language=detected_language))
             return CodeStringsMarkdown(code_strings=code_string_list, language=detected_language)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context

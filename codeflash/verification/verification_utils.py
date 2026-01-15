@@ -7,12 +7,16 @@ from typing import Optional
 from pydantic.dataclasses import dataclass
 
 
-def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
+def get_test_file_path(
+    test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit", language: str = "python"
+) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
-    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}.py"
+    # Use appropriate file extension based on language
+    extension = ".test.js" if language in ("javascript", "typescript") else ".py"
+    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
+        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, language)
     return path
 
 

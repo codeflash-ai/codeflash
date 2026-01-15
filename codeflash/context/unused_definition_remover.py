@@ -632,8 +632,8 @@ def _analyze_imports_in_optimized_code(
     helpers_by_file_and_func = defaultdict(dict)
     helpers_by_file = defaultdict(list)  # preserved for "import module"
     for helper in code_context.helper_functions:
-        jedi_type = helper.jedi_definition.type
-        if jedi_type != "class":
+        jedi_type = helper.jedi_definition.type if helper.jedi_definition else None
+        if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
             func_name = helper.only_function_name
             module_name = helper.file_path.stem
             # Cache function lookup for this (module, func)
@@ -784,7 +784,8 @@ def detect_unused_helper_functions(
         # Find helper functions that are no longer called
         unused_helpers = []
         for helper_function in code_context.helper_functions:
-            if helper_function.jedi_definition.type != "class":
+            jedi_type = helper_function.jedi_definition.type if helper_function.jedi_definition else None
+            if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
                 # Check if the helper function is called using multiple name variants
                 helper_qualified_name = helper_function.qualified_name
                 helper_simple_name = helper_function.only_function_name

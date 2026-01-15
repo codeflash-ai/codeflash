@@ -42,6 +42,7 @@ def generate_tests(
         test_timeout=test_timeout,
         trace_id=function_trace_id,
         test_index=test_index,
+        language=function_to_optimize.language,
     )
     if response and isinstance(response, tuple) and len(response) == 3:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response

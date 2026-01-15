@@ -1149,9 +1149,12 @@ def get_fn_references_jedi(
     source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
 ) -> list[Path]:
     start_time = time.perf_counter()
-    function_position: CodePosition = find_specific_function_in_file(
+    function_position: CodePosition | None = find_specific_function_in_file(
         source_code, file_path, target_function, target_class
     )
+    if function_position is None:
+        # Function not found (may be non-Python code)
+        return []
     try:
         script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
         # Get references to the function

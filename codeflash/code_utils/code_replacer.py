@@ -601,7 +601,8 @@ def replace_optimized_code(
                     [
                         callee.qualified_name
                         for callee in code_context.helper_functions
-                        if callee.file_path == module_path and callee.jedi_definition.type != "class"
+                        if callee.file_path == module_path
+                        and (callee.jedi_definition is None or callee.jedi_definition.type != "class")
                     ]
                 ),
                 candidate.source_code,

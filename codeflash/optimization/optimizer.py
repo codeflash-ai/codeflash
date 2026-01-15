@@ -191,8 +191,8 @@ class Optimizer:
         )
 
     def prepare_module_for_optimization(
-        self, original_module_path: Path
-    ) -> tuple[dict[Path, ValidCode], ast.Module] | None:
+        self, original_module_path: Path, language: str = "python"
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
 
@@ -200,6 +200,17 @@ class Optimizer:
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
+
+        # For JavaScript/TypeScript, skip Python-specific AST parsing
+        if language in ("javascript", "typescript"):
+            validated_original_code: dict[Path, ValidCode] = {
+                original_module_path: ValidCode(
+                    source_code=original_module_code, normalized_code=original_module_code
+                )
+            }
+            return validated_original_code, None
+
+        # Python-specific parsing
         try:
             original_module_ast = ast.parse(original_module_code)
         except SyntaxError as e:
@@ -207,7 +218,7 @@ class Optimizer:
             logger.info("Skipping optimization due to file error.")
             return None
         normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-        validated_original_code: dict[Path, ValidCode] = {
+        validated_original_code = {
             original_module_path: ValidCode(
                 source_code=original_module_code, normalized_code=normalized_original_module_code
             )
@@ -457,13 +468,15 @@ class Optimizer:
             # GLOBAL RANKING: Rank all functions together before optimizing
             globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
             # Cache for module preparation (avoid re-parsing same files)
-            prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module]] = {}
+            prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
                 # Prepare module if not already cached
                 if original_module_path not in prepared_modules:
-                    module_prep_result = self.prepare_module_for_optimization(original_module_path)
+                    module_prep_result = self.prepare_module_for_optimization(
+                        original_module_path, language=function_to_optimize.language
+                    )
                     if module_prep_result is None:
                         logger.warning(f"Skipping functions in {original_module_path} due to preparation error")
                         continue
