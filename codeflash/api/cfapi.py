@@ -349,14 +349,14 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
         if req.status_code >= 500:
             logger.error(f"Server error getting blocklisted functions: {req.status_code}")
             sentry_sdk.capture_message(f"Server error in verify-existing-optimizations: {req.status_code}")
-        elif req.status_code == 401:
-            logger.debug(f"Not authorized to check blocklisted functions for {owner}/{repo} PR #{pr_number}")
-        elif req.status_code == 404:
-            logger.debug(f"PR #{pr_number} not found for {owner}/{repo}")
-        elif not req.ok:
-            logger.warning(f"Unexpected response {req.status_code} from verify-existing-optimizations")
-
+            return {}
         if not req.ok:
+            if req.status_code == 401:
+                logger.debug(f"Not authorized to check blocklisted functions for {owner}/{repo} PR #{pr_number}")
+            elif req.status_code == 404:
+                logger.debug(f"PR #{pr_number} not found for {owner}/{repo}")
+            else:
+                logger.warning(f"Unexpected response {req.status_code} from verify-existing-optimizations")
             return {}
 
         content: dict[str, list[str]] = req.json()
