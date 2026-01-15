@@ -274,6 +274,7 @@ function capture(funcName, fn, ...args) {
  * @throws {Error} - Re-throws any error from the function
  */
 function capturePerf(funcName, fn, ...args) {
+    // TODO for claude: The invocationCounter variable should not be a global var. It should be a map of the lineId to the invocation counter with it starting from 0. The idea is to know if a lineId is called multiple times dynamically like in a loop, we can differentiate between them
     const invocationId = `${lineId}_${invocationCounter}`;
     invocationCounter++;
 

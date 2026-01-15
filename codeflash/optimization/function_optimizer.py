@@ -461,11 +461,17 @@ class FunctionOptimizer:
             # e.g., for source at /project/fibonacci.js and tests at /project/tests/
             # the relative path should be ../fibonacci
             try:
+                # TODO for claude: The absolute path resolution should happen when the file paths are initially read. not here
+                # Resolve both paths to absolute to ensure consistent relative path calculation
+                source_file_abs = self.function_to_optimize.file_path.resolve().with_suffix("")
+                tests_root_abs = test_cfg.tests_root.resolve()
                 # Use os.path.relpath to compute relative path from tests_root to source file
-                rel_path = os.path.relpath(
-                    str(self.function_to_optimize.file_path.with_suffix("")), str(test_cfg.tests_root)
-                )
+                rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
                 self.original_module_path = rel_path
+                logger.debug(
+                    f"!lsp|JS module path: source={source_file_abs}, "
+                    f"tests_root={tests_root_abs}, rel_path={rel_path}"
+                )
             except ValueError:
                 # Fallback if paths are on different drives (Windows)
                 rel_path = self.function_to_optimize.file_path.relative_to(self.project_root)
