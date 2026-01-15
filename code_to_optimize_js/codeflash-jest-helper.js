@@ -4,16 +4,20 @@
  * This module provides a unified approach to instrumenting JavaScript tests
  * for both behavior verification and performance measurement.
  *
- * Unlike Python which has separate instrumentation methods for generated
- * vs existing tests, this helper works identically for ALL JavaScript tests.
- *
- * Uses SQLite for consistent data format with Python implementation.
+ * The instrumentation mirrors Python's codeflash implementation:
+ * - Static identifiers (testModule, testFunction, lineId) are passed at instrumentation time
+ * - Dynamic invocation counter increments only when same call site is seen again (e.g., in loops)
+ * - Uses hrtime for nanosecond precision timing
+ * - SQLite for consistent data format with Python implementation
  *
  * Usage:
  *   const codeflash = require('./codeflash-jest-helper');
  *
- *   // Wrap function calls to capture behavior
- *   const result = codeflash.capture('functionName', targetFunction, arg1, arg2);
+ *   // For behavior verification (writes to SQLite):
+ *   const result = codeflash.capture('functionName', lineId, targetFunction, arg1, arg2);
+ *
+ *   // For performance benchmarking (stdout only):
+ *   const result = codeflash.capturePerf('functionName', lineId, targetFunction, arg1, arg2);
  *
  * Environment Variables:
  *   CODEFLASH_OUTPUT_FILE - Path to write results SQLite file
@@ -24,7 +28,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { performance } = require('perf_hooks');
 
 // Load the codeflash serializer for robust value serialization
 const serializer = require('./codeflash-serializer');
@@ -46,16 +49,73 @@ const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX || '1', 10);
 const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION || '0';
 const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE || '';
 
-// Current test context
+// Current test context (set by Jest hooks)
 let currentTestName = null;
-let invocationCounter = 0;
-let lineId = '0';
+
+// Invocation counter map: tracks how many times each testId has been seen
+// Key: testId (testModule:testClass:testFunction:lineId:loopIndex)
+// Value: count (starts at 0, increments each time same key is seen)
+const invocationCounterMap = new Map();
 
 // Results buffer (for JSON fallback)
 const results = [];
 
 // SQLite database (lazy initialized)
 let db = null;
+
+/**
+ * Get high-resolution time in nanoseconds.
+ * Prefers process.hrtime.bigint() for nanosecond precision,
+ * falls back to performance.now() * 1e6 for non-Node environments.
+ *
+ * @returns {bigint|number} - Time in nanoseconds
+ */
+function getTimeNs() {
+    if (typeof process !== 'undefined' && process.hrtime && process.hrtime.bigint) {
+        return process.hrtime.bigint();
+    }
+    // Fallback to performance.now() in milliseconds, converted to nanoseconds
+    const { performance } = require('perf_hooks');
+    return BigInt(Math.floor(performance.now() * 1_000_000));
+}
+
+/**
+ * Calculate duration in nanoseconds.
+ *
+ * @param {bigint} start - Start time in nanoseconds
+ * @param {bigint} end - End time in nanoseconds
+ * @returns {number} - Duration in nanoseconds (as Number for SQLite compatibility)
+ */
+function getDurationNs(start, end) {
+    const duration = end - start;
+    // Convert to Number for SQLite storage (SQLite INTEGER is 64-bit)
+    return Number(duration);
+}
+
+/**
+ * Get or create invocation index for a testId.
+ * This mirrors Python's index tracking per wrapper function.
+ *
+ * @param {string} testId - Unique test identifier
+ * @returns {number} - Current invocation index (0-based)
+ */
+function getInvocationIndex(testId) {
+    const currentIndex = invocationCounterMap.get(testId);
+    if (currentIndex === undefined) {
+        invocationCounterMap.set(testId, 0);
+        return 0;
+    }
+    invocationCounterMap.set(testId, currentIndex + 1);
+    return currentIndex + 1;
+}
+
+/**
+ * Reset invocation counter for a test.
+ * Called at the start of each test to ensure consistent indexing.
+ */
+function resetInvocationCounters() {
+    invocationCounterMap.clear();
+}
 
 /**
  * Initialize the SQLite database.
@@ -86,15 +146,6 @@ function initDatabase() {
 
 /**
  * Safely serialize a value for storage.
- * Uses the codeflash-serializer which:
- * - Prefers V8 serialization (fast, handles all JS types natively)
- * - Falls back to msgpack with custom extensions (for Bun/browser)
- *
- * This provides robust serialization for:
- * - All primitive types (including NaN, Infinity, BigInt, Symbol)
- * - Complex objects (Map, Set, Date, RegExp, Error)
- * - TypedArrays and ArrayBuffer
- * - Circular references
  *
  * @param {any} value - Value to serialize
  * @returns {Buffer} - Serialized value as Buffer
@@ -103,8 +154,6 @@ function safeSerialize(value) {
     try {
         return serializer.serialize(value);
     } catch (e) {
-        // If serialization fails, return a JSON error marker
-        // This should be rare with the robust serializer
         console.warn('[codeflash] Serialization failed:', e.message);
         return Buffer.from(JSON.stringify({ __type: 'SerializationError', error: e.message }));
     }
@@ -112,7 +161,6 @@ function safeSerialize(value) {
 
 /**
  * Safely deserialize a buffer back to a value.
- * Uses the codeflash-serializer to restore the original value.
  *
  * @param {Buffer|Uint8Array} buffer - Serialized buffer
  * @returns {any} - Deserialized value
@@ -129,19 +177,17 @@ function safeDeserialize(buffer) {
 /**
  * Record a test result to SQLite or JSON buffer.
  *
+ * @param {string} testModulePath - Test module path
+ * @param {string|null} testClassName - Test class name (null for Jest)
+ * @param {string} testFunctionName - Test function name
  * @param {string} funcName - Name of the function being tested
+ * @param {string} invocationId - Unique invocation identifier (lineId_index)
  * @param {Array} args - Arguments passed to the function
  * @param {any} returnValue - Return value from the function
  * @param {Error|null} error - Error thrown by the function (if any)
  * @param {number} durationNs - Execution time in nanoseconds
  */
-function recordResult(funcName, args, returnValue, error, durationNs) {
-    const invocationId = `${lineId}_${invocationCounter}`;
-    invocationCounter++;
-
-    // Get test module path from file being tested or env
-    const testModulePath = TEST_MODULE || currentTestName || 'unknown';
-
+function recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, returnValue, error, durationNs) {
     // Serialize the return value (args, kwargs (empty for JS), return_value) like Python does
     const serializedValue = error
         ? safeSerialize(error)
@@ -154,12 +200,12 @@ function recordResult(funcName, args, returnValue, error, durationNs) {
             `);
             stmt.run(
                 testModulePath,           // test_module_path
-                null,                     // test_class_name (Jest doesn't use classes like Python)
-                currentTestName,          // test_function_name
+                testClassName,            // test_class_name
+                testFunctionName,         // test_function_name
                 funcName,                 // function_getting_tested
                 LOOP_INDEX,               // loop_index
                 invocationId,             // iteration_id
-                Math.round(durationNs),   // runtime (nanoseconds)
+                durationNs,               // runtime (nanoseconds) - no rounding
                 serializedValue,          // return_value (serialized)
                 'function_call'           // verification_type
             );
@@ -168,12 +214,12 @@ function recordResult(funcName, args, returnValue, error, durationNs) {
             // Fall back to JSON
             results.push({
                 testModulePath,
-                testClassName: null,
-                testFunctionName: currentTestName,
+                testClassName,
+                testFunctionName,
                 funcName,
                 loopIndex: LOOP_INDEX,
                 iterationId: invocationId,
-                durationNs: Math.round(durationNs),
+                durationNs,
                 returnValue: error ? null : returnValue,
                 error: error ? { name: error.name, message: error.message } : null,
                 verificationType: 'function_call'
@@ -183,42 +229,60 @@ function recordResult(funcName, args, returnValue, error, durationNs) {
         // JSON fallback
         results.push({
             testModulePath,
-            testClassName: null,
-            testFunctionName: currentTestName,
+            testClassName,
+            testFunctionName,
             funcName,
             loopIndex: LOOP_INDEX,
             iterationId: invocationId,
-            durationNs: Math.round(durationNs),
+            durationNs,
             returnValue: error ? null : returnValue,
             error: error ? { name: error.name, message: error.message } : null,
             verificationType: 'function_call'
         });
     }
-
-    // Print stdout tag like Python does for test identification
-    const testClassName = '';
-    const testStdoutTag = `${testModulePath}:${testClassName}${currentTestName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
-    console.log(`!$######${testStdoutTag}######$!`);
 }
 
 /**
  * Capture a function call with full behavior tracking.
  *
  * This is the main API for instrumenting function calls for BEHAVIOR verification.
- * It captures inputs (after call, to detect mutations), outputs, errors, and timing.
+ * It captures inputs, outputs, errors, and timing.
  * Results are written to SQLite for comparison between original and optimized code.
  *
- * @param {string} funcName - Name of the function being tested
+ * Static parameters (funcName, lineId) are determined at instrumentation time.
+ * The lineId enables tracking when the same call site is invoked multiple times (e.g., in loops).
+ *
+ * @param {string} funcName - Name of the function being tested (static)
+ * @param {string} lineId - Line number identifier in test file (static)
  * @param {Function} fn - The function to call
  * @param {...any} args - Arguments to pass to the function
  * @returns {any} - The function's return value
  * @throws {Error} - Re-throws any error from the function
  */
-function capture(funcName, fn, ...args) {
+function capture(funcName, lineId, fn, ...args) {
     // Initialize database on first capture
     initDatabase();
 
-    const startTime = performance.now();
+    // Get test context
+    const testModulePath = TEST_MODULE || currentTestName || 'unknown';
+    const testClassName = null;  // Jest doesn't use classes like Python
+    const testFunctionName = currentTestName || 'unknown';
+
+    // Create testId for invocation tracking (matches Python format)
+    const testId = `${testModulePath}:${testClassName}:${testFunctionName}:${lineId}:${LOOP_INDEX}`;
+
+    // Get invocation index (increments if same testId seen again)
+    const invocationIndex = getInvocationIndex(testId);
+    const invocationId = `${lineId}_${invocationIndex}`;
+
+    // Format stdout tag (matches Python format)
+    const testStdoutTag = `${testModulePath}:${testClassName ? testClassName + '.' : ''}${testFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
+
+    // Print start tag
+    console.log(`!$######${testStdoutTag}######$!`);
+
+    // Timing with nanosecond precision
+    const startTime = getTimeNs();
     let returnValue;
     let error = null;
 
@@ -229,16 +293,18 @@ function capture(funcName, fn, ...args) {
         if (returnValue instanceof Promise) {
             return returnValue.then(
                 (resolved) => {
-                    const endTime = performance.now();
-                    const durationNs = (endTime - startTime) * 1_000_000;
-                    // Note: args is captured AFTER the call to detect mutations
-                    recordResult(funcName, args, resolved, null, durationNs);
+                    const endTime = getTimeNs();
+                    const durationNs = getDurationNs(startTime, endTime);
+                    recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, resolved, null, durationNs);
+                    // Print end tag (no duration for behavior mode)
+                    console.log(`!######${testStdoutTag}######!`);
                     return resolved;
                 },
                 (err) => {
-                    const endTime = performance.now();
-                    const durationNs = (endTime - startTime) * 1_000_000;
-                    recordResult(funcName, args, null, err, durationNs);
+                    const endTime = getTimeNs();
+                    const durationNs = getDurationNs(startTime, endTime);
+                    recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, null, err, durationNs);
+                    console.log(`!######${testStdoutTag}######!`);
                     throw err;
                 }
             );
@@ -247,10 +313,12 @@ function capture(funcName, fn, ...args) {
         error = e;
     }
 
-    const endTime = performance.now();
-    const durationNs = (endTime - startTime) * 1_000_000;
-    // Note: args is captured AFTER the call to detect mutations (same as Python)
-    recordResult(funcName, args, returnValue, error, durationNs);
+    const endTime = getTimeNs();
+    const durationNs = getDurationNs(startTime, endTime);
+    recordResult(testModulePath, testClassName, testFunctionName, funcName, invocationId, args, returnValue, error, durationNs);
+
+    // Print end tag (no duration for behavior mode, matching Python)
+    console.log(`!######${testStdoutTag}######!`);
 
     if (error) throw error;
     return returnValue;
@@ -263,64 +331,78 @@ function capture(funcName, fn, ...args) {
  * It prints start/end tags to stdout (no SQLite writes, no serialization overhead).
  * Used when we've already verified behavior and just need accurate timing.
  *
+ * The timing measurement is done exactly around the function call for accuracy.
+ *
  * Output format matches Python's codeflash_performance wrapper:
  * Start: !$######test_module:test_class.test_name:func_name:loop_index:invocation_id######$!
  * End:   !######test_module:test_class.test_name:func_name:loop_index:invocation_id:duration_ns######!
  *
- * @param {string} funcName - Name of the function being tested
+ * @param {string} funcName - Name of the function being tested (static)
+ * @param {string} lineId - Line number identifier in test file (static)
  * @param {Function} fn - The function to call
  * @param {...any} args - Arguments to pass to the function
  * @returns {any} - The function's return value
  * @throws {Error} - Re-throws any error from the function
  */
-function capturePerf(funcName, fn, ...args) {
-    // TODO for claude: The invocationCounter variable should not be a global var. It should be a map of the lineId to the invocation counter with it starting from 0. The idea is to know if a lineId is called multiple times dynamically like in a loop, we can differentiate between them
-    const invocationId = `${lineId}_${invocationCounter}`;
-    invocationCounter++;
-
+function capturePerf(funcName, lineId, fn, ...args) {
     // Get test context
     const testModulePath = TEST_MODULE || currentTestName || 'unknown';
-    const testClassName = '';  // Jest doesn't use classes like Python
+    const testClassName = null;  // Jest doesn't use classes like Python
+    const testFunctionName = currentTestName || 'unknown';
 
-    // Format: test_module:test_class.test_name:func_name:loop_index:invocation_id
-    const testStdoutTag = `${testModulePath}:${testClassName}${currentTestName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
+    // Create testId for invocation tracking (matches Python format)
+    const testId = `${testModulePath}:${testClassName}:${testFunctionName}:${lineId}:${LOOP_INDEX}`;
+
+    // Get invocation index (increments if same testId seen again)
+    const invocationIndex = getInvocationIndex(testId);
+    const invocationId = `${lineId}_${invocationIndex}`;
+
+    // Format stdout tag (matches Python format)
+    const testStdoutTag = `${testModulePath}:${testClassName ? testClassName + '.' : ''}${testFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
 
     // Print start tag
     console.log(`!$######${testStdoutTag}######$!`);
 
-    const startTime = performance.now();
+    // Timing with nanosecond precision - exactly around the function call
     let returnValue;
     let error = null;
+    let durationNs;
 
     try {
+        const startTime = getTimeNs();
         returnValue = fn(...args);
+        const endTime = getTimeNs();
+        durationNs = getDurationNs(startTime, endTime);
 
         // Handle promises (async functions)
         if (returnValue instanceof Promise) {
             return returnValue.then(
                 (resolved) => {
-                    const endTime = performance.now();
-                    const durationNs = Math.round((endTime - startTime) * 1_000_000);
+                    // For async, we measure until resolution
+                    const asyncEndTime = getTimeNs();
+                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
                     // Print end tag with timing
-                    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
                     return resolved;
                 },
                 (err) => {
-                    const endTime = performance.now();
-                    const durationNs = Math.round((endTime - startTime) * 1_000_000);
+                    const asyncEndTime = getTimeNs();
+                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
                     // Print end tag with timing even on error
-                    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
                     throw err;
                 }
             );
         }
     } catch (e) {
+        const endTime = getTimeNs();
+        // For sync errors, we still need to calculate duration
+        // Use a fallback if we didn't capture startTime yet
+        durationNs = 0;
         error = e;
     }
 
-    const endTime = performance.now();
-    const durationNs = Math.round((endTime - startTime) * 1_000_000);
-    // Print end tag with timing
+    // Print end tag with timing (no rounding)
     console.log(`!######${testStdoutTag}:${durationNs}######!`);
 
     if (error) throw error;
@@ -331,12 +413,13 @@ function capturePerf(funcName, fn, ...args) {
  * Capture multiple invocations for benchmarking.
  *
  * @param {string} funcName - Name of the function being tested
+ * @param {string} lineId - Line number identifier
  * @param {Function} fn - The function to call
  * @param {Array<Array>} argsList - List of argument arrays to test
  * @returns {Array} - Array of return values
  */
-function captureMultiple(funcName, fn, argsList) {
-    return argsList.map(args => capture(funcName, fn, ...args));
+function captureMultiple(funcName, lineId, fn, argsList) {
+    return argsList.map(args => capture(funcName, lineId, fn, ...args));
 }
 
 /**
@@ -379,7 +462,7 @@ function writeResults() {
  */
 function clearResults() {
     results.length = 0;
-    invocationCounter = 0;
+    resetInvocationCounters();
 }
 
 /**
@@ -400,7 +483,7 @@ function getResults() {
  */
 function setTestName(name) {
     currentTestName = name;
-    invocationCounter = 0;
+    resetInvocationCounters();
 }
 
 // Jest lifecycle hooks - these run automatically when this module is imported
@@ -412,8 +495,8 @@ if (typeof beforeEach !== 'undefined') {
         } catch (e) {
             currentTestName = 'unknown';
         }
-        invocationCounter = 0;
-        lineId = String(Date.now() % 1000000); // Unique line ID per test
+        // Reset invocation counters for each test
+        resetInvocationCounters();
     });
 }
 
@@ -435,6 +518,8 @@ module.exports = {
     safeSerialize,
     safeDeserialize,
     initDatabase,
+    resetInvocationCounters,
+    getInvocationIndex,
     // Serializer info
     getSerializerType: serializer.getSerializerType,
     // Constants
