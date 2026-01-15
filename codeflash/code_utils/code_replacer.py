@@ -441,7 +441,18 @@ def replace_function_definitions_in_module(
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
     should_add_global_assignments: bool = True,  # noqa: FBT001, FBT002
+    function_to_optimize: Optional["FunctionToOptimize"] = None,
 ) -> bool:
+    # Route to language-specific implementation for non-Python languages
+    if optimized_code.language and optimized_code.language != "python":
+        return replace_function_definitions_for_language(
+            function_names,
+            optimized_code,
+            module_abspath,
+            project_root_path,
+            function_to_optimize,
+        )
+
     source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
 
@@ -459,6 +470,78 @@ def replace_function_definitions_in_module(
     )
     if is_zero_diff(source_code, new_code):
         return False
+    module_abspath.write_text(new_code, encoding="utf8")
+    return True
+
+
+def replace_function_definitions_for_language(
+    function_names: list[str],
+    optimized_code: CodeStringsMarkdown,
+    module_abspath: Path,
+    project_root_path: Path,
+    function_to_optimize: Optional["FunctionToOptimize"] = None,
+) -> bool:
+    """Replace function definitions for non-Python languages.
+
+    Uses the language support abstraction to perform code replacement.
+
+    Args:
+        function_names: List of qualified function names to replace.
+        optimized_code: The optimized code to apply.
+        module_abspath: Path to the module file.
+        project_root_path: Root of the project.
+        function_to_optimize: The function being optimized (needed for line info).
+
+    Returns:
+        True if the code was modified, False if no changes.
+    """
+    from codeflash.languages import get_language_support
+    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+
+    source_code: str = module_abspath.read_text(encoding="utf8")
+    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
+
+    if not code_to_apply.strip():
+        return False
+
+    # Get language support
+    language = Language(optimized_code.language)
+    lang_support = get_language_support(language)
+
+    # If we have function_to_optimize with line info, use it for precise replacement
+    if function_to_optimize and function_to_optimize.starting_line and function_to_optimize.ending_line:
+        parents = tuple(
+            ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents
+        )
+        func_info = FunctionInfo(
+            name=function_to_optimize.function_name,
+            file_path=module_abspath,
+            start_line=function_to_optimize.starting_line,
+            end_line=function_to_optimize.ending_line,
+            parents=parents,
+            is_async=function_to_optimize.is_async,
+            language=language,
+        )
+        new_code = lang_support.replace_function(source_code, func_info, code_to_apply)
+    else:
+        # Fallback: find function in source and replace
+        # This is less precise but works when we don't have line info
+        functions = lang_support.discover_functions(module_abspath)
+        for func in functions:
+            qualified_name = func.qualified_name
+            if qualified_name in function_names or func.name in function_names:
+                new_code = lang_support.replace_function(source_code, func, code_to_apply)
+                source_code = new_code  # Continue with modified source for multiple replacements
+                break
+        else:
+            # No matching function found
+            logger.warning(f"Could not find function {function_names} in {module_abspath}")
+            return False
+
+    # Check if there was actually a change
+    if source_code.strip() == new_code.strip():
+        return False
+
     module_abspath.write_text(new_code, encoding="utf8")
     return True
 

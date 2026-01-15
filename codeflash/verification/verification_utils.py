@@ -75,8 +75,28 @@ class TestConfig:
     pytest_cmd: str = "pytest"
     benchmark_tests_root: Optional[Path] = None
     use_cache: bool = True
+    _language: Optional[str] = None  # Language identifier for multi-language support
 
     @property
     def test_framework(self) -> str:
-        """Always returns 'pytest' as we use pytest for all tests."""
+        """Returns the appropriate test framework based on language.
+
+        Returns 'jest' for JavaScript/TypeScript, 'pytest' for Python (default).
+        """
+        if self._language in ("javascript", "typescript"):
+            return "jest"
         return "pytest"
+
+    def set_language(self, language: str) -> None:
+        """Set the language for this test config.
+
+        Args:
+            language: Language identifier (e.g., "python", "javascript").
+
+        """
+        self._language = language
+
+    @property
+    def language(self) -> Optional[str]:
+        """Get the current language setting."""
+        return self._language

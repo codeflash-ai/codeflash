@@ -26,6 +26,9 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.languages import get_language_support, get_supported_extensions
+from codeflash.languages.base import Language
+from codeflash.languages.registry import is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -176,6 +179,92 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
+
+# =============================================================================
+# Multi-language support helpers
+# =============================================================================
+
+
+def get_files_for_language(module_root_path: Path, language: Language | None = None) -> list[Path]:
+    """Get all source files for supported languages.
+
+    Args:
+        module_root_path: Root path to search for source files.
+        language: Optional specific language to filter for. If None, includes all supported languages.
+
+    Returns:
+        List of file paths matching supported extensions.
+
+    """
+    if language is not None:
+        support = get_language_support(language)
+        extensions = support.file_extensions
+    else:
+        extensions = tuple(get_supported_extensions())
+
+    files = []
+    for ext in extensions:
+        pattern = f"*{ext}"
+        files.extend(module_root_path.rglob(pattern))
+    return files
+
+
+def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
+    """Find all optimizable functions in a Python file using AST parsing.
+
+    This is the original Python implementation preserved for backward compatibility.
+    """
+    functions: dict[Path, list[FunctionToOptimize]] = {}
+    with file_path.open(encoding="utf8") as f:
+        try:
+            ast_module = ast.parse(f.read())
+        except Exception as e:
+            if DEBUG_MODE:
+                logger.exception(e)
+            return functions
+        function_name_visitor = FunctionWithReturnStatement(file_path)
+        function_name_visitor.visit(ast_module)
+        functions[file_path] = function_name_visitor.functions
+    return functions
+
+
+def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
+    """Find all optimizable functions using the language support abstraction.
+
+    This function uses the registered language support for the file's language
+    to discover functions, then converts them to FunctionToOptimize instances.
+    """
+    from codeflash.languages.base import FunctionFilterCriteria
+
+    functions: dict[Path, list[FunctionToOptimize]] = {}
+
+    try:
+        lang_support = get_language_support(file_path)
+        criteria = FunctionFilterCriteria(require_return=True)
+        function_infos = lang_support.discover_functions(file_path, criteria)
+
+        ftos = []
+        for func_info in function_infos:
+            parents = [FunctionParent(p.name, p.type) for p in func_info.parents]
+            ftos.append(
+                FunctionToOptimize(
+                    function_name=func_info.name,
+                    file_path=func_info.file_path,
+                    parents=parents,
+                    starting_line=func_info.start_line,
+                    ending_line=func_info.end_line,
+                    starting_col=func_info.start_col,
+                    ending_col=func_info.end_col,
+                    is_async=func_info.is_async,
+                    language=func_info.language.value,
+                )
+            )
+        functions[file_path] = ftos
+    except Exception as e:
+        logger.debug(f"Failed to discover functions in {file_path}: {e}")
+
+    return functions
 
 
 def get_functions_to_optimize(
@@ -362,9 +451,21 @@ def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str
     return functions
 
 
-def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[FunctionToOptimize]]:
+def get_all_files_and_functions(
+    module_root_path: Path, language: Language | None = None
+) -> dict[str, list[FunctionToOptimize]]:
+    """Get all optimizable functions from files in the module root.
+
+    Args:
+        module_root_path: Root path to search for source files.
+        language: Optional specific language to filter for. If None, includes all supported languages.
+
+    Returns:
+        Dictionary mapping file paths to lists of FunctionToOptimize.
+
+    """
     functions: dict[str, list[FunctionToOptimize]] = {}
-    for file_path in module_root_path.rglob("*.py"):
+    for file_path in get_files_for_language(module_root_path, language):
         # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
@@ -375,18 +476,34 @@ def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[Functi
 
 
 def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    functions: dict[Path, list[FunctionToOptimize]] = {}
-    with file_path.open(encoding="utf8") as f:
-        try:
-            ast_module = ast.parse(f.read())
-        except Exception as e:
-            if DEBUG_MODE:
-                logger.exception(e)
-            return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
-        function_name_visitor.visit(ast_module)
-        functions[file_path] = function_name_visitor.functions
-    return functions
+    """Find all optimizable functions in a file, routing to the appropriate language handler.
+
+    This function checks if the file extension is supported and routes to either
+    the Python-specific implementation (for backward compatibility) or the
+    language support abstraction for other languages.
+
+    Args:
+        file_path: Path to the source file.
+
+    Returns:
+        Dictionary mapping file path to list of FunctionToOptimize.
+
+    """
+    # Check if the file extension is supported
+    if not is_language_supported(file_path):
+        return {}
+
+    try:
+        lang_support = get_language_support(file_path)
+    except Exception:
+        return {}
+
+    # Route to Python-specific implementation for backward compatibility
+    if lang_support.language == Language.PYTHON:
+        return _find_all_functions_in_python_file(file_path)
+
+    # Use language support abstraction for other languages
+    return _find_all_functions_via_language_support(file_path)
 
 
 def get_all_replay_test_functions(

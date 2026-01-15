@@ -36,6 +36,11 @@ from codeflash.languages.registry import (
     register_language,
 )
 
+# Import language support modules to trigger auto-registration
+# This ensures all supported languages are available when this package is imported
+from codeflash.languages.python import PythonSupport  # noqa: F401
+from codeflash.languages.javascript import JavaScriptSupport  # noqa: F401
+
 __all__ = [
     # Base types
     "Language",

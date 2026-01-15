@@ -23,7 +23,7 @@ from re import Pattern
 from typing import Annotated, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -214,8 +214,16 @@ class ProcessedBenchmarkInfo:
 
 
 class CodeString(BaseModel):
-    code: Annotated[str, AfterValidator(validate_python_code)]
+    code: str
     file_path: Optional[Path] = None
+    language: str = "python"  # Language for validation - only Python code is validated
+
+    @model_validator(mode="after")
+    def validate_code_syntax(self) -> "CodeString":
+        """Validate code syntax for Python only."""
+        if self.language == "python":
+            validate_python_code(self.code)
+        return self
 
 
 def get_code_block_splitter(file_path: Path) -> str:

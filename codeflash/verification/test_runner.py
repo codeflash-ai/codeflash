@@ -22,6 +22,88 @@ BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
 
 
+def run_jest_behavioral_tests(
+    test_paths: TestFiles,
+    test_env: dict[str, str],
+    cwd: Path,
+    *,
+    timeout: int | None = None,
+) -> tuple[Path, subprocess.CompletedProcess, None, None]:
+    """Run Jest tests and return results in a format compatible with pytest output.
+
+    Args:
+        test_paths: TestFiles object containing test file information.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result, None, None).
+
+    """
+    result_file_path = get_run_tmp_file(Path("jest_results.xml"))
+
+    # Get test files to run
+    test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
+
+    # Build Jest command
+    jest_cmd = [
+        "npx",
+        "jest",
+        "--reporters=default",
+        "--reporters=jest-junit",
+        "--runInBand",  # Run tests serially for consistent timing
+        "--forceExit",
+    ]
+
+    # Add test pattern if we have specific files
+    if test_files:
+        # Jest uses regex for test path matching
+        test_pattern = "|".join(str(Path(f).name) for f in test_files)
+        jest_cmd.append(f"--testPathPattern={test_pattern}")
+
+    if timeout:
+        jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
+
+    # Set up environment
+    jest_env = test_env.copy()
+    jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
+    jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
+    jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
+
+    logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
+
+    try:
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=cwd,
+            env=jest_env,
+            timeout=timeout or 600,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        logger.debug(f"Jest result: returncode={result.returncode}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Jest tests timed out after {timeout}s")
+        result = subprocess.CompletedProcess(
+            args=jest_cmd,
+            returncode=-1,
+            stdout="",
+            stderr="Test execution timed out",
+        )
+    except FileNotFoundError:
+        logger.error("Jest not found. Make sure Jest is installed (npm install jest)")
+        result = subprocess.CompletedProcess(
+            args=jest_cmd,
+            returncode=-1,
+            stdout="",
+            stderr="Jest not found. Run: npm install jest jest-junit",
+        )
+
+    return result_file_path, result, None, None
+
+
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
 ) -> subprocess.CompletedProcess:
@@ -46,6 +128,8 @@ def run_behavioral_tests(
     enable_coverage: bool = False,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
+    if test_framework == "jest":
+        return run_jest_behavioral_tests(test_paths, test_env, cwd, timeout=pytest_timeout)
     if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:

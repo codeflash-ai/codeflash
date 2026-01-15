@@ -554,11 +554,112 @@ def filter_test_files_by_imports(
     return filtered_map
 
 
+def _detect_language_from_functions(
+    file_to_funcs: dict[Path, list[FunctionToOptimize]] | None,
+) -> str | None:
+    """Detect language from the functions to optimize.
+
+    Args:
+        file_to_funcs: Dictionary mapping file paths to functions.
+
+    Returns:
+        Language string (e.g., "python", "javascript") or None if not determinable.
+
+    """
+    if not file_to_funcs:
+        return None
+
+    for funcs in file_to_funcs.values():
+        if funcs:
+            return funcs[0].language
+    return None
+
+
+def discover_tests_for_language(
+    cfg: TestConfig,
+    language: str,
+    file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None,
+) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    """Discover tests using language-specific support.
+
+    Args:
+        cfg: Test configuration.
+        language: Language identifier (e.g., "javascript").
+        file_to_funcs_to_optimize: Dictionary mapping file paths to functions.
+
+    Returns:
+        Tuple of (function_to_tests_map, num_tests, num_replay_tests).
+
+    """
+    from codeflash.languages import get_language_support
+    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+
+    try:
+        lang_support = get_language_support(Language(language))
+    except Exception:
+        logger.warning(f"Unsupported language {language}, returning empty test map")
+        return {}, 0, 0
+
+    # Convert FunctionToOptimize to FunctionInfo for the language support API
+    function_infos: list[FunctionInfo] = []
+    if file_to_funcs_to_optimize:
+        for funcs in file_to_funcs_to_optimize.values():
+            for func in funcs:
+                parents = tuple(ParentInfo(p.name, p.type) for p in func.parents)
+                function_infos.append(
+                    FunctionInfo(
+                        name=func.function_name,
+                        file_path=func.file_path,
+                        start_line=func.starting_line or 0,
+                        end_line=func.ending_line or 0,
+                        start_col=func.starting_col,
+                        end_col=func.ending_col,
+                        is_async=func.is_async,
+                        is_method=bool(func.parents and any(p.type == "ClassDef" for p in func.parents)),
+                        class_name=func.parents[0].name if func.parents and func.parents[0].type == "ClassDef" else None,
+                        parents=parents,
+                        language=Language(language),
+                    )
+                )
+
+    # Use language support to discover tests
+    test_map = lang_support.discover_tests(cfg.tests_root, function_infos)
+
+    # Convert TestInfo back to FunctionCalledInTest format
+    function_to_tests: dict[str, set[FunctionCalledInTest]] = defaultdict(set)
+    num_tests = 0
+
+    for qualified_name, test_infos in test_map.items():
+        for test_info in test_infos:
+            function_to_tests[qualified_name].add(
+                FunctionCalledInTest(
+                    tests_in_file=TestsInFile(
+                        test_file=test_info.test_file,
+                        test_class=test_info.test_class,
+                        test_function=test_info.test_name,
+                        test_type=TestType.EXISTING_UNIT_TEST,
+                    ),
+                    position=CodePosition(line_no=0, col_no=0),
+                )
+            )
+            num_tests += 1
+
+    return dict(function_to_tests), num_tests, 0
+
+
 def discover_unit_tests(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    # Detect language from functions being optimized
+    language = _detect_language_from_functions(file_to_funcs_to_optimize)
+
+    # Route to language-specific test discovery for non-Python languages
+    if language and language != "python":
+        return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
+
+    # Existing Python logic
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
     strategy = framework_strategies.get(cfg.test_framework, None)
     if not strategy:

@@ -419,6 +419,14 @@ class Optimizer:
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
+
+        # Set language on TestConfig based on discovered functions
+        if file_to_funcs_to_optimize:
+            for funcs in file_to_funcs_to_optimize.values():
+                if funcs and funcs[0].language:
+                    self.test_cfg.set_language(funcs[0].language)
+                    break
+
         if self.args.all:
             three_min_in_ns = int(1.8e11)
             console.rule()
