@@ -343,18 +343,16 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
                     continue
 
-            # Deserialize return value - try JSON first (for JavaScript), then pickle (for Python)
+            # Deserialize return value
+            # For JavaScript: Skip deserialization - comparison happens in JS land via compare_javascript_test_results
+            # For Python: Use pickle to deserialize
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
                     if is_javascript:
-                        # JavaScript uses JSON serialization
-                        import json
-                        # val[7] might be bytes or string
-                        raw_value = val[7]
-                        if isinstance(raw_value, bytes):
-                            raw_value = raw_value.decode('utf-8')
-                        ret_val = (json.loads(raw_value),)
+                        # JavaScript comparison happens via Node.js script (compare_javascript_test_results)
+                        # Store a marker indicating data exists but is not deserialized in Python
+                        ret_val = ("__javascript_serialized__", val[7])
                     else:
                         # Python uses pickle serialization
                         ret_val = (pickle.loads(val[7]),)
@@ -766,6 +764,7 @@ def parse_test_results(
     coverage_config_file: Path | None,
     code_context: CodeOptimizationContext | None = None,
     run_result: subprocess.CompletedProcess | None = None,
+    skip_sqlite_cleanup: bool = False,
 ) -> tuple[TestResults, CoverageData | None]:
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
@@ -804,7 +803,11 @@ def parse_test_results(
     get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_perf_results.xml")).unlink(missing_ok=True)
-    get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
+
+    # For JavaScript tests, SQLite cleanup is deferred until after comparison
+    # (comparison happens in JavaScript land via compare_javascript_test_results)
+    if not skip_sqlite_cleanup:
+        get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
     all_args = False

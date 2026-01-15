@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import reprlib
+import subprocess
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
@@ -13,6 +16,9 @@ if TYPE_CHECKING:
     from codeflash.models.models import TestResults
 
 INCREASED_RECURSION_LIMIT = 5000
+
+# Path to JavaScript comparison script (relative to codeflash package)
+JAVASCRIPT_COMPARATOR_SCRIPT = Path(__file__).parent.parent / "languages" / "javascript" / "runtime" / "codeflash-compare-results.js"
 
 reprlib_repr = reprlib.Repr()
 reprlib_repr.maxstring = 1500
@@ -137,3 +143,115 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
     if did_all_timeout:
         return False, test_diffs
     return len(test_diffs) == 0, test_diffs
+
+
+def compare_javascript_test_results(
+    original_sqlite_path: Path,
+    candidate_sqlite_path: Path,
+    comparator_script: Path | None = None,
+) -> tuple[bool, list[TestDiff]]:
+    """Compare JavaScript test results using the JavaScript comparator.
+
+    This function calls a Node.js script that:
+    1. Reads serialized behavior data from both SQLite databases
+    2. Deserializes using codeflash-serializer.js
+    3. Compares using codeflash-comparator.js (handles Map, Set, Date, etc. natively)
+    4. Returns comparison results as JSON
+
+    Args:
+        original_sqlite_path: Path to SQLite database with original code results.
+        candidate_sqlite_path: Path to SQLite database with candidate code results.
+        comparator_script: Optional path to the comparison script.
+
+    Returns:
+        Tuple of (all_equivalent, list of TestDiff objects).
+
+    """
+    script_path = comparator_script or JAVASCRIPT_COMPARATOR_SCRIPT
+
+    if not script_path.exists():
+        logger.error(f"JavaScript comparator script not found: {script_path}")
+        return False, []
+
+    if not original_sqlite_path.exists():
+        logger.error(f"Original SQLite database not found: {original_sqlite_path}")
+        return False, []
+
+    if not candidate_sqlite_path.exists():
+        logger.error(f"Candidate SQLite database not found: {candidate_sqlite_path}")
+        return False, []
+
+    try:
+        result = subprocess.run(
+            ["node", str(script_path), str(original_sqlite_path), str(candidate_sqlite_path)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        # Parse the JSON output
+        try:
+            comparison = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JavaScript comparator output: {e}")
+            logger.debug(f"stdout: {result.stdout}")
+            logger.debug(f"stderr: {result.stderr}")
+            return False, []
+
+        # Check for errors
+        if comparison.get("error"):
+            logger.error(f"JavaScript comparator error: {comparison['error']}")
+            return False, []
+
+        # Convert diffs to TestDiff objects
+        test_diffs: list[TestDiff] = []
+        for diff in comparison.get("diffs", []):
+            scope_str = diff.get("scope", "return_value")
+            scope = TestDiffScope.RETURN_VALUE
+            if scope_str == "stdout":
+                scope = TestDiffScope.STDOUT
+            elif scope_str == "did_pass":
+                scope = TestDiffScope.DID_PASS
+
+            test_info = diff.get("test_info", {})
+
+            test_diffs.append(
+                TestDiff(
+                    scope=scope,
+                    original_value=diff.get("original"),
+                    candidate_value=diff.get("candidate"),
+                    test_src_code=None,  # JavaScript tests don't have Python source
+                    candidate_pytest_error=None,
+                    original_pass=True,  # Assume passed if we got results
+                    candidate_pass=diff.get("scope") != "missing",
+                    original_pytest_error=None,
+                )
+            )
+
+            logger.debug(
+                f"JavaScript test diff:\n"
+                f"  Test: {test_info.get('test_function_name', 'unknown')}\n"
+                f"  Function: {test_info.get('function_getting_tested', 'unknown')}\n"
+                f"  Scope: {scope_str}\n"
+                f"  Original: {diff.get('original', 'N/A')[:100]}\n"
+                f"  Candidate: {diff.get('candidate', 'N/A')[:100] if diff.get('candidate') else 'N/A'}"
+            )
+
+        equivalent = comparison.get("equivalent", False)
+
+        logger.info(
+            f"JavaScript comparison: {'equivalent' if equivalent else 'DIFFERENT'} "
+            f"({comparison.get('total_invocations', 0)} invocations, {len(test_diffs)} diffs)"
+        )
+
+        return equivalent, test_diffs
+
+    except subprocess.TimeoutExpired:
+        logger.error("JavaScript comparator timed out")
+        return False, []
+    except FileNotFoundError:
+        logger.error("Node.js not found. Please install Node.js to compare JavaScript test results.")
+        return False, []
+    except Exception as e:
+        logger.error(f"Error running JavaScript comparator: {e}")
+        return False, []

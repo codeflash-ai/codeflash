@@ -2330,7 +2330,24 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+
+            # Use language-appropriate comparison
+            if self.function_to_optimize.language in ("javascript", "typescript"):
+                # JavaScript: Compare using Node.js script (handles Map, Set, Date, etc. natively)
+                from codeflash.verification.equivalence import compare_javascript_test_results
+                from codeflash.code_utils.code_utils import get_run_tmp_file
+
+                original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+                candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
+                match, diffs = compare_javascript_test_results(original_sqlite, candidate_sqlite)
+
+                # Cleanup SQLite files after comparison (deferred from parse_test_results)
+                candidate_sqlite.unlink(missing_ok=True)
+                # Keep original_sqlite for comparing with other candidates
+            else:
+                # Python: Compare using Python comparator
+                match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+
             if match:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
@@ -2488,6 +2505,11 @@ class FunctionOptimizer:
                         console.print(panel)
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
+            # For JavaScript behavior tests, skip SQLite cleanup - files needed for JS-native comparison
+            is_js_behavior = (
+                self.function_to_optimize.language in ("javascript", "typescript")
+                and testing_type == TestingMode.BEHAVIOR
+            )
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
                 test_files=test_files,
@@ -2499,6 +2521,7 @@ class FunctionOptimizer:
                 code_context=code_context,
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
+                skip_sqlite_cleanup=is_js_behavior,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
