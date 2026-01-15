@@ -2,8 +2,6 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from codeflash.code_utils.code_utils import encoded_tokens_len
-
 json_primitive_types = (str, float, int, bool)
 
 
@@ -44,4 +42,7 @@ class Memory:
         return self._messages
 
     def get_total_tokens(self) -> int:
-        return sum(encoded_tokens_len(message["content"]) for message in self._messages)
+        total = 0
+        for message in self._messages:
+            total += len(message["content"]) // 4
+        return total
