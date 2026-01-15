@@ -95,21 +95,22 @@ class FunctionVisitor(cst.CSTVisitor):
 
 
 class FunctionWithReturnStatement(ast.NodeVisitor):
-    def __init__(self, file_path: Path) -> None:
+    def __init__(self, file_path: Path, must_return_a_value: bool = True) -> None:  # noqa: FBT001, FBT002
         self.functions: list[FunctionToOptimize] = []
         self.ast_path: list[FunctionParent] = []
         self.file_path: Path = file_path
+        self.must_return_a_value: bool = must_return_a_value
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         # Check if the function has a return statement and add it to the list
-        if function_has_return_statement(node) and not function_is_a_property(node):
+        if not self.must_return_a_value or (function_has_return_statement(node) and not function_is_a_property(node)):
             self.functions.append(
                 FunctionToOptimize(function_name=node.name, file_path=self.file_path, parents=self.ast_path[:])
             )
 
     def visit_AsyncFunctionDef(self, node: AsyncFunctionDef) -> None:
         # Check if the async function has a return statement and add it to the list
-        if function_has_return_statement(node) and not function_is_a_property(node):
+        if not self.must_return_a_value or (function_has_return_statement(node) and not function_is_a_property(node)):
             self.functions.append(
                 FunctionToOptimize(
                     function_name=node.name, file_path=self.file_path, parents=self.ast_path[:], is_async=True
@@ -182,6 +183,7 @@ def get_functions_to_optimize(
     project_root: Path,
     module_root: Path,
     previous_checkpoint_functions: dict[str, dict[str, str]] | None = None,
+    must_return_a_value: bool = True,  # noqa: FBT001, FBT002
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int, Path | None]:
     assert sum([bool(optimize_all), bool(replay_test), bool(file)]) <= 1, (
         "Only one of optimize_all, replay_test, or file should be provided"
@@ -203,7 +205,9 @@ def get_functions_to_optimize(
             logger.info("!lsp|Finding all functions in the file '%s'…", file)
             console.rule()
             file = Path(file) if isinstance(file, str) else file
-            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(file)
+            functions: dict[Path, list[FunctionToOptimize]] = find_all_functions_in_file(
+                file, must_return_a_value=must_return_a_value
+            )
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -368,7 +372,10 @@ def get_all_files_and_functions(module_root_path: Path) -> dict[str, list[Functi
     return dict(files_list)
 
 
-def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
+def find_all_functions_in_file(
+    file_path: Path,
+    must_return_a_value: bool = True,  # noqa: FBT001, FBT002
+) -> dict[Path, list[FunctionToOptimize]]:
     functions: dict[Path, list[FunctionToOptimize]] = {}
     with file_path.open(encoding="utf8") as f:
         try:
@@ -377,7 +384,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
             if DEBUG_MODE:
                 logger.exception(e)
             return functions
-        function_name_visitor = FunctionWithReturnStatement(file_path)
+        function_name_visitor = FunctionWithReturnStatement(file_path, must_return_a_value=must_return_a_value)
         function_name_visitor.visit(ast_module)
         functions[file_path] = function_name_visitor.functions
     return functions
