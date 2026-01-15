@@ -212,6 +212,8 @@ class AiServiceClient:
         payload = {
             "source_code": source_code,
             "trace_id": trace_id,
+            "dependency_code": "",  # dummy value to please the api endpoint
+            "python_version": "3.12.1",  # dummy value to please the api endpoint
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
