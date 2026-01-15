@@ -1235,7 +1235,7 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
     numerical_names: set[str] = set()
     modules_used: set[str] = set()
 
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 # import numpy or import numpy as np
