@@ -225,8 +225,9 @@ function recordResult(funcName, args, returnValue, error, durationNs) {
 /**
  * Capture a function call with full behavior tracking.
  *
- * This is the main API for instrumenting function calls.
- * It captures inputs, outputs, errors, and timing for every call.
+ * This is the main API for instrumenting function calls for BEHAVIOR verification.
+ * It captures inputs (after call, to detect mutations), outputs, errors, and timing.
+ * Results are written to SQLite for comparison between original and optimized code.
  *
  * @param {string} funcName - Name of the function being tested
  * @param {Function} fn - The function to call
@@ -251,6 +252,7 @@ function capture(funcName, fn, ...args) {
                 (resolved) => {
                     const endTime = performance.now();
                     const durationNs = (endTime - startTime) * 1_000_000;
+                    // Note: args is captured AFTER the call to detect mutations
                     recordResult(funcName, args, resolved, null, durationNs);
                     return resolved;
                 },
@@ -268,7 +270,78 @@ function capture(funcName, fn, ...args) {
 
     const endTime = performance.now();
     const durationNs = (endTime - startTime) * 1_000_000;
+    // Note: args is captured AFTER the call to detect mutations (same as Python)
     recordResult(funcName, args, returnValue, error, durationNs);
+
+    if (error) throw error;
+    return returnValue;
+}
+
+/**
+ * Capture a function call for PERFORMANCE benchmarking only.
+ *
+ * This is a lightweight instrumentation that only measures timing.
+ * It prints start/end tags to stdout (no SQLite writes, no serialization overhead).
+ * Used when we've already verified behavior and just need accurate timing.
+ *
+ * Output format matches Python's codeflash_performance wrapper:
+ * Start: !$######test_module:test_class.test_name:func_name:loop_index:invocation_id######$!
+ * End:   !######test_module:test_class.test_name:func_name:loop_index:invocation_id:duration_ns######!
+ *
+ * @param {string} funcName - Name of the function being tested
+ * @param {Function} fn - The function to call
+ * @param {...any} args - Arguments to pass to the function
+ * @returns {any} - The function's return value
+ * @throws {Error} - Re-throws any error from the function
+ */
+function capturePerf(funcName, fn, ...args) {
+    const invocationId = `${lineId}_${invocationCounter}`;
+    invocationCounter++;
+
+    // Get test context
+    const testModulePath = TEST_MODULE || currentTestName || 'unknown';
+    const testClassName = '';  // Jest doesn't use classes like Python
+
+    // Format: test_module:test_class.test_name:func_name:loop_index:invocation_id
+    const testStdoutTag = `${testModulePath}:${testClassName}${currentTestName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
+
+    // Print start tag
+    console.log(`!$######${testStdoutTag}######$!`);
+
+    const startTime = performance.now();
+    let returnValue;
+    let error = null;
+
+    try {
+        returnValue = fn(...args);
+
+        // Handle promises (async functions)
+        if (returnValue instanceof Promise) {
+            return returnValue.then(
+                (resolved) => {
+                    const endTime = performance.now();
+                    const durationNs = Math.round((endTime - startTime) * 1_000_000);
+                    // Print end tag with timing
+                    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+                    return resolved;
+                },
+                (err) => {
+                    const endTime = performance.now();
+                    const durationNs = Math.round((endTime - startTime) * 1_000_000);
+                    // Print end tag with timing even on error
+                    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+                    throw err;
+                }
+            );
+        }
+    } catch (e) {
+        error = e;
+    }
+
+    const endTime = performance.now();
+    const durationNs = Math.round((endTime - startTime) * 1_000_000);
+    // Print end tag with timing
+    console.log(`!######${testStdoutTag}:${durationNs}######!`);
 
     if (error) throw error;
     return returnValue;
@@ -372,7 +445,8 @@ if (typeof afterAll !== 'undefined') {
 
 // Export public API
 module.exports = {
-    capture,
+    capture,           // Behavior verification (writes to SQLite)
+    capturePerf,       // Performance benchmarking (prints to stdout only)
     captureMultiple,
     writeResults,
     clearResults,
