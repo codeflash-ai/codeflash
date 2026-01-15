@@ -1,6 +1,7 @@
 import os
 import re
 from functools import lru_cache
+from pathlib import Path
 
 from rich.tree import Tree
 
@@ -8,7 +9,8 @@ from codeflash.models.test_type import TestType
 
 _double_quote_pat = re.compile(r'"(.*?)"')
 _single_quote_pat = re.compile(r"'(.*?)'")
-worktree_path_regex = re.compile(r'\/[^"]*worktrees\/[^"]\S*')
+# Match worktree paths on both Unix (/path/to/worktrees/...) and Windows (C:\path\to\worktrees\... or C:/path/to/worktrees/...)
+worktree_path_regex = re.compile(r'[^"]*worktrees[\\/][^"]\S*')
 
 
 @lru_cache(maxsize=1)
@@ -47,7 +49,8 @@ def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str)
 def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
     path_in_msg = worktree_path_regex.search(msg)
     if path_in_msg:
-        last_part_of_path = path_in_msg.group(0).split("/")[-1]
+        # Use Path.name to handle both Unix and Windows path separators
+        last_part_of_path = Path(path_in_msg.group(0)).name
         if highlight:
             last_part_of_path = f"`{last_part_of_path}`"
         return msg.replace(path_in_msg.group(0), last_part_of_path)

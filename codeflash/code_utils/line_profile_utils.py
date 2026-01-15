@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
@@ -14,6 +15,169 @@ from codeflash.code_utils.formatter import sort_imports
 if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import CodeOptimizationContext
+
+# Known JIT decorators organized by module
+# Format: {module_path: {decorator_name, ...}}
+JIT_DECORATORS: dict[str, set[str]] = {
+    "numba": {"jit", "njit", "vectorize", "guvectorize", "stencil", "cfunc", "generated_jit"},
+    "numba.cuda": {"jit"},
+    "torch": {"compile"},
+    "torch.jit": {"script", "trace"},
+    "tensorflow": {"function"},
+    "jax": {"jit"},
+}
+
+
+class JitDecoratorDetector(ast.NodeVisitor):
+    """AST visitor that detects JIT compilation decorators considering import aliases."""
+
+    def __init__(self) -> None:
+        # Maps local name -> (module, original_name)
+        # e.g., {"nb": ("numba", None), "my_jit": ("numba", "jit")}
+        self.import_aliases: dict[str, tuple[str, str | None]] = {}
+        self.found_jit_decorator = False
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """Track regular imports like 'import numba' or 'import numba as nb'."""
+        for alias in node.names:
+            # alias.name is the module name, alias.asname is the alias (or None)
+            local_name = alias.asname if alias.asname else alias.name
+            # For module imports, we store (module_name, None) to indicate it's a module import
+            self.import_aliases[local_name] = (alias.name, None)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """Track from imports like 'from numba import jit' or 'from numba import jit as my_jit'."""
+        if node.module is None:
+            self.generic_visit(node)
+            return
+
+        for alias in node.names:
+            local_name = alias.asname if alias.asname else alias.name
+            # For from imports, we store (module_name, imported_name)
+            self.import_aliases[local_name] = (node.module, alias.name)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """Check function decorators for JIT decorators."""
+        for decorator in node.decorator_list:
+            if self._is_jit_decorator(decorator):
+                self.found_jit_decorator = True
+                return
+        self.generic_visit(node)
+
+    def _is_jit_decorator(self, node: ast.expr) -> bool:
+        """Check if a decorator node is a known JIT decorator."""
+        # Handle Call nodes (e.g., @jit() or @numba.jit(nopython=True))
+        if isinstance(node, ast.Call):
+            return self._is_jit_decorator(node.func)
+
+        # Handle simple Name nodes (e.g., @jit when imported directly)
+        if isinstance(node, ast.Name):
+            return self._check_name_decorator(node.id)
+
+        # Handle Attribute nodes (e.g., @numba.jit or @nb.jit)
+        if isinstance(node, ast.Attribute):
+            return self._check_attribute_decorator(node)
+
+        return False
+
+    def _check_name_decorator(self, name: str) -> bool:
+        """Check if a simple name decorator (e.g., @jit) is a JIT decorator."""
+        if name not in self.import_aliases:
+            return False
+
+        module, imported_name = self.import_aliases[name]
+
+        if imported_name is None:
+            # This is a module import used as decorator (unlikely but possible)
+            return False
+
+        # Check if this is a known JIT decorator from the module
+        return self._is_known_jit_decorator(module, imported_name)
+
+    def _check_attribute_decorator(self, node: ast.Attribute) -> bool:
+        """Check if an attribute decorator (e.g., @numba.jit) is a JIT decorator."""
+        # Build the full attribute chain
+        parts = self._get_attribute_parts(node)
+        if not parts:
+            return False
+
+        # The first part might be an alias
+        first_part = parts[0]
+        rest_parts = parts[1:]
+
+        # Check if first_part is an imported alias
+        if first_part in self.import_aliases:
+            module, imported_name = self.import_aliases[first_part]
+
+            if imported_name is None:
+                # It's a module import (e.g., import numba as nb)
+                # The full path is module + rest_parts
+                if rest_parts:
+                    full_module = module
+                    decorator_name = rest_parts[-1]
+                    if len(rest_parts) > 1:
+                        full_module = f"{module}.{'.'.join(rest_parts[:-1])}"
+                    return self._is_known_jit_decorator(full_module, decorator_name)
+            # It's a from import of something that has attributes
+            # e.g., from torch import jit; @jit.script
+            elif rest_parts:
+                full_module = f"{module}.{imported_name}"
+                decorator_name = rest_parts[-1]
+                if len(rest_parts) > 1:
+                    full_module = f"{full_module}.{'.'.join(rest_parts[:-1])}"
+                return self._is_known_jit_decorator(full_module, decorator_name)
+        # first_part is used directly (e.g., @numba.jit without import alias)
+        # Reconstruct the full path
+        elif rest_parts:
+            full_module = first_part
+            if len(rest_parts) > 1:
+                full_module = f"{first_part}.{'.'.join(rest_parts[:-1])}"
+            decorator_name = rest_parts[-1]
+            return self._is_known_jit_decorator(full_module, decorator_name)
+
+        return False
+
+    def _get_attribute_parts(self, node: ast.Attribute) -> list[str]:
+        """Get all parts of an attribute chain (e.g., ['numba', 'cuda', 'jit'])."""
+        parts = []
+        current = node
+
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+            parts.reverse()
+            return parts
+
+        return []
+
+    def _is_known_jit_decorator(self, module: str, decorator_name: str) -> bool:
+        """Check if a decorator from a module is a known JIT decorator."""
+        if module in JIT_DECORATORS:
+            return decorator_name in JIT_DECORATORS[module]
+        return False
+
+
+def contains_jit_decorator(code: str) -> bool:
+    """Check if the code contains JIT compilation decorators from numba, torch, tensorflow, or jax.
+
+    This function uses AST parsing to accurately detect JIT decorators even when:
+    - They are imported with aliases (e.g., import numba as nb; @nb.jit)
+    - They are imported directly (e.g., from numba import jit; @jit)
+    - They are called with arguments (e.g., @jit(nopython=True))
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return False
+
+    detector = JitDecoratorDetector()
+    detector.visit(tree)
+    return detector.found_jit_decorator
 
 
 class LineProfilerDecoratorAdder(cst.CSTTransformer):
