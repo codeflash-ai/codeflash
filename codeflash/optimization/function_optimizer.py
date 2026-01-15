@@ -581,10 +581,6 @@ class FunctionOptimizer:
             )
         )
 
-    # def_is_numerical_code_fto_helpers():
-    #     #get mapping of code string to function names
-    #     # run is_numerical_code on this mapping and return if any of these is true
-
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:
         initialization_result = self.can_be_optimized()
