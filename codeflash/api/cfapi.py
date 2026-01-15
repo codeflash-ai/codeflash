@@ -361,7 +361,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
 
         content: dict[str, list[str]] = req.json()
 
-        if "error" in content:
+        if "error" in content.lower():
             logger.debug(f"No existing optimizations found for PR #{pr_number}")
             return {}
 
