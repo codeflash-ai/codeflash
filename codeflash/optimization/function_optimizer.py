@@ -465,6 +465,7 @@ class FunctionOptimizer:
         self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
+        self.is_numerical_code: bool | None = None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -587,7 +588,7 @@ class FunctionOptimizer:
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
-
+        self.is_numerical_code = is_numerical_code(code_string=code_context.read_writable_code.flat)
         code_print(
             code_context.read_writable_code.flat,
             file_name=self.function_to_optimize.file_path,
@@ -601,9 +602,7 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if is_numerical_code(
-                code_string=code_context.read_writable_code.flat
-            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
+            if self.is_numerical_code:  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
                 jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
                     code_context.read_writable_code.markdown, self.function_trace_id
                 )
@@ -628,6 +627,7 @@ class FunctionOptimizer:
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 run_experiment=should_run_experiment,
+                is_numerical_code=self.is_numerical_code,
             )
 
             concurrent.futures.wait([future_tests, future_optimizations])
@@ -1127,6 +1127,7 @@ class FunctionOptimizer:
             )
             if self.experiment_id
             else None,
+            is_numerical_code=self.is_numerical_code,
         )
 
         processor = CandidateProcessor(
@@ -1594,6 +1595,7 @@ class FunctionOptimizer:
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         run_experiment: bool = False,  # noqa: FBT001, FBT002
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
@@ -1605,6 +1607,7 @@ class FunctionOptimizer:
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
+            is_numerical_code=is_numerical_code,
         )
 
         future_references = self.executor.submit(

@@ -129,6 +129,7 @@ class AiServiceClient:
         *,
         is_async: bool = False,
         n_candidates: int = 5,
+        is_numerical_code: bool | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -164,6 +165,7 @@ class AiServiceClient:
             "is_async": is_async,
             "call_sequence": self.get_next_sequence(),
             "n_candidates": n_candidates,
+            "is_numerical_code": is_numerical_code,
         }
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
@@ -251,6 +253,7 @@ class AiServiceClient:
         line_profiler_results: str,
         n_candidates: int,
         experiment_metadata: ExperimentMetadata | None = None,
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance using line profiler results.
 
@@ -285,6 +288,7 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
+            "is_numerical_code": is_numerical_code,
         }
 
         try:
