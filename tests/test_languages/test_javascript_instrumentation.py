@@ -147,8 +147,8 @@ function multiply(x, y) {
 class TestJavaScriptSupportInstrumentation:
     """Integration tests for JavaScript support instrumentation methods."""
 
-    def test_javascript_support_instrument_for_tracing(self):
-        """Test JavaScriptSupport.instrument_for_tracing method."""
+    def test_javascript_support_instrument_for_behavior(self):
+        """Test JavaScriptSupport.instrument_for_behavior method."""
         from codeflash.languages import get_language_support
 
         js_support = get_language_support(Language.JAVASCRIPT)
@@ -173,7 +173,7 @@ function greet(name) {
         )
 
         output_file = file_path.parent / ".codeflash" / "traces.db"
-        instrumented = js_support.instrument_for_tracing(
+        instrumented = js_support.instrument_for_behavior(
             source, [func_info], output_file=output_file
         )
 

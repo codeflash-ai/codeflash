@@ -7,7 +7,11 @@
     "test": "jest",
     "test:coverage": "jest --coverage"
   },
-  "keywords": ["codeflash", "optimization", "testing"],
+  "keywords": [
+    "codeflash",
+    "optimization",
+    "testing"
+  ],
   "author": "CodeFlash Inc.",
   "license": "MIT",
   "devDependencies": {
@@ -16,14 +20,25 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.js"],
-    "collectCoverageFrom": ["*.js", "!jest.config.js"],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "*.js",
+      "!jest.config.js"
+    ],
     "reporters": [
       "default",
-      ["jest-junit", {
-        "outputDirectory": ".codeflash",
-        "outputName": "jest-results.xml"
-      }]
+      [
+        "jest-junit",
+        {
+          "outputDirectory": ".codeflash",
+          "outputName": "jest-results.xml"
+        }
+      ]
     ]
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.0"
   }
 }

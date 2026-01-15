@@ -72,6 +72,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
 
     Args:
         test_class_path: The full class path from pytest (e.g., "project.tests.test_file.TestClass")
+            or a file path from Jest (e.g., "tests/test_file.test.js")
         base_dir: The base directory for tests (tests project root)
 
     Returns:
@@ -83,7 +84,25 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
-    # First try the full path
+    # Handle JavaScript file paths (contain slashes and .js/.ts extension)
+    if "/" in test_class_path or "\\" in test_class_path:
+        # This is a file path, not a Python module path
+        # Try to resolve relative to base_dir's parent (project root)
+        project_root = base_dir.parent
+        potential_path = project_root / test_class_path
+        if potential_path.exists():
+            return potential_path
+        # Also try relative to base_dir itself
+        potential_path = base_dir / test_class_path
+        if potential_path.exists():
+            return potential_path
+        # Try the path as-is if it's absolute
+        potential_path = Path(test_class_path)
+        if potential_path.exists():
+            return potential_path
+        return None
+
+    # First try the full path (Python module path)
     test_file_path = file_name_from_test_module_name(test_class_path, base_dir)
 
     # If we couldn't find the file, try stripping the last component (likely a class name)
@@ -112,6 +131,97 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
                     break
 
     return test_file_path
+
+
+def parse_jest_json_results(
+    file_location: Path,
+    test_files: TestFiles,
+    test_config: TestConfig,
+    function_name: str | None = None,
+) -> TestResults:
+    """Parse Jest test results from JSON format written by codeflash-jest-helper.
+
+    Args:
+        file_location: Path to the JSON results file.
+        test_files: TestFiles object containing test file information.
+        test_config: Test configuration.
+        function_name: Name of the function being tested.
+
+    Returns:
+        TestResults containing parsed test invocations.
+
+    """
+    import json
+
+    test_results = TestResults()
+    if not file_location.exists():
+        logger.debug(f"No Jest JSON results at {file_location}")
+        return test_results
+
+    try:
+        with file_location.open("r") as f:
+            data = json.load(f)
+
+        results = data.get("results", [])
+        for result in results:
+            test_name = result.get("testName", "")
+            func_name = result.get("funcName", "")
+            duration_ns = result.get("durationNs", 0)
+            loop_index = result.get("loopIndex", 1)
+            invocation_id = result.get("invocationId", 0)
+            error = result.get("error")
+
+            # Try to find the test file from test_files
+            # Check both behavior and benchmarking paths since the same parser is used for both
+            test_file_path = None
+            test_type = TestType.GENERATED_REGRESSION  # Default for Jest generated tests
+
+            for test_file in test_files.test_files:
+                # Check benchmarking path first (used for performance tests)
+                if test_file.benchmarking_file_path and test_file.benchmarking_file_path.exists():
+                    test_file_path = test_file.benchmarking_file_path
+                    test_type = test_file.test_type
+                    break
+                # Fall back to behavior path (used for behavior tests)
+                if test_file.instrumented_behavior_file_path and test_file.instrumented_behavior_file_path.exists():
+                    test_file_path = test_file.instrumented_behavior_file_path
+                    test_type = test_file.test_type
+                    break
+
+            if test_file_path is None:
+                logger.debug(f"Could not find test file for Jest result: {test_name}")
+                continue
+
+            # Create invocation ID - use funcName from result or passed function_name
+            function_getting_tested = func_name or function_name or "unknown"
+            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
+            invocation_id_obj = InvocationId(
+                test_module_path=test_module_path,
+                test_class_name=None,
+                test_function_name=test_name or func_name,
+                function_getting_tested=function_getting_tested,
+                iteration_id=str(invocation_id),
+            )
+
+            test_results.add(
+                function_test_invocation=FunctionTestInvocation(
+                    loop_index=loop_index,
+                    id=invocation_id_obj,
+                    file_name=test_file_path,
+                    did_pass=error is None,
+                    runtime=duration_ns,
+                    test_framework=test_config.test_framework,
+                    test_type=test_type,
+                    return_value=result.get("returnValue"),
+                    timed_out=False,
+                    verification_type=VerificationType.FUNCTION_CALL,
+                )
+            )
+
+    except Exception as e:
+        logger.warning(f"Failed to parse Jest JSON results from {file_location}: {e}")
+
+    return test_results
 
 
 def parse_test_return_values_bin(file_location: Path, test_files: TestFiles, test_config: TestConfig) -> TestResults:
@@ -196,13 +306,26 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
         return test_results
     finally:
         db.close()
+
+    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
+    is_javascript = test_config.test_framework == "jest"
+
     for val in data:
         try:
             test_module_path = val[0]
             test_class_name = val[1] if val[1] else None
             test_function_name = val[2] if val[2] else None
             function_getting_tested = val[3]
-            test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
+
+            # For JavaScript, test_module_path is already a file path (e.g., "tests/foo.test.js")
+            # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
+            if is_javascript:
+                # JavaScript: test_module_path is a relative file path
+                test_file_path = test_config.tests_project_rootdir / test_module_path
+            else:
+                # Python: convert module path to file path
+                test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
+
             loop_index = val[4]
             iteration_id = val[5]
             runtime = val[6]
@@ -212,10 +335,34 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             else:
                 # TODO : this is because sqlite writes original file module path. Should make it consistent
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
-            try:
-                ret_val = (pickle.loads(val[7]) if loop_index == 1 else None,)
-            except Exception:  # noqa: S112
-                continue
+                # Default to GENERATED_REGRESSION for JavaScript tests when test type can't be determined
+                if test_type is None and is_javascript:
+                    test_type = TestType.GENERATED_REGRESSION
+                elif test_type is None:
+                    # Skip results where test type cannot be determined
+                    logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
+                    continue
+
+            # Deserialize return value - try JSON first (for JavaScript), then pickle (for Python)
+            ret_val = None
+            if loop_index == 1 and val[7]:
+                try:
+                    if is_javascript:
+                        # JavaScript uses JSON serialization
+                        import json
+                        # val[7] might be bytes or string
+                        raw_value = val[7]
+                        if isinstance(raw_value, bytes):
+                            raw_value = raw_value.decode('utf-8')
+                        ret_val = (json.loads(raw_value),)
+                    else:
+                        # Python uses pickle serialization
+                        ret_val = (pickle.loads(val[7]),)
+                except Exception as e:  # noqa: S112
+                    # If deserialization fails, skip this result
+                    logger.debug(f"Failed to deserialize return value for {test_function_name}: {e}")
+                    continue
+
             test_results.add(
                 function_test_invocation=FunctionTestInvocation(
                     loop_index=loop_index,
@@ -434,12 +581,14 @@ def merge_test_results(
                 test_function_name = result.id.test_function_name[: result.id.test_function_name.index("[")]
             else:
                 test_function_name = result.id.test_function_name
-
-        if test_framework == "unittest":
+        elif test_framework == "unittest":
             test_function_name = result.id.test_function_name
             is_parameterized, new_test_function_name, _ = discover_parameters_unittest(test_function_name)
             if is_parameterized:  # handle parameterized test
                 test_function_name = new_test_function_name
+        else:
+            # Jest and other frameworks - use test function name as-is
+            test_function_name = result.id.test_function_name
 
         grouped_xml_results[
             (result.id.test_module_path or "")
@@ -621,34 +770,42 @@ def parse_test_results(
     test_results_xml = parse_test_xml(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
     )
-    try:
-        bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
-        test_results_bin_file = (
-            parse_test_return_values_bin(bin_results_file, test_files=test_files, test_config=test_config)
-            if bin_results_file.exists()
-            else TestResults()
-        )
-    except AttributeError as e:
-        logger.exception(e)
-        test_results_bin_file = TestResults()
-        get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
+
+    # Parse timing/behavior data from SQLite (used by both Python and JavaScript)
+    # JavaScript (Jest) uses SQLite exclusively via codeflash-jest-helper
+    # Python can use SQLite (preferred) or legacy binary format
+    test_results_data = TestResults()
 
     try:
         sql_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite"))
         if sql_results_file.exists():
-            test_results_sqlite_file = parse_sqlite_test_results(
+            test_results_data = parse_sqlite_test_results(
                 sqlite_file_path=sql_results_file, test_files=test_files, test_config=test_config
             )
-            test_results_bin_file.merge(test_results_sqlite_file)
-    except AttributeError as e:
-        logger.exception(e)
+            logger.debug(f"Parsed {len(test_results_data.test_results)} results from SQLite")
+    except Exception as e:
+        logger.exception(f"Failed to parse SQLite test results: {e}")
 
+    # Fall back to legacy binary format for Python tests if SQLite doesn't exist
+    if not test_results_data.test_results and test_config.test_framework != "jest":
+        try:
+            bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
+            if bin_results_file.exists():
+                test_results_data = parse_test_return_values_bin(
+                    bin_results_file, test_files=test_files, test_config=test_config
+                )
+        except AttributeError as e:
+            logger.exception(e)
+
+    # Cleanup temp files
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin")).unlink(missing_ok=True)
 
     get_run_tmp_file(Path("pytest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("jest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("jest_perf_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
-    results = merge_test_results(test_results_xml, test_results_bin_file, test_config.test_framework)
+    results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
     all_args = False
     if coverage_database_file and source_file and code_context and function_name:

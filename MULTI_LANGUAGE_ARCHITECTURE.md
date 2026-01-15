@@ -60,7 +60,7 @@ Verification → Benchmarking → Ranking → PR Creation
 │  │  │  - replace_function()                                    │  │
 │  │  │  - run_tests()                                           │  │
 │  │  │  - discover_tests()                                      │  │
-│  │  │  - instrument_for_tracing()                              │  │
+│  │  │  - instrument_for_behavior()                              │  │
 │  │  │  - format_code()                                         │  │
 │  │  └──────────────────────────────────────────────────────────┘  │
 │  └─────────────────────────────────────────────────────────────────┤
@@ -250,7 +250,7 @@ class LanguageSupport(Protocol):
 
     # === Instrumentation ===
 
-    def instrument_for_tracing(
+    def instrument_for_behavior(
         self,
         file_path: Path,
         functions: list[FunctionInfo],
@@ -492,7 +492,7 @@ class JavaScriptSupport(LanguageSupport):
         results = self.parse_test_results(junit_path, result.stdout)
         return results, junit_path
 
-    def instrument_for_tracing(
+    def instrument_for_behavior(
         self,
         file_path: Path,
         functions: list[FunctionInfo],

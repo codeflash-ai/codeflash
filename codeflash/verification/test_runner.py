@@ -98,6 +98,16 @@ def run_jest_behavioral_tests(
     jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
     jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
     jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
+    # Configure jest-junit to use filepath-based classnames for proper parsing
+    jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
+    # Set codeflash output file for the jest helper to write timing/behavior data (SQLite format)
+    codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+    jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
+    jest_env["CODEFLASH_TEST_ITERATION"] = "0"
+    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
+    jest_env["CODEFLASH_MODE"] = "behavior"
 
     logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
 
@@ -304,6 +314,93 @@ def run_line_profile_tests(
     return result_file_path, results
 
 
+def run_jest_benchmarking_tests(
+    test_paths: TestFiles,
+    test_env: dict[str, str],
+    cwd: Path,
+    *,
+    timeout: int | None = None,
+) -> tuple[Path, subprocess.CompletedProcess]:
+    """Run Jest benchmarking tests.
+
+    Args:
+        test_paths: TestFiles object containing test file information.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result).
+
+    """
+    result_file_path = get_run_tmp_file(Path("jest_perf_results.xml"))
+
+    # Get performance test files
+    test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
+
+    # Find the JavaScript project root
+    js_project_root = None
+    if test_files:
+        first_test_file = Path(test_files[0])
+        js_project_root = _find_js_project_root(first_test_file)
+
+    effective_cwd = js_project_root if js_project_root else cwd
+    logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
+
+    # Build Jest command for performance tests
+    jest_cmd = [
+        "npx",
+        "jest",
+        "--reporters=default",
+        "--reporters=jest-junit",
+        "--runInBand",
+        "--forceExit",
+    ]
+
+    if test_files:
+        test_pattern = "|".join(str(Path(f).resolve()) for f in test_files)
+        jest_cmd.append(f"--testPathPattern={test_pattern}")
+
+    if timeout:
+        jest_cmd.append(f"--testTimeout={timeout * 1000}")
+
+    # Set up environment
+    jest_env = test_env.copy()
+    jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
+    jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
+    jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
+    jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
+    # Set codeflash output file for the jest helper to write timing data (SQLite format)
+    codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+    jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
+    jest_env["CODEFLASH_TEST_ITERATION"] = "0"
+    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
+    jest_env["CODEFLASH_MODE"] = "performance"
+
+    logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
+
+    try:
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
+        )
+        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Jest benchmarking tests timed out after {timeout}s")
+        result = subprocess.CompletedProcess(
+            args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking tests timed out"
+        )
+    except FileNotFoundError:
+        logger.error("Jest not found for benchmarking")
+        result = subprocess.CompletedProcess(
+            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found"
+        )
+
+    return result_file_path, result
+
+
 def run_benchmarking_tests(
     test_paths: TestFiles,
     pytest_cmd: str,
@@ -316,6 +413,8 @@ def run_benchmarking_tests(
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
+    if test_framework == "jest":
+        return run_jest_benchmarking_tests(test_paths, test_env, cwd, timeout=pytest_timeout)
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)

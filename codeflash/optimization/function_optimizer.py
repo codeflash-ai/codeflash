@@ -2116,18 +2116,25 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        if not coverage_critic(coverage_results):
-            did_pass_all_tests = all(result.did_pass for result in behavioral_results)
-            if not did_pass_all_tests:
-                return Failure("Tests failed to pass for the original code.")
-            return Failure(
-                f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
-            )
+        # Skip coverage check for JavaScript/TypeScript (coverage not yet supported)
+        if self.function_to_optimize.language not in ("javascript", "typescript"):
+            if not coverage_critic(coverage_results):
+                did_pass_all_tests = all(result.did_pass for result in behavioral_results)
+                if not did_pass_all_tests:
+                    return Failure("Tests failed to pass for the original code.")
+                coverage_pct = coverage_results.coverage if coverage_results else 0
+                return Failure(
+                    f"Test coverage is {coverage_pct}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
+                )
 
-        with progress_bar("Running line profiler to identify performance bottlenecks..."):
-            line_profile_results = self.line_profiler_step(
-                code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
-            )
+        # Skip line profiler for JavaScript/TypeScript (not yet supported)
+        if self.function_to_optimize.language in ("javascript", "typescript"):
+            line_profile_results = None
+        else:
+            with progress_bar("Running line profiler to identify performance bottlenecks..."):
+                line_profile_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+                )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
             if self.function_to_optimize.is_async:

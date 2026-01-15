@@ -442,17 +442,17 @@ class LanguageSupport(Protocol):
 
     # === Instrumentation ===
 
-    def instrument_for_tracing(
+    def instrument_for_behavior(
         self,
         source: str,
         functions: Sequence[FunctionInfo],
     ) -> str:
         """
-        Add tracing instrumentation to capture inputs/outputs.
+        Add behavior instrumentation to capture inputs/outputs.
 
         Args:
             source: Source code to instrument.
-            functions: Functions to add tracing to.
+            functions: Functions to add behavior capture.
 
         Returns:
             Instrumented source code.

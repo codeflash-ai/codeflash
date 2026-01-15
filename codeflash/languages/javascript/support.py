@@ -541,10 +541,10 @@ class JavaScriptSupport:
 
     # === Instrumentation ===
 
-    def instrument_for_tracing(
+    def instrument_for_behavior(
         self, source: str, functions: Sequence[FunctionInfo], output_file: Path | None = None
     ) -> str:
-        """Add tracing instrumentation to capture inputs/outputs.
+        """Add behavior instrumentation to capture inputs/outputs.
 
         For JavaScript, this wraps functions to capture their arguments
         and return values.
