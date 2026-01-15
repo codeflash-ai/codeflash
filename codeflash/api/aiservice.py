@@ -192,24 +192,14 @@ class AiServiceClient:
         return []
 
     def get_jit_rewritten_code(  # noqa: D417
-        self,
-        source_code: str,
-        dependency_code: str,
-        trace_id: str,
-        num_candidates: int = 1,
-        experiment_metadata: ExperimentMetadata | None = None,
-        *,
-        is_async: bool = False,
+        self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
         Parameters
         ----------
         - source_code (str): The python code to optimize.
-        - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
-        - num_candidates (int): Number of optimization variants to generate. Default is 10.
-        - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
 
         Returns
         -------
@@ -221,17 +211,10 @@ class AiServiceClient:
 
         payload = {
             "source_code": source_code,
-            "dependency_code": dependency_code,
-            "num_variants": num_candidates,
             "trace_id": trace_id,
-            "python_version": platform.python_version(),
-            "experiment_metadata": experiment_metadata,
-            "codeflash_version": codeflash_version,
             "current_username": get_last_commit_author_if_pr_exists(None),
             "repo_owner": git_repo_owner,
             "repo_name": git_repo_name,
-            "n_candidates": 1,
-            "is_async": is_async,
         }
 
         logger.info("!lsp|Generating optimized candidates…")
