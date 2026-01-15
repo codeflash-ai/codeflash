@@ -44,11 +44,7 @@ def _find_js_project_root(file_path: Path) -> Path | None:
 
 
 def run_jest_behavioral_tests(
-    test_paths: TestFiles,
-    test_env: dict[str, str],
-    cwd: Path,
-    *,
-    timeout: int | None = None,
+    test_paths: TestFiles, test_env: dict[str, str], cwd: Path, *, timeout: int | None = None
 ) -> tuple[Path, subprocess.CompletedProcess, None, None]:
     """Run Jest tests and return results in a format compatible with pytest output.
 
@@ -90,9 +86,9 @@ def run_jest_behavioral_tests(
 
     # Add test pattern if we have specific files
     if test_files:
-        # Jest uses regex for test path matching
-        test_pattern = "|".join(str(Path(f).name) for f in test_files)
-        jest_cmd.append(f"--testPathPatterns={test_pattern}")
+        # Jest uses regex for test path matching - use full paths for temp directory tests
+        test_pattern = "|".join(str(Path(f).resolve()) for f in test_files)
+        jest_cmd.append(f"--testPathPattern={test_pattern}")
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -107,30 +103,17 @@ def run_jest_behavioral_tests(
 
     try:
         run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd,
-            env=jest_env,
-            timeout=timeout or 600,
-            check=False,
-            text=True,
-            capture_output=True,
+            cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
         )
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
         logger.debug(f"Jest result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest tests timed out after {timeout}s")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd,
-            returncode=-1,
-            stdout="",
-            stderr="Test execution timed out",
-        )
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Test execution timed out")
     except FileNotFoundError:
         logger.error("Jest not found. Make sure Jest is installed (npm install jest)")
         result = subprocess.CompletedProcess(
-            args=jest_cmd,
-            returncode=-1,
-            stdout="",
-            stderr="Jest not found. Run: npm install jest jest-junit",
+            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest jest-junit"
         )
 
     return result_file_path, result, None, None

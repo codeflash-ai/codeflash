@@ -462,10 +462,8 @@ class FunctionOptimizer:
             # the relative path should be ../fibonacci
             try:
                 # Use os.path.relpath to compute relative path from tests_root to source file
-                import os
                 rel_path = os.path.relpath(
-                    str(self.function_to_optimize.file_path.with_suffix("")),
-                    str(test_cfg.tests_root)
+                    str(self.function_to_optimize.file_path.with_suffix("")), str(test_cfg.tests_root)
                 )
                 self.original_module_path = rel_path
             except ValueError:
@@ -473,7 +471,9 @@ class FunctionOptimizer:
                 rel_path = self.function_to_optimize.file_path.relative_to(self.project_root)
                 self.original_module_path = "../" + rel_path.with_suffix("").as_posix()
         else:
-            self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
+            self.original_module_path = module_name_from_file_path(
+                self.function_to_optimize.file_path, self.project_root
+            )
 
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
@@ -567,23 +567,37 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
+        logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
+            logger.debug(
+                f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
+            )
+
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_behavior_test_source)
+            logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
+
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
-            self.test_files.add(
-                TestFile(
-                    instrumented_behavior_file_path=generated_test.behavior_file_path,
-                    benchmarking_file_path=generated_test.perf_file_path,
-                    original_file_path=None,
-                    original_source=generated_test.generated_original_test_source,
-                    test_type=TestType.GENERATED_REGRESSION,
-                    tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
-                )
+            logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
+
+            test_file_obj = TestFile(
+                instrumented_behavior_file_path=generated_test.behavior_file_path,
+                benchmarking_file_path=generated_test.perf_file_path,
+                original_file_path=None,
+                original_source=generated_test.generated_original_test_source,
+                test_type=TestType.GENERATED_REGRESSION,
+                tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
             )
+            self.test_files.add(test_file_obj)
+            logger.debug(
+                f"[PIPELINE] Added test file to collection: behavior={test_file_obj.instrumented_behavior_file_path}, perf={test_file_obj.benchmarking_file_path}"
+            )
+
             logger.info(f"Generated test {i + 1}/{count_tests}:")
-            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
+            # Use correct extension based on language
+            test_ext = ".test.js" if self.function_to_optimize.language in ("javascript", "typescript") else ".py"
+            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}")
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
@@ -2077,6 +2091,11 @@ class FunctionOptimizer:
                 )
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
+                for idx, tf in enumerate(self.test_files):
+                    logger.debug(
+                        f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+                    )
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,

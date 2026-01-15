@@ -178,6 +178,11 @@ class AiServiceClient:
             pass  # python_version already set
         else:
             payload["language_version"] = language_version or "ES2022"
+
+        # DEBUG: Print payload language field
+        print(
+            f"[CLI DEBUG] Sending optimize request with language='{payload['language']}' (type: {type(payload['language'])})"
+        )
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
         try:
@@ -672,6 +677,11 @@ class AiServiceClient:
             pass  # python_version already set
         else:
             payload["language_version"] = language_version or "ES2022"
+
+        # DEBUG: Print payload language field
+        print(
+            f"[CLI DEBUG] Sending testgen request with language='{payload['language']}', framework='{test_framework}'"
+        )
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
