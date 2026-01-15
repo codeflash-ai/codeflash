@@ -296,6 +296,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if isinstance(orig, torch.dtype):
                 return orig == new
 
+            if isinstance(orig, torch.device):
+                return orig == new
+
         if HAS_PYRSISTENT:
             import pyrsistent  # type: ignore  # noqa: PGH003
 

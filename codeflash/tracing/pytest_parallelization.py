@@ -7,14 +7,14 @@ from random import shuffle
 
 
 def pytest_split(
-    arguments: list[str], num_splits: int | None = None
+    arguments: list[str], num_splits: int | None = None, limit: int | None = None
 ) -> tuple[list[list[str]] | None, list[str] | None]:
     """Split pytest test files from a directory into N roughly equal groups for parallel execution.
 
     Args:
         arguments: List of arguments passed to pytest
-        test_directory: Path to directory containing test files
         num_splits: Number of groups to split tests into. If None, uses CPU count.
+        limit: Maximum number of test files to process. If None, processes all files.
 
     Returns:
         List of lists, where each inner list contains test file paths for one group.
@@ -57,6 +57,10 @@ def pytest_split(
     # randomize to increase chances of all splits being balanced
     test_files = list(test_files)
     shuffle(test_files)
+
+    # Apply limit if specified
+    if limit is not None and limit > 0:
+        test_files = test_files[:limit]
 
     # Ensure each split has at least 4 test files
     # If we have fewer test files than 4 * num_splits, reduce num_splits

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import logging
 import os
 import queue
 import random
@@ -15,6 +16,7 @@ import libcst as cst
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
@@ -34,6 +36,7 @@ from codeflash.code_utils.code_utils import (
     create_rank_dictionary_compact,
     create_score_dictionary_from_metrics,
     diff_length,
+    encoded_tokens_len,
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -46,6 +49,7 @@ from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MIN_CORRECT_CANDIDATES,
+    OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
@@ -126,6 +130,69 @@ if TYPE_CHECKING:
         TestDiff,
     )
     from codeflash.verification.verification_utils import TestConfig
+
+
+def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
+    """Log optimization context details when in verbose mode using Rich formatting."""
+    if logger.getEffectiveLevel() > logging.DEBUG:
+        return
+
+    console.rule()
+    read_writable_tokens = encoded_tokens_len(code_context.read_writable_code.markdown)
+    read_only_tokens = (
+        encoded_tokens_len(code_context.read_only_context_code) if code_context.read_only_context_code else 0
+    )
+    total_tokens = read_writable_tokens + read_only_tokens
+    token_pct = min(total_tokens / OPTIMIZATION_CONTEXT_TOKEN_LIMIT, 1.0)
+
+    # Token bar color based on usage
+    bar_color = "green" if token_pct < 0.7 else "yellow" if token_pct < 0.9 else "red"
+
+    # Build compact info line
+    helper_names = [hf.qualified_name for hf in code_context.helper_functions]
+    helpers_str = f"[magenta]{', '.join(helper_names)}[/]" if helper_names else "[dim]none[/]"
+    read_writable_files = [str(cs.file_path) for cs in code_context.read_writable_code.code_strings]
+
+    # Create a tree view for the context
+    tree = Tree(f"[bold cyan]Context for {function_name}[/]")
+    tree.add(
+        Text.assemble(
+            ("Tokens: ", "dim"),
+            (f"{total_tokens:,}", "bold " + bar_color),
+            (f"/{OPTIMIZATION_CONTEXT_TOKEN_LIMIT:,} ", "dim"),
+            (f"({token_pct:.0%})", bar_color),
+            ("  [", "dim"),
+            (f"{read_writable_tokens:,}", "green"),
+            (" rw", "dim green"),
+            (" + ", "dim"),
+            (f"{read_only_tokens:,}", "yellow"),
+            (" ro", "dim yellow"),
+            ("]", "dim"),
+        )
+    )
+    tree.add(f"[dim]Helpers:[/] {helpers_str}")
+    files_branch = tree.add("[dim]Files:[/]")
+    for f in read_writable_files:
+        files_branch.add(f"[blue]{f}[/]")
+
+    console.print(tree)
+
+    console.print(
+        Panel(
+            Syntax(code_context.read_writable_code.markdown, "markdown", theme="monokai", word_wrap=True),
+            title="[green]Read-Writable Code[/]",
+            border_style="green",
+        )
+    )
+
+    if code_context.read_only_context_code:
+        console.print(
+            Panel(
+                Syntax(code_context.read_only_context_code, "markdown", theme="monokai", word_wrap=True),
+                title="[yellow]Read-Only Dependencies[/]",
+                border_style="yellow",
+            )
+        )
 
 
 class CandidateNode:
@@ -409,6 +476,7 @@ class FunctionOptimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
+        log_optimization_context(self.function_to_optimize.function_name, code_context)
         original_helper_code: dict[Path, str] = {}
         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
         for helper_function_path in helper_function_paths:
