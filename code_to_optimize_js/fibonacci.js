@@ -8,11 +8,19 @@
  * @param {number} n - The index of the Fibonacci number to calculate
  * @returns {number} - The nth Fibonacci number
  */
+const cache = new Map();
+
 function fibonacci(n) {
+    if (cache.has(n)) return cache.get(n);
     if (n <= 1) {
+        cache.set(n, n);
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    const a = fibonacci(n - 1);
+    const b = fibonacci(n - 2);
+    const res = a + b;
+    cache.set(n, res);
+    return res;
 }
 
 /**
