@@ -155,21 +155,22 @@ class VariableNormalizer(ast.NodeTransformer):
 
 
 def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: bool = False) -> str:  # noqa : FBT002, FBT001
-    """Normalize Python code by parsing, cleaning, and normalizing only variable names.
+    """Normalize code by parsing, cleaning, and normalizing only variable names.
 
     Function names, class names, and parameters are preserved.
+    For non-Python code (JavaScript, TypeScript), falls back to basic whitespace normalization.
 
     Args:
-        code: Python source code as string
-        remove_docstrings: Whether to remove docstrings
-        return_ast_dump: return_ast_dump
+        code: Source code as string
+        remove_docstrings: Whether to remove docstrings (Python only)
+        return_ast_dump: return_ast_dump (Python only)
 
     Returns:
         Normalized code as string
 
     """
     try:
-        # Parse the code
+        # Parse the code (Python-specific)
         tree = ast.parse(code)
 
         # Remove docstrings if requested
@@ -188,9 +189,10 @@ def normalize_code(code: str, remove_docstrings: bool = True, return_ast_dump: b
 
         # Unparse back to code
         return ast.unparse(normalized_tree)
-    except SyntaxError as e:
-        msg = f"Invalid Python syntax: {e}"
-        raise ValueError(msg) from e
+    except SyntaxError:
+        # Non-Python code (JavaScript, TypeScript, etc.) - use basic whitespace normalization
+        # This still allows duplicate detection to work
+        return " ".join(code.split())
 
 
 def remove_docstrings_from_ast(node):  # noqa : ANN001, ANN201

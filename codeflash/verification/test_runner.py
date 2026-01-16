@@ -44,8 +44,15 @@ def _find_js_project_root(file_path: Path) -> Path | None:
 
 
 def run_jest_behavioral_tests(
-    test_paths: TestFiles, test_env: dict[str, str], cwd: Path, *, timeout: int | None = None
-) -> tuple[Path, subprocess.CompletedProcess, None, None]:
+    test_paths: TestFiles,
+    test_env: dict[str, str],
+    cwd: Path,
+    *,
+    timeout: int | None = None,
+    js_project_root: Path | None = None,
+    enable_coverage: bool = False,
+    candidate_index: int = 0,
+) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run Jest tests and return results in a format compatible with pytest output.
 
     Args:
@@ -53,9 +60,11 @@ def run_jest_behavioral_tests(
         test_env: Environment variables for the test run.
         cwd: Working directory for running tests.
         timeout: Optional timeout in seconds.
+        js_project_root: JavaScript project root (directory containing package.json).
+        enable_coverage: Whether to collect coverage information.
 
     Returns:
-        Tuple of (result_file_path, subprocess_result, None, None).
+        Tuple of (result_file_path, subprocess_result, coverage_json_path, None).
 
     """
     result_file_path = get_run_tmp_file(Path("jest_results.xml"))
@@ -63,18 +72,18 @@ def run_jest_behavioral_tests(
     # Get test files to run
     test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
 
-    # Find the JavaScript project root from the test file paths
-    # Jest needs to run from the directory containing package.json or jest.config.js
-    # The js_project_root should be passed via cwd if properly configured,
-    # but we detect it here as a fallback for safety
-    js_project_root = None
-    if test_files:
+    # Use provided js_project_root, or detect it as fallback
+    if js_project_root is None and test_files:
         first_test_file = Path(test_files[0])
         js_project_root = _find_js_project_root(first_test_file)
 
-    # Use the detected JS project root, or fall back to provided cwd
+    # Use the JS project root, or fall back to provided cwd
     effective_cwd = js_project_root if js_project_root else cwd
     logger.debug(f"Jest working directory: {effective_cwd}")
+
+    # Coverage output directory
+    coverage_dir = get_run_tmp_file(Path("jest_coverage"))
+    coverage_json_path = coverage_dir / "coverage-final.json" if enable_coverage else None
 
     # Build Jest command
     jest_cmd = [
@@ -85,6 +94,14 @@ def run_jest_behavioral_tests(
         "--runInBand",  # Run tests serially for consistent timing
         "--forceExit",
     ]
+
+    # Add coverage flags if enabled
+    if enable_coverage:
+        jest_cmd.extend([
+            "--coverage",
+            "--coverageReporters=json",
+            f"--coverageDirectory={coverage_dir}",
+        ])
 
     # Add test pattern if we have specific files
     if test_files:
@@ -107,9 +124,10 @@ def run_jest_behavioral_tests(
     # Include console.log output in JUnit XML for timing marker parsing
     jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
     # Set codeflash output file for the jest helper to write timing/behavior data (SQLite format)
-    codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+    # Use candidate_index to differentiate between baseline (0) and optimization candidates
+    codeflash_sqlite_file = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
-    jest_env["CODEFLASH_TEST_ITERATION"] = "0"
+    jest_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"
     jest_env["CODEFLASH_MODE"] = "behavior"
 
@@ -141,7 +159,7 @@ def run_jest_behavioral_tests(
             args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest jest-junit"
         )
 
-    return result_file_path, result, None, None
+    return result_file_path, result, coverage_json_path, None
 
 
 def execute_test_subprocess(
@@ -166,10 +184,18 @@ def run_behavioral_tests(
     pytest_cmd: str = "pytest",
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
+    js_project_root: Path | None = None,
+    candidate_index: int = 0,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
     if test_framework == "jest":
-        return run_jest_behavioral_tests(test_paths, test_env, cwd, timeout=pytest_timeout)
+        return run_jest_behavioral_tests(
+            test_paths, test_env, cwd,
+            timeout=pytest_timeout,
+            js_project_root=js_project_root,
+            enable_coverage=enable_coverage,
+            candidate_index=candidate_index,
+        )
     if test_framework in {"pytest", "unittest"}:
         test_files: list[str] = []
         for file in test_paths.test_files:
@@ -335,6 +361,7 @@ def run_jest_benchmarking_tests(
     cwd: Path,
     *,
     timeout: int | None = None,
+    js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     """Run Jest benchmarking tests.
 
@@ -343,6 +370,7 @@ def run_jest_benchmarking_tests(
         test_env: Environment variables for the test run.
         cwd: Working directory for running tests.
         timeout: Optional timeout in seconds.
+        js_project_root: JavaScript project root (directory containing package.json).
 
     Returns:
         Tuple of (result_file_path, subprocess_result).
@@ -353,9 +381,8 @@ def run_jest_benchmarking_tests(
     # Get performance test files
     test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
 
-    # Find the JavaScript project root
-    js_project_root = None
-    if test_files:
+    # Use provided js_project_root, or detect it as fallback
+    if js_project_root is None and test_files:
         first_test_file = Path(test_files[0])
         js_project_root = _find_js_project_root(first_test_file)
 
@@ -440,9 +467,10 @@ def run_benchmarking_tests(
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
+    js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "jest":
-        return run_jest_benchmarking_tests(test_paths, test_env, cwd, timeout=pytest_timeout)
+        return run_jest_benchmarking_tests(test_paths, test_env, cwd, timeout=pytest_timeout, js_project_root=js_project_root)
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)

@@ -21,7 +21,7 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType, VerificationType
-from codeflash.verification.coverage_utils import CoverageUtils
+from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -42,6 +42,12 @@ matches_re_end = re.compile(r"!######(.*?):(.*?)([^\.:]*?):(.*?):(.*?):(.*?)####
 
 start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
 end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+
+# Jest timing marker patterns (from codeflash-jest-helper.js console.log output)
+# Format: !$######testName:testName:funcName:loopIndex:lineId######$! (start)
+# Format: !######testName:testName:funcName:loopIndex:lineId:durationNs######! (end)
+jest_start_pattern = re.compile(r"!\$######([^:]+):([^:]+):([^:]+):([^:]+):([^#]+)######\$!")
+jest_end_pattern = re.compile(r"!######([^:]+):([^:]+):([^:]+):([^:]+):([^:]+):(\d+)######!")
 
 
 def calculate_function_throughput_from_test_results(test_results: TestResults, function_name: str) -> int:
@@ -388,12 +394,217 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     return test_results
 
 
+def _extract_jest_console_output(suite_elem) -> str:
+    """Extract console output from Jest's JUnit XML system-out element.
+
+    Jest-junit writes console.log output as a JSON array in the testsuite's system-out.
+    Each entry has: {"message": "...", "origin": "...", "type": "log"}
+
+    Args:
+        suite_elem: The testsuite lxml element
+
+    Returns:
+        Concatenated message content from all log entries
+    """
+    import json
+
+    system_out_elem = suite_elem.find("system-out")
+    if system_out_elem is None or system_out_elem.text is None:
+        return ""
+
+    raw_content = system_out_elem.text.strip()
+    if not raw_content:
+        return ""
+
+    # Jest-junit wraps console output in a JSON array
+    # Try to parse as JSON first
+    try:
+        log_entries = json.loads(raw_content)
+        if isinstance(log_entries, list):
+            # Extract message field from each log entry
+            messages = []
+            for entry in log_entries:
+                if isinstance(entry, dict) and "message" in entry:
+                    messages.append(entry["message"])
+            return "\n".join(messages)
+    except (json.JSONDecodeError, TypeError):
+        # Not JSON - return as plain text (fallback for pytest-style output)
+        pass
+
+    return raw_content
+
+
+def parse_jest_test_xml(
+    test_xml_file_path: Path,
+    test_files: TestFiles,
+    test_config: TestConfig,
+    run_result: subprocess.CompletedProcess | None = None,
+) -> TestResults:
+    """Parse Jest JUnit XML test results.
+
+    Jest-junit has a different structure than pytest:
+    - system-out is at the testsuite level (not testcase)
+    - system-out contains a JSON array of log entries
+    - Timing markers are in the message field of log entries
+
+    Args:
+        test_xml_file_path: Path to the Jest JUnit XML file
+        test_files: TestFiles object with test file information
+        test_config: Test configuration
+        run_result: Optional subprocess result for logging
+
+    Returns:
+        TestResults containing parsed test invocations
+    """
+    test_results = TestResults()
+
+    if not test_xml_file_path.exists():
+        logger.warning(f"No Jest test results for {test_xml_file_path} found.")
+        return test_results
+
+    try:
+        xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
+    except Exception as e:
+        logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
+        return test_results
+
+    base_dir = test_config.tests_project_rootdir
+
+    for suite in xml:
+        # Extract console output from suite-level system-out (Jest specific)
+        suite_stdout = _extract_jest_console_output(suite._elem)  # noqa: SLF001
+
+        # Parse timing markers from the suite's console output
+        start_matches = list(jest_start_pattern.finditer(suite_stdout))
+        end_matches_dict = {}
+        for match in jest_end_pattern.finditer(suite_stdout):
+            # Key: (testName, testName2, funcName, loopIndex, lineId)
+            key = match.groups()[:5]
+            end_matches_dict[key] = match
+
+        for testcase in suite:
+            test_class_path = testcase.classname  # For Jest, this is the file path
+            test_name = testcase.name
+
+            if test_name is None:
+                logger.debug(f"testcase.name is None in Jest XML {test_xml_file_path}, skipping")
+                continue
+
+            # Resolve test file path - Jest uses file paths in classname
+            test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
+            if test_file_path is None:
+                # Try using the file attribute directly
+                test_file_name = suite._elem.attrib.get("file") or testcase._elem.attrib.get("file")  # noqa: SLF001
+                if test_file_name:
+                    test_file_path = base_dir.parent / test_file_name
+                    if not test_file_path.exists():
+                        test_file_path = base_dir / test_file_name
+
+            if test_file_path is None or not test_file_path.exists():
+                logger.warning(f"Could not resolve test file for Jest test: {test_class_path}")
+                continue
+
+            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            if test_type is None:
+                # Default to GENERATED_REGRESSION for Jest tests
+                test_type = TestType.GENERATED_REGRESSION
+
+            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
+            result = testcase.is_passed
+
+            # Check for timeout
+            timed_out = False
+            if len(testcase.result) >= 1:
+                message = (testcase.result[0].message or "").lower()
+                if "timeout" in message or "timed out" in message:
+                    timed_out = True
+
+            # Find matching timing markers for this test
+            # Jest test names in markers match the full test name
+            matching_starts = [m for m in start_matches if test_name in m.group(1)]
+
+            if not matching_starts:
+                # No timing markers found - add basic result
+                test_results.add(
+                    FunctionTestInvocation(
+                        loop_index=1,
+                        id=InvocationId(
+                            test_module_path=test_module_path,
+                            test_class_name=None,
+                            test_function_name=test_name,
+                            function_getting_tested="",
+                            iteration_id="",
+                        ),
+                        file_name=test_file_path,
+                        runtime=None,
+                        test_framework=test_config.test_framework,
+                        did_pass=result,
+                        test_type=test_type,
+                        return_value=None,
+                        timed_out=timed_out,
+                        stdout="",
+                    )
+                )
+            else:
+                # Process each timing marker
+                for match in matching_starts:
+                    groups = match.groups()
+                    # groups: (testName, testName2, funcName, loopIndex, lineId)
+                    func_name = groups[2]
+                    loop_index = int(groups[3]) if groups[3].isdigit() else 1
+                    line_id = groups[4]
+
+                    # Find matching end marker
+                    end_key = groups[:5]
+                    end_match = end_matches_dict.get(end_key)
+
+                    runtime = None
+                    if end_match:
+                        # Duration is in the 6th group (index 5)
+                        try:
+                            runtime = int(end_match.group(6))
+                        except (ValueError, IndexError):
+                            pass
+
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_index=loop_index,
+                            id=InvocationId(
+                                test_module_path=test_module_path,
+                                test_class_name=None,
+                                test_function_name=test_name,
+                                function_getting_tested=func_name,
+                                iteration_id=line_id,
+                            ),
+                            file_name=test_file_path,
+                            runtime=runtime,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                            stdout="",
+                        )
+                    )
+
+    if not test_results:
+        logger.info(f"No Jest test results parsed from {test_xml_file_path}")
+        if run_result is not None:
+            logger.debug(f"Jest stdout: {run_result.stdout[:1000] if run_result.stdout else 'empty'}")
+
+    return test_results
+
+
 def parse_test_xml(
     test_xml_file_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
+    # Route to Jest-specific parser for Jest tests
+    if test_config.test_framework == "jest":
+        return parse_jest_test_xml(test_xml_file_path, test_files, test_config, run_result)
+
     test_results = TestResults()
     # Parse unittest output
     if not test_xml_file_path.exists():
@@ -811,20 +1022,37 @@ def parse_test_results(
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
     all_args = False
+    coverage = None
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        coverage = CoverageUtils.load_from_sqlite_database(
-            database_path=coverage_database_file,
-            config_path=coverage_config_file,
-            source_code_path=source_file,
-            code_context=code_context,
-            function_name=function_name,
-        )
+        if test_config.test_framework == "jest":
+            # Jest uses coverage-final.json (coverage_database_file points to this)
+            coverage = JestCoverageUtils.load_from_jest_json(
+                coverage_json_path=coverage_database_file,
+                function_name=function_name,
+                code_context=code_context,
+                source_code_path=source_file,
+            )
+        else:
+            # Python uses coverage.py SQLite database
+            coverage = CoverageUtils.load_from_sqlite_database(
+                database_path=coverage_database_file,
+                config_path=coverage_config_file,
+                source_code_path=source_file,
+                code_context=code_context,
+                function_name=function_name,
+            )
         coverage.log_coverage()
     try:
         failures = parse_test_failures_from_stdout(run_result.stdout)
         results.test_failures = failures
     except Exception as e:
         logger.exception(e)
+
+    # Cleanup Jest coverage directory after coverage is parsed
+    import shutil
+    jest_coverage_dir = get_run_tmp_file(Path("jest_coverage"))
+    if jest_coverage_dir.exists():
+        shutil.rmtree(jest_coverage_dir, ignore_errors=True)
 
     return results, coverage if all_args else None

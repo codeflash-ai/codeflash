@@ -848,10 +848,14 @@ class FunctionOptimizer:
 
         Returns the BestOptimization and optional benchmark tree.
         """
-        with progress_bar("Running line-by-line profiling"):
-            line_profile_test_results = self.line_profiler_step(
-                code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
-            )
+        # Skip line profiling for JavaScript/TypeScript until implementation is ready
+        if self.function_to_optimize.language in ("javascript", "typescript"):
+            line_profile_test_results = {"timings": {}, "unit": 0, "str_out": ""}
+        else:
+            with progress_bar("Running line-by-line profiling"):
+                line_profile_test_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
+                )
 
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
 
@@ -1314,6 +1318,7 @@ class FunctionOptimizer:
         optimization_id: str,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
+        language: str = "python",
     ) -> concurrent.futures.Future[OptimizedCandidate | None]:
         request = AIServiceCodeRepairRequest(
             optimization_id=optimization_id,
@@ -1321,6 +1326,7 @@ class FunctionOptimizer:
             modified_source_code=modified_source_code,
             test_diffs=test_diffs,
             trace_id=trace_id,
+            language=language,
         )
         return executor.submit(ai_service_client.code_repair, request=request)
 
@@ -2016,6 +2022,7 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "language": self.function_to_optimize.language,
         }
 
         raise_pr = not self.args.no_pr
@@ -2058,7 +2065,9 @@ class FunctionOptimizer:
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir()
             data["git_remote"] = self.args.git_remote
-            check_create_pr(**data)
+            # Remove language from data dict as check_create_pr doesn't accept it
+            pr_data = {k: v for k, v in data.items() if k != "language"}
+            check_create_pr(**pr_data)
         elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
@@ -2178,7 +2187,7 @@ class FunctionOptimizer:
 
         # Skip line profiler for JavaScript/TypeScript (not yet supported)
         if self.function_to_optimize.language in ("javascript", "typescript"):
-            line_profile_results = None
+            line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         else:
             with progress_bar("Running line profiler to identify performance bottlenecks..."):
                 line_profile_results = self.line_profiler_step(
@@ -2318,6 +2327,7 @@ class FunctionOptimizer:
                 ai_service_client=ai_service_client,
                 optimization_id=candidate.optimization_id,
                 executor=self.executor,
+                language=self.function_to_optimize.language,
             )
         )
 
@@ -2386,17 +2396,25 @@ class FunctionOptimizer:
 
             # Use language-appropriate comparison
             if self.function_to_optimize.language in ("javascript", "typescript"):
-                # JavaScript: Compare using Node.js script (handles Map, Set, Date, etc. natively)
-                from codeflash.verification.equivalence import compare_javascript_test_results
-                from codeflash.code_utils.code_utils import get_run_tmp_file
-
+                # JavaScript: Compare using SQLite results if available, otherwise compare test pass/fail
                 original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
                 candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
-                match, diffs = compare_javascript_test_results(original_sqlite, candidate_sqlite)
 
-                # Cleanup SQLite files after comparison (deferred from parse_test_results)
-                candidate_sqlite.unlink(missing_ok=True)
-                # Keep original_sqlite for comparing with other candidates
+                if original_sqlite.exists() and candidate_sqlite.exists():
+                    # Full comparison using captured return values
+                    from codeflash.verification.equivalence import compare_javascript_test_results
+
+                    match, diffs = compare_javascript_test_results(original_sqlite, candidate_sqlite)
+                    # Cleanup SQLite files after comparison
+                    candidate_sqlite.unlink(missing_ok=True)
+                else:
+                    # Fallback: compare test pass/fail status (tests aren't instrumented yet)
+                    # If all tests that passed for original also pass for candidate, consider it a match
+                    if not candidate_sqlite.exists():
+                        logger.error(f"Candidate SQLite database not found: {candidate_sqlite}")
+                    logger.debug("No diffs found, skipping repair")
+                    # Use Python-style comparison on TestResults as fallback
+                    match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
             else:
                 # Python: Compare using Python comparator
                 match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
@@ -2503,6 +2521,8 @@ class FunctionOptimizer:
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     enable_coverage=enable_coverage,
+                    js_project_root=self.test_cfg.js_project_root,
+                    candidate_index=optimization_iteration,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
                 result_file_path, run_result = run_line_profile_tests(
@@ -2527,6 +2547,7 @@ class FunctionOptimizer:
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
+                    js_project_root=self.test_cfg.js_project_root,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"

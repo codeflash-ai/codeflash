@@ -101,11 +101,14 @@ class AiServiceClient:
         return response
 
     def _get_valid_candidates(
-        self, optimizations_json: list[dict[str, Any]], source: OptimizedCandidateSource
+        self,
+        optimizations_json: list[dict[str, Any]],
+        source: OptimizedCandidateSource,
+        language: str = "python",
     ) -> list[OptimizedCandidate]:
         candidates: list[OptimizedCandidate] = []
         for opt in optimizations_json:
-            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"], expected_language=language)
             if not code.code_strings:
                 continue
             candidates.append(
@@ -199,7 +202,7 @@ class AiServiceClient:
             logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
             logger.info(f"!lsp|Received {len(optimizations_json)} optimization candidates.")
             console.rule()
-            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE, language)
         try:
             error = response.json()["error"]
         except Exception:
@@ -399,6 +402,7 @@ class AiServiceClient:
                 "modified_source_code": request.modified_source_code,
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
+                "language": request.language,
             }
             response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
@@ -410,7 +414,9 @@ class AiServiceClient:
             fixed_optimization = response.json()
             console.rule()
 
-            valid_candidates = self._get_valid_candidates([fixed_optimization], OptimizedCandidateSource.REPAIR)
+            valid_candidates = self._get_valid_candidates(
+                [fixed_optimization], OptimizedCandidateSource.REPAIR, request.language
+            )
             if not valid_candidates:
                 logger.error("Code repair failed to generate a valid candidate.")
                 return None
@@ -721,6 +727,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
+        language: str = "python",
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
@@ -762,7 +769,8 @@ class AiServiceClient:
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
-            "python_version": platform.python_version(),
+            "language": language,
+            "python_version": platform.python_version() if language == "python" else None,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

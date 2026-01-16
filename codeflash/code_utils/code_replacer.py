@@ -498,7 +498,7 @@ def replace_function_definitions_for_language(
     from codeflash.languages import get_language_support
     from codeflash.languages.base import FunctionInfo, Language, ParentInfo
 
-    source_code: str = module_abspath.read_text(encoding="utf8")
+    original_source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
 
     if not code_to_apply.strip():
@@ -522,16 +522,16 @@ def replace_function_definitions_for_language(
             is_async=function_to_optimize.is_async,
             language=language,
         )
-        new_code = lang_support.replace_function(source_code, func_info, code_to_apply)
+        new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
     else:
         # Fallback: find function in source and replace
         # This is less precise but works when we don't have line info
         functions = lang_support.discover_functions(module_abspath)
+        new_code = original_source_code
         for func in functions:
             qualified_name = func.qualified_name
             if qualified_name in function_names or func.name in function_names:
-                new_code = lang_support.replace_function(source_code, func, code_to_apply)
-                source_code = new_code  # Continue with modified source for multiple replacements
+                new_code = lang_support.replace_function(new_code, func, code_to_apply)
                 break
         else:
             # No matching function found
@@ -539,7 +539,7 @@ def replace_function_definitions_for_language(
             return False
 
     # Check if there was actually a change
-    if source_code.strip() == new_code.strip():
+    if original_source_code.strip() == new_code.strip():
         return False
 
     module_abspath.write_text(new_code, encoding="utf8")
@@ -550,12 +550,18 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
     if module_optimized_code is None:
-        logger.warning(
-            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-            "re-check your 'markdown code structure'"
-            f"existing files are {file_to_code_context.keys()}"
-        )
-        module_optimized_code = ""
+        # Fallback for JavaScript/TypeScript: if there's only one code block with None file path,
+        # use it regardless of the expected path (the AI server doesn't always include file paths)
+        if "None" in file_to_code_context and len(file_to_code_context) == 1:
+            module_optimized_code = file_to_code_context["None"]
+            logger.debug(f"Using code block with None file_path for {relative_path}")
+        else:
+            logger.warning(
+                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                "re-check your 'markdown code structure'"
+                f"existing files are {file_to_code_context.keys()}"
+            )
+            module_optimized_code = ""
     return module_optimized_code
 
 

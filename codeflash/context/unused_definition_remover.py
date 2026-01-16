@@ -722,6 +722,11 @@ def detect_unused_helper_functions(
         List of FunctionSource objects representing unused helper functions
 
     """
+    # Skip this analysis for non-Python languages since we use Python's ast module
+    if function_to_optimize.language in ("javascript", "typescript"):
+        logger.debug("Skipping unused helper function detection for JavaScript/TypeScript")
+        return []
+
     if isinstance(optimized_code, CodeStringsMarkdown) and len(optimized_code.code_strings) > 0:
         return list(
             chain.from_iterable(

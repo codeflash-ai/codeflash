@@ -93,6 +93,7 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+    language: str = "python"
 
 
 class OptimizationReviewResult(NamedTuple):
@@ -226,7 +227,9 @@ class CodeString(BaseModel):
         return self
 
 
-def get_code_block_splitter(file_path: Path) -> str:
+def get_code_block_splitter(file_path: Path | None) -> str:
+    if file_path is None:
+        return ""
     return f"# file: {file_path.as_posix()}"
 
 

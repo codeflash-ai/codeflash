@@ -8,11 +8,13 @@
  * @returns {string} - The reversed string
  */
 function reverseString(str) {
-    let result = '';
-    for (let i = str.length - 1; i >= 0; i--) {
-        result += str[i]; // Inefficient string concatenation
+    // Efficient O(n) implementation using a single allocation and one join
+    const len = str.length;
+    const result = new Array(len);
+    for (let i = 0; i < len; i++) {
+        result[i] = str[len - 1 - i];
     }
-    return result;
+    return result.join('');
 }
 
 /**

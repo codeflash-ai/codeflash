@@ -65,19 +65,20 @@ let db = null;
 
 /**
  * Get high-resolution time in nanoseconds.
- * Prefers process.hrtime.bigint() for nanosecond precision,
- * falls back to performance.now() * 1e6 for non-Node environments.
+ * Cached at module load time for minimal overhead during timing.
  *
- * @returns {bigint|number} - Time in nanoseconds
+ * @returns {bigint} - Time in nanoseconds
  */
-function getTimeNs() {
+const getTimeNs = (() => {
+    // Determine timing method once at module load, not on every call
     if (typeof process !== 'undefined' && process.hrtime && process.hrtime.bigint) {
-        return process.hrtime.bigint();
+        // Node.js with BigInt hrtime support - fastest, most precise
+        return () => process.hrtime.bigint();
     }
-    // Fallback to performance.now() in milliseconds, converted to nanoseconds
+    // Fallback: pre-import performance module once
     const { performance } = require('perf_hooks');
-    return BigInt(Math.floor(performance.now() * 1_000_000));
-}
+    return () => BigInt(Math.floor(performance.now() * 1_000_000));
+})();
 
 /**
  * Calculate duration in nanoseconds.
