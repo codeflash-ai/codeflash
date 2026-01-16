@@ -4,6 +4,7 @@ import asyncio
 import gc
 import os
 import sqlite3
+import time
 from enum import Enum
 from functools import wraps
 from pathlib import Path
@@ -163,5 +164,47 @@ def codeflash_performance_async(func: F) -> F:
         if exception:
             raise exception
         return return_value
+
+    return async_wrapper
+
+
+def codeflash_concurrency_async(func: F) -> F:
+    """Measures concurrent vs sequential execution performance for async functions."""
+
+    @wraps(func)
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        function_name = func.__name__
+        concurrency_factor = int(os.environ.get("CODEFLASH_CONCURRENCY_FACTOR", "10"))
+
+        test_module_name = os.environ.get("CODEFLASH_TEST_MODULE", "")
+        test_class_name = os.environ.get("CODEFLASH_TEST_CLASS", "")
+        test_function = os.environ.get("CODEFLASH_TEST_FUNCTION", "")
+        loop_index = os.environ.get("CODEFLASH_LOOP_INDEX", "0")
+
+        # Phase 1: Sequential execution timing
+        gc.disable()
+        try:
+            seq_start = time.perf_counter_ns()
+            for _ in range(concurrency_factor):
+                result = await func(*args, **kwargs)
+            sequential_time = time.perf_counter_ns() - seq_start
+        finally:
+            gc.enable()
+
+        # Phase 2: Concurrent execution timing
+        gc.disable()
+        try:
+            conc_start = time.perf_counter_ns()
+            tasks = [func(*args, **kwargs) for _ in range(concurrency_factor)]
+            await asyncio.gather(*tasks)
+            concurrent_time = time.perf_counter_ns() - conc_start
+        finally:
+            gc.enable()
+
+        # Output parseable metrics
+        tag = f"{test_module_name}:{test_class_name}:{test_function}:{function_name}:{loop_index}"
+        print(f"!@######CONC:{tag}:{sequential_time}:{concurrent_time}:{concurrency_factor}######@!")
+
+        return result
 
     return async_wrapper
