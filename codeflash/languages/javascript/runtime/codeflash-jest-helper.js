@@ -301,10 +301,12 @@ function capture(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
-        // This matches what Jest's junit XML produces
+        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
+        // Strip the leading "tests/" directory to match what Jest's junit XML produces
+        // and what module_name_from_file_path(test_file, tests_root) generates
         testModulePath = relativePath
             .replace(/\\/g, '/')       // Handle Windows paths
+            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')       // Remove .js extension
             .replace(/\.test$/, '.test') // Keep .test suffix
             .replace(/\//g, '.');       // Convert path separators to dots
@@ -404,9 +406,11 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
+        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
+        // Strip leading "tests/" to match XML module path format
         testModulePath = relativePath
             .replace(/\\/g, '/')
+            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')
             .replace(/\.test$/, '.test')
             .replace(/\//g, '.');
@@ -544,9 +548,11 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
+        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
+        // Strip leading "tests/" to match XML module path format
         testModulePath = relativePath
             .replace(/\\/g, '/')
+            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')
             .replace(/\.test$/, '.test')
             .replace(/\//g, '.');
@@ -632,8 +638,8 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
             break;
         }
 
-        // Stop if we've reached min loops AND exceeded time limit
-        if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS) {
+        // Stop if we've reached min loops AND exceeded a reasonable portion of time
+        if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS * 0.8) {
             break;
         }
 

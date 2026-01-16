@@ -601,6 +601,24 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
+        # For JavaScript/TypeScript, copy all runtime files to tests directory
+        if language in ("javascript", "typescript"):
+            import shutil
+
+            from codeflash.languages.javascript.runtime import get_all_runtime_files
+
+            # Copy all runtime files (helper, serializer, comparator, etc.)
+            for runtime_file_source in get_all_runtime_files():
+                runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
+
+                # Copy file if it doesn't exist or is outdated
+                if (
+                    not runtime_file_dest.exists()
+                    or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime
+                ):
+                    shutil.copy2(runtime_file_source, runtime_file_dest)
+                    logger.debug(f"Copied {runtime_file_source.name} to {runtime_file_dest}")
+
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,
             helper_functions=code_context.helper_functions,
@@ -2238,6 +2256,7 @@ class FunctionOptimizer:
             for result in behavioral_results
             if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
         ]
+
         if total_timing == 0:
             logger.warning("The overall summed benchmark runtime of the original function is 0, couldn't run tests.")
             console.rule()
@@ -2587,6 +2606,7 @@ class FunctionOptimizer:
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             # For JavaScript behavior tests, skip SQLite cleanup - files needed for JS-native comparison
+            #TODO (ali): make sure it works fine
             is_js_for_original_code = self.is_js and optimization_iteration == 0
             is_js_behavior = (self.is_js and testing_type == TestingMode.BEHAVIOR) or is_js_for_original_code
 

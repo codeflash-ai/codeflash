@@ -519,9 +519,11 @@ def parse_jest_test_xml(
                     timed_out = True
 
             # Find matching timing markers for this test
-            # Jest test names in markers match the full test name
-            # the test_name is the string in describe and test arguments, the group 2 is the same but with _ instead of spaces
-            matching_starts = [m for m in start_matches if m.group(2).replace("_", " ") in test_name]
+            # Jest test names in markers are sanitized (spaces → underscores)
+            # The marker format is: testModulePath:testFunctionName:funcName:loopIndex:lineId
+            # We need to check group(2) (testFunctionName) and handle sanitization
+            sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
+            matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
             if not matching_starts:
                 # No timing markers found - add basic result
@@ -1024,6 +1026,7 @@ def parse_test_results(
     # (comparison happens in JavaScript land via compare_javascript_test_results)
     if not skip_sqlite_cleanup:
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
+
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
     all_args = False

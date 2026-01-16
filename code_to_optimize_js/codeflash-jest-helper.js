@@ -193,7 +193,7 @@ function initDatabase() {
             )
         `);
     } catch (e) {
-        console.log('[codeflash] Failed to initialize SQLite:', e.message);
+        console.error('[codeflash] Failed to initialize SQLite:', e.message);
         useSqlite = false;
     }
 }
