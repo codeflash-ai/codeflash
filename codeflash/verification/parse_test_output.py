@@ -520,8 +520,11 @@ def parse_jest_test_xml(
                     timed_out = True
 
             # Find matching timing markers for this test
-            # Jest test names in markers match the full test name
-            matching_starts = [m for m in start_matches if test_name in m.group(1)]
+            # Jest test names in markers are sanitized (spaces → underscores)
+            # The marker format is: testModulePath:testFunctionName:funcName:loopIndex:lineId
+            # We need to check group(2) (testFunctionName) and handle sanitization
+            sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
+            matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
             if not matching_starts:
                 # No timing markers found - add basic result

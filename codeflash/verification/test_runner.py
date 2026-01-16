@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages.javascript.runtime import get_all_runtime_files
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -20,6 +22,23 @@ if TYPE_CHECKING:
 
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+
+def _ensure_js_runtime_files(js_project_root: Path) -> None:
+    """Ensure JavaScript runtime files are present in the project root.
+
+    Copies codeflash-jest-helper.js and related files to the JS project root
+    if they don't already exist or are outdated.
+
+    Args:
+        js_project_root: The JavaScript project root directory.
+    """
+    for runtime_file in get_all_runtime_files():
+        dest_path = js_project_root / runtime_file.name
+        # Always copy to ensure we have the latest version
+        if not dest_path.exists() or dest_path.stat().st_mtime < runtime_file.stat().st_mtime:
+            shutil.copy2(runtime_file, dest_path)
+            logger.debug(f"Copied {runtime_file.name} to {js_project_root}")
 
 
 def _find_js_project_root(file_path: Path) -> Path | None:
@@ -80,6 +99,9 @@ def run_jest_behavioral_tests(
     # Use the JS project root, or fall back to provided cwd
     effective_cwd = js_project_root if js_project_root else cwd
     logger.debug(f"Jest working directory: {effective_cwd}")
+
+    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    _ensure_js_runtime_files(effective_cwd)
 
     # Coverage output directory
     coverage_dir = get_run_tmp_file(Path("jest_coverage"))
@@ -373,11 +395,13 @@ def run_jest_benchmarking_tests(
         test_paths: TestFiles object containing test file information.
         test_env: Environment variables for the test run.
         cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds.
+        timeout: Optional timeout in seconds for the subprocess.
         js_project_root: JavaScript project root (directory containing package.json).
         min_loops: Minimum number of loops to run for each test case.
         max_loops: Maximum number of loops to run for each test case.
-        target_duration_ms: Target duration in milliseconds for looping.
+        target_duration_ms: Target TOTAL duration in milliseconds for looping.
+            This is divided among test cases since JavaScript uses capturePerfLooped
+            which loops internally per test case, unlike Python's external looping.
         stability_check: Whether to enable stability-based early stopping.
 
     Returns:
@@ -389,6 +413,13 @@ def run_jest_benchmarking_tests(
     # Get performance test files
     test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
 
+    # Count approximate number of test cases to divide time budget
+    # JavaScript's capturePerfLooped loops internally per test case, so we need to divide
+    # the total time budget among test cases to avoid timeout
+    num_test_cases = len(test_files) * 10  # Estimate ~10 test cases per file (conservative)
+    # Use at least 500ms per test case for fast functions, cap at 2 seconds
+    per_test_duration_ms = max(500, min(2000, target_duration_ms // max(1, num_test_cases)))
+
     # Use provided js_project_root, or detect it as fallback
     if js_project_root is None and test_files:
         first_test_file = Path(test_files[0])
@@ -396,6 +427,9 @@ def run_jest_benchmarking_tests(
 
     effective_cwd = js_project_root if js_project_root else cwd
     logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
+
+    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    _ensure_js_runtime_files(effective_cwd)
 
     # Build Jest command for performance tests
     jest_cmd = [
@@ -433,14 +467,23 @@ def run_jest_benchmarking_tests(
     # Looping configuration for stable performance measurements
     jest_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
     jest_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
-    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(target_duration_ms)
+    # Use per-test duration instead of total duration
+    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(per_test_duration_ms)
     jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
 
+    # Calculate subprocess timeout based on expected benchmarking time
+    # For slow O(n²) functions, a single call might take seconds, so add generous buffer
+    # Allow for Jest startup overhead (10s) + per-test-case benchmarking + safety margin
+    expected_benchmarking_time_s = (num_test_cases * per_test_duration_ms) / 1000 + 10
+    # Use at least 60 seconds to handle slow functions, or calculated time with 2x margin
+    subprocess_timeout = max(60, int(expected_benchmarking_time_s * 2))
+
     logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
+    logger.debug(f"Jest benchmarking config: {num_test_cases} estimated test cases, {per_test_duration_ms}ms per test, min_loops={min_loops}, {subprocess_timeout}s subprocess timeout")
 
     try:
         run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
+            cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
         )
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
         # Jest sends console.log output to stderr by default - move it to stdout
@@ -456,7 +499,7 @@ def run_jest_benchmarking_tests(
             )
         logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
-        logger.warning(f"Jest benchmarking tests timed out after {timeout}s")
+        logger.warning(f"Jest benchmarking tests timed out after {subprocess_timeout}s")
         result = subprocess.CompletedProcess(
             args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking tests timed out"
         )

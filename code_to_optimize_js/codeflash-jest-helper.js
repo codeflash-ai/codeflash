@@ -632,6 +632,12 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
             break;
         }
 
+        // EARLY EXIT: Stop if we've exceeded time limit (even before MIN_LOOPS)
+        // This handles slow functions that would otherwise timeout
+        if (elapsedMs >= TARGET_DURATION_MS) {
+            break;
+        }
+
         // Stop if we've reached min loops AND exceeded a reasonable portion of time
         if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS * 0.8) {
             break;
