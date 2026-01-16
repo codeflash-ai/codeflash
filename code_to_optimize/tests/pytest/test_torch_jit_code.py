@@ -9,7 +9,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from code_to_optimize.sample_jit_code import (
+from code_to_optimize.sample_code import (
     leapfrog_integration_torch,
     longest_increasing_subsequence_length_torch,
     tridiagonal_solve_torch,

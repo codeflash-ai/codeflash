@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from code_to_optimize.sample_jit_code import (
+from code_to_optimize.sample_code import (
     leapfrog_integration,
     longest_increasing_subsequence_length,
     tridiagonal_solve,

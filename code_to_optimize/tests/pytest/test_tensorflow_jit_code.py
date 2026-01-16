@@ -9,7 +9,7 @@ import pytest
 
 tf = pytest.importorskip("tensorflow")
 
-from code_to_optimize.sample_jit_code import (
+from code_to_optimize.sample_code import (
     leapfrog_integration_tf,
     longest_increasing_subsequence_length_tf,
     tridiagonal_solve_tf,

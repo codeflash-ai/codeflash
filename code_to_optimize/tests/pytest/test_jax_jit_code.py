@@ -10,7 +10,7 @@ import pytest
 jax = pytest.importorskip("jax")
 import jax.numpy as jnp
 
-from code_to_optimize.sample_jit_code import (
+from code_to_optimize.sample_code import (
     leapfrog_integration_jax,
     longest_increasing_subsequence_length_jax,
     tridiagonal_solve_jax,
