@@ -1,13 +1,13 @@
 """
 Unit tests for JAX implementations of JIT-suitable functions.
 
-Tests run on CPU and CUDA devices.
+Tests run on CPU, CUDA, and Metal (Mac) devices.
 """
 
 import numpy as np
 import pytest
 
-jax = pytest.importorskip("jax")
+import jax
 import jax.numpy as jnp
 
 from code_to_optimize.sample_code import (
@@ -32,6 +32,14 @@ def get_available_devices():
     except RuntimeError:
         pass
 
+    # Check for Metal (Mac)
+    try:
+        metal_devices = jax.devices("METAL")
+        if metal_devices:
+            devices.append("metal")
+    except RuntimeError:
+        pass
+
     return devices
 
 
@@ -44,6 +52,8 @@ def to_device(arr, device):
         return jax.device_put(arr, jax.devices("cpu")[0])
     elif device == "cuda":
         return jax.device_put(arr, jax.devices("gpu")[0])
+    elif device == "metal":
+        return jax.device_put(arr, jax.devices("METAL")[0])
     return arr
 
 

@@ -1,8 +1,10 @@
 """
 Unit tests for TensorFlow implementations of JIT-suitable functions.
 
-Tests run on CPU and CUDA devices.
+Tests run on CPU, CUDA, and Metal (Mac) devices.
 """
+
+import platform
 
 import numpy as np
 import pytest
@@ -20,10 +22,14 @@ def get_available_devices():
     """Return list of available TensorFlow devices for testing."""
     devices = ["cpu"]
 
-    # Check for CUDA/GPU
+    # Check for GPU devices
     gpus = tf.config.list_physical_devices("GPU")
     if gpus:
-        devices.append("cuda")
+        # On macOS, GPUs are Metal devices; on other platforms, they're CUDA
+        if platform.system() == "Darwin":
+            devices.append("metal")
+        else:
+            devices.append("cuda")
 
     return devices
 
@@ -35,7 +41,7 @@ def run_on_device(func, device, *args, **kwargs):
     """Run a function on the specified device."""
     if device == "cpu":
         device_name = "/CPU:0"
-    elif device == "cuda":
+    elif device in ("cuda", "metal"):
         device_name = "/GPU:0"
     else:
         device_name = "/CPU:0"
@@ -48,7 +54,7 @@ def to_tensor(arr, device, dtype=tf.float64):
     """Create a tensor on the specified device."""
     if device == "cpu":
         device_name = "/CPU:0"
-    elif device == "cuda":
+    elif device in ("cuda", "metal"):
         device_name = "/GPU:0"
     else:
         device_name = "/CPU:0"

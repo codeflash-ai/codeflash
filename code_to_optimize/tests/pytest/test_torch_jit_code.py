@@ -7,7 +7,7 @@ Tests run on CPU, CUDA, and MPS devices.
 import numpy as np
 import pytest
 
-torch = pytest.importorskip("torch")
+import torch
 
 from code_to_optimize.sample_code import (
     leapfrog_integration_torch,
