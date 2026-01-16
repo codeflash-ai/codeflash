@@ -12,7 +12,45 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast doubling for integer n >= 2 gives O(log n) time.
+    // Returns [F(k), F(k+1)]
+    function fastDoubling(k) {
+        if (k === 0) {
+            return [0, 1];
+        }
+        const half = fastDoubling((k / 2) | 0);
+        const a = half[0];
+        const b = half[1];
+        const c = a * (2 * b - a);
+        const d = a * a + b * b;
+        if ((k & 1) === 0) {
+            return [c, d];
+        } else {
+            return [d, c + d];
+        }
+    }
+
+    if (Number.isInteger(n)) {
+        return fastDoubling(n)[0];
+    }
+
+    // For non-integer n > 1, memoize the recursive definition to avoid exponential blowup.
+    const cache = new Map();
+    function memo(x) {
+        if (x <= 1) {
+            return x;
+        }
+        const cached = cache.get(x);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const res = memo(x - 1) + memo(x - 2);
+        cache.set(x, res);
+        return res;
+    }
+
+    return memo(n);
 }
 
 /**
