@@ -362,8 +362,12 @@ def run_jest_benchmarking_tests(
     *,
     timeout: int | None = None,
     js_project_root: Path | None = None,
+    min_loops: int = 5,
+    max_loops: int = 100_000,
+    target_duration_ms: int = 10_000,
+    stability_check: bool = True,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    """Run Jest benchmarking tests.
+    """Run Jest benchmarking tests with internal looping for stable measurements.
 
     Args:
         test_paths: TestFiles object containing test file information.
@@ -371,6 +375,10 @@ def run_jest_benchmarking_tests(
         cwd: Working directory for running tests.
         timeout: Optional timeout in seconds.
         js_project_root: JavaScript project root (directory containing package.json).
+        min_loops: Minimum number of loops to run for each test case.
+        max_loops: Maximum number of loops to run for each test case.
+        target_duration_ms: Target duration in milliseconds for looping.
+        stability_check: Whether to enable stability-based early stopping.
 
     Returns:
         Tuple of (result_file_path, subprocess_result).
@@ -422,6 +430,11 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_TEST_ITERATION"] = "0"
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"
     jest_env["CODEFLASH_MODE"] = "performance"
+    # Looping configuration for stable performance measurements
+    jest_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
+    jest_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
+    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(target_duration_ms)
+    jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
 
     logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
 
@@ -470,7 +483,17 @@ def run_benchmarking_tests(
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework == "jest":
-        return run_jest_benchmarking_tests(test_paths, test_env, cwd, timeout=pytest_timeout, js_project_root=js_project_root)
+        return run_jest_benchmarking_tests(
+            test_paths,
+            test_env,
+            cwd,
+            timeout=pytest_timeout,
+            js_project_root=js_project_root,
+            min_loops=pytest_min_loops,
+            max_loops=pytest_max_loops,
+            target_duration_ms=int(pytest_target_runtime_seconds * 1000),
+            stability_check=True,
+        )
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
