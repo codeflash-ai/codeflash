@@ -27,7 +27,7 @@ def generate_tests(
     test_index: int,
     test_path: Path,
     test_perf_path: Path,
-) -> tuple[str, str, Path] | None:
+) -> tuple[str, str, str, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
     start_time = time.perf_counter()
