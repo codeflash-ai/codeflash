@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import shorten_pytest_error
+from codeflash.languages.javascript.runtime import get_compare_results_path
 from codeflash.models.models import TestDiff, TestDiffScope, TestResults, TestType, VerificationType
 from codeflash.verification.comparator import comparator
 
@@ -17,10 +18,7 @@ if TYPE_CHECKING:
 
 INCREASED_RECURSION_LIMIT = 5000
 
-# Path to JavaScript comparison script (relative to codeflash package)
-JAVASCRIPT_COMPARATOR_SCRIPT = (
-    Path(__file__).parent.parent / "languages" / "javascript" / "runtime" / "codeflash-compare-results.js"
-)
+JAVASCRIPT_COMPARATOR_SCRIPT = get_compare_results_path()
 
 reprlib_repr = reprlib.Repr()
 reprlib_repr.maxstring = 1500
@@ -223,14 +221,18 @@ def compare_javascript_test_results(
                 scope = TestDiffScope.DID_PASS
 
             test_info = diff.get("test_info", {})
+            # Build a test identifier string for JavaScript tests
+            test_function_name = test_info.get("test_function_name", "unknown")
+            function_getting_tested = test_info.get("function_getting_tested", "unknown")
+            test_src_code = f"// Test: {test_function_name}\n// Testing function: {function_getting_tested}"
 
             test_diffs.append(
                 TestDiff(
                     scope=scope,
                     original_value=diff.get("original"),
                     candidate_value=diff.get("candidate"),
-                    test_src_code=None,  # JavaScript tests don't have Python source
-                    candidate_pytest_error=None,
+                    test_src_code=test_src_code,
+                    candidate_pytest_error=diff.get("candidate_error"),
                     original_pass=True,  # Assume passed if we got results
                     candidate_pass=diff.get("scope") != "missing",
                     original_pytest_error=None,

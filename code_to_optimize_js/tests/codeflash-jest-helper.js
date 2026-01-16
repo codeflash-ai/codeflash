@@ -49,6 +49,31 @@ const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX || '1', 10);
 const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION || '0';
 const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE || '';
 
+// Random seed for reproducible test runs
+// Both original and optimized runs use the same seed to get identical "random" values
+const RANDOM_SEED = parseInt(process.env.CODEFLASH_RANDOM_SEED || '0', 10);
+
+/**
+ * Seeded random number generator using mulberry32 algorithm.
+ * This provides reproducible "random" numbers given a fixed seed.
+ */
+function createSeededRandom(seed) {
+    let state = seed;
+    return function() {
+        state |= 0;
+        state = state + 0x6D2B79F5 | 0;
+        let t = Math.imul(state ^ state >>> 15, 1 | state);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+// Override Math.random with seeded version if seed is provided
+if (RANDOM_SEED !== 0) {
+    const seededRandom = createSeededRandom(RANDOM_SEED);
+    Math.random = seededRandom;
+}
+
 // Looping configuration for performance benchmarking
 const MIN_LOOPS = parseInt(process.env.CODEFLASH_MIN_LOOPS || '5', 10);
 const MAX_LOOPS = parseInt(process.env.CODEFLASH_MAX_LOOPS || '100000', 10);
@@ -301,12 +326,10 @@ function capture(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
-        // Strip the leading "tests/" directory to match what Jest's junit XML produces
-        // and what module_name_from_file_path(test_file, tests_root) generates
+        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
+        // This matches what Jest's junit XML produces
         testModulePath = relativePath
             .replace(/\\/g, '/')       // Handle Windows paths
-            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')       // Remove .js extension
             .replace(/\.test$/, '.test') // Keep .test suffix
             .replace(/\//g, '.');       // Convert path separators to dots
@@ -406,11 +429,9 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
-        // Strip leading "tests/" to match XML module path format
+        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
         testModulePath = relativePath
             .replace(/\\/g, '/')
-            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')
             .replace(/\.test$/, '.test')
             .replace(/\//g, '.');
@@ -548,11 +569,9 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
         // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to module-style path (e.g., "tests/test_foo.test.js" -> "test_foo.test")
-        // Strip leading "tests/" to match XML module path format
+        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
         testModulePath = relativePath
             .replace(/\\/g, '/')
-            .replace(/^tests\//, '')   // Strip leading "tests/" directory
             .replace(/\.js$/, '')
             .replace(/\.test$/, '.test')
             .replace(/\//g, '.');
@@ -638,8 +657,8 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
             break;
         }
 
-        // Stop if we've reached min loops AND exceeded a reasonable portion of time
-        if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS * 0.8) {
+        // Stop if we've reached min loops AND exceeded time limit
+        if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS) {
             break;
         }
 

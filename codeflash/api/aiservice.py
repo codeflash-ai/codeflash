@@ -101,10 +101,7 @@ class AiServiceClient:
         return response
 
     def _get_valid_candidates(
-        self,
-        optimizations_json: list[dict[str, Any]],
-        source: OptimizedCandidateSource,
-        language: str = "python",
+        self, optimizations_json: list[dict[str, Any]], source: OptimizedCandidateSource, language: str = "python"
     ) -> list[OptimizedCandidate]:
         candidates: list[OptimizedCandidate] = []
         for opt in optimizations_json:
@@ -183,8 +180,8 @@ class AiServiceClient:
             payload["language_version"] = language_version or "ES2022"
 
         # DEBUG: Print payload language field
-        print(
-            f"[CLI DEBUG] Sending optimize request with language='{payload['language']}' (type: {type(payload['language'])})"
+        logger.debug(
+            f"Sending optimize request with language='{payload['language']}' (type: {type(payload['language'])})"
         )
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
@@ -685,9 +682,7 @@ class AiServiceClient:
             payload["language_version"] = language_version or "ES2022"
 
         # DEBUG: Print payload language field
-        print(
-            f"[CLI DEBUG] Sending testgen request with language='{payload['language']}', framework='{test_framework}'"
-        )
+        logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
