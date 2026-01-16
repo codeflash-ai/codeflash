@@ -140,10 +140,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
 
 
 def parse_jest_json_results(
-    file_location: Path,
-    test_files: TestFiles,
-    test_config: TestConfig,
-    function_name: str | None = None,
+    file_location: Path, test_files: TestFiles, test_config: TestConfig, function_name: str | None = None
 ) -> TestResults:
     """Parse Jest test results from JSON format written by codeflash-jest-helper.
 
@@ -362,7 +359,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     else:
                         # Python uses pickle serialization
                         ret_val = (pickle.loads(val[7]),)
-                except Exception as e:  # noqa: S112
+                except Exception as e:
                     # If deserialization fails, skip this result
                     logger.debug(f"Failed to deserialize return value for {test_function_name}: {e}")
                     continue
@@ -405,6 +402,7 @@ def _extract_jest_console_output(suite_elem) -> str:
 
     Returns:
         Concatenated message content from all log entries
+
     """
     import json
 
@@ -455,6 +453,7 @@ def parse_jest_test_xml(
 
     Returns:
         TestResults containing parsed test invocations
+
     """
     test_results = TestResults()
 
@@ -1058,6 +1057,7 @@ def parse_test_results(
 
     # Cleanup Jest coverage directory after coverage is parsed
     import shutil
+
     jest_coverage_dir = get_run_tmp_file(Path("jest_coverage"))
     if jest_coverage_dir.exists():
         shutil.rmtree(jest_coverage_dir, ignore_errors=True)

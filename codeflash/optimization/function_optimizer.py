@@ -487,8 +487,7 @@ class FunctionOptimizer:
                 rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
                 self.original_module_path = rel_path
                 logger.debug(
-                    f"!lsp|JS module path: source={source_file_abs}, "
-                    f"tests_root={tests_root_abs}, rel_path={rel_path}"
+                    f"!lsp|JS module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
                 )
             except ValueError:
                 # Fallback if paths are on different drives (Windows)
@@ -602,15 +601,19 @@ class FunctionOptimizer:
 
         # For JavaScript/TypeScript, copy all runtime files to tests directory
         if language in ("javascript", "typescript"):
-            from codeflash.languages.javascript.runtime import get_all_runtime_files
             import shutil
+
+            from codeflash.languages.javascript.runtime import get_all_runtime_files
 
             # Copy all runtime files (helper, serializer, comparator, etc.)
             for runtime_file_source in get_all_runtime_files():
                 runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
 
                 # Copy file if it doesn't exist or is outdated
-                if not runtime_file_dest.exists() or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime:
+                if (
+                    not runtime_file_dest.exists()
+                    or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime
+                ):
                     shutil.copy2(runtime_file_source, runtime_file_dest)
                     logger.debug(f"Copied {runtime_file_source.name} to {runtime_file_dest}")
 
@@ -868,7 +871,9 @@ class FunctionOptimizer:
         else:
             with progress_bar("Running line-by-line profiling"):
                 line_profile_test_results = self.line_profiler_step(
-                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
+                    code_context=code_context,
+                    original_helper_code=original_helper_code,
+                    candidate_index=candidate_index,
                 )
 
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
@@ -2246,15 +2251,6 @@ class FunctionOptimizer:
             if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
         ]
 
-        # For JavaScript/TypeScript: If performance benchmarking fails, use behavioral test timing as fallback
-        if total_timing == 0 and self.function_to_optimize.language in ("javascript", "typescript"):
-            behavioral_timing = behavioral_results.total_passed_runtime()
-            if behavioral_timing > 0:
-                logger.info(f"Performance benchmarking returned 0 runtime, using behavioral test timing as fallback: {behavioral_timing}ns")
-                total_timing = behavioral_timing
-                # Use behavioral results for benchmarking since performance tests failed
-                benchmarking_results = behavioral_results
-
         if total_timing == 0:
             logger.warning("The overall summed benchmark runtime of the original function is 0, couldn't run tests.")
             console.rule()
@@ -2438,7 +2434,9 @@ class FunctionOptimizer:
                         logger.error(f"Candidate SQLite database not found: {candidate_sqlite}")
                     logger.debug("No diffs found, skipping repair")
                     # Use Python-style comparison on TestResults as fallback
-                    match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+                    match, diffs = compare_test_results(
+                        baseline_results.behavior_test_results, candidate_behavior_results
+                    )
             else:
                 # Python: Compare using Python comparator
                 match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
@@ -2484,17 +2482,7 @@ class FunctionOptimizer:
                 else 0
             )
 
-            total_candidate_timing = candidate_benchmarking_results.total_passed_runtime()
-
-            # For JavaScript/TypeScript: If performance benchmarking fails, use behavioral test timing as fallback
-            if total_candidate_timing == 0 and self.function_to_optimize.language in ("javascript", "typescript"):
-                candidate_behavioral_timing = candidate_behavior_results.total_passed_runtime()
-                if candidate_behavioral_timing > 0:
-                    logger.info(f"Performance benchmarking returned 0 runtime for candidate, using behavioral test timing as fallback: {candidate_behavioral_timing}ns")
-                    total_candidate_timing = candidate_behavioral_timing
-                    candidate_benchmarking_results = candidate_behavior_results
-
-            if total_candidate_timing == 0:
+            if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
 

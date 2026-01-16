@@ -554,9 +554,7 @@ def filter_test_files_by_imports(
     return filtered_map
 
 
-def _detect_language_from_functions(
-    file_to_funcs: dict[Path, list[FunctionToOptimize]] | None,
-) -> str | None:
+def _detect_language_from_functions(file_to_funcs: dict[Path, list[FunctionToOptimize]] | None) -> str | None:
     """Detect language from the functions to optimize.
 
     Args:
@@ -576,9 +574,7 @@ def _detect_language_from_functions(
 
 
 def discover_tests_for_language(
-    cfg: TestConfig,
-    language: str,
-    file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None,
+    cfg: TestConfig, language: str, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
     """Discover tests using language-specific support.
 
