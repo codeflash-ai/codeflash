@@ -28,7 +28,14 @@
           },
           {
             "group": "📖 Codeflash CLI",
-            "pages": ["cli-reference"]
+            "pages": [
+              "cli-reference/index",
+              "cli-reference/setup",
+              "cli-reference/optimization",
+              "cli-reference/tracing",
+              "cli-reference/flags",
+              "cli-reference/troubleshooting"
+            ]
           },
           {
             "group": "🛠 IDE Extension",
