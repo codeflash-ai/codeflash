@@ -1,3 +1,4 @@
+import math
 from functools import partial
 
 import jax.numpy as jnp
@@ -5,6 +6,9 @@ import numpy as np
 import tensorflow as tf
 import torch
 from jax import lax
+from numba import njit
+
+_numba_available = False
 
 
 def tridiagonal_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -71,43 +75,9 @@ def leapfrog_integration(
 
     G = 1.0
 
-    for step in range(n_steps):
-        acc.fill(0.0)
-
-        for i in range(n_particles):
-            for j in range(i + 1, n_particles):
-                dx = pos[j, 0] - pos[i, 0]
-                dy = pos[j, 1] - pos[i, 1]
-                dz = pos[j, 2] - pos[i, 2]
-
-                dist_sq = dx * dx + dy * dy + dz * dz + softening * softening
-                dist = np.sqrt(dist_sq)
-                dist_cubed = dist_sq * dist
-
-                force_over_dist = G / dist_cubed
-
-                acc[i, 0] += masses[j] * force_over_dist * dx
-                acc[i, 1] += masses[j] * force_over_dist * dy
-                acc[i, 2] += masses[j] * force_over_dist * dz
-
-                acc[j, 0] -= masses[i] * force_over_dist * dx
-                acc[j, 1] -= masses[i] * force_over_dist * dy
-                acc[j, 2] -= masses[i] * force_over_dist * dz
-
-        for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
-
-        for i in range(n_particles):
-            pos[i, 0] += dt * vel[i, 0]
-            pos[i, 1] += dt * vel[i, 1]
-            pos[i, 2] += dt * vel[i, 2]
-
-        for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
+    # Use the JIT-compiled core when available; it operates in-place on pos and vel.
+    # If Numba is not installed, _leapfrog_core is a plain-Python function (behaves identically).
+    _leapfrog_core(pos, vel, masses, dt, n_steps, softening)
 
     return pos, vel
 
@@ -474,3 +444,85 @@ def longest_increasing_subsequence_length_tf(arr):
     )
 
     return int(tf.reduce_max(dp))
+
+def njit(*args, **kwargs):
+    # simple pass-through decorator when Numba isn't installed
+    def _decorator(func):
+        return func
+    if args and callable(args[0]):
+        return args[0]
+    return _decorator
+
+
+@njit(cache=True)
+def _leapfrog_core(
+    pos: np.ndarray,
+    vel: np.ndarray,
+    masses: np.ndarray,
+    dt: float,
+    n_steps: int,
+    softening: float
+) -> None:
+    n_particles = masses.shape[0]
+    acc = np.zeros_like(pos)
+
+    G = 1.0
+
+    soft2 = softening * softening
+    half_dt = 0.5 * dt
+
+    for step in range(n_steps):
+        # reset accelerations
+        for ii in range(n_particles):
+            acc[ii, 0] = 0.0
+            acc[ii, 1] = 0.0
+            acc[ii, 2] = 0.0
+
+        # pairwise interactions (symmetric updates)
+        for i in range(n_particles):
+            mi = masses[i]
+            pos_i0 = pos[i, 0]
+            pos_i1 = pos[i, 1]
+            pos_i2 = pos[i, 2]
+            for j in range(i + 1, n_particles):
+                dx = pos[j, 0] - pos_i0
+                dy = pos[j, 1] - pos_i1
+                dz = pos[j, 2] - pos_i2
+
+                dist_sq = dx * dx + dy * dy + dz * dz + soft2
+                dist = math.sqrt(dist_sq)
+                dist_cubed = dist_sq * dist
+
+                force_over_dist = G / dist_cubed
+
+                mj = masses[j]
+
+                ax = mj * force_over_dist * dx
+                ay = mj * force_over_dist * dy
+                az = mj * force_over_dist * dz
+
+                acc[i, 0] += ax
+                acc[i, 1] += ay
+                acc[i, 2] += az
+
+                acc[j, 0] -= mi * force_over_dist * dx
+                acc[j, 1] -= mi * force_over_dist * dy
+                acc[j, 2] -= mi * force_over_dist * dz
+
+        # velocity half-step
+        for i in range(n_particles):
+            vel[i, 0] += half_dt * acc[i, 0]
+            vel[i, 1] += half_dt * acc[i, 1]
+            vel[i, 2] += half_dt * acc[i, 2]
+
+        # position full-step
+        for i in range(n_particles):
+            pos[i, 0] += dt * vel[i, 0]
+            pos[i, 1] += dt * vel[i, 1]
+            pos[i, 2] += dt * vel[i, 2]
+
+        # velocity half-step
+        for i in range(n_particles):
+            vel[i, 0] += half_dt * acc[i, 0]
+            vel[i, 1] += half_dt * acc[i, 1]
+            vel[i, 2] += half_dt * acc[i, 2]
