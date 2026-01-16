@@ -65,6 +65,8 @@ def run_jest_behavioral_tests(
 
     # Find the JavaScript project root from the test file paths
     # Jest needs to run from the directory containing package.json or jest.config.js
+    # The js_project_root should be passed via cwd if properly configured,
+    # but we detect it here as a fallback for safety
     js_project_root = None
     if test_files:
         first_test_file = Path(test_files[0])
@@ -116,6 +118,17 @@ def run_jest_behavioral_tests(
             cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
         )
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        # Jest sends console.log output to stderr by default - move it to stdout
+        # so our timing markers (printed via console.log) are in the expected place
+        if result.stderr and not result.stdout:
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
+            )
+        elif result.stderr:
+            # Combine stderr into stdout if both have content
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
+            )
         logger.debug(f"Jest result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest tests timed out after {timeout}s")
@@ -386,6 +399,17 @@ def run_jest_benchmarking_tests(
             cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
         )
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        # Jest sends console.log output to stderr by default - move it to stdout
+        # so our timing markers (printed via console.log) are in the expected place
+        if result.stderr and not result.stdout:
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
+            )
+        elif result.stderr:
+            # Combine stderr into stdout if both have content
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
+            )
         logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest benchmarking tests timed out after {timeout}s")

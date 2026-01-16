@@ -461,10 +461,28 @@ class FunctionOptimizer:
             # e.g., for source at /project/fibonacci.js and tests at /project/tests/
             # the relative path should be ../fibonacci
             try:
-                # TODO for claude: The absolute path resolution should happen when the file paths are initially read. not here
                 # Resolve both paths to absolute to ensure consistent relative path calculation
                 source_file_abs = self.function_to_optimize.file_path.resolve().with_suffix("")
                 tests_root_abs = test_cfg.tests_root.resolve()
+
+                # Find the JavaScript project root (directory containing package.json)
+                js_project_root = self._find_js_project_root(self.function_to_optimize.file_path)
+
+                # Validate that tests_root is within the same JS project as the source file
+                # If not, use a sensible default (js_project_root/tests)
+                if js_project_root:
+                    try:
+                        tests_root_abs.relative_to(js_project_root)
+                    except ValueError:
+                        # tests_root is outside the JS project - use default
+                        logger.warning(
+                            f"Configured tests_root {tests_root_abs} is outside JS project {js_project_root}. "
+                            f"Using default: {js_project_root / 'tests'}"
+                        )
+                        tests_root_abs = js_project_root / "tests"
+                        if not tests_root_abs.exists():
+                            tests_root_abs = js_project_root
+
                 # Use os.path.relpath to compute relative path from tests_root to source file
                 rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
                 self.original_module_path = rel_path
@@ -494,6 +512,27 @@ class FunctionOptimizer:
         self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
+
+    @staticmethod
+    def _find_js_project_root(file_path: Path) -> Path | None:
+        """Find the JavaScript/TypeScript project root by looking for package.json.
+
+        Traverses up from the given file path to find the nearest directory
+        containing package.json or jest.config.js.
+
+        Args:
+            file_path: A file path within the JavaScript project.
+
+        Returns:
+            The project root directory, or None if not found.
+
+        """
+        current = file_path.parent if file_path.is_file() else file_path
+        while current != current.parent:  # Stop at filesystem root
+            if (current / "package.json").exists() or (current / "jest.config.js").exists():
+                return current
+            current = current.parent
+        return None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -587,6 +626,7 @@ class FunctionOptimizer:
                 f.write(generated_test.instrumented_perf_test_source)
             logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
 
+            # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
             test_file_obj = TestFile(
                 instrumented_behavior_file_path=generated_test.behavior_file_path,
                 benchmarking_file_path=generated_test.perf_file_path,
@@ -2092,9 +2132,12 @@ class FunctionOptimizer:
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
             try:
-                instrument_codeflash_capture(
-                    self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                )
+                # Only instrument Python code here - JavaScript uses codeflash-jest-helper.js
+                # which is already included in the generated/instrumented tests
+                if self.function_to_optimize.language not in ("javascript", "typescript"):
+                    instrument_codeflash_capture(
+                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                    )
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
@@ -2311,9 +2354,11 @@ class FunctionOptimizer:
                 )
 
             try:
-                instrument_codeflash_capture(
-                    self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                )
+                # Only instrument Python code here - JavaScript uses codeflash-jest-helper.js
+                if self.function_to_optimize.language not in ("javascript", "typescript"):
+                    instrument_codeflash_capture(
+                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                    )
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 candidate_behavior_results, _ = self.run_and_parse_tests(
@@ -2326,9 +2371,11 @@ class FunctionOptimizer:
                 )
             # Remove instrumentation
             finally:
-                self.write_code_and_helpers(
-                    candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                )
+                # Only restore code for Python - JavaScript tests are self-contained
+                if self.function_to_optimize.language not in ("javascript", "typescript"):
+                    self.write_code_and_helpers(
+                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
+                    )
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),

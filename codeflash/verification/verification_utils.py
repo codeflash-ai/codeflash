@@ -80,6 +80,7 @@ class TestConfig:
     benchmark_tests_root: Optional[Path] = None
     use_cache: bool = True
     _language: Optional[str] = None  # Language identifier for multi-language support
+    js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
 
     @property
     def test_framework(self) -> str:

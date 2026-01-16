@@ -62,6 +62,27 @@ class Optimizer:
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
 
+    @staticmethod
+    def _find_js_project_root(file_path: Path) -> Path | None:
+        """Find the JavaScript/TypeScript project root by looking for package.json.
+
+        Traverses up from the given file path to find the nearest directory
+        containing package.json or jest.config.js.
+
+        Args:
+            file_path: A file path within the JavaScript project.
+
+        Returns:
+            The project root directory, or None if not found.
+
+        """
+        current = file_path.parent if file_path.is_file() else file_path
+        while current != current.parent:  # Stop at filesystem root
+            if (current / "package.json").exists() or (current / "jest.config.js").exists():
+                return current
+            current = current.parent
+        return None
+
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
     ) -> tuple[dict[str, dict[BenchmarkKey, float]], dict[BenchmarkKey, float]]:
@@ -433,9 +454,12 @@ class Optimizer:
 
         # Set language on TestConfig based on discovered functions
         if file_to_funcs_to_optimize:
-            for funcs in file_to_funcs_to_optimize.values():
+            for file_path, funcs in file_to_funcs_to_optimize.items():
                 if funcs and funcs[0].language:
                     self.test_cfg.set_language(funcs[0].language)
+                    # For JavaScript, also set js_project_root for test execution
+                    if funcs[0].language in ("javascript", "typescript"):
+                        self.test_cfg.js_project_root = self._find_js_project_root(file_path)
                     break
 
         if self.args.all:

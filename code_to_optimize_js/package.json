@@ -13,7 +13,7 @@
     "testing"
   ],
   "author": "CodeFlash Inc.",
-  "license": "MIT",
+  "license": "BSL 1.1",
   "devDependencies": {
     "jest": "^29.7.0",
     "jest-junit": "^16.0.0"
