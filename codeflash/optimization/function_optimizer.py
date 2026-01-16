@@ -1957,11 +1957,7 @@ class FunctionOptimizer:
         )
 
         generated_tests = add_runtime_comments_to_generated_tests(
-            generated_tests,
-            original_runtime_by_test,
-            optimized_runtime_by_test,
-            self.test_cfg.tests_project_rootdir,
-            language=self.function_to_optimize.language,
+            generated_tests, original_runtime_by_test, optimized_runtime_by_test, self.test_cfg.tests_project_rootdir
         )
 
         generated_tests_str = ""
@@ -2447,11 +2443,9 @@ class FunctionOptimizer:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
             else:
-                if not self.is_js:
-                    # TODO: get repair to work with js/ts code
-                    self.repair_if_possible(
-                        candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
-                    )
+                self.repair_if_possible(
+                    candidate, diffs, eval_ctx, code_context, len(candidate_behavior_results), exp_type
+                )
                 return self.get_results_not_matched_error()
 
             logger.info(f"loading|Running performance tests for candidate {optimization_candidate_index}...")
@@ -2606,7 +2600,7 @@ class FunctionOptimizer:
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             # For JavaScript behavior tests, skip SQLite cleanup - files needed for JS-native comparison
-            #TODO (ali): make sure it works fine
+            # TODO (ali): make sure it works fine
             is_js_for_original_code = self.is_js and optimization_iteration == 0
             is_js_behavior = (self.is_js and testing_type == TestingMode.BEHAVIOR) or is_js_for_original_code
 
