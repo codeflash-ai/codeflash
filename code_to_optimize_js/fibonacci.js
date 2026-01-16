@@ -12,7 +12,28 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast path for non-negative integer inputs (O(n) time, O(1) memory)
+    if (Number.isInteger(n) && n >= 0) {
+        let a = 0;
+        let b = 1;
+        for (let i = 2; i <= n; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
+    }
+
+    // Fallback to the original recursive behavior for other numeric inputs
+    function slow(x) {
+        if (x <= 1) {
+            return x;
+        }
+        return slow(x - 1) + slow(x - 2);
+    }
+
+    return slow(n);
 }
 
 /**
