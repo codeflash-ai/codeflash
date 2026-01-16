@@ -1,6 +1,7 @@
 from functools import partial
 
 import jax.numpy as jnp
+import numba
 import numpy as np
 import tensorflow as tf
 import torch
@@ -36,6 +37,7 @@ def tridiagonal_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
     return x
 
 
+@numba.njit(cache=True)
 def leapfrog_integration(
     positions: np.ndarray,
     velocities: np.ndarray,
