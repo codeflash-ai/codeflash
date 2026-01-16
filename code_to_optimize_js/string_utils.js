@@ -79,11 +79,26 @@ function longestCommonPrefix(strs) {
  * @returns {string} - The title-cased string
  */
 function toTitleCase(str) {
-    return str
-        .toLowerCase()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    if (!str) return str;
+    
+    let result = '';
+    let capitalizeNext = true;
+    
+    for (let i = 0, len = str.length; i < len; i++) {
+        const char = str[i];
+        
+        if (char === ' ') {
+            result += char;
+            capitalizeNext = true;
+        } else if (capitalizeNext) {
+            result += char.toUpperCase();
+            capitalizeNext = false;
+        } else {
+            result += char.toLowerCase();
+        }
+    }
+    
+    return result;
 }
 
 module.exports = {
