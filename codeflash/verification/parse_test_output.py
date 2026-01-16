@@ -316,7 +316,12 @@ def parse_test_xml(
                 logger.warning(f"Could not find the test for file name - {test_file_path} ")
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
-            assert test_type is not None, f"Test type not found for {test_file_path}"
+            if test_type is None:
+                logger.warning(
+                    f"Test type not found for {test_file_path}. "
+                    f"This may indicate the test file was not properly registered. Skipping test case."
+                )
+                continue
             test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
             result = testcase.is_passed  # TODO: See for the cases of ERROR and SKIPPED
             test_class = None

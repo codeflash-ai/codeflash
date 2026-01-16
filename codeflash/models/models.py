@@ -372,21 +372,82 @@ class TestFiles(BaseModel):
             raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
-        return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
-
-    def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
+        # Normalize the input path for comparison
+        try:
+            normalized_file_path = file_path.resolve()
+        except (OSError, RuntimeError):
+            normalized_file_path = file_path.absolute()
+        
         return next(
             (
-                test_file.test_type
+                test_file
                 for test_file in self.test_files
-                if (file_path in (test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path))
+                if test_file.original_file_path is not None
+                and self._paths_match(normalized_file_path, test_file.original_file_path, None)
             ),
             None,
         )
 
-    def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
+    def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
+        # Normalize the input path for comparison
+        try:
+            normalized_file_path = file_path.resolve()
+        except (OSError, RuntimeError):
+            # If resolve fails (e.g., file doesn't exist), use absolute path
+            normalized_file_path = file_path.absolute()
+        
         return next(
-            (test_file.test_type for test_file in self.test_files if test_file.original_file_path == file_path), None
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if self._paths_match(
+                    normalized_file_path,
+                    test_file.instrumented_behavior_file_path,
+                    test_file.benchmarking_file_path,
+                )
+            ),
+            None,
+        )
+    
+    def _paths_match(self, path1: Path, path2: Path | None, path3: Path | None) -> bool:
+        """Check if path1 matches path2 or path3 after normalization."""
+        def normalize_path(path: Path) -> Path:
+            """Normalize a path for comparison."""
+            try:
+                return path.resolve()
+            except (OSError, RuntimeError):
+                # If resolve fails (e.g., file doesn't exist), use absolute path
+                return path.absolute()
+        
+        normalized_path1 = normalize_path(path1)
+        
+        if path2 is not None:
+            normalized_path2 = normalize_path(path2)
+            # Compare using string representation to handle Windows path case insensitivity
+            if str(normalized_path1).lower() == str(normalized_path2).lower():
+                return True
+        if path3 is not None:
+            normalized_path3 = normalize_path(path3)
+            # Compare using string representation to handle Windows path case insensitivity
+            if str(normalized_path1).lower() == str(normalized_path3).lower():
+                return True
+        return False
+
+    def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
+        # Normalize the input path for comparison
+        try:
+            normalized_file_path = file_path.resolve()
+        except (OSError, RuntimeError):
+            normalized_file_path = file_path.absolute()
+        
+        return next(
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if test_file.original_file_path is not None
+                and self._paths_match(normalized_file_path, test_file.original_file_path, None)
+            ),
+            None,
         )
 
     def __iter__(self) -> Iterator[TestFile]:
