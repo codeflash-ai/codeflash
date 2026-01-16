@@ -1,6 +1,7 @@
 from functools import partial
 
 import jax.numpy as jnp
+import numba
 import numpy as np
 import tensorflow as tf
 import torch
@@ -56,6 +57,7 @@ def tridiagonal_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
     return x
 
 
+@numba.njit(cache=True)
 def leapfrog_integration(
     positions: np.ndarray,
     velocities: np.ndarray,
@@ -71,6 +73,9 @@ def leapfrog_integration(
 
     G = 1.0
 
+    half_dt = 0.5 * dt
+    softening_sq = softening * softening
+
     for step in range(n_steps):
         acc.fill(0.0)
 
@@ -80,7 +85,7 @@ def leapfrog_integration(
                 dy = pos[j, 1] - pos[i, 1]
                 dz = pos[j, 2] - pos[i, 2]
 
-                dist_sq = dx * dx + dy * dy + dz * dz + softening * softening
+                dist_sq = dx * dx + dy * dy + dz * dz + softening_sq
                 dist = np.sqrt(dist_sq)
                 dist_cubed = dist_sq * dist
 
@@ -95,9 +100,10 @@ def leapfrog_integration(
                 acc[j, 2] -= masses[i] * force_over_dist * dz
 
         for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
+            vel[i, 0] += half_dt * acc[i, 0]
+            vel[i, 1] += half_dt * acc[i, 1]
+            vel[i, 2] += half_dt * acc[i, 2]
+
 
         for i in range(n_particles):
             pos[i, 0] += dt * vel[i, 0]
@@ -105,9 +111,9 @@ def leapfrog_integration(
             pos[i, 2] += dt * vel[i, 2]
 
         for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
+            vel[i, 0] += half_dt * acc[i, 0]
+            vel[i, 1] += half_dt * acc[i, 1]
+            vel[i, 2] += half_dt * acc[i, 2]
 
     return pos, vel
 
