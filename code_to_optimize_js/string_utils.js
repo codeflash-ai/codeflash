@@ -8,18 +8,8 @@
  * @returns {string} - The reversed string
  */
 function reverseString(str) {
-    // Intentionally inefficient O(n²) implementation for testing
-    let result = '';
-    for (let i = str.length - 1; i >= 0; i--) {
-        // Rebuild the entire result string each iteration (very inefficient)
-        let temp = '';
-        for (let j = 0; j < result.length; j++) {
-            temp += result[j];
-        }
-        temp += str[i];
-        result = temp;
-    }
-    return result;
+    // Optimized O(n) implementation using array operations
+    return str.split('').reverse().join('');
 }
 
 /**
@@ -79,11 +69,26 @@ function longestCommonPrefix(strs) {
  * @returns {string} - The title-cased string
  */
 function toTitleCase(str) {
-    return str
-        .toLowerCase()
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+    if (!str) return str;
+    
+    let result = '';
+    let capitalizeNext = true;
+    
+    for (let i = 0, len = str.length; i < len; i++) {
+        const char = str[i];
+        
+        if (char === ' ') {
+            result += char;
+            capitalizeNext = true;
+        } else if (capitalizeNext) {
+            result += char.toUpperCase();
+            capitalizeNext = false;
+        } else {
+            result += char.toLowerCase();
+        }
+    }
+    
+    return result;
 }
 
 module.exports = {
