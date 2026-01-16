@@ -996,14 +996,20 @@ def parse_test_results(
     except Exception as e:
         logger.exception(f"Failed to parse SQLite test results: {e}")
 
-    # Fall back to legacy binary format for Python tests if SQLite doesn't exist
-    if not test_results_data.test_results and test_config.test_framework != "jest":
+    # Also try to read legacy binary format for Python tests
+    # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
+    # from @codeflash_capture. We need to merge both sources.
+    if test_config.test_framework != "jest":
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
-                test_results_data = parse_test_return_values_bin(
+                bin_test_results = parse_test_return_values_bin(
                     bin_results_file, test_files=test_files, test_config=test_config
                 )
+                # Merge binary results with SQLite results
+                for result in bin_test_results:
+                    test_results_data.add(result)
+                logger.debug(f"Merged {len(bin_test_results)} results from binary file")
         except AttributeError as e:
             logger.exception(e)
 

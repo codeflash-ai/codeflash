@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.javascript.runtime import get_all_runtime_files
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.models.test_type import TestType
 from codeflash.verification.verification_utils import TestConfig
@@ -26,8 +27,14 @@ from codeflash.verification.test_runner import run_jest_behavioral_tests, run_je
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
 
-# Path to the JavaScript test project
+# Path to the JavaScript test project (sample code only)
 JS_PROJECT_ROOT = Path(__file__).parent.parent / "code_to_optimize_js"
+
+
+def setup_js_test_environment(project_dir: Path) -> None:
+    """Copy JavaScript runtime files from codeflash package to project directory."""
+    for runtime_file in get_all_runtime_files():
+        shutil.copy(runtime_file, project_dir / runtime_file.name)
 
 
 class TestJavaScriptInstrumentation:
@@ -47,7 +54,7 @@ const { reverseString } = require('../string_utils');
 describe('reverseString', () => {
     test('should reverse a string', () => {
         // Behavior mode: capture inputs, outputs, timing to SQLite
-        const result = codeflash.capture('reverseString', reverseString, 'hello');
+        const result = codeflash.capture('reverseString', '8', reverseString, 'hello');
         // [codeflash-disabled] expect(result).toBe('olleh');
     });
 });
@@ -61,7 +68,7 @@ const { reverseString } = require('../string_utils');
 describe('reverseString', () => {
     test('benchmark reverseString', () => {
         // Performance mode: only timing to stdout, no SQLite overhead
-        const result = codeflash.capturePerf('reverseString', reverseString, 'hello');
+        const result = codeflash.capturePerf('reverseString', '8', reverseString, 'hello');
         // [codeflash-disabled] expect(result).toBe('olleh');
     });
 });
@@ -86,6 +93,9 @@ class TestJavaScriptTestExecution:
         project_dir = tmp_path / "js_project"
         shutil.copytree(JS_PROJECT_ROOT, project_dir)
 
+        # Copy runtime JS files from codeflash package
+        setup_js_test_environment(project_dir)
+
         # Create a simple instrumented test file
         test_file = project_dir / "tests" / "test_instrumented.test.js"
         test_file.parent.mkdir(parents=True, exist_ok=True)
@@ -96,12 +106,12 @@ const { reverseString } = require('../string_utils');
 
 describe('reverseString instrumented', () => {
     test('should reverse hello', () => {
-        const result = codeflash.capture('reverseString', reverseString, 'hello');
+        const result = codeflash.capture('reverseString', '7', reverseString, 'hello');
         // [codeflash-disabled] expect(result).toBe('olleh');
     });
 
     test('should reverse world', () => {
-        const result = codeflash.capture('reverseString', reverseString, 'world');
+        const result = codeflash.capture('reverseString', '12', reverseString, 'world');
         // [codeflash-disabled] expect(result).toBe('dlrow');
     });
 });
@@ -345,6 +355,9 @@ class TestEndToEndJavaScript:
         project_dir = tmp_path / "js_project"
         shutil.copytree(JS_PROJECT_ROOT, project_dir)
 
+        # Copy runtime JS files from codeflash package
+        setup_js_test_environment(project_dir)
+
         # Ensure dependencies are installed
         subprocess.run(
             ["npm", "install"],
@@ -367,7 +380,7 @@ const { reverseString } = require('../string_utils');
 
 describe('reverseString behavior', () => {
     test('reverses hello', () => {
-        const result = codeflash.capture('reverseString', reverseString, 'hello');
+        const result = codeflash.capture('reverseString', '8', reverseString, 'hello');
         // [codeflash-disabled] expect(result).toBe('olleh');
     });
 });
@@ -440,7 +453,7 @@ const { reverseString } = require('../string_utils');
 
 describe('reverseString benchmark', () => {
     test('benchmark reverseString', () => {
-        const result = codeflash.capture('reverseString', reverseString, 'hello world');
+        const result = codeflash.capture('reverseString', '8', reverseString, 'hello world');
         // [codeflash-disabled] expect(result).toBe('dlrow olleh');
     });
 });
@@ -502,7 +515,7 @@ const { reverseString } = require('../string_utils');
 describe('reverseString perf only', () => {
     test('perf test reverseString', () => {
         // Use capturePerf instead of capture for performance-only
-        const result = codeflash.capturePerf('reverseString', reverseString, 'hello world');
+        const result = codeflash.capturePerf('reverseString', '9', reverseString, 'hello world');
         // [codeflash-disabled] expect(result).toBe('dlrow olleh');
     });
 });
