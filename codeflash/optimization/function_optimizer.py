@@ -618,6 +618,7 @@ class FunctionOptimizer:
                     try:
                         new_code_context = self.get_code_optimization_context().unwrap()
                     except Exception as e:
+                        sentry_sdk.capture_exception(e)
                         logger.debug(f"!lsp|Getting new code context failed, revert to original one")    
                     # unwrite files
                     self.write_code_and_helpers(
