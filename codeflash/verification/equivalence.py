@@ -192,6 +192,7 @@ def compare_javascript_test_results(
     try:
         result = subprocess.run(
             ["node", str(script_path), str(original_sqlite_path), str(candidate_sqlite_path)],
+            check=False,
             capture_output=True,
             text=True,
             timeout=60,

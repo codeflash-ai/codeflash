@@ -359,7 +359,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     else:
                         # Python uses pickle serialization
                         ret_val = (pickle.loads(val[7]),)
-                except Exception as e:  # noqa: S112
+                except Exception as e:
                     # If deserialization fails, skip this result
                     logger.debug(f"Failed to deserialize return value for {test_function_name}: {e}")
                     continue
@@ -402,6 +402,7 @@ def _extract_jest_console_output(suite_elem) -> str:
 
     Returns:
         Concatenated message content from all log entries
+
     """
     import json
 
@@ -452,6 +453,7 @@ def parse_jest_test_xml(
 
     Returns:
         TestResults containing parsed test invocations
+
     """
     test_results = TestResults()
 

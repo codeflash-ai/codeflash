@@ -98,11 +98,7 @@ def run_jest_behavioral_tests(
 
     # Add coverage flags if enabled
     if enable_coverage:
-        jest_cmd.extend([
-            "--coverage",
-            "--coverageReporters=json",
-            f"--coverageDirectory={coverage_dir}",
-        ])
+        jest_cmd.extend(["--coverage", "--coverageReporters=json", f"--coverageDirectory={coverage_dir}"])
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
@@ -191,7 +187,9 @@ def run_behavioral_tests(
     """Run behavioral tests with optional coverage."""
     if test_framework == "jest":
         return run_jest_behavioral_tests(
-            test_paths, test_env, cwd,
+            test_paths,
+            test_env,
+            cwd,
             timeout=pytest_timeout,
             js_project_root=js_project_root,
             enable_coverage=enable_coverage,
@@ -399,14 +397,7 @@ def run_jest_benchmarking_tests(
     logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
 
     # Build Jest command for performance tests
-    jest_cmd = [
-        "npx",
-        "jest",
-        "--reporters=default",
-        "--reporters=jest-junit",
-        "--runInBand",
-        "--forceExit",
-    ]
+    jest_cmd = ["npx", "jest", "--reporters=default", "--reporters=jest-junit", "--runInBand", "--forceExit"]
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
@@ -470,9 +461,7 @@ def run_jest_benchmarking_tests(
         )
     except FileNotFoundError:
         logger.error("Jest not found for benchmarking")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found"
-        )
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
 
     return result_file_path, result
 
