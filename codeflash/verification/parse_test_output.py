@@ -1025,6 +1025,7 @@ def parse_test_results(
     # (comparison happens in JavaScript land via compare_javascript_test_results)
     if not skip_sqlite_cleanup:
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
+
     results = merge_test_results(test_results_xml, test_results_data, test_config.test_framework)
 
     all_args = False

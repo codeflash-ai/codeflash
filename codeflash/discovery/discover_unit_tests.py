@@ -656,6 +656,10 @@ def discover_unit_tests(
 
     # Route to language-specific test discovery for non-Python languages
     if language and language != "python":
+        # For JavaScript/TypeScript, tests_project_rootdir should be tests_root itself
+        # The Jest helper will be configured to NOT include "tests." prefix to match
+        if language in ("javascript", "typescript"):
+            cfg.tests_project_rootdir = cfg.tests_root
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 
     # Existing Python logic

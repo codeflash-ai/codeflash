@@ -600,6 +600,20 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
+        # For JavaScript/TypeScript, copy all runtime files to tests directory
+        if language in ("javascript", "typescript"):
+            from codeflash.languages.javascript.runtime import get_all_runtime_files
+            import shutil
+
+            # Copy all runtime files (helper, serializer, comparator, etc.)
+            for runtime_file_source in get_all_runtime_files():
+                runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
+
+                # Copy file if it doesn't exist or is outdated
+                if not runtime_file_dest.exists() or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime:
+                    shutil.copy2(runtime_file_source, runtime_file_dest)
+                    logger.debug(f"Copied {runtime_file_source.name} to {runtime_file_dest}")
+
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,
             helper_functions=code_context.helper_functions,
@@ -2231,6 +2245,16 @@ class FunctionOptimizer:
             for result in behavioral_results
             if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
         ]
+
+        # For JavaScript/TypeScript: If performance benchmarking fails, use behavioral test timing as fallback
+        if total_timing == 0 and self.function_to_optimize.language in ("javascript", "typescript"):
+            behavioral_timing = behavioral_results.total_passed_runtime()
+            if behavioral_timing > 0:
+                logger.info(f"Performance benchmarking returned 0 runtime, using behavioral test timing as fallback: {behavioral_timing}ns")
+                total_timing = behavioral_timing
+                # Use behavioral results for benchmarking since performance tests failed
+                benchmarking_results = behavioral_results
+
         if total_timing == 0:
             logger.warning("The overall summed benchmark runtime of the original function is 0, couldn't run tests.")
             console.rule()
@@ -2460,7 +2484,17 @@ class FunctionOptimizer:
                 else 0
             )
 
-            if (total_candidate_timing := candidate_benchmarking_results.total_passed_runtime()) == 0:
+            total_candidate_timing = candidate_benchmarking_results.total_passed_runtime()
+
+            # For JavaScript/TypeScript: If performance benchmarking fails, use behavioral test timing as fallback
+            if total_candidate_timing == 0 and self.function_to_optimize.language in ("javascript", "typescript"):
+                candidate_behavioral_timing = candidate_behavior_results.total_passed_runtime()
+                if candidate_behavioral_timing > 0:
+                    logger.info(f"Performance benchmarking returned 0 runtime for candidate, using behavioral test timing as fallback: {candidate_behavioral_timing}ns")
+                    total_candidate_timing = candidate_behavioral_timing
+                    candidate_benchmarking_results = candidate_behavior_results
+
+            if total_candidate_timing == 0:
                 logger.warning("The overall test runtime of the optimized function is 0, couldn't run tests.")
                 console.rule()
 
