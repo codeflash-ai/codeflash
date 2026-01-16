@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
 import torch
-from jax import lax
+from jax import jit, lax
 
 
 def tridiagonal_solve(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -148,6 +148,7 @@ def _tridiagonal_back_step_jax(x_next, inputs):
     return x_i, x_i
 
 
+@jit
 def tridiagonal_solve_jax(a, b, c, d):
     n = b.shape[0]
 
@@ -167,6 +168,7 @@ def tridiagonal_solve_jax(a, b, c, d):
     denom_last = b[n - 1] - a[n - 2] * c_prime[n - 2]
     d_prime_last = (d[n - 1] - a[n - 2] * d_prime_mid[-1]) / denom_last
     d_prime = jnp.concatenate([jnp.array([d_prime_0]), d_prime_mid, jnp.array([d_prime_last])])
+
 
     x_last = d_prime[n - 1]
     _, x_rest = lax.scan(
