@@ -18,14 +18,20 @@ if TYPE_CHECKING:
 INCREASED_RECURSION_LIMIT = 5000
 
 # Path to JavaScript comparison script (relative to codeflash package)
-JAVASCRIPT_COMPARATOR_SCRIPT = Path(__file__).parent.parent / "languages" / "javascript" / "runtime" / "codeflash-compare-results.js"
+JAVASCRIPT_COMPARATOR_SCRIPT = (
+    Path(__file__).parent.parent / "languages" / "javascript" / "runtime" / "codeflash-compare-results.js"
+)
 
 reprlib_repr = reprlib.Repr()
 reprlib_repr.maxstring = 1500
 test_diff_repr = reprlib_repr.repr
 
 
-def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
+def compare_test_results(
+    original_results: TestResults,
+    candidate_results: TestResults,
+    pass_fail_only: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
         return False, []  # empty test results are not equal
@@ -79,7 +85,9 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if original_pytest_error:
             original_pytest_error = shorten_pytest_error(original_pytest_error)
 
-        if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
+        if not pass_fail_only and comparator(
+            original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
+        ):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.RETURN_VALUE,
@@ -104,8 +112,10 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                 )
             except Exception as e:
                 logger.error(e)
-        elif (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
-            original_test_result.stdout, cdd_test_result.stdout
+        elif (
+            not pass_fail_only
+            and (original_test_result.stdout and cdd_test_result.stdout)
+            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
         ):
             test_diffs.append(
                 TestDiff(
@@ -146,9 +156,7 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
 
 
 def compare_javascript_test_results(
-    original_sqlite_path: Path,
-    candidate_sqlite_path: Path,
-    comparator_script: Path | None = None,
+    original_sqlite_path: Path, candidate_sqlite_path: Path, comparator_script: Path | None = None
 ) -> tuple[bool, list[TestDiff]]:
     """Compare JavaScript test results using the JavaScript comparator.
 

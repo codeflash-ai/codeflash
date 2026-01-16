@@ -62,6 +62,7 @@ def run_jest_behavioral_tests(
         timeout: Optional timeout in seconds.
         js_project_root: JavaScript project root (directory containing package.json).
         enable_coverage: Whether to collect coverage information.
+        candidate_index: Index of the candidate being tested.
 
     Returns:
         Tuple of (result_file_path, subprocess_result, coverage_json_path, None).
@@ -103,11 +104,9 @@ def run_jest_behavioral_tests(
             f"--coverageDirectory={coverage_dir}",
         ])
 
-    # Add test pattern if we have specific files
     if test_files:
-        # Jest uses regex for test path matching - use full paths for temp directory tests
-        test_pattern = "|".join(str(Path(f).resolve()) for f in test_files)
-        jest_cmd.append(f"--testPathPattern={test_pattern}")
+        jest_cmd.append("--runTestsByPath")
+        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -130,6 +129,8 @@ def run_jest_behavioral_tests(
     jest_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"
     jest_env["CODEFLASH_MODE"] = "behavior"
+    # Seed random number generator for reproducible test runs across original and optimized code
+    jest_env["CODEFLASH_RANDOM_SEED"] = "42"
 
     logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
 
@@ -408,8 +409,8 @@ def run_jest_benchmarking_tests(
     ]
 
     if test_files:
-        test_pattern = "|".join(str(Path(f).resolve()) for f in test_files)
-        jest_cmd.append(f"--testPathPattern={test_pattern}")
+        jest_cmd.append("--runTestsByPath")
+        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
@@ -435,12 +436,19 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
     jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(target_duration_ms)
     jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
+    # Seed random number generator for reproducible test runs across original and optimized code
+    jest_env["CODEFLASH_RANDOM_SEED"] = "42"
 
     logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
 
+    # Calculate subprocess timeout: for Jest benchmarking, we need enough time for all tests to complete
+    # Each test can run up to target_duration_ms (default 10s) for stable measurements
+    # Use a generous subprocess timeout (10 minutes) since individual test timeouts are handled by Jest
+    subprocess_timeout = 600  # 10 minutes - sufficient for benchmarking suite
+
     try:
         run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
+            cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
         )
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
         # Jest sends console.log output to stderr by default - move it to stdout
@@ -456,7 +464,7 @@ def run_jest_benchmarking_tests(
             )
         logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
-        logger.warning(f"Jest benchmarking tests timed out after {timeout}s")
+        logger.warning(f"Jest benchmarking tests timed out after {subprocess_timeout}s")
         result = subprocess.CompletedProcess(
             args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking tests timed out"
         )

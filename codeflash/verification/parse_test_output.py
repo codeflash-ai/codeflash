@@ -140,10 +140,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
 
 
 def parse_jest_json_results(
-    file_location: Path,
-    test_files: TestFiles,
-    test_config: TestConfig,
-    function_name: str | None = None,
+    file_location: Path, test_files: TestFiles, test_config: TestConfig, function_name: str | None = None
 ) -> TestResults:
     """Parse Jest test results from JSON format written by codeflash-jest-helper.
 
@@ -521,7 +518,8 @@ def parse_jest_test_xml(
 
             # Find matching timing markers for this test
             # Jest test names in markers match the full test name
-            matching_starts = [m for m in start_matches if test_name in m.group(1)]
+            # the test_name is the string in describe and test arguments, the group 2 is the same but with _ instead of spaces
+            matching_starts = [m for m in start_matches if m.group(2).replace("_", " ") in test_name]
 
             if not matching_starts:
                 # No timing markers found - add basic result
@@ -565,7 +563,6 @@ def parse_jest_test_xml(
                             runtime = int(end_match.group(6))
                         except (ValueError, IndexError):
                             pass
-
                     test_results.add(
                         FunctionTestInvocation(
                             loop_index=loop_index,
@@ -1057,6 +1054,7 @@ def parse_test_results(
 
     # Cleanup Jest coverage directory after coverage is parsed
     import shutil
+
     jest_coverage_dir = get_run_tmp_file(Path("jest_coverage"))
     if jest_coverage_dir.exists():
         shutil.rmtree(jest_coverage_dir, ignore_errors=True)
