@@ -413,6 +413,7 @@ def leapfrog_integration_tf(
     return final_pos, final_vel
 
 
+@tf.function(jit_compile=True)
 def _lis_inner_body_tf(j, dp_inner, arr, i):
     condition = tf.logical_and(arr[j] < arr[i], dp_inner[j] + 1 > dp_inner[i])
     new_val = tf.where(condition, dp_inner[j] + 1, dp_inner[i])
