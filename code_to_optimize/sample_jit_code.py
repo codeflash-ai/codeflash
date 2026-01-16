@@ -74,40 +74,33 @@ def leapfrog_integration(
     for step in range(n_steps):
         acc.fill(0.0)
 
-        for i in range(n_particles):
-            for j in range(i + 1, n_particles):
-                dx = pos[j, 0] - pos[i, 0]
-                dy = pos[j, 1] - pos[i, 1]
-                dz = pos[j, 2] - pos[i, 2]
+        # Vectorized pairwise differences: diff[i, j] = pos[j] - pos[i]
+        x = pos[:, 0]
+        y = pos[:, 1]
+        z = pos[:, 2]
 
-                dist_sq = dx * dx + dy * dy + dz * dz + softening * softening
-                dist = np.sqrt(dist_sq)
-                dist_cubed = dist_sq * dist
+        # create (N, N) difference matrices for each axis
+        dx = x[None, :] - x[:, None]
+        dy = y[None, :] - y[:, None]
+        dz = z[None, :] - z[:, None]
 
-                force_over_dist = G / dist_cubed
+        # pairwise squared distances with softening
+        dist_sq = dx * dx + dy * dy + dz * dz + softening * softening
 
-                acc[i, 0] += masses[j] * force_over_dist * dx
-                acc[i, 1] += masses[j] * force_over_dist * dy
-                acc[i, 2] += masses[j] * force_over_dist * dz
+        # inverse distance cubed
+        inv_dist3 = G / (dist_sq * np.sqrt(dist_sq))
 
-                acc[j, 0] -= masses[i] * force_over_dist * dx
-                acc[j, 1] -= masses[i] * force_over_dist * dy
-                acc[j, 2] -= masses[i] * force_over_dist * dz
+        # include masses[j] contribution and sum over j for each i
+        factor = masses[None, :] * inv_dist3
 
-        for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
+        acc[:, 0] = np.sum(factor * dx, axis=1)
+        acc[:, 1] = np.sum(factor * dy, axis=1)
+        acc[:, 2] = np.sum(factor * dz, axis=1)
 
-        for i in range(n_particles):
-            pos[i, 0] += dt * vel[i, 0]
-            pos[i, 1] += dt * vel[i, 1]
-            pos[i, 2] += dt * vel[i, 2]
-
-        for i in range(n_particles):
-            vel[i, 0] += 0.5 * dt * acc[i, 0]
-            vel[i, 1] += 0.5 * dt * acc[i, 1]
-            vel[i, 2] += 0.5 * dt * acc[i, 2]
+        # velocity half-kick, drift, velocity half-kick (preserve original sequence)
+        vel += 0.5 * dt * acc
+        pos += dt * vel
+        vel += 0.5 * dt * acc
 
     return pos, vel
 
