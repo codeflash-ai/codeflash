@@ -1,5 +1,4 @@
-"""
-JavaScript language support implementation.
+"""JavaScript language support implementation.
 
 This module implements the LanguageSupport protocol for JavaScript,
 using tree-sitter for code analysis and Jest for test execution.
@@ -7,9 +6,7 @@ using tree-sitter for code analysis and Jest for test execution.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -26,12 +23,7 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import (
-    FunctionNode,
-    TreeSitterAnalyzer,
-    TreeSitterLanguage,
-    get_analyzer_for_file,
-)
+from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -41,8 +33,7 @@ logger = logging.getLogger(__name__)
 
 @register_language
 class JavaScriptSupport:
-    """
-    JavaScript language support implementation.
+    """JavaScript language support implementation.
 
     This class implements the LanguageSupport protocol for JavaScript/JSX files,
     using tree-sitter for code analysis and Jest for test execution.
@@ -68,12 +59,9 @@ class JavaScriptSupport:
     # === Discovery ===
 
     def discover_functions(
-        self,
-        file_path: Path,
-        filter_criteria: FunctionFilterCriteria | None = None,
+        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionInfo]:
-        """
-        Find all optimizable functions in a JavaScript file.
+        """Find all optimizable functions in a JavaScript file.
 
         Uses tree-sitter to parse the file and find functions.
 
@@ -83,6 +71,7 @@ class JavaScriptSupport:
 
         Returns:
             List of FunctionInfo objects for discovered functions.
+
         """
         criteria = filter_criteria or FunctionFilterCriteria()
 
@@ -95,10 +84,7 @@ class JavaScriptSupport:
         try:
             analyzer = get_analyzer_for_file(file_path)
             tree_functions = analyzer.find_functions(
-                source,
-                include_methods=criteria.include_methods,
-                include_arrow_functions=True,
-                require_name=True,
+                source, include_methods=criteria.include_methods, include_arrow_functions=True, require_name=True
             )
 
             functions: list[FunctionInfo] = []
@@ -139,13 +125,8 @@ class JavaScriptSupport:
             logger.warning(f"Failed to parse {file_path}: {e}")
             return []
 
-    def discover_tests(
-        self,
-        test_root: Path,
-        source_functions: Sequence[FunctionInfo],
-    ) -> dict[str, list[TestInfo]]:
-        """
-        Map source functions to their tests via static analysis.
+    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
+        """Map source functions to their tests via static analysis.
 
         For JavaScript, this uses static analysis to find test files
         and match them to source functions based on imports and function calls.
@@ -156,6 +137,7 @@ class JavaScriptSupport:
 
         Returns:
             Dict mapping qualified function names to lists of TestInfo.
+
         """
         result: dict[str, list[TestInfo]] = {}
 
@@ -197,11 +179,7 @@ class JavaScriptSupport:
                             result[func.qualified_name] = []
                         for test_name in test_functions:
                             result[func.qualified_name].append(
-                                TestInfo(
-                                    test_name=test_name,
-                                    test_file=test_file,
-                                    test_class=None,
-                                )
+                                TestInfo(test_name=test_name, test_file=test_file, test_class=None)
                             )
             except Exception as e:
                 logger.debug(f"Failed to analyze test file {test_file}: {e}")
@@ -217,25 +195,19 @@ class JavaScriptSupport:
         self._walk_for_jest_tests(tree.root_node, source_bytes, test_names)
         return test_names
 
-    def _walk_for_jest_tests(
-        self, node: Any, source_bytes: bytes, test_names: list[str]
-    ) -> None:
+    def _walk_for_jest_tests(self, node: Any, source_bytes: bytes, test_names: list[str]) -> None:
         """Walk tree to find Jest test/it/describe calls."""
         if node.type == "call_expression":
             func_node = node.child_by_field_name("function")
             if func_node:
-                func_name = source_bytes[func_node.start_byte : func_node.end_byte].decode(
-                    "utf8"
-                )
+                func_name = source_bytes[func_node.start_byte : func_node.end_byte].decode("utf8")
                 if func_name in ("test", "it", "describe"):
                     # Get the first string argument as the test name
                     args_node = node.child_by_field_name("arguments")
                     if args_node:
                         for child in args_node.children:
                             if child.type == "string":
-                                test_name = source_bytes[
-                                    child.start_byte : child.end_byte
-                                ].decode("utf8")
+                                test_name = source_bytes[child.start_byte : child.end_byte].decode("utf8")
                                 test_names.append(test_name.strip("'\""))
                                 break
 
@@ -244,14 +216,8 @@ class JavaScriptSupport:
 
     # === Code Analysis ===
 
-    def extract_code_context(
-        self,
-        function: FunctionInfo,
-        project_root: Path,
-        module_root: Path,
-    ) -> CodeContext:
-        """
-        Extract function code and its dependencies.
+    def extract_code_context(self, function: FunctionInfo, project_root: Path, module_root: Path) -> CodeContext:
+        """Extract function code and its dependencies.
 
         Uses tree-sitter to analyze imports and find helper functions.
 
@@ -262,16 +228,13 @@ class JavaScriptSupport:
 
         Returns:
             CodeContext with target code and dependencies.
+
         """
         try:
             source = function.file_path.read_text()
         except Exception as e:
             logger.error(f"Failed to read {function.file_path}: {e}")
-            return CodeContext(
-                target_code="",
-                target_file=function.file_path,
-                language=Language.JAVASCRIPT,
-            )
+            return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVASCRIPT)
 
         # Extract the function source
         lines = source.splitlines(keepends=True)
@@ -286,9 +249,7 @@ class JavaScriptSupport:
         imports = analyzer.find_imports(source)
 
         # Find helper functions called by target
-        helpers = self._find_helper_functions(
-            function, source, analyzer, imports, module_root
-        )
+        helpers = self._find_helper_functions(function, source, analyzer, imports, module_root)
 
         # Extract import statements as strings
         import_lines = []
@@ -306,12 +267,7 @@ class JavaScriptSupport:
         )
 
     def _find_helper_functions(
-        self,
-        function: FunctionInfo,
-        source: str,
-        analyzer: TreeSitterAnalyzer,
-        imports: list[Any],
-        module_root: Path,
+        self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
     ) -> list[HelperFunction]:
         """Find helper functions called by the target function."""
         helpers: list[HelperFunction] = []
@@ -322,10 +278,7 @@ class JavaScriptSupport:
         # Find the target function's tree-sitter node
         target_func = None
         for func in all_functions:
-            if (
-                func.name == function.name
-                and func.start_line == function.start_line
-            ):
+            if func.name == function.name and func.start_line == function.start_line:
                 target_func = func
                 break
 
@@ -353,13 +306,8 @@ class JavaScriptSupport:
 
         return helpers
 
-    def find_helper_functions(
-        self,
-        function: FunctionInfo,
-        project_root: Path,
-    ) -> list[HelperFunction]:
-        """
-        Find helper functions called by the target function.
+    def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
+        """Find helper functions called by the target function.
 
         Args:
             function: The target function to analyze.
@@ -367,28 +315,21 @@ class JavaScriptSupport:
 
         Returns:
             List of HelperFunction objects.
+
         """
         try:
             source = function.file_path.read_text()
             analyzer = get_analyzer_for_file(function.file_path)
             imports = analyzer.find_imports(source)
-            return self._find_helper_functions(
-                function, source, analyzer, imports, project_root
-            )
+            return self._find_helper_functions(function, source, analyzer, imports, project_root)
         except Exception as e:
             logger.warning(f"Failed to find helpers for {function.name}: {e}")
             return []
 
     # === Code Transformation ===
 
-    def replace_function(
-        self,
-        source: str,
-        function: FunctionInfo,
-        new_source: str,
-    ) -> str:
-        """
-        Replace a function in source code with new implementation.
+    def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
+        """Replace a function in source code with new implementation.
 
         Uses text-based replacement with line numbers.
 
@@ -399,6 +340,7 @@ class JavaScriptSupport:
 
         Returns:
             Modified source code with function replaced.
+
         """
         if function.start_line is None or function.end_line is None:
             logger.error(f"Function {function.name} has no line information")
@@ -454,13 +396,8 @@ class JavaScriptSupport:
         result_lines = before + new_lines + after
         return "".join(result_lines)
 
-    def format_code(
-        self,
-        source: str,
-        file_path: Path | None = None,
-    ) -> str:
-        """
-        Format JavaScript code using prettier (if available).
+    def format_code(self, source: str, file_path: Path | None = None) -> str:
+        """Format JavaScript code using prettier (if available).
 
         Args:
             source: Source code to format.
@@ -468,11 +405,13 @@ class JavaScriptSupport:
 
         Returns:
             Formatted source code.
+
         """
         try:
             # Try to use prettier via npx
             result = subprocess.run(
                 ["npx", "prettier", "--stdin-filepath", "file.js"],
+                check=False,
                 input=source,
                 capture_output=True,
                 text=True,
@@ -490,14 +429,9 @@ class JavaScriptSupport:
     # === Test Execution ===
 
     def run_tests(
-        self,
-        test_files: Sequence[Path],
-        cwd: Path,
-        env: dict[str, str],
-        timeout: int,
+        self, test_files: Sequence[Path], cwd: Path, env: dict[str, str], timeout: int
     ) -> tuple[list[TestResult], Path]:
-        """
-        Run Jest tests and return results.
+        """Run Jest tests and return results.
 
         Args:
             test_files: Paths to test files to run.
@@ -507,6 +441,7 @@ class JavaScriptSupport:
 
         Returns:
             Tuple of (list of TestResults, path to JUnit XML).
+
         """
         # Create output directory for results
         output_dir = cwd / ".codeflash"
@@ -530,12 +465,7 @@ class JavaScriptSupport:
 
         try:
             result = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=test_env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
+                cmd, check=False, cwd=cwd, env=test_env, capture_output=True, text=True, timeout=timeout
             )
 
             results = self.parse_test_results(junit_xml, result.stdout)
@@ -548,13 +478,8 @@ class JavaScriptSupport:
             logger.error(f"Test execution failed: {e}")
             return [], junit_xml
 
-    def parse_test_results(
-        self,
-        junit_xml_path: Path,
-        stdout: str,
-    ) -> list[TestResult]:
-        """
-        Parse test results from JUnit XML.
+    def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
+        """Parse test results from JUnit XML.
 
         Args:
             junit_xml_path: Path to JUnit XML results file.
@@ -562,6 +487,7 @@ class JavaScriptSupport:
 
         Returns:
             List of TestResult objects.
+
         """
         results: list[TestResult] = []
 
@@ -615,13 +541,8 @@ class JavaScriptSupport:
 
     # === Instrumentation ===
 
-    def instrument_for_tracing(
-        self,
-        source: str,
-        functions: Sequence[FunctionInfo],
-    ) -> str:
-        """
-        Add tracing instrumentation to capture inputs/outputs.
+    def instrument_for_tracing(self, source: str, functions: Sequence[FunctionInfo]) -> str:
+        """Add tracing instrumentation to capture inputs/outputs.
 
         For JavaScript, this wraps functions to capture their arguments
         and return values.
@@ -632,18 +553,14 @@ class JavaScriptSupport:
 
         Returns:
             Instrumented source code.
+
         """
         # For now, return source unchanged
         # Full implementation would add wrapper code
         return source
 
-    def instrument_for_benchmarking(
-        self,
-        test_source: str,
-        target_function: FunctionInfo,
-    ) -> str:
-        """
-        Add timing instrumentation to test code.
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
+        """Add timing instrumentation to test code.
 
         Args:
             test_source: Test source code to instrument.
@@ -651,6 +568,7 @@ class JavaScriptSupport:
 
         Returns:
             Instrumented test source code.
+
         """
         # For now, return source unchanged
         # Full implementation would add timing wrappers
@@ -659,8 +577,7 @@ class JavaScriptSupport:
     # === Validation ===
 
     def validate_syntax(self, source: str) -> bool:
-        """
-        Check if JavaScript source code is syntactically valid.
+        """Check if JavaScript source code is syntactically valid.
 
         Uses tree-sitter to parse and check for errors.
 
@@ -669,6 +586,7 @@ class JavaScriptSupport:
 
         Returns:
             True if valid, False otherwise.
+
         """
         try:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
@@ -679,8 +597,7 @@ class JavaScriptSupport:
             return False
 
     def normalize_code(self, source: str) -> str:
-        """
-        Normalize JavaScript code for deduplication.
+        """Normalize JavaScript code for deduplication.
 
         Removes comments and normalizes whitespace.
 
@@ -689,6 +606,7 @@ class JavaScriptSupport:
 
         Returns:
             Normalized source code.
+
         """
         # Simple normalization: remove extra whitespace
         # A full implementation would use tree-sitter to strip comments

@@ -1,5 +1,4 @@
-"""
-Tree-sitter utilities for cross-language code analysis.
+"""Tree-sitter utilities for cross-language code analysis.
 
 This module provides a unified interface for parsing and analyzing code
 across multiple languages using tree-sitter.
@@ -11,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Union
 
 from tree_sitter import Language, Node, Parser
 
@@ -27,6 +26,7 @@ class TreeSitterLanguage(Enum):
     JAVASCRIPT = "javascript"
     TYPESCRIPT = "typescript"
     TSX = "tsx"
+    GO = "go"
 
 
 # Lazy-loaded language instances
@@ -48,11 +48,15 @@ def _get_language(lang: TreeSitterLanguage) -> Language:
             import tree_sitter_typescript
 
             _LANGUAGE_CACHE[lang] = Language(tree_sitter_typescript.language_tsx())
+        elif lang == TreeSitterLanguage.GO:
+            import tree_sitter_go
+
+            _LANGUAGE_CACHE[lang] = Language(tree_sitter_go.language())
     return _LANGUAGE_CACHE[lang]
 
 
 @dataclass
-class FunctionNode:
+class JSFunctionNode:  # also works for TS
     """Represents a function found by tree-sitter analysis."""
 
     name: str
@@ -71,6 +75,53 @@ class FunctionNode:
 
 
 @dataclass
+class GOFunctionNode:
+    name: str
+    node: Node
+    start_line: int
+    end_line: int
+    start_col: int
+    end_col: int
+    source_text: str
+    receiver_type: str | None = None  # For methods: the receiver type (e.g., "*MyStruct")
+    is_method: bool = False
+
+
+@dataclass
+class GoImportInfo:
+    """Represents a Go import statement."""
+
+    package_path: str  # The import path (e.g., "fmt", "github.com/pkg/errors")
+    alias: str | None  # Optional alias (e.g., "import myalias \"fmt\"")
+    start_line: int
+    end_line: int
+
+
+@dataclass
+class GoStructInfo:
+    """Represents a Go struct or type definition."""
+
+    name: str
+    node: Node
+    start_line: int
+    end_line: int
+    source_text: str
+    kind: str  # "struct", "interface", "alias", "type"
+
+
+@dataclass
+class GoVariableInfo:
+    """Represents a Go package-level variable or constant."""
+
+    name: str
+    node: Node
+    start_line: int
+    end_line: int
+    source_text: str
+    is_const: bool
+
+
+@dataclass
 class ImportInfo:
     """Represents an import statement."""
 
@@ -84,19 +135,18 @@ class ImportInfo:
 
 
 class TreeSitterAnalyzer:
-    """
-    Cross-language code analysis using tree-sitter.
+    """Cross-language code analysis using tree-sitter.
 
     This class provides methods to parse and analyze JavaScript/TypeScript code,
     finding functions, imports, and other code structures.
     """
 
     def __init__(self, language: TreeSitterLanguage | str):
-        """
-        Initialize the analyzer for a specific language.
+        """Initialize the analyzer for a specific language.
 
         Args:
             language: The language to analyze (TreeSitterLanguage enum or string).
+
         """
         if isinstance(language, str):
             language = TreeSitterLanguage(language)
@@ -111,22 +161,21 @@ class TreeSitterAnalyzer:
         return self._parser
 
     def parse(self, source: str | bytes) -> Tree:
-        """
-        Parse source code into a tree-sitter tree.
+        """Parse source code into a tree-sitter tree.
 
         Args:
             source: Source code as string or bytes.
 
         Returns:
             The parsed tree.
+
         """
         if isinstance(source, str):
             source = source.encode("utf8")
         return self.parser.parse(source)
 
     def get_node_text(self, node: Node, source: bytes) -> str:
-        """
-        Extract the source text for a tree-sitter node.
+        """Extract the source text for a tree-sitter node.
 
         Args:
             node: The tree-sitter node.
@@ -134,18 +183,14 @@ class TreeSitterAnalyzer:
 
         Returns:
             The text content of the node.
+
         """
         return source[node.start_byte : node.end_byte].decode("utf8")
 
     def find_functions(
-        self,
-        source: str,
-        include_methods: bool = True,
-        include_arrow_functions: bool = True,
-        require_name: bool = True,
-    ) -> list[FunctionNode]:
-        """
-        Find all function definitions in source code.
+        self, source: str, include_methods: bool = True, include_arrow_functions: bool = True, require_name: bool = True
+    ) -> list[JSFunctionNode]:
+        """Find all function definitions in source code.
 
         Args:
             source: The source code to analyze.
@@ -155,12 +200,17 @@ class TreeSitterAnalyzer:
 
         Returns:
             List of FunctionNode objects describing found functions.
+
         """
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
-        functions: list[FunctionNode] = []
+        functions: Union[list[JSFunctionNode], list[GOFunctionNode]] = []
 
-        self._walk_tree_for_functions(
+        if self.language == TreeSitterLanguage.GO:
+            self._walk_tree_for_go_functions(tree.root_node, source_bytes, functions)
+            return functions
+
+        self._walk_tree_for_js_functions(
             tree.root_node,
             source_bytes,
             functions,
@@ -173,11 +223,22 @@ class TreeSitterAnalyzer:
 
         return functions
 
-    def _walk_tree_for_functions(
+    def _walk_tree_for_go_functions(self, node: Node, source_bytes: bytes, functions: list[GOFunctionNode]) -> None:
+        function_types = {"method_declaration", "function_declaration"}
+
+        if node.type in function_types:
+            func_info = self._extract_go_function_info(node, source_bytes)
+            if func_info:
+                functions.append(func_info)
+
+        for child in node.children:
+            self._walk_tree_for_go_functions(child, source_bytes, functions)
+
+    def _walk_tree_for_js_functions(
         self,
         node: Node,
         source_bytes: bytes,
-        functions: list[FunctionNode],
+        functions: list[JSFunctionNode],
         include_methods: bool,
         include_arrow_functions: bool,
         require_name: bool,
@@ -210,9 +271,7 @@ class TreeSitterAnalyzer:
                 new_class = self.get_node_text(name_node, source_bytes)
 
         if node.type in function_types:
-            func_info = self._extract_function_info(
-                node, source_bytes, current_class, current_function
-            )
+            func_info = self._extract_js_function_info(node, source_bytes, current_class, current_function)
 
             if func_info:
                 # Check if we should include this function
@@ -236,7 +295,7 @@ class TreeSitterAnalyzer:
 
         # Recurse into children
         for child in node.children:
-            self._walk_tree_for_functions(
+            self._walk_tree_for_js_functions(
                 child,
                 source_bytes,
                 functions,
@@ -247,13 +306,9 @@ class TreeSitterAnalyzer:
                 current_function=new_function if node.type in function_types else current_function,
             )
 
-    def _extract_function_info(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        current_class: str | None,
-        current_function: str | None,
-    ) -> FunctionNode | None:
+    def _extract_js_function_info(
+        self, node: Node, source_bytes: bytes, current_class: str | None, current_function: str | None
+    ) -> JSFunctionNode | None:
         """Extract function information from a tree-sitter node."""
         name = ""
         is_async = False
@@ -296,7 +351,7 @@ class TreeSitterAnalyzer:
         # Get source text
         source_text = self.get_node_text(node, source_bytes)
 
-        return FunctionNode(
+        return JSFunctionNode(
             name=name,
             node=node,
             start_line=node.start_point[0] + 1,  # Convert to 1-indexed
@@ -312,9 +367,44 @@ class TreeSitterAnalyzer:
             source_text=source_text,
         )
 
+    def _extract_go_function_info(self, node: Node, source_bytes: bytes) -> GOFunctionNode | None:
+        """Extract function information from a tree-sitter node."""
+        name = ""
+        receiver_type = None
+        is_method = node.type == "method_declaration"
+
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            name = self.get_node_text(name_node, source_bytes)
+
+        # Extract receiver type for methods
+        if is_method:
+            receiver_node = node.child_by_field_name("receiver")
+            if receiver_node:
+                # The receiver is a parameter_list containing the receiver parameter
+                for child in receiver_node.children:
+                    if child.type == "parameter_declaration":
+                        type_node = child.child_by_field_name("type")
+                        if type_node:
+                            receiver_type = self.get_node_text(type_node, source_bytes)
+                            break
+
+        source_text = self.get_node_text(node, source_bytes)
+
+        return GOFunctionNode(
+            name=name,
+            node=node,
+            start_line=node.start_point[0] + 1,  # Convert to 1-indexed
+            end_line=node.end_point[0] + 1,
+            start_col=node.start_point[1],
+            end_col=node.end_point[1],
+            source_text=source_text,
+            receiver_type=receiver_type,
+            is_method=is_method,
+        )
+
     def _get_name_from_assignment(self, node: Node, source_bytes: bytes) -> str:
-        """
-        Try to extract function name from parent variable declaration or assignment.
+        """Try to extract function name from parent variable declaration or assignment.
 
         Handles patterns like:
         - const foo = () => {}
@@ -338,7 +428,7 @@ class TreeSitterAnalyzer:
             if left_node:
                 if left_node.type == "identifier":
                     return self.get_node_text(left_node, source_bytes)
-                elif left_node.type == "member_expression":
+                if left_node.type == "member_expression":
                     # For obj.method = ..., get the property name
                     prop_node = left_node.child_by_field_name("property")
                     if prop_node:
@@ -353,14 +443,14 @@ class TreeSitterAnalyzer:
         return ""
 
     def find_imports(self, source: str) -> list[ImportInfo]:
-        """
-        Find all import statements in source code.
+        """Find all import statements in source code.
 
         Args:
             source: The source code to analyze.
 
         Returns:
             List of ImportInfo objects describing imports.
+
         """
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
@@ -370,12 +460,7 @@ class TreeSitterAnalyzer:
 
         return imports
 
-    def _walk_tree_for_imports(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        imports: list[ImportInfo],
-    ) -> None:
+    def _walk_tree_for_imports(self, node: Node, source_bytes: bytes, imports: list[ImportInfo]) -> None:
         """Recursively walk the tree to find import statements."""
         if node.type == "import_statement":
             import_info = self._extract_import_info(node, source_bytes)
@@ -416,9 +501,7 @@ class TreeSitterAnalyzer:
         # Process import clause
         for child in node.children:
             if child.type == "import_clause":
-                self._process_import_clause(
-                    child, source_bytes, default_import, named_imports, namespace_import
-                )
+                self._process_import_clause(child, source_bytes, default_import, named_imports, namespace_import)
                 # Re-extract after processing
                 for clause_child in child.children:
                     if clause_child.type == "identifier":
@@ -430,11 +513,7 @@ class TreeSitterAnalyzer:
                                 alias_node = spec.child_by_field_name("alias")
                                 if name_node:
                                     name = self.get_node_text(name_node, source_bytes)
-                                    alias = (
-                                        self.get_node_text(alias_node, source_bytes)
-                                        if alias_node
-                                        else None
-                                    )
+                                    alias = self.get_node_text(alias_node, source_bytes) if alias_node else None
                                     named_imports.append((name, alias))
                     elif clause_child.type == "namespace_import":
                         # import * as X
@@ -465,7 +544,7 @@ class TreeSitterAnalyzer:
     ) -> None:
         """Process an import clause to extract imports."""
         # This is a helper that modifies the lists in place
-        pass  # Processing is done inline in _extract_import_info
+        # Processing is done inline in _extract_import_info
 
     def _extract_require_info(self, node: Node, source_bytes: bytes) -> ImportInfo | None:
         """Extract import information from a require() call."""
@@ -506,9 +585,8 @@ class TreeSitterAnalyzer:
             end_line=node.end_point[0] + 1,
         )
 
-    def find_function_calls(self, source: str, within_function: FunctionNode) -> list[str]:
-        """
-        Find all function calls within a specific function's body.
+    def find_function_calls(self, source: str, within_function: JSFunctionNode) -> list[str]:
+        """Find all function calls within a specific function's body.
 
         Args:
             source: The full source code.
@@ -516,6 +594,7 @@ class TreeSitterAnalyzer:
 
         Returns:
             List of function names that are called.
+
         """
         calls: list[str] = []
         source_bytes = source.encode("utf8")
@@ -536,12 +615,7 @@ class TreeSitterAnalyzer:
 
         return list(set(calls))  # Remove duplicates
 
-    def _walk_tree_for_calls(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        calls: list[str],
-    ) -> None:
+    def _walk_tree_for_calls(self, node: Node, source_bytes: bytes, calls: list[str]) -> None:
         """Recursively find function calls in a subtree."""
         if node.type == "call_expression":
             func_node = node.child_by_field_name("function")
@@ -557,9 +631,8 @@ class TreeSitterAnalyzer:
         for child in node.children:
             self._walk_tree_for_calls(child, source_bytes, calls)
 
-    def has_return_statement(self, function_node: FunctionNode, source: str) -> bool:
-        """
-        Check if a function has a return statement.
+    def has_return_statement(self, function_node: Union[JSFunctionNode, GOFunctionNode], source: str) -> bool:
+        """Check if a function has a return statement.
 
         Args:
             function_node: The function to check.
@@ -567,8 +640,10 @@ class TreeSitterAnalyzer:
 
         Returns:
             True if the function has a return statement.
+
         """
-        source_bytes = source.encode("utf8")
+        if isinstance(function_node, GOFunctionNode):
+            return self._node_has_return(function_node.node)
 
         # For arrow functions with expression body, there's an implicit return
         if function_node.is_arrow:
@@ -585,12 +660,7 @@ class TreeSitterAnalyzer:
             return True
 
         # Don't recurse into nested function definitions
-        if node.type in (
-            "function_declaration",
-            "function_expression",
-            "arrow_function",
-            "method_definition",
-        ):
+        if node.type in ("function_declaration", "function_expression", "arrow_function", "method_definition"):
             # Only check the current function, not nested ones
             body_node = node.child_by_field_name("body")
             if body_node:
@@ -605,23 +675,382 @@ class TreeSitterAnalyzer:
 
         return False
 
+    # === Go-specific analysis methods ===
+
+    def find_go_imports(self, source: str) -> list[GoImportInfo]:
+        """Find all import statements in Go source code.
+
+        Args:
+            source: The Go source code to analyze.
+
+        Returns:
+            List of GoImportInfo objects describing imports.
+
+        """
+        if self.language != TreeSitterLanguage.GO:
+            return []
+
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        imports: list[GoImportInfo] = []
+
+        self._walk_tree_for_go_imports(tree.root_node, source_bytes, imports)
+
+        return imports
+
+    def _walk_tree_for_go_imports(self, node: Node, source_bytes: bytes, imports: list[GoImportInfo]) -> None:
+        """Recursively walk the tree to find Go import statements."""
+        if node.type == "import_declaration":
+            # Can be single import or import block
+            for child in node.children:
+                if child.type == "import_spec":
+                    import_info = self._extract_go_import_spec(child, source_bytes)
+                    if import_info:
+                        imports.append(import_info)
+                elif child.type == "import_spec_list":
+                    # Multiple imports in parentheses
+                    for spec in child.children:
+                        if spec.type == "import_spec":
+                            import_info = self._extract_go_import_spec(spec, source_bytes)
+                            if import_info:
+                                imports.append(import_info)
+
+        for child in node.children:
+            self._walk_tree_for_go_imports(child, source_bytes, imports)
+
+    def _extract_go_import_spec(self, node: Node, source_bytes: bytes) -> GoImportInfo | None:
+        """Extract import information from a Go import_spec node."""
+        package_path = ""
+        alias = None
+
+        # Get the package path (interpreted_string_literal)
+        path_node = node.child_by_field_name("path")
+        if path_node:
+            package_path = self.get_node_text(path_node, source_bytes).strip('"')
+
+        # Get the alias if present
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            alias = self.get_node_text(name_node, source_bytes)
+
+        if not package_path:
+            return None
+
+        return GoImportInfo(
+            package_path=package_path, alias=alias, start_line=node.start_point[0] + 1, end_line=node.end_point[0] + 1
+        )
+
+    def find_go_function_calls(self, source: str, within_function: GOFunctionNode) -> list[str]:
+        """Find all function calls within a specific Go function's body.
+
+        Args:
+            source: The full source code.
+            within_function: The function to search within.
+
+        Returns:
+            List of function names that are called.
+
+        """
+        if self.language != TreeSitterLanguage.GO:
+            return []
+
+        calls: list[str] = []
+        source_bytes = source.encode("utf8")
+
+        # Get the body of the function
+        body_node = within_function.node.child_by_field_name("body")
+        if body_node:
+            self._walk_tree_for_go_calls(body_node, source_bytes, calls)
+
+        return list(set(calls))  # Remove duplicates
+
+    def _walk_tree_for_go_calls(self, node: Node, source_bytes: bytes, calls: list[str]) -> None:
+        """Recursively find Go function calls in a subtree."""
+        if node.type == "call_expression":
+            func_node = node.child_by_field_name("function")
+            if func_node:
+                if func_node.type == "identifier":
+                    calls.append(self.get_node_text(func_node, source_bytes))
+                elif func_node.type == "selector_expression":
+                    # For method calls like obj.Method() or pkg.Function()
+                    # Get both the object/package and the method/function name
+                    field_node = func_node.child_by_field_name("field")
+                    operand_node = func_node.child_by_field_name("operand")
+                    if field_node:
+                        field_name = self.get_node_text(field_node, source_bytes)
+                        calls.append(field_name)
+                        # Also track the full qualified call for package functions
+                        if operand_node:
+                            full_call = self.get_node_text(func_node, source_bytes)
+                            calls.append(full_call)
+
+        for child in node.children:
+            self._walk_tree_for_go_calls(child, source_bytes, calls)
+
+    def find_go_structs(self, source: str) -> list[GoStructInfo]:
+        """Find all struct and type definitions in Go source code.
+
+        Args:
+            source: The Go source code to analyze.
+
+        Returns:
+            List of GoStructInfo objects describing type definitions.
+
+        """
+        if self.language != TreeSitterLanguage.GO:
+            return []
+
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        structs: list[GoStructInfo] = []
+
+        self._walk_tree_for_go_structs(tree.root_node, source_bytes, structs)
+
+        return structs
+
+    def _walk_tree_for_go_structs(self, node: Node, source_bytes: bytes, structs: list[GoStructInfo]) -> None:
+        """Recursively walk the tree to find Go type definitions."""
+        if node.type == "type_declaration":
+            for child in node.children:
+                if child.type == "type_spec":
+                    struct_info = self._extract_go_struct_info(child, source_bytes)
+                    if struct_info:
+                        structs.append(struct_info)
+
+        for child in node.children:
+            self._walk_tree_for_go_structs(child, source_bytes, structs)
+
+    def _extract_go_struct_info(self, node: Node, source_bytes: bytes) -> GoStructInfo | None:
+        """Extract struct/type information from a Go type_spec node."""
+        name = ""
+        kind = "type"
+
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            name = self.get_node_text(name_node, source_bytes)
+
+        type_node = node.child_by_field_name("type")
+        if type_node:
+            if type_node.type == "struct_type":
+                kind = "struct"
+            elif type_node.type == "interface_type":
+                kind = "interface"
+            else:
+                kind = "alias"
+
+        if not name:
+            return None
+
+        source_text = self.get_node_text(node, source_bytes)
+
+        return GoStructInfo(
+            name=name,
+            node=node,
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            source_text=source_text,
+            kind=kind,
+        )
+
+    def find_go_variables(self, source: str) -> list[GoVariableInfo]:
+        """Find all package-level variable and constant declarations in Go source code.
+
+        Args:
+            source: The Go source code to analyze.
+
+        Returns:
+            List of GoVariableInfo objects describing variable/constant declarations.
+
+        """
+        if self.language != TreeSitterLanguage.GO:
+            return []
+
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        variables: list[GoVariableInfo] = []
+
+        self._walk_tree_for_go_variables(tree.root_node, source_bytes, variables, depth=0)
+
+        return variables
+
+    def _walk_tree_for_go_variables(
+        self, node: Node, source_bytes: bytes, variables: list[GoVariableInfo], depth: int
+    ) -> None:
+        """Recursively walk the tree to find Go var/const declarations."""
+        # Only look at package-level declarations (depth 1 = direct children of source_file)
+        if node.type == "source_file":
+            for child in node.children:
+                self._walk_tree_for_go_variables(child, source_bytes, variables, depth=1)
+            return
+
+        if depth != 1:
+            return
+
+        if node.type in ("var_declaration", "const_declaration"):
+            is_const = node.type == "const_declaration"
+            for child in node.children:
+                if child.type in {"var_spec", "const_spec"}:
+                    var_info = self._extract_go_variable_info(child, source_bytes, is_const)
+                    if var_info:
+                        variables.append(var_info)
+
+    def _extract_go_variable_info(self, node: Node, source_bytes: bytes, is_const: bool) -> GoVariableInfo | None:
+        """Extract variable/constant information from a Go var_spec/const_spec node."""
+        name = ""
+
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            name = self.get_node_text(name_node, source_bytes)
+
+        if not name:
+            # Try getting identifier from children for multi-var declarations
+            for child in node.children:
+                if child.type == "identifier":
+                    name = self.get_node_text(child, source_bytes)
+                    break
+
+        if not name:
+            return None
+
+        source_text = self.get_node_text(node, source_bytes)
+
+        return GoVariableInfo(
+            name=name,
+            node=node,
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            source_text=source_text,
+            is_const=is_const,
+        )
+
+    def get_leading_comments(self, source: str, target_line: int) -> str:
+        """Get comments immediately preceding a target line.
+
+        This is useful for extracting doc comments for functions, structs, etc.
+
+        Args:
+            source: The source code.
+            target_line: The 1-indexed line number of the target declaration.
+
+        Returns:
+            The leading comments as a string, or empty string if none.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+
+        comments: list[tuple[int, int, str]] = []  # (start_line, end_line, text)
+        self._collect_comments(tree.root_node, source_bytes, comments)
+
+        # Find comments that end right before the target line
+        leading_comment_lines: list[str] = []
+        comments_sorted = sorted(comments, key=lambda x: x[0])
+
+        # Find consecutive comments leading up to target_line
+        expected_line = target_line - 1
+        for start_line, end_line, text in reversed(comments_sorted):
+            if end_line == expected_line:
+                leading_comment_lines.insert(0, text)
+                expected_line = start_line - 1
+            elif end_line < expected_line:
+                break
+
+        return "\n".join(leading_comment_lines)
+
+    def _collect_comments(self, node: Node, source_bytes: bytes, comments: list[tuple[int, int, str]]) -> None:
+        """Collect all comments from the tree."""
+        if node.type == "comment":
+            text = self.get_node_text(node, source_bytes)
+            comments.append((node.start_point[0] + 1, node.end_point[0] + 1, text))
+
+        for child in node.children:
+            self._collect_comments(child, source_bytes, comments)
+
+    def get_node_with_leading_comments(self, source: str, node_start_line: int, node_end_line: int) -> tuple[int, str]:
+        """Get a node's source code including any leading comments.
+
+        Args:
+            source: The full source code.
+            node_start_line: The 1-indexed start line of the node.
+            node_end_line: The 1-indexed end line of the node.
+
+        Returns:
+            Tuple of (actual_start_line, source_with_comments).
+
+        """
+        leading_comments = self.get_leading_comments(source, node_start_line)
+        lines = source.splitlines(keepends=True)
+
+        # Get the node's own source
+        node_lines = lines[node_start_line - 1 : node_end_line]
+        node_source = "".join(node_lines)
+
+        if leading_comments:
+            # Count lines in comments to get actual start
+            comment_line_count = leading_comments.count("\n") + 1
+            actual_start = node_start_line - comment_line_count
+            return actual_start, leading_comments + "\n" + node_source
+
+        return node_start_line, node_source
+
+    def find_go_type_references(self, source: str, within_function: GOFunctionNode) -> list[str]:
+        """Find all type references within a Go function's body and signature.
+
+        Args:
+            source: The full source code.
+            within_function: The function to search within.
+
+        Returns:
+            List of type names that are referenced.
+
+        """
+        if self.language != TreeSitterLanguage.GO:
+            return []
+
+        types: list[str] = []
+        source_bytes = source.encode("utf8")
+
+        # Check the entire function node (including parameters and return types)
+        self._walk_tree_for_go_types(within_function.node, source_bytes, types)
+
+        return list(set(types))
+
+    def _walk_tree_for_go_types(self, node: Node, source_bytes: bytes, types: list[str]) -> None:
+        """Recursively find Go type references in a subtree."""
+        # Type identifier (simple types like MyStruct)
+        if node.type == "type_identifier":
+            types.append(self.get_node_text(node, source_bytes))
+        # Pointer types like *MyStruct
+        elif node.type == "pointer_type":
+            for child in node.children:
+                if child.type == "type_identifier":
+                    types.append(self.get_node_text(child, source_bytes))
+        # Slice/array types like []MyStruct
+        elif node.type in ("slice_type", "array_type") or node.type == "map_type":
+            for child in node.children:
+                self._walk_tree_for_go_types(child, source_bytes, types)
+
+        for child in node.children:
+            self._walk_tree_for_go_types(child, source_bytes, types)
+
 
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
-    """
-    Get the appropriate TreeSitterAnalyzer for a file based on its extension.
+    """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 
     Args:
         file_path: Path to the file.
 
     Returns:
         TreeSitterAnalyzer configured for the file's language.
+
     """
     suffix = file_path.suffix.lower()
 
     if suffix in (".ts",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-    elif suffix in (".tsx",):
+    if suffix in (".tsx",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
-    else:
-        # Default to JavaScript for .js, .jsx, .mjs, .cjs
-        return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+    if suffix in (".go",):
+        return TreeSitterAnalyzer(TreeSitterLanguage.GO)
+    # Default to JavaScript for .js, .jsx, .mjs, .cjs
+    return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)

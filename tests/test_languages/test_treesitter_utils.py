@@ -8,7 +8,7 @@ analyzes JavaScript/TypeScript code.
 import pytest
 
 from codeflash.languages.treesitter_utils import (
-    FunctionNode,
+    JSFunctionNode,
     ImportInfo,
     TreeSitterAnalyzer,
     TreeSitterLanguage,
