@@ -12,7 +12,42 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Match original behavior where the loop effectively runs up to floor(n)
+    let m = Math.floor(n);
+
+    // Fast doubling: maintain (a, b) = (F(k), F(k+1))
+    let a = 0;
+    let b = 1;
+
+    // Find highest power of two <= m using multiplication to avoid 32-bit shift limits
+    let highest = 1;
+    while (highest <= m) {
+        highest *= 2;
+    }
+    highest /= 2;
+
+    // Consume bits from highest to lowest: for each bit, double the index;
+    // if the bit is set, advance by one.
+    while (highest >= 1) {
+        // c = F(2k) = F(k) * (2*F(k+1) - F(k))
+        // d = F(2k+1) = F(k)^2 + F(k+1)^2
+        const c = a * (2 * b - a);
+        const d = a * a + b * b;
+
+        if (m >= highest) {
+            m -= highest;
+            a = d;
+            b = c + d;
+        } else {
+            a = c;
+            b = d;
+        }
+
+        highest /= 2;
+    }
+
+    return a;
 }
 
 /**
