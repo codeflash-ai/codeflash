@@ -2485,6 +2485,7 @@ class FunctionOptimizer:
                 test_index,
                 test_path,
                 test_perf_path,
+                self.is_numerical_code,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)

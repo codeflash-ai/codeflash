@@ -55,7 +55,7 @@ class AiServiceClient:
             logger.info("Using local AI Service at http://localhost:8000")
             console.rule()
             return "http://localhost:8000"
-        return "https://app.codeflash.ai"
+        return "http://localhost:8000"
 
     def make_ai_service_request(
         self,
@@ -634,6 +634,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -670,6 +671,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
+            "is_numerical_code": is_numerical_code,
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
