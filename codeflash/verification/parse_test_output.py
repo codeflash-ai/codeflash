@@ -317,9 +317,11 @@ def parse_test_xml(
                 continue
             test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
+                # Log registered paths for debugging
+                registered_paths = [str(tf.instrumented_behavior_file_path) for tf in test_files.test_files]
                 logger.warning(
-                    f"Test type not found for {test_file_path}. "
-                    f"This may indicate the test file was not properly registered. Skipping test case."
+                    f"Test type not found for '{test_file_path}'. "
+                    f"Registered test files: {registered_paths}. Skipping test case."
                 )
                 continue
             test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
