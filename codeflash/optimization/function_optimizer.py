@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
+import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -619,7 +620,7 @@ class FunctionOptimizer:
                         new_code_context = self.get_code_optimization_context().unwrap()
                     except Exception as e:
                         sentry_sdk.capture_exception(e)
-                        logger.debug(f"!lsp|Getting new code context failed, revert to original one")    
+                        logger.debug("!lsp|Getting new code context failed, revert to original one")
                     # unwrite files
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
