@@ -827,11 +827,18 @@ def filter_functions(
         if not file_path_normalized.startswith(module_root_str + os.sep):
             non_modules_removed_count += len(_functions)
             continue
-        try:
-            ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
-        except SyntaxError:
-            malformed_paths_count += 1
-            continue
+
+        # TODO for claude: make this work only for python, not when its not js
+        # Check if module path is valid - only for Python files
+        # JavaScript files don't have the same import constraints
+        file_ext = Path(file_path).suffix.lower()
+        is_javascript = file_ext in (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
+        if not is_javascript:
+            try:
+                ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
+            except SyntaxError:
+                malformed_paths_count += 1
+                continue
 
         if blocklist_funcs:
             functions_tmp = []
