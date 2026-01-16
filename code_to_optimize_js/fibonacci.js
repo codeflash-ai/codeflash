@@ -12,7 +12,28 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast path for non-negative integer n: iterative O(n) time, O(1) memory.
+    if (Number.isInteger(n) && n >= 2) {
+        let a = 0;
+        let b = 1;
+        for (let i = 2; i <= n; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
+    }
+
+    // Fallback for non-integer or other numeric inputs: memoized recursion
+    // to preserve original recursive semantics for all inputs.
+    const cache = fibonacci._cache || (fibonacci._cache = new Map());
+    if (cache.has(n)) {
+        return cache.get(n);
+    }
+    const result = fibonacci(n - 1) + fibonacci(n - 2);
+    cache.set(n, result);
+    return result;
 }
 
 /**
