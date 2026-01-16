@@ -12,7 +12,36 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast path for integer n: iterative O(n) with constant auxiliary memory.
+    if (Number.isInteger(n)) {
+        let a = 0;
+        let b = 1;
+        // iterate from 2..n inclusive; cache length to help V8 optimize the loop
+        for (let i = 2, len = n; i <= len; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
+    }
+
+    // Non-integer n: preserve original recursive semantics but avoid exponential blow-up
+    // by memoizing intermediate results keyed by the numeric value.
+    const cache = new Map();
+    function rec(x) {
+        if (x <= 1) {
+            return x;
+        }
+        const cached = cache.get(x);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const val = rec(x - 1) + rec(x - 2);
+        cache.set(x, val);
+        return val;
+    }
+    return rec(n);
 }
 
 /**
