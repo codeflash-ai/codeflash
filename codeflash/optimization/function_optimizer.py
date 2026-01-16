@@ -615,7 +615,10 @@ class FunctionOptimizer:
                         original_helper_code=original_helper_code,
                     )
                     # get code context
-                    new_code_context = self.get_code_optimization_context().unwrap()
+                    try:
+                        new_code_context = self.get_code_optimization_context().unwrap()
+                    except Exception as e:
+                        logger.debug(f"!lsp|Getting new code context failed, revert to original one")    
                     # unwrite files
                     self.write_code_and_helpers(
                         self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path

@@ -221,13 +221,13 @@ class AiServiceClient:
             "repo_name": git_repo_name,
         }
 
-        logger.info("!lsp|Generating optimized candidates…")
+        logger.info("!lsp|Rewriting as a JIT function…")
         console.rule()
         try:
             response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating jit rewritten candidate: {e}")
-            ph("cli-optimize-error-caught", {"error": str(e)})
+            ph("cli-jit-rewrite-error-caught", {"error": str(e)})
             return []
 
         if response.status_code == 200:
@@ -241,7 +241,7 @@ class AiServiceClient:
         except Exception:
             error = response.text
         logger.error(f"Error generating jit rewritten candidate: {response.status_code} - {error}")
-        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        ph("cli-jit-rewrite-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
 
