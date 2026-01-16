@@ -31,8 +31,13 @@
             "pages": ["cli-reference"]
           },
           {
-            "group": "🛠 IDE Extensions",
-            "pages": ["editor-plugins/vscode"]
+            "group": "🛠 IDE Extension",
+            "pages": [
+              "editor-plugins/vscode/index",
+              "editor-plugins/vscode/features",
+              "editor-plugins/vscode/configuration",
+              "editor-plugins/vscode/troubleshooting"
+            ]
           },
           {
             "group": "⚡ Optimizing with Codeflash",

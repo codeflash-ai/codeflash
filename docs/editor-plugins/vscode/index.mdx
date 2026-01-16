@@ -1,0 +1,235 @@
+---
+title: "VS Code Extension"
+description: "Optimize Python code directly in your editor with one-click AI-powered optimizations"
+icon: "code"
+sidebarTitle: "Overview"
+keywords:
+  [
+    "VS Code",
+    "extension",
+    "Cursor",
+    "Windsurf",
+    "IDE",
+    "editor",
+    "CodeLens",
+    "optimization",
+  ]
+---
+
+# VS Code Extension
+
+Bring Codeflash directly into your editor. See optimization suggestions inline, track progress in real-time, and apply performance improvements without leaving your code.
+
+<Info>
+  **Works with multiple editors** — This extension is compatible with VS Code,
+  Cursor, Windsurf, and other VS Code-compatible editors.
+</Info>
+
+---
+
+## Requirements
+
+Before installing the extension, ensure you have:
+
+- **VS Code 1.94.0+** (or Cursor, Windsurf, or other VS Code-compatible editor)
+- **Python 3.9+** installed and available in your PATH
+- **Git repository** initialized for your project
+- **Microsoft Python extension** installed (the Codeflash extension depends on it)
+
+---
+
+## Installation
+
+<Tabs>
+  <Tab title="VS Code Marketplace">
+    The quickest way to install for VS Code users:
+
+    <Steps>
+      <Step title="Open Extensions Panel">
+        Press `Ctrl+Shift+X` (Windows/Linux) or `Cmd+Shift+X` (macOS) to open the Extensions panel.
+      </Step>
+      <Step title="Search for Codeflash">
+        Type **"Codeflash"** in the search bar.
+      </Step>
+      <Step title="Install">
+        Click **Install** on the Codeflash extension.
+
+        [Install from VS Code Marketplace →](https://marketplace.visualstudio.com/items?itemName=codeflash.codeflash)
+      </Step>
+      <Step title="Reload">
+        Reload VS Code when prompted to activate the extension.
+      </Step>
+    </Steps>
+
+  </Tab>
+
+  <Tab title="VSIX (Cursor/Offline)">
+    For Cursor, Windsurf, air-gapped environments, or when the Marketplace isn't available:
+
+    <Steps>
+      <Step title="Download VSIX">
+        Download the latest VSIX package from Open VSX:
+
+        [Download VSIX →](https://open-vsx.org/extension/codeflash/codeflash)
+      </Step>
+      <Step title="Open Command Palette">
+        Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS).
+      </Step>
+      <Step title="Install from VSIX">
+        Type and select **"Extensions: Install from VSIX…"**
+      </Step>
+      <Step title="Select File">
+        Choose the downloaded `codeflash-*.vsix` file.
+      </Step>
+      <Step title="Restart Editor">
+        Restart your editor to complete the installation.
+      </Step>
+    </Steps>
+
+  </Tab>
+</Tabs>
+
+---
+
+## First-Time Setup
+
+When you first open a Python file, the extension guides you through setup:
+
+<Steps>
+  <Step title="Extension Activates">
+    The Codeflash sidebar opens automatically, showing the setup wizard.
+  </Step>
+  <Step title="Select Python Interpreter">
+    **This step is critical.** The extension uses the Python interpreter selected in VS Code to run Codeflash. Make sure you select the interpreter from the environment where Codeflash is installed.
+
+    <Tabs>
+      <Tab title="Select via Command Palette">
+        1. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
+        2. Type **"Python: Select Interpreter"**
+        3. Choose the Python environment where you installed Codeflash (e.g., your project's virtual environment)
+      </Tab>
+      <Tab title="Select via Status Bar">
+        1. Look at the bottom-left status bar in VS Code
+        2. Click on the Python version shown
+        3. Select your project's Python interpreter from the list
+      </Tab>
+    </Tabs>
+
+    <Warning>
+      If you see "No Python interpreter selected" or "Codeflash not installed" errors, verify that:
+      - You've selected the correct Python interpreter
+      - Codeflash is installed in that environment (`pip install codeflash`)
+    </Warning>
+
+  </Step>
+  <Step title="Install Codeflash Package">
+    If Codeflash is not installed in your selected Python environment, the extension prompts you to install it. Click the **"Install codeflash Python package"** button or run:
+
+    ```bash
+    pip install codeflash
+    ```
+
+  </Step>
+  <Step title="Authentication">
+    Authenticate with Codeflash using one of two methods:
+
+    <Tabs>
+      <Tab title="Browser Login (Recommended)">
+        Click **"Sign in with Browser"** to authenticate via OAuth. This opens your browser where you can log in with your Codeflash account.
+
+        <Tip>
+          This is the easiest method — no need to copy/paste API keys!
+        </Tip>
+
+      </Tab>
+      <Tab title="API Key">
+        If you prefer to use an API key, you can:
+
+        1. **Generate an API key** in the [Codeflash web app](https://app.codeflash.ai)
+        2. **Copy the API key** from your account settings
+        3. **Paste it** into the extension's authentication prompt
+
+        <Tip>
+          Don't have an account? [Sign up free at app.codeflash.ai](https://app.codeflash.ai/login)
+        </Tip>
+
+      </Tab>
+    </Tabs>
+
+  </Step>
+  <Step title="Project Initialization">
+    The extension runs `codeflash init` to configure your project if needed. This creates or updates your `pyproject.toml` with Codeflash settings.
+  </Step>
+  <Step title="Ready to Optimize">
+    Once setup completes, you'll see "optimize" hints appear above your Python functions.
+  </Step>
+</Steps>
+
+<Note>
+  If you've already run `codeflash init` via CLI, the extension detects your
+  existing configuration and skips to the ready state.
+</Note>
+
+### Changing the Python Interpreter
+
+If you need to switch to a different Python environment later:
+
+1. **Use VS Code's interpreter selector**: `Ctrl+Shift+P` → "Python: Select Interpreter"
+2. **The extension automatically reloads** when you change interpreters
+
+<Info>
+  The extension uses the Python interpreter selected in VS Code. Make sure Codeflash is installed in the selected environment.
+</Info>
+
+---
+
+## Quick Start
+
+Once installed, here's the basic workflow:
+
+1. **Open a Python file** in your project
+2. **See "optimize" hints** appear above functions
+3. **Click to optimize** — the extension handles the rest
+4. **Review and accept** optimizations via inline comments
+
+For detailed feature documentation, see [Features](/editor-plugins/vscode/features).
+
+---
+
+## Using with CLI
+
+The extension works alongside the Codeflash CLI. You can:
+
+- **Use CLI for batch operations** — Run `codeflash --all` for large-scale optimization
+- **Use extension for interactive work** — Optimize individual functions as you code
+- **Mix both** — The extension picks up CLI results when you return to the editor
+
+For CLI documentation, see the [CLI Reference](/cli-reference).
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Features" icon="sparkles" href="/editor-plugins/vscode/features">
+    Learn about all extension features
+  </Card>
+  <Card title="Configuration" icon="gear" href="/editor-plugins/vscode/configuration">
+    Customize extension settings
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/editor-plugins/vscode/troubleshooting">
+    Fix common issues
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli-reference">
+    Command-line interface docs
+  </Card>
+</CardGroup>
+
+---
+
+## Need Help?
+
+- **Discord** — [Join our community](https://www.codeflash.ai/discord)
+- **GitHub Issues** — [Report bugs or request features](https://github.com/codeflash-ai/codeflash/issues)
+- **Documentation** — [Full docs at docs.codeflash.ai](https://docs.codeflash.ai)
+
