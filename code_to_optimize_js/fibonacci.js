@@ -12,7 +12,32 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // For integer inputs use an iterative O(n) loop with constant memory
+    // This preserves exact integer Fibonacci values and avoids recursion/branch explosion.
+    if (Number.isInteger(n)) {
+        let a = 0;
+        let b = 1;
+        // iterate from 2..n inclusive
+        for (let i = 2; i <= n; i++) {
+            const tmp = a + b;
+            a = b;
+            b = tmp;
+        }
+        return b;
+    }
+
+    // For non-integer inputs preserve original recursive semantics but memoize
+    // to eliminate exponential recomputation while returning identical results.
+    const cache = new Map();
+    function fib(k) {
+        if (k <= 1) return k;
+        if (cache.has(k)) return cache.get(k);
+        const val = fib(k - 1) + fib(k - 2);
+        cache.set(k, val);
+        return val;
+    }
+    return fib(n);
 }
 
 /**
