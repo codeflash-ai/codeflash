@@ -104,6 +104,8 @@ def run_jest_behavioral_tests(
     jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
+    # Include console.log output in JUnit XML for timing marker parsing
+    jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
     # Set codeflash output file for the jest helper to write timing/behavior data (SQLite format)
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
@@ -385,6 +387,8 @@ def run_jest_benchmarking_tests(
     jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
+    # Include console.log output in JUnit XML for timing marker parsing
+    jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
     # Set codeflash output file for the jest helper to write timing data (SQLite format)
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
