@@ -545,3 +545,143 @@ def target_function():
 """
 
     assert modified_code.strip() == expected_code.strip()
+
+
+def test_instrument_codeflash_trace_skips_benchmarking_module() -> None:
+    """Test that files in codeflash/benchmarking/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/benchmarking/
+        benchmarking_dir = Path(temp_dir) / "codeflash" / "benchmarking"
+        benchmarking_dir.mkdir(parents=True)
+
+        test_file_path = benchmarking_dir / "some_module.py"
+        original_content = """
+def some_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="some_function",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_skips_picklepatch_module() -> None:
+    """Test that files in codeflash/picklepatch/ are skipped to avoid circular imports."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a directory structure that mimics codeflash/picklepatch/
+        picklepatch_dir = Path(temp_dir) / "codeflash" / "picklepatch"
+        picklepatch_dir.mkdir(parents=True)
+
+        test_file_path = picklepatch_dir / "patcher.py"
+        original_content = """
+def patch_function():
+    return "This should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="patch_function",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_nested_codeflash_path_skips_benchmarking() -> None:
+    """Test that nested codeflash paths like /project/codeflash/codeflash/benchmarking/ are skipped.
+
+    The rpartition logic should find the LAST 'codeflash' in the path.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create nested structure: project_codeflash/codeflash/benchmarking/
+        nested_dir = Path(temp_dir) / "project_codeflash" / "codeflash" / "benchmarking"
+        nested_dir.mkdir(parents=True)
+
+        test_file_path = nested_dir / "trace_module.py"
+        original_content = """
+def trace_func():
+    return "Should not be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="trace_func",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File should remain unchanged because last /codeflash/ is followed by benchmarking
+        assert test_file_path.read_text(encoding="utf-8") == original_content
+
+
+def test_instrument_codeflash_trace_nested_codeflash_path_instruments_other_modules() -> None:
+    """Test that nested codeflash paths with non-skipped modules ARE instrumented.
+
+    The rpartition logic should allow instrumentation when the submodule is not benchmarking/picklepatch.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create nested structure: project_codeflash/codeflash/other_module/
+        nested_dir = Path(temp_dir) / "project_codeflash" / "codeflash" / "other_module"
+        nested_dir.mkdir(parents=True)
+
+        test_file_path = nested_dir / "utils.py"
+        original_content = """
+def util_func():
+    return "Should be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="util_func",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File SHOULD be modified because other_module is not in skip list
+        modified_content = test_file_path.read_text(encoding="utf-8")
+        assert "codeflash_trace" in modified_content
+        assert "@codeflash_trace" in modified_content
+
+
+def test_instrument_codeflash_trace_no_codeflash_in_path() -> None:
+    """Test that paths without 'codeflash' directory are instrumented normally."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Create a path with no 'codeflash' directory
+        project_dir = Path(temp_dir) / "myproject" / "src"
+        project_dir.mkdir(parents=True)
+
+        test_file_path = project_dir / "main.py"
+        original_content = """
+def main_func():
+    return "Should be modified"
+"""
+        test_file_path.write_text(original_content, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="main_func",
+            file_path=test_file_path,
+            parents=[]
+        )
+
+        instrument_codeflash_trace_decorator({test_file_path: [fto]})
+
+        # File SHOULD be modified
+        modified_content = test_file_path.read_text(encoding="utf-8")
+        assert "codeflash_trace" in modified_content
+        assert "@codeflash_trace" in modified_content

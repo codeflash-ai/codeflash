@@ -32,16 +32,22 @@ def trace_benchmarks_pytest(
         **run_args,
     )
     if result.returncode != 0:
-        if "ERROR collecting" in result.stdout:
+        # Combine stdout and stderr for error reporting (errors often go to stderr)
+        combined_output = result.stdout
+        if result.stderr:
+            combined_output = combined_output + "\n" + result.stderr if combined_output else result.stderr
+
+        if "ERROR collecting" in combined_output:
             # Pattern matches "===== ERRORS =====" (any number of =) and captures everything after
             error_pattern = r"={3,}\s*ERRORS\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
-            match = re.search(error_pattern, result.stdout)
-            error_section = match.group(1) if match else result.stdout
-        elif "FAILURES" in result.stdout:
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
+        elif "FAILURES" in combined_output:
             # Pattern matches "===== FAILURES =====" (any number of =) and captures everything after
             error_pattern = r"={3,}\s*FAILURES\s*={3,}\n([\s\S]*?)(?:={3,}|$)"
-            match = re.search(error_pattern, result.stdout)
-            error_section = match.group(1) if match else result.stdout
+            match = re.search(error_pattern, combined_output)
+            error_section = match.group(1) if match else combined_output
         else:
-            error_section = result.stdout
+            error_section = combined_output
         logger.warning(f"Error collecting benchmarks - Pytest Exit code: {result.returncode}, {error_section}")
+        logger.debug(f"Full pytest output:\n{combined_output}")

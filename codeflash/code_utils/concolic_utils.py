@@ -33,39 +33,27 @@ class AssertCleanup:
             indent, assert_method, args = unittest_match.groups()
 
             if args:
-                arg_parts = self._split_top_level_args(args)
-                if arg_parts and arg_parts[0]:
-                    return f"{indent}{arg_parts[0]}"
+                arg_parts = self._first_top_level_arg(args)
+                if arg_parts:
+                    return f"{indent}{arg_parts}"
 
         return None
-
-    def _split_top_level_args(self, args_str: str) -> list[str]:
-        result = []
-        current = []
-        depth = 0
-
-        for char in args_str:
-            if char in "([{":
-                depth += 1
-                current.append(char)
-            elif char in ")]}":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                result.append("".join(current).strip())
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            result.append("".join(current).strip())
-
-        return result
 
     def __init__(self) -> None:
         # Pre-compiling regular expressions for faster execution
         self.assert_re = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
         self.unittest_re = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")
+
+    def _first_top_level_arg(self, args: str) -> str:
+        depth = 0
+        for i, ch in enumerate(args):
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                return args[:i].strip()
+        return args.strip()
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:
