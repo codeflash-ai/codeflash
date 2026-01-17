@@ -1,0 +1,215 @@
+---
+title: "Extension Troubleshooting"
+description: "Fix common issues with the Codeflash VS Code extension"
+icon: "wrench"
+sidebarTitle: "Troubleshooting"
+keywords:
+  [
+    "troubleshooting",
+    "errors",
+    "issues",
+    "problems",
+    "debugging",
+    "logs",
+  ]
+---
+
+# Extension Troubleshooting
+
+Solutions for common issues with the Codeflash VS Code extension.
+
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Extension not activating">
+    **Symptoms:** No Codeflash icon in sidebar, no "optimize" hints appearing.
+
+    **Solutions:**
+    1. **Check Python file is open** — The extension activates when you open a `.py` file
+    2. **Verify Python extension** — Ensure Microsoft Python extension is installed
+    3. **Check Output logs** — Go to `View → Output` and select "Codeflash" from the dropdown
+    4. **Reload extension** — Restart VS Code or reload the window
+
+  </Accordion>
+
+  <Accordion title="No 'optimize' hints appearing">
+    **Symptoms:** Extension is active but no hints above functions.
+
+    **Solutions:**
+    1. **Wait for analysis** — The extension needs time to analyze your code
+    2. **Check module-root** — Functions must be inside your `module-root` directory (check `pyproject.toml`)
+    3. **Run codeflash init** — Ensure project is initialized: run `codeflash init` in terminal
+    4. **Check function requirements** — Functions need a `return` statement and shouldn't be properties
+
+  </Accordion>
+
+  <Accordion title="Python environment issues">
+    **Symptoms:** "No Python interpreter selected", "Codeflash not installed", or wrong Python version errors.
+
+    **Solutions:**
+
+    1. **Select the correct Python interpreter:**
+       - Press `Ctrl+Shift+P` / `Cmd+Shift+P`
+       - Type **"Python: Select Interpreter"**
+       - Choose the environment where Codeflash is installed
+
+    2. **Verify Codeflash is installed in that environment:**
+       ```bash
+       # Check which Python is active
+       which python   # Linux/macOS
+       (Get-Command python).Source   # Windows PowerShell
+
+       # Check if Codeflash is installed
+       python -c "import codeflash; print(codeflash.__version__)"
+       ```
+
+    3. **Install Codeflash if missing:**
+       ```bash
+       pip install codeflash
+       ```
+
+    <Warning>
+      **Common mistake:** Having multiple Python environments and selecting one that doesn't have Codeflash installed. Always verify Codeflash is installed in your selected interpreter.
+    </Warning>
+
+  </Accordion>
+
+  <Accordion title="Connection or LSP errors">
+    **Symptoms:** "Failed to connect" or language server errors.
+
+    **Solutions:**
+    1. **Reload extension** — Restart VS Code or reload the window
+    2. **Check network** — Ensure you can reach `app.codeflash.ai`
+    3. **Verify API key** — Check your API key is valid
+    4. **View logs** — Check `View → Output → Codeflash` for details
+
+  </Accordion>
+
+  <Accordion title="Using Cursor or custom VS Code build">
+    **Symptoms:** Extension doesn't install from Marketplace.
+
+    **Solution:** Install via VSIX instead:
+    1. Download from [Open VSX](https://open-vsx.org/extension/codeflash/codeflash)
+      2. Install using VS Code's extension installation feature
+    3. Restart the editor
+
+  </Accordion>
+
+  <Accordion title="Optimization stuck or not completing">
+    **Symptoms:** Optimization appears to hang or never finishes.
+
+    **Solutions:**
+    1. **Check sidebar status** — Look for error messages in the Codeflash sidebar
+    2. **Check network** — Ensure stable internet connection
+    3. **View logs** — Check `View → Output → Codeflash` for errors
+    4. **Clear tasks** — Use the sidebar to clear completed or failed tasks
+    5. **Reload extension** — Restart VS Code or reload the window
+
+  </Accordion>
+
+  <Accordion title="API key issues">
+    **Symptoms:** Authentication errors, "invalid API key" messages.
+
+    **Solutions:**
+    1. **Verify API key** — Check your key at [app.codeflash.ai](https://app.codeflash.ai)
+    2. **Re-enter key** — The extension may prompt you to re-enter your API key
+    3. **Check environment variable** — If using `CODEFLASH_API_KEY`, ensure it's set correctly
+    4. **Reload extension** — Restart VS Code or reload the window
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Viewing Logs
+
+For detailed debugging information:
+
+<Steps>
+  <Step title="Open Output Panel">
+    Go to `View → Output` in the menu bar, or press `Ctrl+Shift+U` / `Cmd+Shift+U`.
+  </Step>
+  <Step title="Select Codeflash">
+    Click the dropdown in the Output panel and select **"Codeflash"**.
+  </Step>
+  <Step title="Review Logs">
+    Look for error messages, warnings, or stack traces that indicate the issue.
+  </Step>
+</Steps>
+
+<Tip>
+  When reporting issues, include relevant log output to help diagnose the
+  problem.
+</Tip>
+
+---
+
+## Requirements Checklist
+
+If you're having issues, verify these requirements:
+
+<AccordionGroup>
+  <Accordion title="System Requirements">
+    - [ ] VS Code 1.94.0+ (or Cursor/Windsurf)
+    - [ ] Python 3.9+ installed
+    - [ ] Git installed and repository initialized
+    - [ ] Microsoft Python extension installed
+
+  </Accordion>
+
+  <Accordion title="Project Requirements">
+    - [ ] Project has been initialized with `codeflash init`
+    - [ ] `pyproject.toml` exists with `[tool.codeflash]` section
+    - [ ] `module-root` is correctly configured
+    - [ ] Python files are inside the `module-root` directory
+
+  </Accordion>
+
+  <Accordion title="Authentication">
+    - [ ] Valid Codeflash API key
+    - [ ] API key entered in extension or set as environment variable
+    - [ ] Network access to `app.codeflash.ai`
+
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Still Need Help?
+
+If you're still experiencing issues:
+
+- **Discord** — [Join our community](https://www.codeflash.ai/discord) for real-time help
+- **GitHub Issues** — [Report bugs](https://github.com/codeflash-ai/codeflash/issues) with detailed reproduction steps
+- **Documentation** — [Full docs](https://docs.codeflash.ai) for reference
+
+<Info>
+  When reporting issues, please include:
+  - VS Code version
+  - Extension version
+  - Python version
+  - Relevant log output from the Output panel
+  - Steps to reproduce the issue
+</Info>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Overview" icon="house" href="/editor-plugins/vscode">
+    Back to extension overview
+  </Card>
+  <Card title="Features" icon="sparkles" href="/editor-plugins/vscode/features">
+    Learn about extension features
+  </Card>
+  <Card title="Configuration" icon="gear" href="/editor-plugins/vscode/configuration">
+    Customize extension settings
+  </Card>
+  <Card title="Codeflash CLI" icon="terminal" href="/cli-reference/index">
+    Command-line interface docs
+  </Card>
+</CardGroup>
+

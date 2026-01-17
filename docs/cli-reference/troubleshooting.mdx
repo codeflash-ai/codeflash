@@ -1,0 +1,157 @@
+---
+title: "CLI Troubleshooting"
+description: "Solutions for common Codeflash CLI issues and errors"
+icon: "wrench"
+sidebarTitle: "Troubleshooting"
+keywords: ["troubleshooting", "errors", "issues", "problems", "debugging"]
+---
+
+# CLI Troubleshooting
+
+Solutions for common issues when using the Codeflash CLI.
+
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="'Functions outside module-root' Error">
+    **Problem**: Function not found because file is outside `module-root`.
+    
+    **Solution**: Ensure your file is within the `module-root` directory specified in `pyproject.toml`.
+    
+    ```bash
+    # Check your module-root
+    grep "module-root" pyproject.toml
+    
+    # Use the correct path (e.g., if module-root is "src")
+    codeflash --file src/myfile.py --function my_function --no-pr
+    ```
+  </Accordion>
+  
+  <Accordion title="'benchmarks-root must be specified' Error">
+    **Problem**: Using `--benchmark` without specifying benchmarks directory.
+    
+    **Solution**: Either add `benchmarks-root` to `pyproject.toml` or use the flag:
+    
+    ```bash
+    codeflash --file src/app.py --benchmark --benchmarks-root tests/benchmarks --no-pr
+    ```
+  </Accordion>
+  
+  <Accordion title="Replay Test File Not Found">
+    **Problem**: Replay test filename doesn't match expected path.
+    
+    **Solution**: Replay tests include the module path in their name. Check the actual filename:
+    
+    ```bash
+    # Linux/macOS
+    ls tests/test_*replay*.py
+    
+    # Windows
+    dir tests\test_*replay*.py
+    ```
+    
+    <Note>
+      Replay test files are named based on the traced script path. For `src/app.py`, 
+      the replay test will be named like `test_srcapp_py__replay_test_0.py`.
+    </Note>
+  </Accordion>
+  
+  <Accordion title="GitHub App Required">
+    **Problem**: PR creation fails due to missing GitHub App.
+    
+    **Solution**: Install the Codeflash GitHub App or use `--no-pr` for local optimization:
+    
+    ```bash
+    # Local optimization
+    codeflash --file src/app.py --function main --no-pr
+    
+    # Or install the GitHub App
+    # https://github.com/apps/codeflash-ai/installations/select_target
+    ```
+  </Accordion>
+
+  <Accordion title="Module Not Found Errors">
+    **Problem**: Codeflash can't find your Python modules.
+    
+    **Solution**: 
+    
+    1. Verify `module-root` is correctly set in `pyproject.toml`
+    2. Ensure you're running from the project root
+    3. Check that your Python environment has all dependencies installed
+    
+    ```bash
+    # Verify module-root
+    cat pyproject.toml | grep module-root
+    
+    # Check Python path
+    python -c "import sys; print(sys.path)"
+    ```
+  </Accordion>
+
+  <Accordion title="Test Generation Fails">
+    **Problem**: Codeflash can't generate tests for your function.
+    
+    **Solution**: 
+    
+    1. Ensure your function has a return statement
+    2. Check that the function is not a property or class method with special decorators
+    3. Use `--no-gen-tests` to skip test generation and use existing tests only
+    
+    ```bash
+    codeflash --file src/app.py --function main --no-gen-tests --no-pr
+    ```
+  </Accordion>
+
+  <Accordion title="Optimization Timeout">
+    **Problem**: Optimization takes too long or times out.
+    
+    **Solution**: 
+    
+    1. Use `--verbose` to see what's happening
+    2. For tracing, use `--timeout` to limit trace duration
+    3. For large functions, consider breaking them down
+    
+    ```bash
+    # Limit trace time
+    codeflash optimize app.py --timeout 30
+    
+    # See detailed progress
+    codeflash --file src/app.py --function main --verbose --no-pr
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. **Check the logs**: Use `--verbose` flag to see detailed output
+2. **Verify setup**: Run `codeflash --verify-setup` to check your installation
+3. **Check configuration**: Ensure `pyproject.toml` is correctly configured
+4. **View help**: Run `codeflash --help` or `codeflash <command> --help`
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Setup Commands"
+    icon="wrench"
+    href="/cli-reference/setup"
+  >
+    Review setup and initialization
+  </Card>
+  <Card
+    title="Flags Reference"
+    icon="list"
+    href="/cli-reference/flags"
+  >
+    Complete flag reference
+  </Card>
+</CardGroup>
+

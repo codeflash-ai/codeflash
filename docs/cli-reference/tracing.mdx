@@ -1,0 +1,213 @@
+---
+title: "Tracing & Workflows"
+description: "Trace script execution and optimize functions based on real-world usage"
+icon: "route"
+sidebarTitle: "Tracing & Workflows"
+keywords: ["tracing", "optimize", "workflow", "replay test", "pytest"]
+---
+
+# Tracing & Workflows
+
+Trace Python script execution and optimize functions based on real-world usage patterns.
+
+---
+
+## `codeflash optimize`
+
+Trace a Python script's execution and optimize functions based on real-world usage.
+
+```bash
+codeflash optimize <script.py> [script_args]
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Basic trace and optimize
+    codeflash optimize app.py
+
+    # With script arguments
+    codeflash optimize process.py --input data.csv --output results.json
+
+    # Custom trace output file
+    codeflash optimize app.py --output custom_trace.trace
+
+    # With timeout (30 seconds)
+    codeflash optimize long_running_script.py --timeout 30
+
+    # Limit function trace count
+    codeflash optimize app.py --max-function-count 50
+
+    # Specify config file
+    codeflash optimize app.py --config-file-path pyproject.toml
+
+    # Local only (no PR)
+    codeflash optimize app.py --no-pr
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Basic trace and optimize
+    codeflash optimize app.py
+
+    # With script arguments
+    codeflash optimize process.py --input data.csv --output results.json
+
+    # Custom trace output file
+    codeflash optimize app.py --output custom_trace.trace
+
+    # With timeout (30 seconds)
+    codeflash optimize long_running_script.py --timeout 30
+
+    # Limit function trace count
+    codeflash optimize app.py --max-function-count 50
+
+    # Specify config file
+    codeflash optimize app.py --config-file-path pyproject.toml
+
+    # Local only (no PR)
+    codeflash optimize app.py --no-pr
+    ```
+  </Tab>
+</Tabs>
+</Accordion>
+
+**How it works:**
+
+1. Runs your script with the provided arguments
+2. Traces all function calls during execution
+3. Identifies which functions are called and how often
+4. Generates replay tests based on actual usage
+5. Optimizes the traced functions
+
+---
+
+## Trace with pytest
+
+Optimize functions called during pytest test execution.
+
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Trace pytest tests
+    codeflash optimize -m pytest tests/
+
+    # Trace specific test file
+    codeflash optimize -m pytest tests/test_core.py
+
+    # With pytest arguments
+    codeflash optimize -m pytest tests/ -v --tb=short
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Trace pytest tests
+    codeflash optimize -m pytest tests\
+
+    # Trace specific test file
+    codeflash optimize -m pytest tests\test_core.py
+
+    # With pytest arguments
+    codeflash optimize -m pytest tests\ -v --tb=short
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Tracing pytest tests is great for optimizing functions that are heavily used in your test suite, ensuring optimizations work correctly with your existing tests.
+</Tip>
+
+---
+
+## Trace Only (Generate Replay Tests)
+
+Create trace files and replay tests without running optimization.
+
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Trace only - generates replay test
+    codeflash optimize app.py --output trace_file.trace --trace-only
+
+    # Then optimize using the replay test
+    codeflash --replay-test tests/test_app_py__replay_test_0.py --no-pr
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Trace only - generates replay test
+    codeflash optimize app.py --output trace_file.trace --trace-only
+
+    # Then optimize using the replay test
+    codeflash --replay-test tests\test_app_py__replay_test_0.py --no-pr
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  **Replay test naming**: Files are named based on the traced script path. For
+  `src/app.py`, the replay test will be named like
+  `test_srcapp_py__replay_test_0.py`.
+</Note>
+
+**Use cases for trace-only:**
+
+- Generate replay tests for later optimization
+- Debug tracing issues without running full optimization
+- Create reusable test cases from script execution
+
+---
+
+## Replay Test Optimization
+
+Optimize functions using previously generated replay tests.
+
+```bash
+codeflash --replay-test <path/to/replay_test.py>
+```
+
+<Accordion title="Complete Examples">
+<Tabs>
+  <Tab title="Linux/macOS">
+    ```bash
+    # Optimize using replay test
+    codeflash --replay-test tests/test_app_py__replay_test_0.py --no-pr
+
+    # Multiple replay tests
+    codeflash --replay-test tests/test_*.py --no-pr
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Optimize using replay test
+    codeflash --replay-test tests\test_app_py__replay_test_0.py --no-pr
+
+    # Multiple replay tests (use Get-ChildItem for globbing)
+    codeflash --replay-test (Get-ChildItem tests\test_*.py) --no-pr
+    ```
+  </Tab>
+</Tabs>
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Optimization Commands"
+    icon="bullseye"
+    href="/cli-reference/optimization"
+  >
+    Learn about function optimization
+  </Card>
+  <Card
+    title="Flags Reference"
+    icon="list"
+    href="/cli-reference/flags"
+  >
+    Complete flag reference
+  </Card>
+</CardGroup>
+
