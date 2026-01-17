@@ -12,7 +12,23 @@ function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Number of 1-step decrements needed to reach a value <= 1
+    const steps = Math.ceil(n - 1);
+    const lowest = n - steps; // This is <= 1
+
+    // Base values for indices lowest - 1 and lowest (both <= 1)
+    let prevPrev = lowest - 1; // f(lowest - 1) == lowest - 1
+    let prev = lowest;         // f(lowest) == lowest
+
+    // Build values up from lowest to n using f(k) = f(k-1) + f(k-2)
+    for (let i = 1; i <= steps; i++) {
+        const current = prev + prevPrev;
+        prevPrev = prev;
+        prev = current;
+    }
+
+    return prev; // f(n)
 }
 
 /**
