@@ -505,6 +505,203 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    # === Test Editing ===
+
+    def add_runtime_comments(
+        self,
+        test_source: str,
+        original_runtimes: dict[str, int],
+        optimized_runtimes: dict[str, int],
+    ) -> str:
+        """
+        Add runtime performance comments to test source code.
+
+        Adds comments showing the original vs optimized runtime for each
+        function call (e.g., "// 1.5ms -> 0.3ms (80% faster)").
+
+        Args:
+            test_source: Test source code to annotate.
+            original_runtimes: Map of invocation IDs to original runtimes (ns).
+            optimized_runtimes: Map of invocation IDs to optimized runtimes (ns).
+
+        Returns:
+            Test source code with runtime comments added.
+        """
+        ...
+
+    def remove_test_functions(
+        self,
+        test_source: str,
+        functions_to_remove: list[str],
+    ) -> str:
+        """
+        Remove specific test functions from test source code.
+
+        Args:
+            test_source: Test source code.
+            functions_to_remove: List of function names to remove.
+
+        Returns:
+            Test source code with specified functions removed.
+        """
+        ...
+
+    # === Test Result Comparison ===
+
+    def compare_test_results(
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+    ) -> tuple[bool, list]:
+        """
+        Compare test results between original and candidate code.
+
+        Args:
+            original_results_path: Path to original test results (e.g., SQLite DB).
+            candidate_results_path: Path to candidate test results.
+
+        Returns:
+            Tuple of (are_equivalent, list of TestDiff objects).
+        """
+        ...
+
+    # === Configuration ===
+
+    def get_test_file_suffix(self) -> str:
+        """
+        Get the test file suffix for this language.
+
+        Returns:
+            Test file suffix (e.g., ".test.js", "_test.py").
+        """
+        ...
+
+    def get_comment_prefix(self) -> str:
+        """
+        Get the comment prefix for this language.
+
+        Returns:
+            Comment prefix (e.g., "//" for JS, "#" for Python).
+        """
+        ...
+
+    def find_test_root(self, project_root: Path) -> Path | None:
+        """
+        Find the test root directory for a project.
+
+        Args:
+            project_root: Root directory of the project.
+
+        Returns:
+            Path to test root, or None if not found.
+        """
+        ...
+
+    def get_runtime_files(self) -> list[Path]:
+        """
+        Get paths to runtime files that need to be copied to user's project.
+
+        Returns:
+            List of paths to runtime files (e.g., codeflash-jest-helper.js).
+        """
+        ...
+
+    def instrument_existing_test(
+        self,
+        test_path: Path,
+        call_positions: Sequence[Any],
+        function_to_optimize: Any,
+        tests_project_root: Path,
+        mode: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Inject profiling code into an existing test file.
+
+        Wraps function calls with capture/benchmark instrumentation for
+        behavioral verification and performance benchmarking.
+
+        Args:
+            test_path: Path to the test file.
+            call_positions: List of code positions where the function is called.
+            function_to_optimize: The function being optimized.
+            tests_project_root: Root directory of tests.
+            mode: Testing mode - "behavior" or "performance".
+
+        Returns:
+            Tuple of (success, instrumented_code).
+        """
+        ...
+
+    # === Test Framework ===
+
+    @property
+    def test_framework(self) -> str:
+        """
+        Get the test framework used by this language.
+
+        Returns:
+            Test framework name (e.g., "pytest", "jest").
+        """
+        ...
+
+    # === Test Execution ===
+
+    def run_behavioral_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        enable_coverage: bool = False,
+        candidate_index: int = 0,
+    ) -> tuple[Path, Any, Path | None, Path | None]:
+        """
+        Run behavioral tests for this language.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            enable_coverage: Whether to collect coverage information.
+            candidate_index: Index of the candidate being tested.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
+        """
+        ...
+
+    def run_benchmarking_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        min_loops: int = 5,
+        max_loops: int = 100_000,
+        target_duration_seconds: float = 10.0,
+    ) -> tuple[Path, Any]:
+        """
+        Run benchmarking tests for this language.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            min_loops: Minimum number of loops for benchmarking.
+            max_loops: Maximum number of loops for benchmarking.
+            target_duration_seconds: Target duration for benchmarking in seconds.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+        """
+        ...
+
 
 def convert_parents_to_tuple(parents: list | tuple) -> tuple[ParentInfo, ...]:
     """

@@ -659,3 +659,259 @@ class JavaScriptSupport:
             if stripped and not stripped.startswith("//"):
                 normalized_lines.append(stripped)
         return "\n".join(normalized_lines)
+
+    # === Test Editing ===
+
+    def add_runtime_comments(
+        self,
+        test_source: str,
+        original_runtimes: dict[str, int],
+        optimized_runtimes: dict[str, int],
+    ) -> str:
+        """Add runtime performance comments to JavaScript test source.
+
+        Args:
+            test_source: Test source code to annotate.
+            original_runtimes: Map of invocation IDs to original runtimes (ns).
+            optimized_runtimes: Map of invocation IDs to optimized runtimes (ns).
+
+        Returns:
+            Test source code with runtime comments added.
+        """
+        from codeflash.languages.javascript.edit_tests import add_runtime_comments
+
+        return add_runtime_comments(test_source, original_runtimes, optimized_runtimes)
+
+    def remove_test_functions(
+        self,
+        test_source: str,
+        functions_to_remove: list[str],
+    ) -> str:
+        """Remove specific test functions from JavaScript test source.
+
+        Args:
+            test_source: Test source code.
+            functions_to_remove: List of function names to remove.
+
+        Returns:
+            Test source code with specified functions removed.
+        """
+        from codeflash.languages.javascript.edit_tests import remove_test_functions
+
+        return remove_test_functions(test_source, functions_to_remove)
+
+    # === Test Result Comparison ===
+
+    def compare_test_results(
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+    ) -> tuple[bool, list]:
+        """Compare test results between original and candidate code.
+
+        Args:
+            original_results_path: Path to original test results SQLite DB.
+            candidate_results_path: Path to candidate test results SQLite DB.
+
+        Returns:
+            Tuple of (are_equivalent, list of TestDiff objects).
+        """
+        from codeflash.languages.javascript.comparator import compare_test_results
+
+        return compare_test_results(original_results_path, candidate_results_path)
+
+    # === Configuration ===
+
+    def get_test_file_suffix(self) -> str:
+        """Get the test file suffix for JavaScript.
+
+        Returns:
+            Jest test file suffix.
+        """
+        return ".test.js"
+
+    def get_comment_prefix(self) -> str:
+        """Get the comment prefix for JavaScript.
+
+        Returns:
+            JavaScript single-line comment prefix.
+        """
+        return "//"
+
+    def find_test_root(self, project_root: Path) -> Path | None:
+        """Find the test root directory for a JavaScript project.
+
+        Looks for common Jest test directory patterns.
+
+        Args:
+            project_root: Root directory of the project.
+
+        Returns:
+            Path to test root, or None if not found.
+        """
+        # Common test directory patterns for JavaScript/Jest
+        test_dirs = [
+            project_root / "tests",
+            project_root / "test",
+            project_root / "__tests__",
+            project_root / "src" / "__tests__",
+            project_root / "spec",
+        ]
+
+        for test_dir in test_dirs:
+            if test_dir.exists() and test_dir.is_dir():
+                return test_dir
+
+        # Check for jest.config.js to find testMatch patterns
+        jest_config = project_root / "jest.config.js"
+        if jest_config.exists():
+            # Default to project root if jest config exists
+            return project_root
+
+        # Check for test patterns in package.json
+        package_json = project_root / "package.json"
+        if package_json.exists():
+            return project_root
+
+        return None
+
+    def get_runtime_files(self) -> list[Path]:
+        """Get paths to JavaScript runtime files.
+
+        Returns:
+            List of paths to runtime files that need to be available.
+        """
+        from codeflash.languages.javascript.runtime import get_all_runtime_files
+
+        return get_all_runtime_files()
+
+    def instrument_existing_test(
+        self,
+        test_path: Path,
+        call_positions: Sequence[Any],
+        function_to_optimize: Any,
+        tests_project_root: Path,
+        mode: str,
+    ) -> tuple[bool, str | None]:
+        """Inject profiling code into an existing JavaScript test file.
+
+        Wraps function calls with codeflash.capture() or codeflash.capturePerfLooped()
+        for behavioral verification and performance benchmarking.
+
+        Args:
+            test_path: Path to the test file.
+            call_positions: List of code positions where the function is called.
+            function_to_optimize: The function being optimized.
+            tests_project_root: Root directory of tests.
+            mode: Testing mode - "behavior" or "performance".
+
+        Returns:
+            Tuple of (success, instrumented_code).
+        """
+        from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
+
+        return inject_profiling_into_existing_js_test(
+            test_path=test_path,
+            call_positions=list(call_positions),
+            function_to_optimize=function_to_optimize,
+            tests_project_root=tests_project_root,
+            mode=mode,
+        )
+
+    # === Test Execution ===
+
+    def run_behavioral_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        enable_coverage: bool = False,
+        candidate_index: int = 0,
+    ) -> tuple[Path, Any, Path | None, Path | None]:
+        """Run Jest behavioral tests.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            enable_coverage: Whether to collect coverage information.
+            candidate_index: Index of the candidate being tested.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
+        """
+        from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
+
+        return run_jest_behavioral_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=timeout,
+            project_root=project_root,
+            enable_coverage=enable_coverage,
+            candidate_index=candidate_index,
+        )
+
+    def run_benchmarking_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        min_loops: int = 5,
+        max_loops: int = 100_000,
+        target_duration_seconds: float = 10.0,
+    ) -> tuple[Path, Any]:
+        """Run Jest benchmarking tests.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            min_loops: Minimum number of loops for benchmarking.
+            max_loops: Maximum number of loops for benchmarking.
+            target_duration_seconds: Target duration for benchmarking in seconds.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+        """
+        from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
+
+        return run_jest_benchmarking_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=timeout,
+            project_root=project_root,
+            min_loops=min_loops,
+            max_loops=max_loops,
+            target_duration_ms=int(target_duration_seconds * 1000),
+        )
+
+
+@register_language
+class TypeScriptSupport(JavaScriptSupport):
+    """TypeScript language support implementation.
+
+    This class extends JavaScriptSupport to provide TypeScript-specific
+    language identification while sharing all JavaScript functionality.
+    TypeScript and JavaScript use the same parser, test framework (Jest),
+    and code instrumentation approach.
+    """
+
+    @property
+    def language(self) -> Language:
+        """The language this implementation supports."""
+        return Language.TYPESCRIPT
+
+    @property
+    def file_extensions(self) -> tuple[str, ...]:
+        """File extensions for TypeScript files."""
+        return (".ts", ".tsx", ".mts")

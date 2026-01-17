@@ -16,7 +16,7 @@ from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
-from codeflash.languages.javascript.runtime import get_all_runtime_files
+from codeflash.languages.registry import get_language_support, get_language_support_by_framework
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -70,165 +70,29 @@ def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: 
     )
 
 
-def _ensure_js_runtime_files(js_project_root: Path) -> None:
-    """Ensure JavaScript runtime files are present in the project root.
+def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> None:
+    """Ensure runtime files are present in the project root.
 
-    Copies codeflash-jest-helper.js and related files to the JS project root
+    Copies language-specific runtime helper files to the project root
     if they don't already exist or are outdated.
 
     Args:
-        js_project_root: The JavaScript project root directory.
+        project_root: The project root directory.
+        language: The programming language (e.g., "javascript", "typescript").
     """
-    for runtime_file in get_all_runtime_files():
-        dest_path = js_project_root / runtime_file.name
+    try:
+        language_support = get_language_support(language)
+        runtime_files = language_support.get_runtime_files()
+    except (KeyError, ValueError):
+        logger.debug(f"No language support found for {language}, skipping runtime file setup")
+        return
+
+    for runtime_file in runtime_files:
+        dest_path = project_root / runtime_file.name
         # Always copy to ensure we have the latest version
         if not dest_path.exists() or dest_path.stat().st_mtime < runtime_file.stat().st_mtime:
             shutil.copy2(runtime_file, dest_path)
-            logger.debug(f"Copied {runtime_file.name} to {js_project_root}")
-
-
-def _find_js_project_root(file_path: Path) -> Path | None:
-    """Find the JavaScript/TypeScript project root by looking for package.json.
-
-    Traverses up from the given file path to find the nearest directory
-    containing package.json or jest.config.js.
-
-    Args:
-        file_path: A file path within the JavaScript project.
-
-    Returns:
-        The project root directory, or None if not found.
-
-    """
-    current = file_path.parent if file_path.is_file() else file_path
-    while current != current.parent:  # Stop at filesystem root
-        if (current / "package.json").exists() or (current / "jest.config.js").exists():
-            return current
-        current = current.parent
-    return None
-
-
-def run_jest_behavioral_tests(
-    test_paths: TestFiles,
-    test_env: dict[str, str],
-    cwd: Path,
-    *,
-    timeout: int | None = None,
-    js_project_root: Path | None = None,
-    enable_coverage: bool = False,
-    candidate_index: int = 0,
-) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
-    """Run Jest tests and return results in a format compatible with pytest output.
-
-    Args:
-        test_paths: TestFiles object containing test file information.
-        test_env: Environment variables for the test run.
-        cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds.
-        js_project_root: JavaScript project root (directory containing package.json).
-        enable_coverage: Whether to collect coverage information.
-        candidate_index: Index of the candidate being tested.
-
-    Returns:
-        Tuple of (result_file_path, subprocess_result, coverage_json_path, None).
-
-    """
-    result_file_path = get_run_tmp_file(Path("jest_results.xml"))
-
-    # Get test files to run
-    test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
-
-    # Use provided js_project_root, or detect it as fallback
-    if js_project_root is None and test_files:
-        first_test_file = Path(test_files[0])
-        js_project_root = _find_js_project_root(first_test_file)
-
-    # Use the JS project root, or fall back to provided cwd
-    effective_cwd = js_project_root if js_project_root else cwd
-    logger.debug(f"Jest working directory: {effective_cwd}")
-
-    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
-    _ensure_js_runtime_files(effective_cwd)
-
-    # Coverage output directory
-    coverage_dir = get_run_tmp_file(Path("jest_coverage"))
-    coverage_json_path = coverage_dir / "coverage-final.json" if enable_coverage else None
-
-    # Build Jest command
-    jest_cmd = [
-        "npx",
-        "jest",
-        "--reporters=default",
-        "--reporters=jest-junit",
-        "--runInBand",  # Run tests serially for consistent timing
-        "--forceExit",
-    ]
-
-    # Add coverage flags if enabled
-    if enable_coverage:
-        jest_cmd.extend(["--coverage", "--coverageReporters=json", f"--coverageDirectory={coverage_dir}"])
-
-    if test_files:
-        jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
-
-    if timeout:
-        jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
-
-    # Set up environment
-    jest_env = test_env.copy()
-    jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
-    jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
-    jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
-    # Configure jest-junit to use filepath-based classnames for proper parsing
-    jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
-    jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
-    jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
-    # Include console.log output in JUnit XML for timing marker parsing
-    jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
-    # Set codeflash output file for the jest helper to write timing/behavior data (SQLite format)
-    # Use candidate_index to differentiate between baseline (0) and optimization candidates
-    codeflash_sqlite_file = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
-    jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
-    jest_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
-    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
-    jest_env["CODEFLASH_MODE"] = "behavior"
-    # Seed random number generator for reproducible test runs across original and optimized code
-    jest_env["CODEFLASH_RANDOM_SEED"] = "42"
-
-    logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
-
-    start_time_ns = time.perf_counter_ns()
-    try:
-        run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
-        )
-        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
-        # Jest sends console.log output to stderr by default - move it to stdout
-        # so our timing markers (printed via console.log) are in the expected place
-        if result.stderr and not result.stdout:
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
-            )
-        elif result.stderr:
-            # Combine stderr into stdout if both have content
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
-            )
-        logger.debug(f"Jest result: returncode={result.returncode}")
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Jest tests timed out after {timeout}s")
-        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Test execution timed out")
-    except FileNotFoundError:
-        logger.error("Jest not found. Make sure Jest is installed (npm install jest)")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest jest-junit"
-        )
-    finally:
-        wall_clock_ns = time.perf_counter_ns() - start_time_ns
-        _calculate_utilization_fraction(result.stdout if result else "", wall_clock_ns, "jest-behavioral")
-
-    return result_file_path, result, coverage_json_path, None
+            logger.debug(f"Copied {runtime_file.name} to {project_root}")
 
 
 def execute_test_subprocess(
@@ -257,13 +121,15 @@ def run_behavioral_tests(
     candidate_index: int = 0,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
-    if test_framework == "jest":
-        return run_jest_behavioral_tests(
-            test_paths,
-            test_env,
-            cwd,
+    # Check if there's a language support for this test framework that implements run_behavioral_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_behavioral_tests"):
+        return language_support.run_behavioral_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
             timeout=pytest_timeout,
-            js_project_root=js_project_root,
+            project_root=js_project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
         )
@@ -426,143 +292,6 @@ def run_line_profile_tests(
     return result_file_path, results
 
 
-def run_jest_benchmarking_tests(
-    test_paths: TestFiles,
-    test_env: dict[str, str],
-    cwd: Path,
-    *,
-    timeout: int | None = None,
-    js_project_root: Path | None = None,
-    min_loops: int = 5,
-    max_loops: int = 100_000,
-    target_duration_ms: int = 10_000,
-    stability_check: bool = True,
-) -> tuple[Path, subprocess.CompletedProcess]:
-    """Run Jest benchmarking tests with internal looping for stable measurements.
-
-    Args:
-        test_paths: TestFiles object containing test file information.
-        test_env: Environment variables for the test run.
-        cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds for the subprocess.
-        js_project_root: JavaScript project root (directory containing package.json).
-        min_loops: Minimum number of loops to run for each test case.
-        max_loops: Maximum number of loops to run for each test case.
-        target_duration_ms: Target TOTAL duration in milliseconds for looping.
-            This is divided among test cases since JavaScript uses capturePerfLooped
-            which loops internally per test case, unlike Python's external looping.
-        stability_check: Whether to enable stability-based early stopping.
-
-    Returns:
-        Tuple of (result_file_path, subprocess_result).
-
-    """
-    result_file_path = get_run_tmp_file(Path("jest_perf_results.xml"))
-
-    # Get performance test files
-    test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
-
-    # Count approximate number of test cases to divide time budget
-    # JavaScript's capturePerfLooped loops internally per test case, so we need to divide
-    # the total time budget among test cases to avoid timeout
-    num_test_cases = len(test_files) * 10  # Estimate ~10 test cases per file (conservative)
-    # Use at least 500ms per test case for fast functions, cap at 2 seconds
-    per_test_duration_ms = max(500, min(2000, target_duration_ms // max(1, num_test_cases)))
-
-    # Use provided js_project_root, or detect it as fallback
-    if js_project_root is None and test_files:
-        first_test_file = Path(test_files[0])
-        js_project_root = _find_js_project_root(first_test_file)
-
-    effective_cwd = js_project_root if js_project_root else cwd
-    logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
-
-    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
-    _ensure_js_runtime_files(effective_cwd)
-
-    # Build Jest command for performance tests
-    jest_cmd = ["npx", "jest", "--reporters=default", "--reporters=jest-junit", "--runInBand", "--forceExit"]
-
-    if test_files:
-        jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
-
-    if timeout:
-        jest_cmd.append(f"--testTimeout={timeout * 1000}")
-
-    # Set up environment
-    jest_env = test_env.copy()
-    jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
-    jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
-    jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
-    jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
-    jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
-    jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
-    # Include console.log output in JUnit XML for timing marker parsing
-    jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
-    # Set codeflash output file for the jest helper to write timing data (SQLite format)
-    codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
-    jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
-    jest_env["CODEFLASH_TEST_ITERATION"] = "0"
-    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
-    jest_env["CODEFLASH_MODE"] = "performance"
-    # Looping configuration for stable performance measurements
-    jest_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
-    jest_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
-    # Use per-test duration instead of total duration
-    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(per_test_duration_ms)
-    jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
-    # Seed random number generator for reproducible test runs across original and optimized code
-    jest_env["CODEFLASH_RANDOM_SEED"] = "42"
-
-    # Calculate subprocess timeout based on expected benchmarking time
-    # For slow O(n²) functions, a single call might take seconds, so add generous buffer
-    # Allow for Jest startup overhead (10s) + per-test-case benchmarking + safety margin
-    expected_benchmarking_time_s = (num_test_cases * per_test_duration_ms) / 1000 + 10
-    # Use at least 60 seconds to handle slow functions, or calculated time with 2x margin
-    subprocess_timeout = max(60, int(expected_benchmarking_time_s * 2))
-
-    logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
-    logger.debug(f"Jest benchmarking config: {num_test_cases} estimated test cases, {per_test_duration_ms}ms per test, min_loops={min_loops}, {subprocess_timeout}s subprocess timeout")
-
-    # Calculate subprocess timeout: for Jest benchmarking, we need enough time for all tests to complete
-    # Each test can run up to target_duration_ms (default 10s) for stable measurements
-    # Use a generous subprocess timeout (10 minutes) since individual test timeouts are handled by Jest
-    subprocess_timeout = 600  # 10 minutes - sufficient for benchmarking suite
-
-    start_time_ns = time.perf_counter_ns()
-    try:
-        run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
-        )
-        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
-        # Jest sends console.log output to stderr by default - move it to stdout
-        # so our timing markers (printed via console.log) are in the expected place
-        if result.stderr and not result.stdout:
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
-            )
-        elif result.stderr:
-            # Combine stderr into stdout if both have content
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
-            )
-        logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Jest benchmarking tests timed out after {subprocess_timeout}s")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking tests timed out"
-        )
-    except FileNotFoundError:
-        logger.error("Jest not found for benchmarking")
-        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
-    finally:
-        wall_clock_ns = time.perf_counter_ns() - start_time_ns
-        _calculate_utilization_fraction(result.stdout if result else "", wall_clock_ns, "jest-performance")
-
-    return result_file_path, result
-
-
 def run_benchmarking_tests(
     test_paths: TestFiles,
     pytest_cmd: str,
@@ -576,17 +305,18 @@ def run_benchmarking_tests(
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework == "jest":
-        return run_jest_benchmarking_tests(
-            test_paths,
-            test_env,
-            cwd,
+    # Check if there's a language support for this test framework that implements run_benchmarking_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
+        return language_support.run_benchmarking_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
             timeout=pytest_timeout,
-            js_project_root=js_project_root,
+            project_root=js_project_root,
             min_loops=pytest_min_loops,
             max_loops=pytest_max_loops,
-            target_duration_ms=int(pytest_target_runtime_seconds * 1000),
-            stability_check=True,
+            target_duration_seconds=pytest_target_runtime_seconds,
         )
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (

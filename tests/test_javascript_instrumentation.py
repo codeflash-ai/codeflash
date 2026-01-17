@@ -23,7 +23,7 @@ from codeflash.models.models import TestFile, TestFiles
 from codeflash.models.test_type import TestType
 from codeflash.verification.verification_utils import TestConfig
 from codeflash.verification.parse_test_output import parse_sqlite_test_results, parse_test_results
-from codeflash.verification.test_runner import run_jest_behavioral_tests, run_jest_benchmarking_tests
+from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests, run_jest_benchmarking_tests
 from codeflash.code_utils.code_utils import get_run_tmp_file
 
 

@@ -68,10 +68,88 @@ function createSeededRandom(seed) {
     };
 }
 
-// Override Math.random with seeded version if seed is provided
+// Override non-deterministic APIs with seeded versions if seed is provided
+// NOTE: We do NOT seed performance.now() or process.hrtime() as those are used
+// internally by this script for timing measurements.
 if (RANDOM_SEED !== 0) {
+    // Seed Math.random
     const seededRandom = createSeededRandom(RANDOM_SEED);
     Math.random = seededRandom;
+
+    // Seed Date.now() and new Date() - use fixed base timestamp that increments
+    const SEEDED_BASE_TIME = 1700000000000; // Nov 14, 2023 - fixed reference point
+    let dateOffset = 0;
+    const OriginalDate = Date;
+    const originalDateNow = Date.now;
+
+    Date.now = function() {
+        return SEEDED_BASE_TIME + (dateOffset++);
+    };
+
+    // Override Date constructor to use seeded time when called without arguments
+    function SeededDate(...args) {
+        if (args.length === 0) {
+            // No arguments: use seeded current time
+            return new OriginalDate(SEEDED_BASE_TIME + (dateOffset++));
+        }
+        // With arguments: use original behavior
+        return new OriginalDate(...args);
+    }
+    SeededDate.prototype = OriginalDate.prototype;
+    SeededDate.now = Date.now;
+    SeededDate.parse = OriginalDate.parse;
+    SeededDate.UTC = OriginalDate.UTC;
+    global.Date = SeededDate;
+
+    // Seed crypto.randomUUID() and crypto.getRandomValues()
+    try {
+        const crypto = require('crypto');
+        const randomForCrypto = createSeededRandom(RANDOM_SEED + 1000); // Different seed to avoid correlation
+
+        // Seed crypto.randomUUID()
+        if (crypto.randomUUID) {
+            const originalRandomUUID = crypto.randomUUID.bind(crypto);
+            crypto.randomUUID = function() {
+                // Generate a deterministic UUID v4 format
+                const hex = () => Math.floor(randomForCrypto() * 16).toString(16);
+                const bytes = Array.from({ length: 32 }, hex).join('');
+                return `${bytes.slice(0, 8)}-${bytes.slice(8, 12)}-4${bytes.slice(13, 16)}-${(8 + Math.floor(randomForCrypto() * 4)).toString(16)}${bytes.slice(17, 20)}-${bytes.slice(20, 32)}`;
+            };
+        }
+
+        // Seed crypto.getRandomValues() - used by uuid libraries
+        const seededGetRandomValues = function(array) {
+            for (let i = 0; i < array.length; i++) {
+                if (array instanceof Uint8Array) {
+                    array[i] = Math.floor(randomForCrypto() * 256);
+                } else if (array instanceof Uint16Array) {
+                    array[i] = Math.floor(randomForCrypto() * 65536);
+                } else if (array instanceof Uint32Array) {
+                    array[i] = Math.floor(randomForCrypto() * 4294967296);
+                } else {
+                    array[i] = Math.floor(randomForCrypto() * 256);
+                }
+            }
+            return array;
+        };
+
+        if (crypto.getRandomValues) {
+            crypto.getRandomValues = seededGetRandomValues;
+        }
+
+        // Also seed webcrypto if available (Node 18+)
+        // Use the same seeded function to avoid circular references
+        if (crypto.webcrypto) {
+            if (crypto.webcrypto.getRandomValues) {
+                crypto.webcrypto.getRandomValues = seededGetRandomValues;
+            }
+            if (crypto.webcrypto.randomUUID) {
+                crypto.webcrypto.randomUUID = crypto.randomUUID;
+            }
+        }
+    } catch (e) {
+        // crypto module not available, skip seeding
+    }
 }
 
 // Looping configuration for performance benchmarking

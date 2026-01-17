@@ -1,5 +1,5 @@
-"""JavaScript language support for codeflash."""
+"""JavaScript/TypeScript language support for codeflash."""
 
-from codeflash.languages.javascript.support import JavaScriptSupport
+from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 
-__all__ = ["JavaScriptSupport"]
+__all__ = ["JavaScriptSupport", "TypeScriptSupport"]

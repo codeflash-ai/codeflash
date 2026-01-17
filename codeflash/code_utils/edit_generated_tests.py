@@ -12,6 +12,7 @@ from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.languages.registry import get_language_support
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash.result.critic import performance_gain
 
@@ -158,16 +159,15 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             if inv_id.test_class_name
             else inv_id.test_function_name
         )
-        # For JavaScript/TypeScript, test_module_path is already a file path (e.g., "tests/foo.test.js")
+        # For non-Python languages, test_module_path is already a file path (e.g., "tests/foo.test.js")
         # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
         test_module_path = inv_id.test_module_path
-        js_ts_extensions = (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts")
-        if test_module_path.endswith(js_ts_extensions):
-            # JavaScript/TypeScript: already a file path
-            abs_path = tests_project_rootdir / Path(test_module_path)
-        else:
+        if test_module_path.endswith(".py"):
             # Python: convert module name to path
             abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
+        else:
+            # Non-Python: already a file path
+            abs_path = tests_project_rootdir / Path(test_module_path)
         abs_path_str = str(abs_path.resolve().with_suffix(""))
         # Include both unit test and perf test paths for runtime annotations
         # (performance test runtimes are used for annotations)
@@ -186,123 +186,9 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
     return unique_inv_ids
 
 
-def _is_javascript_file(file_path: Path) -> bool:
-    """Check if a file is a JavaScript/TypeScript file."""
-    js_extensions = (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts")
-    return file_path.suffix in js_extensions
-
-
-def _format_runtime_comment(original_time: int, optimized_time: int, is_js: bool = False) -> str:
-    """Format a runtime comparison comment."""
-    perf_gain = format_perf(
-        abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
-    )
-    status = "slower" if optimized_time > original_time else "faster"
-    comment_prefix = "//" if is_js else "#"
-    return f"{comment_prefix} {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
-
-
-def _sanitize_test_name_for_matching(test_name: str) -> str:
-    """Sanitize test name to match the format used in timing markers.
-
-    Must match JavaScript's sanitizeTestId() which replaces [!#:$] and whitespace with underscores.
-    """
-    return re.sub(r"[!#:$\s]+", "_", test_name)
-
-
-def _add_runtime_comments_to_javascript(
-    source: str,
-    test_file_path: Path,
-    original_runtimes: dict[str, int],
-    optimized_runtimes: dict[str, int],
-) -> str:
-    """Add runtime comments to JavaScript test source code.
-
-    For JavaScript, we match timing data by test function name and add comments
-    to expect() or function call lines.
-    """
-    logger.debug(f"[js-annotations] original_runtimes has {len(original_runtimes)} entries")
-    logger.debug(f"[js-annotations] optimized_runtimes has {len(optimized_runtimes)} entries")
-
-    if not original_runtimes or not optimized_runtimes:
-        logger.debug("[js-annotations] No runtimes available, returning unchanged source")
-        return source
-
-    lines = source.split("\n")
-    modified_lines = []
-
-    # Build a lookup by FULL test name (including describe blocks) for suffix matching
-    # The keys in original_runtimes look like: "full_test_name#/path/to/test#invocation_id"
-    # where full_test_name includes describe blocks: "fibonacci Edge cases should return 0"
-    timing_by_full_name: dict[str, tuple[int, int]] = {}
-    for key in original_runtimes:
-        if key in optimized_runtimes:
-            # Extract test function name from the key (first part before #)
-            parts = key.split("#")
-            if parts:
-                full_test_name = parts[0]
-                logger.debug(f"[js-annotations] Found timing for full test name: '{full_test_name}'")
-                if full_test_name not in timing_by_full_name:
-                    timing_by_full_name[full_test_name] = (original_runtimes[key], optimized_runtimes[key])
-                else:
-                    # Sum up timings for same test
-                    old_orig, old_opt = timing_by_full_name[full_test_name]
-                    timing_by_full_name[full_test_name] = (
-                        old_orig + original_runtimes[key],
-                        old_opt + optimized_runtimes[key],
-                    )
-
-    logger.debug(f"[js-annotations] Built timing_by_full_name with {len(timing_by_full_name)} entries")
-
-    def find_matching_test(test_description: str) -> str | None:
-        """Find a timing key that ends with the given test description (suffix match).
-
-        Timing keys are like: "fibonacci Edge cases should return 0"
-        Source test names are like: "should return 0"
-        We need to match by suffix because timing includes all describe block names.
-        """
-        # Try to match by finding a key that ends with the test description
-        for full_name in timing_by_full_name:
-            # Check if the full name ends with the test description (case-insensitive)
-            if full_name.lower().endswith(test_description.lower()):
-                logger.debug(f"[js-annotations] Suffix match: '{test_description}' matches '{full_name}'")
-                return full_name
-        return None
-
-    # Track current test context
-    current_test_name = None
-    current_matched_full_name = None
-    test_pattern = re.compile(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]")
-    # Match function calls that look like: funcName(args) or expect(funcName(args))
-    func_call_pattern = re.compile(r"(?:expect\s*\(\s*)?(\w+)\s*\([^)]*\)")
-
-    for line in lines:
-        # Check if this line starts a new test
-        test_match = test_pattern.search(line)
-        if test_match:
-            current_test_name = test_match.group(1)
-            logger.debug(f"[js-annotations] Found test: '{current_test_name}'")
-            # Find the matching full name from timing data using suffix match
-            current_matched_full_name = find_matching_test(current_test_name)
-            if current_matched_full_name:
-                logger.debug(f"[js-annotations] Test '{current_test_name}' matched to '{current_matched_full_name}'")
-
-        # Check if this line has a function call and we have timing for current test
-        if current_matched_full_name and current_matched_full_name in timing_by_full_name:
-            # Only add comment if line has a function call and doesn't already have a comment
-            if func_call_pattern.search(line) and "//" not in line and "expect(" in line:
-                orig_time, opt_time = timing_by_full_name[current_matched_full_name]
-                comment = _format_runtime_comment(orig_time, opt_time, is_js=True)
-                logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
-                # Add comment at end of line
-                line = f"{line.rstrip()}  {comment}"
-                # Clear timing so we only annotate first call in each test
-                del timing_by_full_name[current_matched_full_name]
-                current_matched_full_name = None
-
-        modified_lines.append(line)
-
-    return "\n".join(modified_lines)
+def _is_python_file(file_path: Path) -> bool:
+    """Check if a file is a Python file."""
+    return file_path.suffix == ".py"
 
 
 def add_runtime_comments_to_generated_tests(
@@ -317,29 +203,9 @@ def add_runtime_comments_to_generated_tests(
     # Process each generated test
     modified_tests = []
     for test in generated_tests.generated_tests:
-        is_js = _is_javascript_file(test.behavior_file_path)
+        is_python = _is_python_file(test.behavior_file_path)
 
-        if is_js:
-            # Use JavaScript-specific comment insertion
-            try:
-                modified_source = _add_runtime_comments_to_javascript(
-                    test.generated_original_test_source,
-                    test.behavior_file_path,
-                    original_runtimes_dict,
-                    optimized_runtimes_dict,
-                )
-                modified_test = GeneratedTests(
-                    generated_original_test_source=modified_source,
-                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
-                    instrumented_perf_test_source=test.instrumented_perf_test_source,
-                    behavior_file_path=test.behavior_file_path,
-                    perf_file_path=test.perf_file_path,
-                )
-                modified_tests.append(modified_test)
-            except Exception as e:
-                logger.debug(f"Failed to add runtime comments to JavaScript test: {e}")
-                modified_tests.append(test)
-        else:
+        if is_python:
             # Use Python libcst-based comment insertion
             try:
                 tree = cst.parse_module(test.generated_original_test_source)
@@ -358,6 +224,25 @@ def add_runtime_comments_to_generated_tests(
                 modified_tests.append(modified_test)
             except Exception as e:
                 # If parsing fails, keep the original test
+                logger.debug(f"Failed to add runtime comments to test: {e}")
+                modified_tests.append(test)
+        else:
+            try:
+                language_support = get_language_support(test.behavior_file_path)
+                modified_source = language_support.add_runtime_comments(
+                    test.generated_original_test_source,
+                    original_runtimes_dict,
+                    optimized_runtimes_dict,
+                )
+                modified_test = GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+                modified_tests.append(modified_test)
+            except Exception as e:
                 logger.debug(f"Failed to add runtime comments to test: {e}")
                 modified_tests.append(test)
 

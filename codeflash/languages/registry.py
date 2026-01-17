@@ -174,6 +174,43 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
     return _SUPPORT_CACHE[language]
 
 
+# Cache for test framework to language support mapping
+_FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
+
+
+def get_language_support_by_framework(test_framework: str) -> LanguageSupport | None:
+    """
+    Get language support for a test framework.
+
+    This function looks up the language support implementation that uses
+    the specified test framework.
+
+    Args:
+        test_framework: Name of the test framework (e.g., "jest", "pytest").
+
+    Returns:
+        LanguageSupport instance for the test framework, or None if not found.
+
+    Example:
+        # Get Jest language support
+        lang = get_language_support_by_framework("jest")
+        if lang:
+            result = lang.run_behavioral_tests(...)
+    """
+    # Check cache first
+    if test_framework in _FRAMEWORK_CACHE:
+        return _FRAMEWORK_CACHE[test_framework]
+
+    # Search all registered languages for one with matching test framework
+    for language in _LANGUAGE_REGISTRY:
+        support = get_language_support(language)
+        if hasattr(support, "test_framework") and support.test_framework == test_framework:
+            _FRAMEWORK_CACHE[test_framework] = support
+            return support
+
+    return None
+
+
 def detect_project_language(project_root: Path, module_root: Path) -> Language:
     """
     Detect the primary language of a project by analyzing file extensions.
@@ -259,6 +296,7 @@ def clear_registry() -> None:
     _EXTENSION_REGISTRY.clear()
     _LANGUAGE_REGISTRY.clear()
     _SUPPORT_CACHE.clear()
+    _FRAMEWORK_CACHE.clear()
 
 
 def clear_cache() -> None:
@@ -268,3 +306,4 @@ def clear_cache() -> None:
     Useful if you need fresh instances of language support objects.
     """
     _SUPPORT_CACHE.clear()
+    _FRAMEWORK_CACHE.clear()

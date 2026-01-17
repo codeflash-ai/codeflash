@@ -67,11 +67,8 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
-from codeflash.languages.javascript.instrument import (
-    TestingMode as JsTestingMode,
-    inject_profiling_into_existing_js_test,
-)
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.languages.registry import get_language_support
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -438,11 +435,12 @@ class FunctionOptimizer:
             if function_to_optimize_source_code
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
-        is_js = function_to_optimize.language in ("javascript", "typescript")
-        self.is_js = is_js
+        # Get language support for non-Python languages
+        self._is_python = function_to_optimize.language == "python"
+        self.language_support = None if self._is_python else get_language_support(function_to_optimize.language)
         if not function_to_optimize_ast:
-            # Skip Python AST parsing for JavaScript/TypeScript
-            if is_js:
+            # Skip Python AST parsing for non-Python languages
+            if not self._is_python:
                 self.function_to_optimize_ast = None
             else:
                 original_module_ast = ast.parse(function_to_optimize_source_code)
@@ -461,9 +459,9 @@ class FunctionOptimizer:
 
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
-        # For JavaScript/TypeScript, we need a relative path from the test file to the source file
+        # For non-Python languages, we need a relative path from the test file to the source file
         # For Python, we use dot-separated module paths
-        if self.is_js:
+        if not self._is_python:
             # Compute relative path from tests directory to source file
             # e.g., for source at /project/fibonacci.js and tests at /project/tests/
             # the relative path should be ../fibonacci
@@ -472,29 +470,30 @@ class FunctionOptimizer:
                 source_file_abs = self.function_to_optimize.file_path.resolve().with_suffix("")
                 tests_root_abs = test_cfg.tests_root.resolve()
 
-                # Find the JavaScript project root (directory containing package.json)
-                js_project_root = self._find_js_project_root(self.function_to_optimize.file_path)
+                # Find the project root using language support
+                # For JavaScript/TypeScript, use the js_project_root if available
+                lang_project_root = test_cfg.js_project_root if test_cfg.js_project_root else self.project_root
+                project_root_from_lang = self.language_support.find_test_root(lang_project_root)
 
-                # Validate that tests_root is within the same JS project as the source file
-                # If not, use a sensible default (js_project_root/tests)
-                if js_project_root:
+                # Validate that tests_root is within the same project as the source file
+                if project_root_from_lang:
                     try:
-                        tests_root_abs.relative_to(js_project_root)
+                        tests_root_abs.relative_to(project_root_from_lang)
                     except ValueError:
-                        # tests_root is outside the JS project - use default
+                        # tests_root is outside the project - use default
                         logger.warning(
-                            f"Configured tests_root {tests_root_abs} is outside JS project {js_project_root}. "
-                            f"Using default: {js_project_root / 'tests'}"
+                            f"Configured tests_root {tests_root_abs} is outside project {project_root_from_lang}. "
+                            f"Using default: {project_root_from_lang / 'tests'}"
                         )
-                        tests_root_abs = js_project_root / "tests"
+                        tests_root_abs = project_root_from_lang / "tests"
                         if not tests_root_abs.exists():
-                            tests_root_abs = js_project_root
+                            tests_root_abs = project_root_from_lang
 
                 # Use os.path.relpath to compute relative path from tests_root to source file
                 rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
                 self.original_module_path = rel_path
                 logger.debug(
-                    f"!lsp|JS module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
+                    f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
                 )
             except ValueError:
                 # Fallback if paths are on different drives (Windows)
@@ -519,27 +518,6 @@ class FunctionOptimizer:
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
         self.is_numerical_code: bool | None = None
-
-    @staticmethod
-    def _find_js_project_root(file_path: Path) -> Path | None:
-        """Find the JavaScript/TypeScript project root by looking for package.json.
-
-        Traverses up from the given file path to find the nearest directory
-        containing package.json or jest.config.js.
-
-        Args:
-            file_path: A file path within the JavaScript project.
-
-        Returns:
-            The project root directory, or None if not found.
-
-        """
-        current = file_path.parent if file_path.is_file() else file_path
-        while current != current.parent:  # Stop at filesystem root
-            if (current / "package.json").exists() or (current / "jest.config.js").exists():
-                return current
-            current = current.parent
-        return None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -607,14 +585,12 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
-        # For JavaScript/TypeScript, copy all runtime files to tests directory
-        if language in ("javascript", "typescript"):
+        # For non-Python languages, copy all runtime files to tests directory
+        if self.language_support is not None:
             import shutil
 
-            from codeflash.languages.javascript.runtime import get_all_runtime_files
-
-            # Copy all runtime files (helper, serializer, comparator, etc.)
-            for runtime_file_source in get_all_runtime_files():
+            # Copy all runtime files via language support
+            for runtime_file_source in self.language_support.get_runtime_files():
                 runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
 
                 # Copy file if it doesn't exist or is outdated
@@ -667,7 +643,7 @@ class FunctionOptimizer:
 
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
-            test_ext = ".test.js" if self.is_js else ".py"
+            test_ext = self.language_support.get_test_file_suffix() if not self._is_python else ".py"
             code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}")
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
@@ -897,8 +873,8 @@ class FunctionOptimizer:
 
         Returns the BestOptimization and optional benchmark tree.
         """
-        # Skip line profiling for JavaScript/TypeScript until implementation is ready
-        if self.is_js:
+        # Skip line profiling for non-Python languages until implementation is ready
+        if not self._is_python:
             line_profile_test_results = {"timings": {}, "unit": 0, "str_out": ""}
         else:
             with progress_bar("Running line-by-line profiling"):
@@ -1574,8 +1550,8 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
-        # Handle JavaScript/TypeScript existing test instrumentation
-        elif self.is_js:
+        # Handle non-Python existing test instrumentation
+        elif not self._is_python:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
                 test_file_invocation_positions[
@@ -1594,27 +1570,27 @@ class FunctionOptimizer:
                     msg = f"Unexpected test type: {test_type}"
                     raise ValueError(msg)
 
-                # Use JavaScript-specific instrumentation
-                success, injected_behavior_test = inject_profiling_into_existing_js_test(
-                    mode=JsTestingMode.BEHAVIOR,
+                # Use language-specific instrumentation
+                success, injected_behavior_test = self.language_support.instrument_existing_test(
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode="behavior",
                 )
                 if not success:
-                    logger.debug(f"Failed to instrument JavaScript test file {test_file} for behavior testing")
+                    logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
                     continue
 
-                success, injected_perf_test = inject_profiling_into_existing_js_test(
-                    mode=JsTestingMode.PERFORMANCE,
+                success, injected_perf_test = self.language_support.instrument_existing_test(
                     test_path=path_obj_test_file,
                     call_positions=[test.position for test in tests_in_file_list],
                     function_to_optimize=self.function_to_optimize,
                     tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode="performance",
                 )
                 if not success:
-                    logger.debug(f"Failed to instrument JavaScript test file {test_file} for performance testing")
+                    logger.debug(f"Failed to instrument test file {test_file} for performance testing")
                     continue
 
                 # Generate instrumented test file paths
@@ -1653,7 +1629,7 @@ class FunctionOptimizer:
 
             if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
                 logger.info(
-                    f"Instrumented {existing_test_files_count} existing JavaScript unit test file"
+                    f"Instrumented {existing_test_files_count} existing unit test file"
                     f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
                     f"{'s' if replay_test_files_count != 1 else ''}, and "
                     f"{concolic_coverage_test_files_count} concolic coverage test file"
@@ -2074,7 +2050,7 @@ class FunctionOptimizer:
         )
 
         generated_tests_str = ""
-        code_lang = "javascript" if self.is_js else "python"
+        code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
             if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
                 formatted_generated_test = format_generated_code(
@@ -2266,7 +2242,7 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async and not self.is_js:
+        if self.function_to_optimize.is_async and not not self._is_python:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
@@ -2276,9 +2252,9 @@ class FunctionOptimizer:
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
             try:
-                # Only instrument Python code here - JavaScript uses codeflash-jest-helper.js
-                # which is already included in the generated/instrumented tests
-                if not self.is_js:
+                # Only instrument Python code here - non-Python languages use their own runtime helpers
+                # which are already included in the generated/instrumented tests
+                if self._is_python:
                     instrument_codeflash_capture(
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
@@ -2309,8 +2285,8 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        # Skip coverage check for JavaScript/TypeScript (coverage not yet supported)
-        if not self.is_js and not coverage_critic(coverage_results):
+        # Skip coverage check for non-Python languages (coverage not yet supported)
+        if self._is_python and not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
@@ -2319,8 +2295,8 @@ class FunctionOptimizer:
                 f"Test coverage is {coverage_pct}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
 
-        # Skip line profiler for JavaScript/TypeScript (not yet supported)
-        if self.is_js:
+        # Skip line profiler for non-Python languages (not yet supported)
+        if not self._is_python:
             line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
         else:
             with progress_bar("Running line profiler to identify performance bottlenecks..."):
@@ -2329,7 +2305,7 @@ class FunctionOptimizer:
                 )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
-            if self.function_to_optimize.is_async and not self.is_js:
+            if self.function_to_optimize.is_async and not not self._is_python:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2499,8 +2475,8 @@ class FunctionOptimizer:
                 )
 
             try:
-                # Only instrument Python code here - JavaScript uses codeflash-jest-helper.js
-                if not self.is_js:
+                # Only instrument Python code here - non-Python languages use their own runtime helpers
+                if self._is_python:
                     instrument_codeflash_capture(
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
@@ -2516,8 +2492,8 @@ class FunctionOptimizer:
                 )
             # Remove instrumentation
             finally:
-                # Only restore code for Python - JavaScript tests are self-contained
-                if not self.is_js:
+                # Only restore code for Python - non-Python tests are self-contained
+                if self._is_python:
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
@@ -2530,16 +2506,14 @@ class FunctionOptimizer:
             console.rule()
 
             # Use language-appropriate comparison
-            if self.is_js:
-                # JavaScript: Compare using SQLite results if available, otherwise compare test pass/fail
+            if not self._is_python:
+                # Non-Python: Compare using language support with SQLite results if available
                 original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
                 candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
 
                 if original_sqlite.exists() and candidate_sqlite.exists():
-                    # Full comparison using captured return values
-                    from codeflash.verification.equivalence import compare_javascript_test_results
-
-                    match, diffs = compare_javascript_test_results(original_sqlite, candidate_sqlite)
+                    # Full comparison using captured return values via language support
+                    match, diffs = self.language_support.compare_test_results(original_sqlite, candidate_sqlite)
                     # Cleanup SQLite files after comparison
                     candidate_sqlite.unlink(missing_ok=True)
                 else:
@@ -2712,10 +2686,9 @@ class FunctionOptimizer:
                         console.print(panel)
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
-            # For JavaScript behavior tests, skip SQLite cleanup - files needed for JS-native comparison
-            # TODO (ali): make sure it works fine
-            is_js_for_original_code = self.is_js and optimization_iteration == 0
-            is_js_behavior = (self.is_js and testing_type == TestingMode.BEHAVIOR) or is_js_for_original_code
+            # For non-Python behavior tests, skip SQLite cleanup - files needed for language-native comparison
+            non_python_original_code = not self._is_python and optimization_iteration == 0
+            skip_cleanup = (not self._is_python and testing_type == TestingMode.BEHAVIOR) or non_python_original_code
 
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
@@ -2728,7 +2701,7 @@ class FunctionOptimizer:
                 code_context=code_context,
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
-                skip_sqlite_cleanup=is_js_behavior,
+                skip_sqlite_cleanup=skip_cleanup,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout

@@ -828,12 +828,8 @@ def filter_functions(
             non_modules_removed_count += len(_functions)
             continue
 
-        # TODO for claude: make this work only for python, not when its not js
-        # Check if module path is valid - only for Python files
-        # JavaScript files don't have the same import constraints
-        file_ext = Path(file_path).suffix.lower()
-        is_javascript = file_ext in (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
-        if not is_javascript:
+        lang_support = get_language_support(Path(file_path))
+        if lang_support.language == Language.PYTHON:
             try:
                 ast.parse(f"import {module_name_from_file_path(Path(file_path), project_root)}")
             except SyntaxError:

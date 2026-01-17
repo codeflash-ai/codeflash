@@ -90,7 +90,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
-    # Handle JavaScript file paths (contain slashes and .js/.ts extension)
+    # Handle file paths (contain slashes and extensions like .js/.ts)
     if "/" in test_class_path or "\\" in test_class_path:
         # This is a file path, not a Python module path
         # Try to resolve relative to base_dir's parent (project root)
@@ -197,7 +197,7 @@ def parse_jest_json_results(
 
             # Create invocation ID - use funcName from result or passed function_name
             function_getting_tested = func_name or function_name or "unknown"
-            # For JavaScript, keep the relative file path with extension intact
+            # For Jest tests, keep the relative file path with extension intact
             # (Python uses module_name_from_file_path which strips extensions)
             try:
                 test_module_path = str(test_file_path.relative_to(test_config.tests_project_rootdir))
@@ -315,8 +315,8 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
-    is_javascript = test_config.test_framework == "jest"
+    # Check if this is a Jest test (use JSON) or Python test (use pickle)
+    is_jest = test_config.test_framework == "jest"
 
     for val in data:
         try:
@@ -325,10 +325,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             test_function_name = val[2] if val[2] else None
             function_getting_tested = val[3]
 
-            # For JavaScript, test_module_path is already a file path (e.g., "tests/foo.test.js")
+            # For Jest tests, test_module_path is already a file path (e.g., "tests/foo.test.js")
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
-            if is_javascript:
-                # JavaScript: test_module_path is a relative file path
+            if is_jest:
+                # Jest: test_module_path is a relative file path
                 test_file_path = test_config.tests_project_rootdir / test_module_path
             else:
                 # Python: convert module path to file path
@@ -343,8 +343,8 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             else:
                 # TODO : this is because sqlite writes original file module path. Should make it consistent
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
-                # Default to GENERATED_REGRESSION for JavaScript tests when test type can't be determined
-                if test_type is None and is_javascript:
+                # Default to GENERATED_REGRESSION for Jest tests when test type can't be determined
+                if test_type is None and is_jest:
                     test_type = TestType.GENERATED_REGRESSION
                 elif test_type is None:
                     # Skip results where test type cannot be determined
@@ -352,15 +352,15 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     continue
 
             # Deserialize return value
-            # For JavaScript: Skip deserialization - comparison happens in JS land via compare_javascript_test_results
+            # For Jest: Skip deserialization - comparison happens via language-specific comparator
             # For Python: Use pickle to deserialize
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
-                    if is_javascript:
-                        # JavaScript comparison happens via Node.js script (compare_javascript_test_results)
+                    if is_jest:
+                        # Jest comparison happens via Node.js script (language_support.compare_test_results)
                         # Store a marker indicating data exists but is not deserialized in Python
-                        ret_val = ("__javascript_serialized__", val[7])
+                        ret_val = ("__serialized__", val[7])
                     else:
                         # Python uses pickle serialization
                         ret_val = (pickle.loads(val[7]),)
@@ -466,13 +466,37 @@ def parse_jest_test_xml(
         logger.warning(f"No Jest test results for {test_xml_file_path} found.")
         return test_results
 
+    # Log file size for debugging
+    file_size = test_xml_file_path.stat().st_size
+    logger.debug(f"Jest XML file size: {file_size} bytes at {test_xml_file_path}")
+
     try:
         xml = JUnitXml.fromfile(str(test_xml_file_path), parse_func=parse_func)
+        logger.debug(f"Successfully parsed Jest JUnit XML from {test_xml_file_path}")
     except Exception as e:
         logger.warning(f"Failed to parse {test_xml_file_path} as JUnitXml. Exception: {e}")
         return test_results
 
     base_dir = test_config.tests_project_rootdir
+    logger.debug(f"Jest XML parsing: base_dir={base_dir}, num_test_files={len(test_files.test_files)}")
+
+    # Build lookup from instrumented file path to TestFile for direct matching
+    # This handles cases where instrumented files are in temp directories
+    instrumented_path_lookup: dict[str, tuple[Path, TestType]] = {}
+    for test_file in test_files.test_files:
+        if test_file.instrumented_behavior_file_path:
+            # Store both the absolute path and resolved path as keys
+            abs_path = str(test_file.instrumented_behavior_file_path.resolve())
+            instrumented_path_lookup[abs_path] = (
+                test_file.instrumented_behavior_file_path,
+                test_file.test_type,
+            )
+            # Also store the string representation in case of minor path differences
+            instrumented_path_lookup[str(test_file.instrumented_behavior_file_path)] = (
+                test_file.instrumented_behavior_file_path,
+                test_file.test_type,
+            )
+            logger.debug(f"Jest XML lookup: registered {abs_path}")
 
     # Fallback: if JUnit XML doesn't have system-out, use subprocess stdout directly
     global_stdout = ""
@@ -489,7 +513,10 @@ def parse_jest_test_xml(
         except (AttributeError, UnicodeDecodeError):
             global_stdout = ""
 
+    suite_count = 0
+    testcase_count = 0
     for suite in xml:
+        suite_count += 1
         # Extract console output from suite-level system-out (Jest specific)
         suite_stdout = _extract_jest_console_output(suite._elem)  # noqa: SLF001
 
@@ -506,6 +533,7 @@ def parse_jest_test_xml(
             end_matches_dict[key] = match
 
         for testcase in suite:
+            testcase_count += 1
             test_class_path = testcase.classname  # For Jest, this is the file path
             test_name = testcase.name
 
@@ -513,26 +541,62 @@ def parse_jest_test_xml(
                 logger.debug(f"testcase.name is None in Jest XML {test_xml_file_path}, skipping")
                 continue
 
-            # Resolve test file path - Jest uses file paths in classname
-            test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
+            logger.debug(f"Jest XML: processing testcase name={test_name}, classname={test_class_path}")
+
+            # First, try direct lookup in instrumented file paths
+            # This handles cases where instrumented files are in temp directories
+            test_file_path = None
+            test_type = None
+
+            if test_class_path:
+                # Try exact match with classname (which should be the filepath from jest-junit)
+                if test_class_path in instrumented_path_lookup:
+                    test_file_path, test_type = instrumented_path_lookup[test_class_path]
+                else:
+                    # Try resolving the path and matching
+                    try:
+                        resolved_path = str(Path(test_class_path).resolve())
+                        if resolved_path in instrumented_path_lookup:
+                            test_file_path, test_type = instrumented_path_lookup[resolved_path]
+                    except Exception:
+                        pass
+
+            # If direct lookup failed, try the file attribute
             if test_file_path is None:
-                # Try using the file attribute directly
                 test_file_name = suite._elem.attrib.get("file") or testcase._elem.attrib.get("file")  # noqa: SLF001
                 if test_file_name:
-                    test_file_path = base_dir.parent / test_file_name
-                    if not test_file_path.exists():
-                        test_file_path = base_dir / test_file_name
+                    if test_file_name in instrumented_path_lookup:
+                        test_file_path, test_type = instrumented_path_lookup[test_file_name]
+                    else:
+                        try:
+                            resolved_path = str(Path(test_file_name).resolve())
+                            if resolved_path in instrumented_path_lookup:
+                                test_file_path, test_type = instrumented_path_lookup[resolved_path]
+                        except Exception:
+                            pass
+
+            # Fall back to traditional path resolution if direct lookup failed
+            if test_file_path is None:
+                test_file_path = resolve_test_file_from_class_path(test_class_path, base_dir)
+                if test_file_path is None:
+                    test_file_name = suite._elem.attrib.get("file") or testcase._elem.attrib.get("file")  # noqa: SLF001
+                    if test_file_name:
+                        test_file_path = base_dir.parent / test_file_name
+                        if not test_file_path.exists():
+                            test_file_path = base_dir / test_file_name
 
             if test_file_path is None or not test_file_path.exists():
                 logger.warning(f"Could not resolve test file for Jest test: {test_class_path}")
                 continue
 
-            test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+            # Get test type if not already set from lookup
+            if test_type is None:
+                test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
                 # Default to GENERATED_REGRESSION for Jest tests
                 test_type = TestType.GENERATED_REGRESSION
 
-            # For JavaScript, keep the relative file path with extension intact
+            # For Jest tests, keep the relative file path with extension intact
             # (Python uses module_name_from_file_path which strips extensions)
             try:
                 test_module_path = str(test_file_path.relative_to(test_config.tests_project_rootdir))
@@ -550,7 +614,7 @@ def parse_jest_test_xml(
             # Find matching timing markers for this test
             # Jest test names in markers are sanitized by codeflash-jest-helper's sanitizeTestId()
             # which replaces: !#:$ and whitespace with underscores
-            # IMPORTANT: Must match JavaScript's sanitization exactly for marker matching to work
+            # IMPORTANT: Must match Jest helper's sanitization exactly for marker matching to work
             sanitized_test_name = re.sub(r"[!#:$\s]+", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
@@ -618,9 +682,17 @@ def parse_jest_test_xml(
                     )
 
     if not test_results:
-        logger.info(f"No Jest test results parsed from {test_xml_file_path}")
+        logger.info(
+            f"No Jest test results parsed from {test_xml_file_path} "
+            f"(found {suite_count} suites, {testcase_count} testcases)"
+        )
         if run_result is not None:
             logger.debug(f"Jest stdout: {run_result.stdout[:1000] if run_result.stdout else 'empty'}")
+    else:
+        logger.debug(
+            f"Jest XML parsing complete: {len(test_results.test_results)} results "
+            f"from {suite_count} suites, {testcase_count} testcases"
+        )
 
     return test_results
 
@@ -1011,8 +1083,8 @@ def parse_test_results(
         test_xml_path, test_files=test_files, test_config=test_config, run_result=run_result
     )
 
-    # Parse timing/behavior data from SQLite (used by both Python and JavaScript)
-    # JavaScript (Jest) uses SQLite exclusively via codeflash-jest-helper
+    # Parse timing/behavior data from SQLite (used by both Python and Jest)
+    # Jest uses SQLite exclusively via codeflash-jest-helper
     # Python can use SQLite (preferred) or legacy binary format
     test_results_data = TestResults()
 
@@ -1051,8 +1123,8 @@ def parse_test_results(
     get_run_tmp_file(Path("jest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_perf_results.xml")).unlink(missing_ok=True)
 
-    # For JavaScript tests, SQLite cleanup is deferred until after comparison
-    # (comparison happens in JavaScript land via compare_javascript_test_results)
+    # For Jest tests, SQLite cleanup is deferred until after comparison
+    # (comparison happens via language_support.compare_test_results)
     if not skip_sqlite_cleanup:
         get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.sqlite")).unlink(missing_ok=True)
 
