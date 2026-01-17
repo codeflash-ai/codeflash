@@ -523,6 +523,7 @@ class OptimizedCandidateSource(str, Enum):
     REFINE = "REFINE"
     REPAIR = "REPAIR"
     ADAPTIVE = "ADAPTIVE"
+    JIT_REWRITE = "JIT_REWRITE"
 
 
 @dataclass(frozen=True)
