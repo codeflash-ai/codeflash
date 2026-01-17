@@ -56,6 +56,10 @@ class JavaScriptSupport:
         """Primary test framework for JavaScript."""
         return "jest"
 
+    @property
+    def comment_prefix(self) -> str:
+        return "//"
+
     # === Discovery ===
 
     def discover_functions(
@@ -663,10 +667,7 @@ class JavaScriptSupport:
     # === Test Editing ===
 
     def add_runtime_comments(
-        self,
-        test_source: str,
-        original_runtimes: dict[str, int],
-        optimized_runtimes: dict[str, int],
+        self, test_source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
     ) -> str:
         """Add runtime performance comments to JavaScript test source.
 
@@ -677,16 +678,13 @@ class JavaScriptSupport:
 
         Returns:
             Test source code with runtime comments added.
+
         """
         from codeflash.languages.javascript.edit_tests import add_runtime_comments
 
         return add_runtime_comments(test_source, original_runtimes, optimized_runtimes)
 
-    def remove_test_functions(
-        self,
-        test_source: str,
-        functions_to_remove: list[str],
-    ) -> str:
+    def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
         """Remove specific test functions from JavaScript test source.
 
         Args:
@@ -695,6 +693,7 @@ class JavaScriptSupport:
 
         Returns:
             Test source code with specified functions removed.
+
         """
         from codeflash.languages.javascript.edit_tests import remove_test_functions
 
@@ -702,11 +701,7 @@ class JavaScriptSupport:
 
     # === Test Result Comparison ===
 
-    def compare_test_results(
-        self,
-        original_results_path: Path,
-        candidate_results_path: Path,
-    ) -> tuple[bool, list]:
+    def compare_test_results(self, original_results_path: Path, candidate_results_path: Path) -> tuple[bool, list]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -715,6 +710,7 @@ class JavaScriptSupport:
 
         Returns:
             Tuple of (are_equivalent, list of TestDiff objects).
+
         """
         from codeflash.languages.javascript.comparator import compare_test_results
 
@@ -727,6 +723,7 @@ class JavaScriptSupport:
 
         Returns:
             Jest test file suffix.
+
         """
         return ".test.js"
 
@@ -735,6 +732,7 @@ class JavaScriptSupport:
 
         Returns:
             JavaScript single-line comment prefix.
+
         """
         return "//"
 
@@ -748,6 +746,7 @@ class JavaScriptSupport:
 
         Returns:
             Path to test root, or None if not found.
+
         """
         # Common test directory patterns for JavaScript/Jest
         test_dirs = [
@@ -780,6 +779,7 @@ class JavaScriptSupport:
 
         Returns:
             List of paths to runtime files that need to be available.
+
         """
         from codeflash.languages.javascript.runtime import get_all_runtime_files
 
@@ -807,6 +807,7 @@ class JavaScriptSupport:
 
         Returns:
             Tuple of (success, instrumented_code).
+
         """
         from codeflash.languages.javascript.instrument import inject_profiling_into_existing_js_test
 
@@ -843,6 +844,7 @@ class JavaScriptSupport:
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
+
         """
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
@@ -881,6 +883,7 @@ class JavaScriptSupport:
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
+
         """
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 

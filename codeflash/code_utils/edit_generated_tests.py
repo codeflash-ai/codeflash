@@ -150,6 +150,11 @@ class CommentAdder(cst.CSTTransformer):
         return updated_node
 
 
+def _is_python_file(file_path: Path) -> bool:
+    """Check if a file is a Python file."""
+    return file_path.suffix == ".py"
+
+
 def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
     logger.debug(f"[unique_inv_id] Processing {len(inv_id_runtimes)} invocation IDs")
@@ -162,7 +167,7 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
         # For non-Python languages, test_module_path is already a file path (e.g., "tests/foo.test.js")
         # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
         test_module_path = inv_id.test_module_path
-        if test_module_path.endswith(".py"):
+        if _is_python_file(Path(test_module_path)):
             # Python: convert module name to path
             abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
         else:
@@ -184,11 +189,6 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
         unique_inv_ids[match_key] += min(runtimes)
     logger.debug(f"[unique_inv_id] Result has {len(unique_inv_ids)} entries")
     return unique_inv_ids
-
-
-def _is_python_file(file_path: Path) -> bool:
-    """Check if a file is a Python file."""
-    return file_path.suffix == ".py"
 
 
 def add_runtime_comments_to_generated_tests(
@@ -230,9 +230,7 @@ def add_runtime_comments_to_generated_tests(
             try:
                 language_support = get_language_support(test.behavior_file_path)
                 modified_source = language_support.add_runtime_comments(
-                    test.generated_original_test_source,
-                    original_runtimes_dict,
-                    optimized_runtimes_dict,
+                    test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
                 )
                 modified_test = GeneratedTests(
                     generated_original_test_source=modified_source,

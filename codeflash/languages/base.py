@@ -1,5 +1,4 @@
-"""
-Base types and protocol for multi-language support in Codeflash.
+"""Base types and protocol for multi-language support in Codeflash.
 
 This module defines the core abstractions that all language implementations must follow.
 The LanguageSupport protocol defines the interface that each language must implement,
@@ -10,11 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
 
 class Language(str, Enum):
@@ -30,8 +29,7 @@ class Language(str, Enum):
 
 @dataclass(frozen=True)
 class ParentInfo:
-    """
-    Parent scope information for nested functions/methods.
+    """Parent scope information for nested functions/methods.
 
     Represents the parent class or function that contains a nested function.
     Used to construct the qualified name of a function.
@@ -39,6 +37,7 @@ class ParentInfo:
     Attributes:
         name: The name of the parent scope (class name or function name).
         type: The type of parent ("ClassDef", "FunctionDef", "AsyncFunctionDef", etc.).
+
     """
 
     name: str
@@ -50,8 +49,7 @@ class ParentInfo:
 
 @dataclass(frozen=True)
 class FunctionInfo:
-    """
-    Language-agnostic representation of a function to optimize.
+    """Language-agnostic representation of a function to optimize.
 
     This class captures all the information needed to identify, locate, and
     work with a function across different programming languages.
@@ -67,6 +65,7 @@ class FunctionInfo:
         language: The programming language.
         start_col: Starting column (0-indexed), optional for more precise location.
         end_col: Ending column (0-indexed), optional.
+
     """
 
     name: str
@@ -82,8 +81,7 @@ class FunctionInfo:
 
     @property
     def qualified_name(self) -> str:
-        """
-        Full qualified name including parent scopes.
+        """Full qualified name including parent scopes.
 
         For a method `add` in class `Calculator`, returns "Calculator.add".
         For nested functions, includes all parent scopes.
@@ -112,8 +110,7 @@ class FunctionInfo:
 
 @dataclass
 class HelperFunction:
-    """
-    A helper function that is a dependency of the target function.
+    """A helper function that is a dependency of the target function.
 
     Helper functions are functions called by the target function that are
     within the same module/project (not external libraries).
@@ -125,6 +122,7 @@ class HelperFunction:
         source_code: The source code of the helper function.
         start_line: Starting line number.
         end_line: Ending line number.
+
     """
 
     name: str
@@ -137,8 +135,7 @@ class HelperFunction:
 
 @dataclass
 class CodeContext:
-    """
-    Code context extracted for optimization.
+    """Code context extracted for optimization.
 
     Contains the target function code and all relevant dependencies
     needed for the AI to understand and optimize the function.
@@ -150,6 +147,7 @@ class CodeContext:
         read_only_context: Additional context code (read-only dependencies).
         imports: List of import statements needed.
         language: The programming language.
+
     """
 
     target_code: str
@@ -162,13 +160,13 @@ class CodeContext:
 
 @dataclass
 class TestInfo:
-    """
-    Information about a test that exercises a function.
+    """Information about a test that exercises a function.
 
     Attributes:
         test_name: Name of the test function.
         test_file: Path to the test file.
         test_class: Name of the test class, if any.
+
     """
 
     test_name: str
@@ -185,8 +183,7 @@ class TestInfo:
 
 @dataclass
 class TestResult:
-    """
-    Language-agnostic test result.
+    """Language-agnostic test result.
 
     Captures the outcome of running a single test, including timing
     and behavioral data for equivalence checking.
@@ -200,6 +197,7 @@ class TestResult:
         stdout: Standard output captured during test execution.
         stderr: Standard error captured during test execution.
         error_message: Error message if the test failed.
+
     """
 
     test_name: str
@@ -214,8 +212,7 @@ class TestResult:
 
 @dataclass
 class FunctionFilterCriteria:
-    """
-    Criteria for filtering which functions to discover.
+    """Criteria for filtering which functions to discover.
 
     Attributes:
         include_patterns: Glob patterns for functions to include.
@@ -225,6 +222,7 @@ class FunctionFilterCriteria:
         include_methods: Include class methods.
         min_lines: Minimum number of lines in the function.
         max_lines: Maximum number of lines in the function.
+
     """
 
     include_patterns: list[str] = field(default_factory=list)
@@ -238,8 +236,7 @@ class FunctionFilterCriteria:
 
 @runtime_checkable
 class LanguageSupport(Protocol):
-    """
-    Protocol defining what a language implementation must provide.
+    """Protocol defining what a language implementation must provide.
 
     All language-specific implementations (Python, JavaScript, etc.) must
     implement this protocol. The protocol defines the interface for:
@@ -259,6 +256,7 @@ class LanguageSupport(Protocol):
             def discover_functions(self, file_path: Path, ...) -> list[FunctionInfo]:
                 # Python-specific implementation using LibCST
                 ...
+
     """
 
     # === Properties ===
@@ -270,33 +268,35 @@ class LanguageSupport(Protocol):
 
     @property
     def file_extensions(self) -> tuple[str, ...]:
-        """
-        File extensions supported by this language.
+        """File extensions supported by this language.
 
         Returns:
             Tuple of extensions with leading dots (e.g., (".py",) for Python).
+
         """
         ...
 
     @property
     def test_framework(self) -> str:
-        """
-        Primary test framework name.
+        """Primary test framework name.
 
         Returns:
             Test framework identifier (e.g., "pytest", "jest").
+
         """
+        ...
+
+    @property
+    def comment_prefix(self) -> str:
+        """Like # or //."""
         ...
 
     # === Discovery ===
 
     def discover_functions(
-        self,
-        file_path: Path,
-        filter_criteria: FunctionFilterCriteria | None = None,
+        self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionInfo]:
-        """
-        Find all optimizable functions in a file.
+        """Find all optimizable functions in a file.
 
         Args:
             file_path: Path to the source file to analyze.
@@ -304,16 +304,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             List of FunctionInfo objects for discovered functions.
+
         """
         ...
 
-    def discover_tests(
-        self,
-        test_root: Path,
-        source_functions: Sequence[FunctionInfo],
-    ) -> dict[str, list[TestInfo]]:
-        """
-        Map source functions to their tests via static analysis.
+    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
+        """Map source functions to their tests via static analysis.
 
         Args:
             test_root: Root directory containing tests.
@@ -321,19 +317,14 @@ class LanguageSupport(Protocol):
 
         Returns:
             Dict mapping qualified function names to lists of TestInfo.
+
         """
         ...
 
     # === Code Analysis ===
 
-    def extract_code_context(
-        self,
-        function: FunctionInfo,
-        project_root: Path,
-        module_root: Path,
-    ) -> CodeContext:
-        """
-        Extract function code and its dependencies.
+    def extract_code_context(self, function: FunctionInfo, project_root: Path, module_root: Path) -> CodeContext:
+        """Extract function code and its dependencies.
 
         Args:
             function: The function to extract context for.
@@ -342,16 +333,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             CodeContext with target code and dependencies.
+
         """
         ...
 
-    def find_helper_functions(
-        self,
-        function: FunctionInfo,
-        project_root: Path,
-    ) -> list[HelperFunction]:
-        """
-        Find helper functions called by the target function.
+    def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
+        """Find helper functions called by the target function.
 
         Args:
             function: The target function to analyze.
@@ -359,19 +346,14 @@ class LanguageSupport(Protocol):
 
         Returns:
             List of HelperFunction objects.
+
         """
         ...
 
     # === Code Transformation ===
 
-    def replace_function(
-        self,
-        source: str,
-        function: FunctionInfo,
-        new_source: str,
-    ) -> str:
-        """
-        Replace a function in source code with new implementation.
+    def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
+        """Replace a function in source code with new implementation.
 
         Args:
             source: Original source code.
@@ -380,16 +362,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             Modified source code with function replaced.
+
         """
         ...
 
-    def format_code(
-        self,
-        source: str,
-        file_path: Path | None = None,
-    ) -> str:
-        """
-        Format code using language-specific formatter.
+    def format_code(self, source: str, file_path: Path | None = None) -> str:
+        """Format code using language-specific formatter.
 
         Args:
             source: Source code to format.
@@ -397,20 +375,16 @@ class LanguageSupport(Protocol):
 
         Returns:
             Formatted source code.
+
         """
         ...
 
     # === Test Execution ===
 
     def run_tests(
-        self,
-        test_files: Sequence[Path],
-        cwd: Path,
-        env: dict[str, str],
-        timeout: int,
+        self, test_files: Sequence[Path], cwd: Path, env: dict[str, str], timeout: int
     ) -> tuple[list[TestResult], Path]:
-        """
-        Run tests and return results.
+        """Run tests and return results.
 
         Args:
             test_files: Paths to test files to run.
@@ -420,16 +394,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (list of TestResults, path to JUnit XML).
+
         """
         ...
 
-    def parse_test_results(
-        self,
-        junit_xml_path: Path,
-        stdout: str,
-    ) -> list[TestResult]:
-        """
-        Parse test results from JUnit XML and stdout.
+    def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
+        """Parse test results from JUnit XML and stdout.
 
         Args:
             junit_xml_path: Path to JUnit XML results file.
@@ -437,18 +407,14 @@ class LanguageSupport(Protocol):
 
         Returns:
             List of TestResult objects.
+
         """
         ...
 
     # === Instrumentation ===
 
-    def instrument_for_behavior(
-        self,
-        source: str,
-        functions: Sequence[FunctionInfo],
-    ) -> str:
-        """
-        Add behavior instrumentation to capture inputs/outputs.
+    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionInfo]) -> str:
+        """Add behavior instrumentation to capture inputs/outputs.
 
         Args:
             source: Source code to instrument.
@@ -456,16 +422,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             Instrumented source code.
+
         """
         ...
 
-    def instrument_for_benchmarking(
-        self,
-        test_source: str,
-        target_function: FunctionInfo,
-    ) -> str:
-        """
-        Add timing instrumentation to test code.
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
+        """Add timing instrumentation to test code.
 
         Args:
             test_source: Test source code to instrument.
@@ -473,26 +435,26 @@ class LanguageSupport(Protocol):
 
         Returns:
             Instrumented test source code.
+
         """
         ...
 
     # === Validation ===
 
     def validate_syntax(self, source: str) -> bool:
-        """
-        Check if source code is syntactically valid.
+        """Check if source code is syntactically valid.
 
         Args:
             source: Source code to validate.
 
         Returns:
             True if valid, False otherwise.
+
         """
         ...
 
     def normalize_code(self, source: str) -> str:
-        """
-        Normalize code for deduplication.
+        """Normalize code for deduplication.
 
         Removes comments, normalizes whitespace, etc. to allow
         comparison of semantically equivalent code.
@@ -502,19 +464,16 @@ class LanguageSupport(Protocol):
 
         Returns:
             Normalized source code.
+
         """
         ...
 
     # === Test Editing ===
 
     def add_runtime_comments(
-        self,
-        test_source: str,
-        original_runtimes: dict[str, int],
-        optimized_runtimes: dict[str, int],
+        self, test_source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]
     ) -> str:
-        """
-        Add runtime performance comments to test source code.
+        """Add runtime performance comments to test source code.
 
         Adds comments showing the original vs optimized runtime for each
         function call (e.g., "// 1.5ms -> 0.3ms (80% faster)").
@@ -526,16 +485,12 @@ class LanguageSupport(Protocol):
 
         Returns:
             Test source code with runtime comments added.
+
         """
         ...
 
-    def remove_test_functions(
-        self,
-        test_source: str,
-        functions_to_remove: list[str],
-    ) -> str:
-        """
-        Remove specific test functions from test source code.
+    def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
+        """Remove specific test functions from test source code.
 
         Args:
             test_source: Test source code.
@@ -543,18 +498,14 @@ class LanguageSupport(Protocol):
 
         Returns:
             Test source code with specified functions removed.
+
         """
         ...
 
     # === Test Result Comparison ===
 
-    def compare_test_results(
-        self,
-        original_results_path: Path,
-        candidate_results_path: Path,
-    ) -> tuple[bool, list]:
-        """
-        Compare test results between original and candidate code.
+    def compare_test_results(self, original_results_path: Path, candidate_results_path: Path) -> tuple[bool, list]:
+        """Compare test results between original and candidate code.
 
         Args:
             original_results_path: Path to original test results (e.g., SQLite DB).
@@ -562,47 +513,48 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (are_equivalent, list of TestDiff objects).
+
         """
         ...
 
     # === Configuration ===
 
     def get_test_file_suffix(self) -> str:
-        """
-        Get the test file suffix for this language.
+        """Get the test file suffix for this language.
 
         Returns:
             Test file suffix (e.g., ".test.js", "_test.py").
+
         """
         ...
 
     def get_comment_prefix(self) -> str:
-        """
-        Get the comment prefix for this language.
+        """Get the comment prefix for this language.
 
         Returns:
             Comment prefix (e.g., "//" for JS, "#" for Python).
+
         """
         ...
 
     def find_test_root(self, project_root: Path) -> Path | None:
-        """
-        Find the test root directory for a project.
+        """Find the test root directory for a project.
 
         Args:
             project_root: Root directory of the project.
 
         Returns:
             Path to test root, or None if not found.
+
         """
         ...
 
     def get_runtime_files(self) -> list[Path]:
-        """
-        Get paths to runtime files that need to be copied to user's project.
+        """Get paths to runtime files that need to be copied to user's project.
 
         Returns:
             List of paths to runtime files (e.g., codeflash-jest-helper.js).
+
         """
         ...
 
@@ -614,8 +566,7 @@ class LanguageSupport(Protocol):
         tests_project_root: Path,
         mode: str,
     ) -> tuple[bool, str | None]:
-        """
-        Inject profiling code into an existing test file.
+        """Inject profiling code into an existing test file.
 
         Wraps function calls with capture/benchmark instrumentation for
         behavioral verification and performance benchmarking.
@@ -629,6 +580,7 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (success, instrumented_code).
+
         """
         ...
 
@@ -636,11 +588,11 @@ class LanguageSupport(Protocol):
 
     @property
     def test_framework(self) -> str:
-        """
-        Get the test framework used by this language.
+        """Get the test framework used by this language.
 
         Returns:
             Test framework name (e.g., "pytest", "jest").
+
         """
         ...
 
@@ -656,8 +608,7 @@ class LanguageSupport(Protocol):
         enable_coverage: bool = False,
         candidate_index: int = 0,
     ) -> tuple[Path, Any, Path | None, Path | None]:
-        """
-        Run behavioral tests for this language.
+        """Run behavioral tests for this language.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -670,6 +621,7 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
+
         """
         ...
 
@@ -684,8 +636,7 @@ class LanguageSupport(Protocol):
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
     ) -> tuple[Path, Any]:
-        """
-        Run benchmarking tests for this language.
+        """Run benchmarking tests for this language.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -699,13 +650,13 @@ class LanguageSupport(Protocol):
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
+
         """
         ...
 
 
 def convert_parents_to_tuple(parents: list | tuple) -> tuple[ParentInfo, ...]:
-    """
-    Convert a list of parent objects to a tuple of ParentInfo.
+    """Convert a list of parent objects to a tuple of ParentInfo.
 
     This helper handles conversion from the existing FunctionParent
     dataclass to the new ParentInfo dataclass.
@@ -715,5 +666,6 @@ def convert_parents_to_tuple(parents: list | tuple) -> tuple[ParentInfo, ...]:
 
     Returns:
         Tuple of ParentInfo objects.
+
     """
     return tuple(ParentInfo(name=p.name, type=p.type) for p in parents)

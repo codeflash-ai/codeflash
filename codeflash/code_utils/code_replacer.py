@@ -441,16 +441,12 @@ def replace_function_definitions_in_module(
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
     should_add_global_assignments: bool = True,  # noqa: FBT001, FBT002
-    function_to_optimize: Optional["FunctionToOptimize"] = None,
+    function_to_optimize: Optional[FunctionToOptimize] = None,
 ) -> bool:
     # Route to language-specific implementation for non-Python languages
     if optimized_code.language and optimized_code.language != "python":
         return replace_function_definitions_for_language(
-            function_names,
-            optimized_code,
-            module_abspath,
-            project_root_path,
-            function_to_optimize,
+            function_names, optimized_code, module_abspath, project_root_path, function_to_optimize
         )
 
     source_code: str = module_abspath.read_text(encoding="utf8")
@@ -479,7 +475,7 @@ def replace_function_definitions_for_language(
     optimized_code: CodeStringsMarkdown,
     module_abspath: Path,
     project_root_path: Path,
-    function_to_optimize: Optional["FunctionToOptimize"] = None,
+    function_to_optimize: Optional[FunctionToOptimize] = None,
 ) -> bool:
     """Replace function definitions for non-Python languages.
 
@@ -494,6 +490,7 @@ def replace_function_definitions_for_language(
 
     Returns:
         True if the code was modified, False if no changes.
+
     """
     from codeflash.languages import get_language_support
     from codeflash.languages.base import FunctionInfo, Language, ParentInfo
@@ -510,9 +507,7 @@ def replace_function_definitions_for_language(
 
     # If we have function_to_optimize with line info, use it for precise replacement
     if function_to_optimize and function_to_optimize.starting_line and function_to_optimize.ending_line:
-        parents = tuple(
-            ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents
-        )
+        parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
         func_info = FunctionInfo(
             name=function_to_optimize.function_name,
             file_path=module_abspath,
@@ -550,7 +545,7 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
     if module_optimized_code is None:
-        # Fallback for JavaScript/TypeScript: if there's only one code block with None file path,
+        # Fallback: if there's only one code block with None file path,
         # use it regardless of the expected path (the AI server doesn't always include file paths)
         if "None" in file_to_code_context and len(file_to_code_context) == 1:
             module_optimized_code = file_to_code_context["None"]

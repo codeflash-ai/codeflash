@@ -7,6 +7,7 @@ import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.test_type import TestType
@@ -20,10 +21,10 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, NamedTuple, Optional, cast
+from typing import NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -220,17 +221,24 @@ class CodeString(BaseModel):
     language: str = "python"  # Language for validation - only Python code is validated
 
     @model_validator(mode="after")
-    def validate_code_syntax(self) -> "CodeString":
+    def validate_code_syntax(self) -> CodeString:
         """Validate code syntax for Python only."""
         if self.language == "python":
             validate_python_code(self.code)
         return self
 
 
+def get_comment_prefix(file_path: Path) -> str:
+    """Get the comment prefix for a given language."""
+    support = get_language_support(file_path)
+    return support.comment_prefix
+
+
 def get_code_block_splitter(file_path: Path | None) -> str:
     if file_path is None:
         return ""
-    return f"# file: {file_path.as_posix()}"
+    comment_prefix = get_comment_prefix(file_path)
+    return f"{comment_prefix} file: {file_path.as_posix()}"
 
 
 # Pattern to match markdown code blocks with optional language tag and file path
@@ -250,7 +258,7 @@ class CodeStringsMarkdown(BaseModel):
         """Returns the combined source code module from all code blocks.
 
         Each block is prefixed by a file path comment to indicate its origin.
-        This representation is syntactically valid Python code.
+        The comment prefix is determined by the language attribute.
 
         Returns:
             str: The concatenated code of all blocks with file path annotations.

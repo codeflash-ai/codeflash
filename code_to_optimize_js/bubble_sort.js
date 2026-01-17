@@ -12,13 +12,11 @@ function bubbleSort(arr) {
     const n = result.length;
 
     for (let i = 0; i < n; i++) {
-        for (let j = 0; j < n; j++) {
-            for (let k = 0; k < n - 1; k++) {
-                if (result[k] > result[k + 1]) {
-                    const temp = result[k];
-                    result[k] = result[k + 1];
-                    result[k + 1] = temp;
-                }
+        for (let j = 0; j < n - 1; j++) {
+            if (result[j] > result[j + 1]) {
+                const temp = result[j];
+                result[j] = result[j + 1];
+                result[j + 1] = temp;
             }
         }
     }

@@ -35,3 +35,7 @@ class PythonSupport:
     def test_framework(self) -> str:
         """Primary test framework for Python."""
         return "pytest"
+
+    @property
+    def comment_prefix(self) -> str:
+        return "#"

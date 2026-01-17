@@ -1,5 +1,4 @@
-"""
-Language registry for multi-language support.
+"""Language registry for multi-language support.
 
 This module provides functions for registering, detecting, and retrieving
 language support implementations. It maintains a registry of all available
@@ -43,8 +42,7 @@ class UnsupportedLanguageError(Exception):
 
 
 def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
-    """
-    Decorator to register a language support implementation.
+    """Decorator to register a language support implementation.
 
     This decorator registers a language support class in both the extension
     registry (for file-based lookup) and the language registry (for direct lookup).
@@ -67,6 +65,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
                 return (".py", ".pyw")
 
             # ... other methods
+
     """
     # Create a temporary instance to get language and extensions
     # Note: This requires the class to be instantiable without arguments
@@ -87,8 +86,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
         if ext_lower in _EXTENSION_REGISTRY:
             existing = _EXTENSION_REGISTRY[ext_lower]
             logger.warning(
-                f"Extension '{ext}' already registered to {existing.__name__}, "
-                f"overwriting with {cls.__name__}"
+                f"Extension '{ext}' already registered to {existing.__name__}, overwriting with {cls.__name__}"
             )
         _EXTENSION_REGISTRY[ext_lower] = cls
 
@@ -96,8 +94,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
     if language in _LANGUAGE_REGISTRY:
         existing = _LANGUAGE_REGISTRY[language]
         logger.warning(
-            f"Language '{language}' already registered to {existing.__name__}, "
-            f"overwriting with {cls.__name__}"
+            f"Language '{language}' already registered to {existing.__name__}, overwriting with {cls.__name__}"
         )
     _LANGUAGE_REGISTRY[language] = cls
 
@@ -107,8 +104,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
 
 
 def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
-    """
-    Get language support for a file, language, or extension.
+    """Get language support for a file, language, or extension.
 
     This function accepts multiple identifier types:
     - Path: Uses file extension to determine language
@@ -136,6 +132,7 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
 
         # By language name
         lang = get_language_support("python")
+
     """
     language: Language | None = None
 
@@ -179,8 +176,7 @@ _FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
 
 
 def get_language_support_by_framework(test_framework: str) -> LanguageSupport | None:
-    """
-    Get language support for a test framework.
+    """Get language support for a test framework.
 
     This function looks up the language support implementation that uses
     the specified test framework.
@@ -196,6 +192,7 @@ def get_language_support_by_framework(test_framework: str) -> LanguageSupport | 
         lang = get_language_support_by_framework("jest")
         if lang:
             result = lang.run_behavioral_tests(...)
+
     """
     # Check cache first
     if test_framework in _FRAMEWORK_CACHE:
@@ -212,8 +209,7 @@ def get_language_support_by_framework(test_framework: str) -> LanguageSupport | 
 
 
 def detect_project_language(project_root: Path, module_root: Path) -> Language:
-    """
-    Detect the primary language of a project by analyzing file extensions.
+    """Detect the primary language of a project by analyzing file extensions.
 
     Counts files by extension in the module root and returns the most
     common supported language.
@@ -227,6 +223,7 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
 
     Raises:
         UnsupportedLanguageError: If no supported language is detected.
+
     """
     extension_counts: dict[str, int] = {}
 
@@ -244,41 +241,38 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
             logger.info(f"Detected language: {cls().language} (found {count} '{ext}' files)")
             return cls().language
 
-    raise UnsupportedLanguageError(
-        f"No supported language detected in {module_root}",
-        get_supported_languages(),
-    )
+    raise UnsupportedLanguageError(f"No supported language detected in {module_root}", get_supported_languages())
 
 
 def get_supported_languages() -> list[str]:
-    """
-    Get list of supported language names.
+    """Get list of supported language names.
 
     Returns:
         List of language name strings.
+
     """
-    return [lang.value for lang in _LANGUAGE_REGISTRY.keys()]
+    return [lang.value for lang in _LANGUAGE_REGISTRY]
 
 
 def get_supported_extensions() -> list[str]:
-    """
-    Get list of supported file extensions.
+    """Get list of supported file extensions.
 
     Returns:
         List of extension strings (with leading dots).
+
     """
     return list(_EXTENSION_REGISTRY.keys())
 
 
 def is_language_supported(identifier: Path | Language | str) -> bool:
-    """
-    Check if a language/extension is supported.
+    """Check if a language/extension is supported.
 
     Args:
         identifier: File path, Language enum, or extension/language string.
 
     Returns:
         True if supported, False otherwise.
+
     """
     try:
         get_language_support(identifier)
@@ -288,8 +282,7 @@ def is_language_supported(identifier: Path | Language | str) -> bool:
 
 
 def clear_registry() -> None:
-    """
-    Clear all registered languages.
+    """Clear all registered languages.
 
     Primarily useful for testing.
     """
@@ -300,8 +293,7 @@ def clear_registry() -> None:
 
 
 def clear_cache() -> None:
-    """
-    Clear the language support instance cache.
+    """Clear the language support instance cache.
 
     Useful if you need fresh instances of language support objects.
     """
