@@ -372,22 +372,57 @@ class TestFiles(BaseModel):
             raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
-        return next((test_file for test_file in self.test_files if test_file.original_file_path == file_path), None)
+        normalized = self._normalize_path_for_comparison(file_path)
+        return next(
+            (
+                test_file
+                for test_file in self.test_files
+                if test_file.original_file_path is not None
+                and normalized == self._normalize_path_for_comparison(test_file.original_file_path)
+            ),
+            None,
+        )
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
+        normalized = self._normalize_path_for_comparison(file_path)
         return next(
             (
                 test_file.test_type
                 for test_file in self.test_files
-                if (file_path in (test_file.instrumented_behavior_file_path, test_file.benchmarking_file_path))
+                if normalized == self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
+                or (
+                    test_file.benchmarking_file_path is not None
+                    and normalized == self._normalize_path_for_comparison(test_file.benchmarking_file_path)
+                )
             ),
             None,
         )
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
+        normalized = self._normalize_path_for_comparison(file_path)
         return next(
-            (test_file.test_type for test_file in self.test_files if test_file.original_file_path == file_path), None
+            (
+                test_file.test_type
+                for test_file in self.test_files
+                if test_file.original_file_path is not None
+                and normalized == self._normalize_path_for_comparison(test_file.original_file_path)
+            ),
+            None,
         )
+
+    @staticmethod
+    def _normalize_path_for_comparison(path: Path) -> str:
+        """Normalize a path for cross-platform comparison.
+
+        Resolves the path to an absolute path and handles Windows case-insensitivity.
+        """
+        try:
+            resolved = str(path.resolve())
+        except (OSError, RuntimeError):
+            # If resolve fails (e.g., file doesn't exist), use absolute path
+            resolved = str(path.absolute())
+        # Only lowercase on Windows where filesystem is case-insensitive
+        return resolved.lower() if sys.platform == "win32" else resolved
 
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
