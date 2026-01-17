@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import libcst as cst
@@ -411,6 +412,7 @@ class TestFiles(BaseModel):
         )
 
     @staticmethod
+    @lru_cache(maxsize=1024)
     def _normalize_path_for_comparison(path: Path) -> str:
         """Normalize a path for cross-platform comparison.
 
