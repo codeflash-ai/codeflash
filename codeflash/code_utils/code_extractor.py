@@ -1301,7 +1301,7 @@ def _find_function_node(tree: ast.Module, name_parts: list[str]) -> ast.Function
     return None
 
 
-def is_numerical_code(code_string: str, function_name: str) -> bool:
+def is_numerical_code(code_string: str, function_name: str | None = None) -> bool:
     """Check if a function uses numerical computing libraries.
 
     Detects usage of numpy, torch, numba, jax, tensorflow, scipy, and math libraries
@@ -1342,6 +1342,13 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
     except SyntaxError:
         return False
 
+    # Collect names that reference numerical modules from imports
+    numerical_names, modules_used = _collect_numerical_imports(tree)
+
+    if not function_name:
+        # Return True if modules used and (numba available or modules don't all require numba)
+        return bool(modules_used) and (has_numba or not modules_used.issubset(NUMBA_REQUIRED_MODULES))
+
     # Split the function name to handle class methods
     name_parts = function_name.split(".")
 
@@ -1349,9 +1356,6 @@ def is_numerical_code(code_string: str, function_name: str) -> bool:
     target_function = _find_function_node(tree, name_parts)
     if target_function is None:
         return False
-
-    # Collect names that reference numerical modules from imports
-    numerical_names, modules_used = _collect_numerical_imports(tree)
 
     # Check if the function body uses any numerical library
     checker = NumericalUsageChecker(numerical_names)

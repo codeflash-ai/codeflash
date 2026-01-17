@@ -27,6 +27,7 @@ def generate_tests(
     test_index: int,
     test_path: Path,
     test_perf_path: Path,
+    is_numerical_code: bool | None = None,  # noqa: FBT001
 ) -> tuple[str, str, str, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition
@@ -43,6 +44,7 @@ def generate_tests(
         trace_id=function_trace_id,
         test_index=test_index,
         language=function_to_optimize.language,
+        is_numerical_code=is_numerical_code,
     )
     if response and isinstance(response, tuple) and len(response) == 3:
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
