@@ -7,12 +7,16 @@ from typing import Optional
 from pydantic.dataclasses import dataclass
 
 
-def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
+def get_test_file_path(
+    test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit", language: str = "python"
+) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
-    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}.py"
+    # Use appropriate file extension based on language
+    extension = ".test.js" if language in ("javascript", "typescript") else ".py"
+    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
+        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, language)
     return path
 
 
@@ -75,8 +79,29 @@ class TestConfig:
     pytest_cmd: str = "pytest"
     benchmark_tests_root: Optional[Path] = None
     use_cache: bool = True
+    _language: Optional[str] = None  # Language identifier for multi-language support
+    js_project_root: Optional[Path] = None  # JavaScript project root (directory containing package.json)
 
     @property
     def test_framework(self) -> str:
-        """Always returns 'pytest' as we use pytest for all tests."""
+        """Returns the appropriate test framework based on language.
+
+        Returns 'jest' for JavaScript/TypeScript, 'pytest' for Python (default).
+        """
+        if self._language in ("javascript", "typescript"):
+            return "jest"
         return "pytest"
+
+    def set_language(self, language: str) -> None:
+        """Set the language for this test config.
+
+        Args:
+            language: Language identifier (e.g., "python", "javascript").
+
+        """
+        self._language = language
+
+    @property
+    def language(self) -> Optional[str]:
+        """Get the current language setting."""
+        return self._language

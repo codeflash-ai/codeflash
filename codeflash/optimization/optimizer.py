@@ -62,6 +62,27 @@ class Optimizer:
         self.original_args_and_test_cfg: tuple[Namespace, TestConfig] | None = None
         self.patch_files: list[Path] = []
 
+    @staticmethod
+    def _find_js_project_root(file_path: Path) -> Path | None:
+        """Find the JavaScript/TypeScript project root by looking for package.json.
+
+        Traverses up from the given file path to find the nearest directory
+        containing package.json or jest.config.js.
+
+        Args:
+            file_path: A file path within the JavaScript project.
+
+        Returns:
+            The project root directory, or None if not found.
+
+        """
+        current = file_path.parent if file_path.is_file() else file_path
+        while current != current.parent:  # Stop at filesystem root
+            if (current / "package.json").exists() or (current / "jest.config.js").exists():
+                return current
+            current = current.parent
+        return None
+
     def run_benchmarks(
         self, file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]], num_optimizable_functions: int
     ) -> tuple[dict[str, dict[BenchmarkKey, float]], dict[BenchmarkKey, float]]:
@@ -191,8 +212,8 @@ class Optimizer:
         )
 
     def prepare_module_for_optimization(
-        self, original_module_path: Path
-    ) -> tuple[dict[Path, ValidCode], ast.Module] | None:
+        self, original_module_path: Path, language: str = "python"
+    ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
 
@@ -200,6 +221,17 @@ class Optimizer:
         console.rule()
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
+
+        # For JavaScript/TypeScript, skip Python-specific AST parsing
+        if language in ("javascript", "typescript"):
+            validated_original_code: dict[Path, ValidCode] = {
+                original_module_path: ValidCode(
+                    source_code=original_module_code, normalized_code=original_module_code
+                )
+            }
+            return validated_original_code, None
+
+        # Python-specific parsing
         try:
             original_module_ast = ast.parse(original_module_code)
         except SyntaxError as e:
@@ -207,7 +239,7 @@ class Optimizer:
             logger.info("Skipping optimization due to file error.")
             return None
         normalized_original_module_code = ast.unparse(normalize_node(original_module_ast))
-        validated_original_code: dict[Path, ValidCode] = {
+        validated_original_code = {
             original_module_path: ValidCode(
                 source_code=original_module_code, normalized_code=normalized_original_module_code
             )
@@ -419,6 +451,17 @@ class Optimizer:
 
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
+
+        # Set language on TestConfig based on discovered functions
+        if file_to_funcs_to_optimize:
+            for file_path, funcs in file_to_funcs_to_optimize.items():
+                if funcs and funcs[0].language:
+                    self.test_cfg.set_language(funcs[0].language)
+                    # For JavaScript, also set js_project_root for test execution
+                    if funcs[0].language in ("javascript", "typescript"):
+                        self.test_cfg.js_project_root = self._find_js_project_root(file_path)
+                    break
+
         if self.args.all:
             three_min_in_ns = int(1.8e11)
             console.rule()
@@ -449,13 +492,15 @@ class Optimizer:
             # GLOBAL RANKING: Rank all functions together before optimizing
             globally_ranked_functions = self.rank_all_functions_globally(file_to_funcs_to_optimize, trace_file_path)
             # Cache for module preparation (avoid re-parsing same files)
-            prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module]] = {}
+            prepared_modules: dict[Path, tuple[dict[Path, ValidCode], ast.Module | None]] = {}
 
             # Optimize functions in globally ranked order
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
                 # Prepare module if not already cached
                 if original_module_path not in prepared_modules:
-                    module_prep_result = self.prepare_module_for_optimization(original_module_path)
+                    module_prep_result = self.prepare_module_for_optimization(
+                        original_module_path, language=function_to_optimize.language
+                    )
                     if module_prep_result is None:
                         logger.warning(f"Skipping functions in {original_module_path} due to preparation error")
                         continue

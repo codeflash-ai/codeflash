@@ -49,7 +49,16 @@ def existing_tests_source_for(
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
     for invocation_id in all_invocation_ids:
-        abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+        # For JavaScript/TypeScript, test_module_path is already a file path (e.g., "tests/foo.test.js")
+        # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
+        test_module_path = invocation_id.test_module_path
+        js_ts_extensions = (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts")
+        if test_module_path.endswith(js_ts_extensions):
+            # JavaScript/TypeScript: already a file path
+            abs_path = Path(test_module_path).resolve()
+        else:
+            # Python: convert module name to path
+            abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
         if abs_path not in non_generated_tests:
             continue
         if abs_path not in original_tests_to_runtimes:

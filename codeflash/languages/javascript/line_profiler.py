@@ -1,0 +1,264 @@
+"""Line profiler instrumentation for JavaScript.
+
+This module provides functionality to instrument JavaScript code with line-level
+profiling similar to Python's line_profiler. It tracks execution counts and timing
+for each line in instrumented functions.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+if TYPE_CHECKING:
+    from codeflash.languages.base import FunctionInfo
+
+logger = logging.getLogger(__name__)
+
+
+class JavaScriptLineProfiler:
+    """Instruments JavaScript code for line-level profiling.
+
+    This class adds profiling code to JavaScript functions to track:
+    - How many times each line executes
+    - How much time is spent on each line
+    - Total execution time per function
+    """
+
+    def __init__(self, output_file: Path):
+        """Initialize the line profiler.
+
+        Args:
+            output_file: Path where profiling results will be written.
+
+        """
+        self.output_file = output_file
+        self.profiler_var = "__codeflash_line_profiler__"
+
+    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo]) -> str:
+        """Instrument JavaScript source code with line profiling.
+
+        Adds profiling instrumentation to track line-level execution for the
+        specified functions.
+
+        Args:
+            source: Original JavaScript source code.
+            file_path: Path to the source file.
+            functions: List of functions to instrument.
+
+        Returns:
+            Instrumented source code with profiling.
+
+        """
+        if not functions:
+            return source
+
+        # Add profiler initialization at the top
+        profiler_init = self._generate_profiler_init()
+
+        # Add instrumentation to each function
+        instrumented_source = source
+        lines = source.splitlines(keepends=True)
+
+        # Process functions in reverse order to preserve line numbers
+        for func in reversed(sorted(functions, key=lambda f: f.start_line)):
+            func_lines = self._instrument_function(func, lines, file_path)
+            start_idx = func.start_line - 1
+            end_idx = func.end_line
+            lines = lines[:start_idx] + func_lines + lines[end_idx:]
+
+        instrumented_source = "".join(lines)
+
+        # Add profiler save at the end
+        profiler_save = self._generate_profiler_save()
+
+        return profiler_init + "\n" + instrumented_source + "\n" + profiler_save
+
+    def _generate_profiler_init(self) -> str:
+        """Generate JavaScript code for profiler initialization."""
+        return f"""
+// Codeflash line profiler initialization
+const {self.profiler_var} = {{
+    stats: {{}},
+    startTime: process.hrtime.bigint(),
+
+    recordLine: function(file, line) {{
+        const key = `${{file}}:${{line}}`;
+        if (!this.stats[key]) {{
+            this.stats[key] = {{ hits: 0, time: 0n, file: file, line: line }};
+        }}
+        const start = process.hrtime.bigint();
+        return () => {{
+            const end = process.hrtime.bigint();
+            this.stats[key].hits++;
+            this.stats[key].time += (end - start);
+        }};
+    }},
+
+    save: function() {{
+        const fs = require('fs');
+        const path = require('path');
+        const outputDir = path.dirname('{self.output_file.as_posix()}');
+        if (!fs.existsSync(outputDir)) {{
+            fs.mkdirSync(outputDir, {{ recursive: true }});
+        }}
+
+        // Convert BigInt to string for JSON serialization
+        const serializable = {{}};
+        for (const [key, value] of Object.entries(this.stats)) {{
+            serializable[key] = {{
+                hits: value.hits,
+                time: value.time.toString(),
+                file: value.file,
+                line: value.line
+            }};
+        }}
+
+        fs.writeFileSync(
+            '{self.output_file.as_posix()}',
+            JSON.stringify(serializable, null, 2)
+        );
+    }}
+}};
+"""
+
+    def _generate_profiler_save(self) -> str:
+        """Generate JavaScript code to save profiler results."""
+        return f"""
+// Save profiler results on process exit
+process.on('exit', () => {self.profiler_var}.save());
+process.on('SIGINT', () => {{ {self.profiler_var}.save(); process.exit(); }});
+process.on('SIGTERM', () => {{ {self.profiler_var}.save(); process.exit(); }});
+"""
+
+    def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path) -> list[str]:
+        """Instrument a single function with line profiling.
+
+        Args:
+            func: Function to instrument.
+            lines: Source lines.
+            file_path: Path to source file.
+
+        Returns:
+            Instrumented function lines.
+
+        """
+        func_lines = lines[func.start_line - 1 : func.end_line]
+        instrumented_lines = []
+
+        # Parse the function to find executable lines
+        analyzer = get_analyzer_for_file(file_path)
+        source = "".join(func_lines)
+
+        try:
+            tree = analyzer.parse(source.encode("utf8"))
+            executable_lines = self._find_executable_lines(tree.root_node, source.encode("utf8"))
+        except Exception as e:
+            logger.warning(f"Failed to parse function {func.name}: {e}")
+            return func_lines
+
+        # Add profiling to each executable line
+        for i, line in enumerate(func_lines, start=func.start_line):
+            if i in executable_lines and line.strip() and not line.strip().startswith("//"):
+                # Get indentation
+                indent = len(line) - len(line.lstrip())
+                indent_str = " " * indent
+
+                # Add profiling wrapper
+                profiled_line = (
+                    f"{indent_str}const __prof_{i}__ = {self.profiler_var}.recordLine('{file_path.as_posix()}', {i});\n"
+                    f"{line.rstrip()}\n"
+                    f"{indent_str}__prof_{i}__();\n"
+                )
+                instrumented_lines.append(profiled_line)
+            else:
+                instrumented_lines.append(line)
+
+        return instrumented_lines
+
+    def _find_executable_lines(self, node, source_bytes: bytes) -> set[int]:
+        """Find lines that contain executable statements.
+
+        Args:
+            node: Tree-sitter AST node.
+            source_bytes: Source code as bytes.
+
+        Returns:
+            Set of line numbers with executable statements.
+
+        """
+        executable_lines = set()
+
+        # Node types that represent executable statements
+        executable_types = {
+            "expression_statement",
+            "return_statement",
+            "if_statement",
+            "for_statement",
+            "while_statement",
+            "do_statement",
+            "switch_statement",
+            "throw_statement",
+            "try_statement",
+            "variable_declaration",
+            "lexical_declaration",
+            "assignment_expression",
+            "call_expression",
+            "await_expression",
+        }
+
+        def walk(n):
+            if n.type in executable_types:
+                # Add the starting line (1-indexed)
+                executable_lines.add(n.start_point[0] + 1)
+
+            for child in n.children:
+                walk(child)
+
+        walk(node)
+        return executable_lines
+
+    @staticmethod
+    def parse_results(profile_file: Path) -> dict:
+        """Parse line profiling results from output file.
+
+        Args:
+            profile_file: Path to profiling results JSON file.
+
+        Returns:
+            Dictionary with profiling statistics.
+
+        """
+        if not profile_file.exists():
+            return {"timings": {}, "unit": 1e-9, "functions": {}}
+
+        try:
+            with profile_file.open("r") as f:
+                data = json.load(f)
+
+            # Group by file and function
+            timings = {}
+            for key, stats in data.items():
+                file_path, line_num = key.rsplit(":", 1)
+                line_num = int(line_num)
+                time_ns = int(stats["time"])
+                hits = stats["hits"]
+
+                if file_path not in timings:
+                    timings[file_path] = {}
+
+                timings[file_path][line_num] = {"hits": hits, "time_ns": time_ns, "time_s": time_ns * 1e-9}
+
+            return {
+                "timings": timings,
+                "unit": 1e-9,  # nanoseconds
+                "raw_data": data,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to parse line profile results: {e}")
+            return {"timings": {}, "unit": 1e-9, "functions": {}}

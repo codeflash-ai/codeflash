@@ -101,11 +101,11 @@ class AiServiceClient:
         return response
 
     def _get_valid_candidates(
-        self, optimizations_json: list[dict[str, Any]], source: OptimizedCandidateSource
+        self, optimizations_json: list[dict[str, Any]], source: OptimizedCandidateSource, language: str = "python"
     ) -> list[OptimizedCandidate]:
         candidates: list[OptimizedCandidate] = []
         for opt in optimizations_json:
-            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"])
+            code = CodeStringsMarkdown.parse_markdown_code(opt["source_code"], expected_language=language)
             if not code.code_strings:
                 continue
             candidates.append(
@@ -120,25 +120,29 @@ class AiServiceClient:
             )
         return candidates
 
-    def optimize_python_code(  # noqa: D417
+    def optimize_code(  # noqa: D417
         self,
         source_code: str,
         dependency_code: str,
         trace_id: str,
         experiment_metadata: ExperimentMetadata | None = None,
         *,
+        language: str = "python",
+        language_version: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
         is_numerical_code: bool | None = None,
     ) -> list[OptimizedCandidate]:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+        """Optimize the given code for performance by making a request to the Django endpoint.
 
         Parameters
         ----------
-        - source_code (str): The python code to optimize.
+        - source_code (str): The code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
+        - language (str): Programming language ("python", "javascript", "typescript")
+        - language_version (str | None): Language version (e.g., "3.11.0" for Python, "ES2022" for JS)
         - is_async (bool): Whether the function being optimized is async
         - n_candidates (int): Number of candidates to generate
 
@@ -152,11 +156,12 @@ class AiServiceClient:
         start_time = time.perf_counter()
         git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
 
-        payload = {
+        # Build payload with language-specific fields
+        payload: dict[str, Any] = {
             "source_code": source_code,
             "dependency_code": dependency_code,
             "trace_id": trace_id,
-            "python_version": platform.python_version(),
+            "language": language,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "current_username": get_last_commit_author_if_pr_exists(None),
@@ -167,6 +172,19 @@ class AiServiceClient:
             "n_candidates": n_candidates,
             "is_numerical_code": is_numerical_code,
         }
+
+        # Add language-specific version fields
+        # Always include python_version for backward compatibility with older backend
+        payload["python_version"] = platform.python_version()
+        if language == "python":
+            pass  # python_version already set
+        else:
+            payload["language_version"] = language_version or "ES2022"
+
+        # DEBUG: Print payload language field
+        logger.debug(
+            f"Sending optimize request with language='{payload['language']}' (type: {type(payload['language'])})"
+        )
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
         try:
@@ -183,7 +201,7 @@ class AiServiceClient:
             logger.debug(f"!lsp|Generating possible optimizations took {end_time - start_time:.2f} seconds.")
             logger.info(f"!lsp|Received {len(optimizations_json)} optimization candidates.")
             console.rule()
-            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE)
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.OPTIMIZE, language)
         try:
             error = response.json()["error"]
         except Exception:
@@ -193,6 +211,27 @@ class AiServiceClient:
         console.rule()
         return []
 
+    # Backward-compatible alias
+    def optimize_python_code(
+        self,
+        source_code: str,
+        dependency_code: str,
+        trace_id: str,
+        experiment_metadata: ExperimentMetadata | None = None,
+        *,
+        is_async: bool = False,
+        n_candidates: int = 5,
+    ) -> list[OptimizedCandidate]:
+        """Backward-compatible alias for optimize_code() with language='python'."""
+        return self.optimize_code(
+            source_code=source_code,
+            dependency_code=dependency_code,
+            trace_id=trace_id,
+            experiment_metadata=experiment_metadata,
+            language="python",
+            is_async=is_async,
+            n_candidates=n_candidates,
+        )
     def get_jit_rewritten_code(  # noqa: D417
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
@@ -415,6 +454,7 @@ class AiServiceClient:
                 "modified_source_code": request.modified_source_code,
                 "trace_id": request.trace_id,
                 "test_diffs": request.test_diffs,
+                "language": request.language,
             }
             response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
         except (requests.exceptions.RequestException, TypeError) as e:
@@ -426,7 +466,9 @@ class AiServiceClient:
             fixed_optimization = response.json()
             console.rule()
 
-            valid_candidates = self._get_valid_candidates([fixed_optimization], OptimizedCandidateSource.REPAIR)
+            valid_candidates = self._get_valid_candidates(
+                [fixed_optimization], OptimizedCandidateSource.REPAIR, request.language
+            )
             if not valid_candidates:
                 logger.error("Code repair failed to generate a valid candidate.")
                 return None
@@ -634,6 +676,9 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        *,
+        language: str = "python",
+        language_version: str | None = None,
         is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
@@ -645,19 +690,30 @@ class AiServiceClient:
         - helper_function_names (list[Source]): List of helper function names.
         - module_path (Path): The module path where the function is located.
         - test_module_path (Path): The module path for the test code.
-        - test_framework (str): The test framework to use, e.g., "pytest".
+        - test_framework (str): The test framework to use, e.g., "pytest", "jest".
         - test_timeout (int): The timeout for each test in seconds.
         - test_index (int): The index from 0-(n-1) if n tests are generated for a single trace_id
+        - language (str): Programming language ("python", "javascript", "typescript")
+        - language_version (str | None): Language version (e.g., "3.11.0" for Python, "ES2022" for JS)
 
         Returns
         -------
         - Dict[str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
 
         """
-        assert test_framework in ["pytest", "unittest"], (
-            f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
-        )
-        payload = {
+        # Validate test framework based on language
+        python_frameworks = ["pytest", "unittest"]
+        javascript_frameworks = ["jest", "mocha", "vitest"]
+        if language == "python":
+            assert test_framework in python_frameworks, (
+                f"Invalid test framework for Python, got {test_framework} but expected one of {python_frameworks}"
+            )
+        elif language in ("javascript", "typescript"):
+            assert test_framework in javascript_frameworks, (
+                f"Invalid test framework for JavaScript, got {test_framework} but expected one of {javascript_frameworks}"
+            )
+
+        payload: dict[str, Any] = {
             "source_code_being_tested": source_code_being_tested,
             "function_to_optimize": function_to_optimize,
             "helper_function_names": helper_function_names,
@@ -667,12 +723,23 @@ class AiServiceClient:
             "test_timeout": test_timeout,
             "trace_id": trace_id,
             "test_index": test_index,
-            "python_version": platform.python_version(),
+            "language": language,
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
             "is_numerical_code": is_numerical_code,
         }
+
+        # Add language-specific version fields
+        # Always include python_version for backward compatibility with older backend
+        payload["python_version"] = platform.python_version()
+        if language == "python":
+            pass  # python_version already set
+        else:
+            payload["language_version"] = language_version or "ES2022"
+
+        # DEBUG: Print payload language field
+        logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
@@ -712,6 +779,7 @@ class AiServiceClient:
         replay_tests: str,
         concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
+        language: str = "python",
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
@@ -753,7 +821,8 @@ class AiServiceClient:
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
             "codeflash_version": codeflash_version,
             "calling_fn_details": calling_fn_details,
-            "python_version": platform.python_version(),
+            "language": language,
+            "python_version": platform.python_version() if language == "python" else None,
             "call_sequence": self.get_next_sequence(),
         }
         console.rule()

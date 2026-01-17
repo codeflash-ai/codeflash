@@ -68,6 +68,7 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
+from codeflash.languages.registry import get_language_support
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
@@ -434,11 +435,18 @@ class FunctionOptimizer:
             if function_to_optimize_source_code
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
+        # Get language support for non-Python languages
+        self._is_python = function_to_optimize.language == "python"
+        self.language_support = None if self._is_python else get_language_support(function_to_optimize.language)
         if not function_to_optimize_ast:
-            original_module_ast = ast.parse(function_to_optimize_source_code)
-            self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
-                function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
-            )
+            # Skip Python AST parsing for non-Python languages
+            if not self._is_python:
+                self.function_to_optimize_ast = None
+            else:
+                original_module_ast = ast.parse(function_to_optimize_source_code)
+                self.function_to_optimize_ast = get_first_top_level_function_or_method_ast(
+                    function_to_optimize.function_name, function_to_optimize.parents, original_module_ast
+                )
         else:
             self.function_to_optimize_ast = function_to_optimize_ast
         self.function_to_tests = function_to_tests if function_to_tests else {}
@@ -451,7 +459,50 @@ class FunctionOptimizer:
 
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
-        self.original_module_path = module_name_from_file_path(self.function_to_optimize.file_path, self.project_root)
+        # For non-Python languages, we need a relative path from the test file to the source file
+        # For Python, we use dot-separated module paths
+        if not self._is_python:
+            # Compute relative path from tests directory to source file
+            # e.g., for source at /project/fibonacci.js and tests at /project/tests/
+            # the relative path should be ../fibonacci
+            try:
+                # Resolve both paths to absolute to ensure consistent relative path calculation
+                source_file_abs = self.function_to_optimize.file_path.resolve().with_suffix("")
+                tests_root_abs = test_cfg.tests_root.resolve()
+
+                # Find the project root using language support
+                # For JavaScript/TypeScript, use the js_project_root if available
+                lang_project_root = test_cfg.js_project_root if test_cfg.js_project_root else self.project_root
+                project_root_from_lang = self.language_support.find_test_root(lang_project_root)
+
+                # Validate that tests_root is within the same project as the source file
+                if project_root_from_lang:
+                    try:
+                        tests_root_abs.relative_to(project_root_from_lang)
+                    except ValueError:
+                        # tests_root is outside the project - use default
+                        logger.warning(
+                            f"Configured tests_root {tests_root_abs} is outside project {project_root_from_lang}. "
+                            f"Using default: {project_root_from_lang / 'tests'}"
+                        )
+                        tests_root_abs = project_root_from_lang / "tests"
+                        if not tests_root_abs.exists():
+                            tests_root_abs = project_root_from_lang
+
+                # Use os.path.relpath to compute relative path from tests_root to source file
+                rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
+                self.original_module_path = rel_path
+                logger.debug(
+                    f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
+                )
+            except ValueError:
+                # Fallback if paths are on different drives (Windows)
+                rel_path = self.function_to_optimize.file_path.relative_to(self.project_root)
+                self.original_module_path = "../" + rel_path.with_suffix("").as_posix()
+        else:
+            self.original_module_path = module_name_from_file_path(
+                self.function_to_optimize.file_path, self.project_root
+            )
 
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
@@ -512,18 +563,43 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        language = self.function_to_optimize.language
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                language=language,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                language=language,
             )
             for test_index in range(n_tests)
         ]
+
+        # For non-Python languages, copy all runtime files to tests directory
+        if self.language_support is not None:
+            import shutil
+
+            # Copy all runtime files via language support
+            for runtime_file_source in self.language_support.get_runtime_files():
+                runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
+
+                # Copy file if it doesn't exist or is outdated
+                if (
+                    not runtime_file_dest.exists()
+                    or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime
+                ):
+                    shutil.copy2(runtime_file_source, runtime_file_dest)
+                    logger.debug(f"Copied {runtime_file_source.name} to {runtime_file_dest}")
 
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,
@@ -537,23 +613,38 @@ class FunctionOptimizer:
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
+        logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
+            logger.debug(
+                f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
+            )
+
             with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_behavior_test_source)
+            logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
+
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
-            self.test_files.add(
-                TestFile(
-                    instrumented_behavior_file_path=generated_test.behavior_file_path,
-                    benchmarking_file_path=generated_test.perf_file_path,
-                    original_file_path=None,
-                    original_source=generated_test.generated_original_test_source,
-                    test_type=TestType.GENERATED_REGRESSION,
-                    tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
-                )
+            logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
+
+            # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
+            test_file_obj = TestFile(
+                instrumented_behavior_file_path=generated_test.behavior_file_path,
+                benchmarking_file_path=generated_test.perf_file_path,
+                original_file_path=None,
+                original_source=generated_test.generated_original_test_source,
+                test_type=TestType.GENERATED_REGRESSION,
+                tests_in_file=None,  # This is currently unused. We can discover the tests in the file if needed.
             )
+            self.test_files.add(test_file_obj)
+            logger.debug(
+                f"[PIPELINE] Added test file to collection: behavior={test_file_obj.instrumented_behavior_file_path}, perf={test_file_obj.benchmarking_file_path}"
+            )
+
             logger.info(f"Generated test {i + 1}/{count_tests}:")
-            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}.py")
+            # Use correct extension based on language
+            test_ext = self.language_support.get_test_file_suffix() if not self._is_python else ".py"
+            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}")
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str)
@@ -782,10 +873,16 @@ class FunctionOptimizer:
 
         Returns the BestOptimization and optional benchmark tree.
         """
-        with progress_bar("Running line-by-line profiling"):
-            line_profile_test_results = self.line_profiler_step(
-                code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
-            )
+        # Skip line profiling for non-Python languages until implementation is ready
+        if not self._is_python:
+            line_profile_test_results = {"timings": {}, "unit": 0, "str_out": ""}
+        else:
+            with progress_bar("Running line-by-line profiling"):
+                line_profile_test_results = self.line_profiler_step(
+                    code_context=code_context,
+                    original_helper_code=original_helper_code,
+                    candidate_index=candidate_index,
+                )
 
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
 
@@ -1249,6 +1346,7 @@ class FunctionOptimizer:
         optimization_id: str,
         ai_service_client: AiServiceClient,
         executor: concurrent.futures.ThreadPoolExecutor,
+        language: str = "python",
     ) -> concurrent.futures.Future[OptimizedCandidate | None]:
         request = AIServiceCodeRepairRequest(
             optimization_id=optimization_id,
@@ -1256,6 +1354,7 @@ class FunctionOptimizer:
             modified_source_code=modified_source_code,
             test_diffs=test_diffs,
             trace_id=trace_id,
+            language=language,
         )
         return executor.submit(ai_service_client.code_repair, request=request)
 
@@ -1397,7 +1496,8 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name
         )
         for helper_function in code_context.helper_functions:
-            if helper_function.jedi_definition.type != "class":
+            # Skip class definitions (jedi_definition may be None for non-Python languages)
+            if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
             did_update |= replace_function_definitions_in_module(
@@ -1450,6 +1550,92 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
+        # Handle non-Python existing test instrumentation
+        elif not self._is_python:
+            test_file_invocation_positions = defaultdict(list)
+            for tests_in_file in function_to_all_tests.get(func_qualname):
+                test_file_invocation_positions[
+                    (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
+                ].append(tests_in_file)
+
+            for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+                path_obj_test_file = Path(test_file)
+                if test_type == TestType.EXISTING_UNIT_TEST:
+                    existing_test_files_count += 1
+                elif test_type == TestType.REPLAY_TEST:
+                    replay_test_files_count += 1
+                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_coverage_test_files_count += 1
+                else:
+                    msg = f"Unexpected test type: {test_type}"
+                    raise ValueError(msg)
+
+                # Use language-specific instrumentation
+                success, injected_behavior_test = self.language_support.instrument_existing_test(
+                    test_path=path_obj_test_file,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=self.function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode="behavior",
+                )
+                if not success:
+                    logger.debug(f"Failed to instrument test file {test_file} for behavior testing")
+                    continue
+
+                success, injected_perf_test = self.language_support.instrument_existing_test(
+                    test_path=path_obj_test_file,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=self.function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                    mode="performance",
+                )
+                if not success:
+                    logger.debug(f"Failed to instrument test file {test_file} for performance testing")
+                    continue
+
+                # Generate instrumented test file paths
+                new_behavioral_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                )
+                new_perf_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                )
+
+                if injected_behavior_test is not None:
+                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_behavior_test)
+                else:
+                    msg = "injected_behavior_test is None"
+                    raise ValueError(msg)
+
+                if injected_perf_test is not None:
+                    with new_perf_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_perf_test)
+
+                unique_instrumented_test_files.add(new_behavioral_test_path)
+                unique_instrumented_test_files.add(new_perf_test_path)
+
+                if not self.test_files.get_by_original_file_path(path_obj_test_file):
+                    self.test_files.add(
+                        TestFile(
+                            instrumented_behavior_file_path=new_behavioral_test_path,
+                            benchmarking_file_path=new_perf_test_path,
+                            original_source=None,
+                            original_file_path=Path(test_file),
+                            test_type=test_type,
+                            tests_in_file=[t.tests_in_file for t in tests_in_file_list],
+                        )
+                    )
+
+            if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+                logger.info(
+                    f"Instrumented {existing_test_files_count} existing unit test file"
+                    f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                    f"{'s' if replay_test_files_count != 1 else ''}, and "
+                    f"{concolic_coverage_test_files_count} concolic coverage test file"
+                    f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                )
+                console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
@@ -1605,11 +1791,12 @@ class FunctionOptimizer:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
         future_optimization_candidates = self.executor.submit(
-            self.aiservice_client.optimize_python_code,
+            self.aiservice_client.optimize_code,
             read_writable_code.markdown,
             read_only_context_code,
             self.function_trace_id[:-4] + "EXP0" if run_experiment else self.function_trace_id,
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
+            language=self.function_to_optimize.language,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
@@ -1629,11 +1816,12 @@ class FunctionOptimizer:
 
         if run_experiment:
             future_candidates_exp = self.executor.submit(
-                self.local_aiservice_client.optimize_python_code,
+                self.local_aiservice_client.optimize_code,
                 read_writable_code.markdown,
                 read_only_context_code,
                 self.function_trace_id[:-4] + "EXP1",
                 ExperimentMetadata(id=self.experiment_id, group="experiment"),
+                language=self.function_to_optimize.language,
                 is_async=self.function_to_optimize.is_async,
                 n_candidates=n_candidates,
             )
@@ -1862,17 +2050,18 @@ class FunctionOptimizer:
         )
 
         generated_tests_str = ""
+        code_lang = self.function_to_optimize.language
         for test in generated_tests.generated_tests:
             if map_gen_test_file_to_no_of_tests[test.behavior_file_path] > 0:
                 formatted_generated_test = format_generated_code(
                     test.generated_original_test_source, self.args.formatter_cmds
                 )
-                generated_tests_str += f"```python\n{formatted_generated_test}\n```"
+                generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```"
                 generated_tests_str += "\n\n"
 
         if concolic_test_str:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
-            generated_tests_str += f"```python\n{formatted_generated_test}\n```\n\n"
+            generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
         existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
@@ -1944,6 +2133,7 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "language": self.function_to_optimize.language,
         }
 
         raise_pr = not self.args.no_pr
@@ -1986,7 +2176,9 @@ class FunctionOptimizer:
             if "root_dir" not in data:
                 data["root_dir"] = git_root_dir()
             data["git_remote"] = self.args.git_remote
-            check_create_pr(**data)
+            # Remove language from data dict as check_create_pr doesn't accept it
+            pr_data = {k: v for k, v in data.items() if k != "language"}
+            check_create_pr(**pr_data)
         elif staging_review:
             response = create_staging(**data)
             if response.status_code == 200:
@@ -2050,7 +2242,7 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async:
+        if self.function_to_optimize.is_async and not not self._is_python:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
@@ -2060,11 +2252,19 @@ class FunctionOptimizer:
         # Instrument codeflash capture
         with progress_bar("Running tests to establish original code behavior..."):
             try:
-                instrument_codeflash_capture(
-                    self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                )
+                # Only instrument Python code here - non-Python languages use their own runtime helpers
+                # which are already included in the generated/instrumented tests
+                if self._is_python:
+                    instrument_codeflash_capture(
+                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                    )
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
+                logger.debug(f"[PIPELINE] Establishing baseline with {len(self.test_files)} test files")
+                for idx, tf in enumerate(self.test_files):
+                    logger.debug(
+                        f"[PIPELINE] Test file {idx}: behavior={tf.instrumented_behavior_file_path}, perf={tf.benchmarking_file_path}"
+                    )
                 behavioral_results, coverage_results = self.run_and_parse_tests(
                     testing_type=TestingMode.BEHAVIOR,
                     test_env=test_env,
@@ -2085,21 +2285,27 @@ class FunctionOptimizer:
             )
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
-        if not coverage_critic(coverage_results):
+        # Skip coverage check for non-Python languages (coverage not yet supported)
+        if self._is_python and not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
+            coverage_pct = coverage_results.coverage if coverage_results else 0
             return Failure(
-                f"Test coverage is {coverage_results.coverage}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
+                f"Test coverage is {coverage_pct}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
 
-        with progress_bar("Running line profiler to identify performance bottlenecks..."):
-            line_profile_results = self.line_profiler_step(
-                code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
-            )
+        # Skip line profiler for non-Python languages (not yet supported)
+        if not self._is_python:
+            line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
+        else:
+            with progress_bar("Running line profiler to identify performance bottlenecks..."):
+                line_profile_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+                )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
-            if self.function_to_optimize.is_async:
+            if self.function_to_optimize.is_async and not not self._is_python:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2135,6 +2341,7 @@ class FunctionOptimizer:
             for result in behavioral_results
             if (result.test_type == TestType.GENERATED_REGRESSION and not result.did_pass)
         ]
+
         if total_timing == 0:
             logger.warning("The overall summed benchmark runtime of the original function is 0, couldn't run tests.")
             console.rule()
@@ -2231,6 +2438,7 @@ class FunctionOptimizer:
                 ai_service_client=ai_service_client,
                 optimization_id=candidate.optimization_id,
                 executor=self.executor,
+                language=self.function_to_optimize.language,
             )
         )
 
@@ -2267,9 +2475,11 @@ class FunctionOptimizer:
                 )
 
             try:
-                instrument_codeflash_capture(
-                    self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
-                )
+                # Only instrument Python code here - non-Python languages use their own runtime helpers
+                if self._is_python:
+                    instrument_codeflash_capture(
+                        self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
+                    )
 
                 total_looping_time = TOTAL_LOOPING_TIME_EFFECTIVE
                 candidate_behavior_results, _ = self.run_and_parse_tests(
@@ -2282,9 +2492,11 @@ class FunctionOptimizer:
                 )
             # Remove instrumentation
             finally:
-                self.write_code_and_helpers(
-                    candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
-                )
+                # Only restore code for Python - non-Python tests are self-contained
+                if self._is_python:
+                    self.write_code_and_helpers(
+                        candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
+                    )
             console.print(
                 TestResults.report_to_tree(
                     candidate_behavior_results.get_test_pass_fail_report_by_type(),
@@ -2292,7 +2504,28 @@ class FunctionOptimizer:
                 )
             )
             console.rule()
-            match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+
+            # Use language-appropriate comparison
+            if not self._is_python:
+                # Non-Python: Compare using language support with SQLite results if available
+                original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
+                candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
+
+                if original_sqlite.exists() and candidate_sqlite.exists():
+                    # Full comparison using captured return values via language support
+                    match, diffs = self.language_support.compare_test_results(original_sqlite, candidate_sqlite)
+                    # Cleanup SQLite files after comparison
+                    candidate_sqlite.unlink(missing_ok=True)
+                else:
+                    # Fallback: compare test pass/fail status (tests aren't instrumented yet)
+                    # If all tests that passed for original also pass for candidate, consider it a match
+                    match, diffs = compare_test_results(
+                        baseline_results.behavior_test_results, candidate_behavior_results, pass_fail_only=True
+                    )
+            else:
+                # Python: Compare using Python comparator
+                match, diffs = compare_test_results(baseline_results.behavior_test_results, candidate_behavior_results)
+
             if match:
                 logger.info("h3|Test results matched ✅")
                 console.rule()
@@ -2395,6 +2628,8 @@ class FunctionOptimizer:
                     test_env=test_env,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     enable_coverage=enable_coverage,
+                    js_project_root=self.test_cfg.js_project_root,
+                    candidate_index=optimization_iteration,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
                 result_file_path, run_result = run_line_profile_tests(
@@ -2419,6 +2654,7 @@ class FunctionOptimizer:
                     pytest_min_loops=pytest_min_loops,
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
+                    js_project_root=self.test_cfg.js_project_root,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"
@@ -2450,6 +2686,10 @@ class FunctionOptimizer:
                         console.print(panel)
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
+            # For non-Python behavior tests, skip SQLite cleanup - files needed for language-native comparison
+            non_python_original_code = not self._is_python and optimization_iteration == 0
+            skip_cleanup = (not self._is_python and testing_type == TestingMode.BEHAVIOR) or non_python_original_code
+
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
                 test_files=test_files,
@@ -2461,6 +2701,7 @@ class FunctionOptimizer:
                 code_context=code_context,
                 coverage_database_file=coverage_database_file,
                 coverage_config_file=coverage_config_file,
+                skip_sqlite_cleanup=skip_cleanup,
             )
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout

@@ -260,3 +260,4 @@ WARP.MD
 .tessl/
 CLAUDE.md
 tessl.json
+*/node_modules/*

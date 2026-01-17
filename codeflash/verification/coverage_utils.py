@@ -21,6 +21,149 @@ if TYPE_CHECKING:
     from codeflash.models.models import CodeOptimizationContext
 
 
+class JestCoverageUtils:
+    """Coverage utils class for interfacing with Jest coverage output."""
+
+    @staticmethod
+    def load_from_jest_json(
+        coverage_json_path: Path,
+        function_name: str,
+        code_context: CodeOptimizationContext,
+        source_code_path: Path,
+    ) -> CoverageData:
+        """Load coverage data from Jest's coverage-final.json file.
+
+        Args:
+            coverage_json_path: Path to coverage-final.json
+            function_name: Name of the function being tested
+            code_context: Code optimization context
+            source_code_path: Path to the source file being tested
+
+        Returns:
+            CoverageData object with parsed coverage information
+        """
+        if not coverage_json_path or not coverage_json_path.exists():
+            logger.debug(f"Jest coverage file not found: {coverage_json_path}")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        try:
+            with coverage_json_path.open(encoding="utf-8") as f:
+                coverage_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to parse Jest coverage file: {e}")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        # Find the file entry in coverage data
+        # Jest uses absolute paths as keys
+        file_coverage = None
+        source_path_str = str(source_code_path.resolve())
+
+        for file_path, file_data in coverage_data.items():
+            if file_path == source_path_str or file_path.endswith(source_code_path.name):
+                file_coverage = file_data
+                break
+
+        if not file_coverage:
+            logger.debug(f"No coverage data found for {source_code_path} in Jest coverage")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        # Extract line coverage from statement map and execution counts
+        statement_map = file_coverage.get("statementMap", {})
+        statement_counts = file_coverage.get("s", {})
+        fn_map = file_coverage.get("fnMap", {})
+        fn_counts = file_coverage.get("f", {})
+        branch_map = file_coverage.get("branchMap", {})
+        branch_counts = file_coverage.get("b", {})
+
+        # Find the function in fnMap
+        function_entry = None
+        function_idx = None
+        for idx, fn_data in fn_map.items():
+            if fn_data.get("name") == function_name:
+                function_entry = fn_data
+                function_idx = idx
+                break
+
+        # Get function line range
+        if function_entry:
+            fn_start_line = function_entry.get("loc", {}).get("start", {}).get("line", 1)
+            fn_end_line = function_entry.get("loc", {}).get("end", {}).get("line", 999999)
+        else:
+            # If function not found in fnMap, use entire file
+            fn_start_line = 1
+            fn_end_line = 999999
+            logger.debug(f"Function {function_name} not found in Jest fnMap, using file coverage")
+
+        # Calculate executed and unexecuted lines within the function
+        executed_lines = []
+        unexecuted_lines = []
+
+        for stmt_idx, stmt_data in statement_map.items():
+            stmt_start = stmt_data.get("start", {}).get("line", 0)
+            stmt_end = stmt_data.get("end", {}).get("line", 0)
+
+            # Check if statement is within function bounds
+            if stmt_start >= fn_start_line and stmt_end <= fn_end_line:
+                count = statement_counts.get(stmt_idx, 0)
+                if count > 0:
+                    # Add all lines covered by this statement
+                    for line in range(stmt_start, stmt_end + 1):
+                        if line not in executed_lines:
+                            executed_lines.append(line)
+                else:
+                    for line in range(stmt_start, stmt_end + 1):
+                        if line not in unexecuted_lines and line not in executed_lines:
+                            unexecuted_lines.append(line)
+
+        # Extract branch coverage
+        executed_branches = []
+        unexecuted_branches = []
+
+        for branch_idx, branch_data in branch_map.items():
+            branch_line = branch_data.get("loc", {}).get("start", {}).get("line", 0)
+            if fn_start_line <= branch_line <= fn_end_line:
+                branch_hits = branch_counts.get(branch_idx, [])
+                for i, hit_count in enumerate(branch_hits):
+                    if hit_count > 0:
+                        executed_branches.append([branch_line, i])
+                    else:
+                        unexecuted_branches.append([branch_line, i])
+
+        # Calculate coverage percentage
+        total_lines = set(executed_lines) | set(unexecuted_lines)
+        coverage_pct = (len(executed_lines) / len(total_lines) * 100) if total_lines else 0.0
+
+        main_func_coverage = FunctionCoverage(
+            name=function_name,
+            coverage=coverage_pct,
+            executed_lines=sorted(executed_lines),
+            unexecuted_lines=sorted(unexecuted_lines),
+            executed_branches=executed_branches,
+            unexecuted_branches=unexecuted_branches,
+        )
+
+        graph = {
+            function_name: {
+                "executed_lines": set(executed_lines),
+                "unexecuted_lines": set(unexecuted_lines),
+                "executed_branches": executed_branches,
+                "unexecuted_branches": unexecuted_branches,
+            }
+        }
+
+        return CoverageData(
+            file_path=source_code_path,
+            coverage=coverage_pct,
+            function_name=function_name,
+            functions_being_tested=[function_name],
+            graph=graph,
+            code_context=code_context,
+            main_func_coverage=main_func_coverage,
+            dependent_func_coverage=None,
+            status=CoverageStatus.PARSED_SUCCESSFULLY,
+        )
+
+
 class CoverageUtils:
     """Coverage utils class for interfacing with Coverage."""
 

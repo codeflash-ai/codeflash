@@ -1,0 +1,5 @@
+# Codeflash configuration for JavaScript project
+module-root: "."
+tests-root: "tests"
+test-framework: "jest"
+formatter-cmds: []

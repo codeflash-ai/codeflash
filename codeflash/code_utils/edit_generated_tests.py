@@ -12,6 +12,7 @@ from libcst.metadata import PositionProvider
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
+from codeflash.languages.registry import get_language_support
 from codeflash.models.models import GeneratedTests, GeneratedTestsList
 from codeflash.result.critic import performance_gain
 
@@ -149,25 +150,44 @@ class CommentAdder(cst.CSTTransformer):
         return updated_node
 
 
+def _is_python_file(file_path: Path) -> bool:
+    """Check if a file is a Python file."""
+    return file_path.suffix == ".py"
+
+
 def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
+    logger.debug(f"[unique_inv_id] Processing {len(inv_id_runtimes)} invocation IDs")
     for inv_id, runtimes in inv_id_runtimes.items():
         test_qualified_name = (
             inv_id.test_class_name + "." + inv_id.test_function_name  # type: ignore[operator]
             if inv_id.test_class_name
             else inv_id.test_function_name
         )
-        abs_path = tests_project_rootdir / Path(inv_id.test_module_path.replace(".", os.sep)).with_suffix(".py")
+        # For non-Python languages, test_module_path is already a file path (e.g., "tests/foo.test.js")
+        # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
+        test_module_path = inv_id.test_module_path
+        if _is_python_file(Path(test_module_path)):
+            # Python: convert module name to path
+            abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
+        else:
+            # Non-Python: already a file path
+            abs_path = tests_project_rootdir / Path(test_module_path)
         abs_path_str = str(abs_path.resolve().with_suffix(""))
-        if "__unit_test_" not in abs_path_str or not test_qualified_name:
+        # Include both unit test and perf test paths for runtime annotations
+        # (performance test runtimes are used for annotations)
+        if ("__unit_test_" not in abs_path_str and "__perf_test_" not in abs_path_str) or not test_qualified_name:
+            logger.debug(f"[unique_inv_id] Skipping: path={abs_path_str}, test_qualified_name={test_qualified_name}")
             continue
         key = test_qualified_name + "#" + abs_path_str
         parts = inv_id.iteration_id.split("_").__len__()  # type: ignore[union-attr]
         cur_invid = inv_id.iteration_id.split("_")[0] if parts < 3 else "_".join(inv_id.iteration_id.split("_")[:-1])  # type: ignore[union-attr]
         match_key = key + "#" + cur_invid
+        logger.debug(f"[unique_inv_id] Adding key: {match_key} with runtime {min(runtimes)}")
         if match_key not in unique_inv_ids:
             unique_inv_ids[match_key] = 0
         unique_inv_ids[match_key] += min(runtimes)
+    logger.debug(f"[unique_inv_id] Result has {len(unique_inv_ids)} entries")
     return unique_inv_ids
 
 
@@ -183,25 +203,46 @@ def add_runtime_comments_to_generated_tests(
     # Process each generated test
     modified_tests = []
     for test in generated_tests.generated_tests:
-        try:
-            tree = cst.parse_module(test.generated_original_test_source)
-            wrapper = MetadataWrapper(tree)
-            line_to_comments = get_fn_call_linenos(test, original_runtimes_dict, optimized_runtimes_dict)
-            comment_adder = CommentAdder(line_to_comments)
-            modified_tree = wrapper.visit(comment_adder)
-            modified_source = modified_tree.code
-            modified_test = GeneratedTests(
-                generated_original_test_source=modified_source,
-                instrumented_behavior_test_source=test.instrumented_behavior_test_source,
-                instrumented_perf_test_source=test.instrumented_perf_test_source,
-                behavior_file_path=test.behavior_file_path,
-                perf_file_path=test.perf_file_path,
-            )
-            modified_tests.append(modified_test)
-        except Exception as e:
-            # If parsing fails, keep the original test
-            logger.debug(f"Failed to add runtime comments to test: {e}")
-            modified_tests.append(test)
+        is_python = _is_python_file(test.behavior_file_path)
+
+        if is_python:
+            # Use Python libcst-based comment insertion
+            try:
+                tree = cst.parse_module(test.generated_original_test_source)
+                wrapper = MetadataWrapper(tree)
+                line_to_comments = get_fn_call_linenos(test, original_runtimes_dict, optimized_runtimes_dict)
+                comment_adder = CommentAdder(line_to_comments)
+                modified_tree = wrapper.visit(comment_adder)
+                modified_source = modified_tree.code
+                modified_test = GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+                modified_tests.append(modified_test)
+            except Exception as e:
+                # If parsing fails, keep the original test
+                logger.debug(f"Failed to add runtime comments to test: {e}")
+                modified_tests.append(test)
+        else:
+            try:
+                language_support = get_language_support(test.behavior_file_path)
+                modified_source = language_support.add_runtime_comments(
+                    test.generated_original_test_source, original_runtimes_dict, optimized_runtimes_dict
+                )
+                modified_test = GeneratedTests(
+                    generated_original_test_source=modified_source,
+                    instrumented_behavior_test_source=test.instrumented_behavior_test_source,
+                    instrumented_perf_test_source=test.instrumented_perf_test_source,
+                    behavior_file_path=test.behavior_file_path,
+                    perf_file_path=test.perf_file_path,
+                )
+                modified_tests.append(modified_test)
+            except Exception as e:
+                logger.debug(f"Failed to add runtime comments to test: {e}")
+                modified_tests.append(test)
 
     return GeneratedTestsList(generated_tests=modified_tests)
 
