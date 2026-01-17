@@ -33,7 +33,8 @@
         "jest-junit",
         {
           "outputDirectory": ".codeflash",
-          "outputName": "jest-results.xml"
+          "outputName": "jest-results.xml",
+          "includeConsoleOutput": true
         }
       ]
     ]

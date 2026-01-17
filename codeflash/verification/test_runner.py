@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,6 +24,50 @@ if TYPE_CHECKING:
 
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+# Pattern to extract timing from stdout markers: !######...:<duration_ns>######!
+# Jest markers have multiple colons: !######module:test:func:loop:id:duration######!
+# Python markers: !######module:class.test:func:loop:id:duration######!
+_TIMING_MARKER_PATTERN = re.compile(r"!######.+:(\d+)######!")
+
+
+def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: str = "unknown") -> None:
+    """Calculate and log the function utilization fraction.
+
+    Utilization = sum(function_runtimes_from_markers) / total_wall_clock_time
+
+    This metric shows how much of the test execution time was spent in actual
+    function calls vs overhead (Jest startup, test framework, I/O, etc.).
+
+    Args:
+        stdout: The stdout from the test subprocess containing timing markers.
+        wall_clock_ns: Total wall clock time for the subprocess in nanoseconds.
+        test_type: Type of test for logging context (e.g., "behavioral", "performance").
+    """
+    if not stdout or wall_clock_ns <= 0:
+        return
+
+    # Extract all timing values from stdout markers
+    matches = _TIMING_MARKER_PATTERN.findall(stdout)
+    if not matches:
+        logger.debug(f"[{test_type}] No timing markers found in stdout, cannot calculate utilization")
+        return
+
+    # Sum all function runtimes
+    total_function_runtime_ns = sum(int(m) for m in matches)
+
+    # Calculate utilization fraction
+    utilization = total_function_runtime_ns / wall_clock_ns if wall_clock_ns > 0 else 0
+    utilization_pct = utilization * 100
+
+    # Log metrics
+    logger.debug(
+        f"[{test_type}] Function Utilization Fraction: {utilization_pct:.2f}% "
+        f"(function_time={total_function_runtime_ns / 1e6:.1f}ms, "
+        f"wall_time={wall_clock_ns / 1e6:.1f}ms, "
+        f"overhead={100 - utilization_pct:.1f}%, "
+        f"num_markers={len(matches)})"
+    )
 
 
 def _ensure_js_runtime_files(js_project_root: Path) -> None:
@@ -152,6 +198,7 @@ def run_jest_behavioral_tests(
 
     logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
 
+    start_time_ns = time.perf_counter_ns()
     try:
         run_args = get_cross_platform_subprocess_run_args(
             cwd=effective_cwd, env=jest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
@@ -177,6 +224,9 @@ def run_jest_behavioral_tests(
         result = subprocess.CompletedProcess(
             args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found. Run: npm install jest jest-junit"
         )
+    finally:
+        wall_clock_ns = time.perf_counter_ns() - start_time_ns
+        _calculate_utilization_fraction(result.stdout if result else "", wall_clock_ns, "jest-behavioral")
 
     return result_file_path, result, coverage_json_path, None
 
@@ -480,6 +530,7 @@ def run_jest_benchmarking_tests(
     # Use a generous subprocess timeout (10 minutes) since individual test timeouts are handled by Jest
     subprocess_timeout = 600  # 10 minutes - sufficient for benchmarking suite
 
+    start_time_ns = time.perf_counter_ns()
     try:
         run_args = get_cross_platform_subprocess_run_args(
             cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
@@ -505,6 +556,9 @@ def run_jest_benchmarking_tests(
     except FileNotFoundError:
         logger.error("Jest not found for benchmarking")
         result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
+    finally:
+        wall_clock_ns = time.perf_counter_ns() - start_time_ns
+        _calculate_utilization_fraction(result.stdout if result else "", wall_clock_ns, "jest-performance")
 
     return result_file_path, result
 

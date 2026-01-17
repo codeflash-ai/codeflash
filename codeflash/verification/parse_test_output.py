@@ -197,7 +197,12 @@ def parse_jest_json_results(
 
             # Create invocation ID - use funcName from result or passed function_name
             function_getting_tested = func_name or function_name or "unknown"
-            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
+            # For JavaScript, keep the relative file path with extension intact
+            # (Python uses module_name_from_file_path which strips extensions)
+            try:
+                test_module_path = str(test_file_path.relative_to(test_config.tests_project_rootdir))
+            except ValueError:
+                test_module_path = test_file_path.name
             invocation_id_obj = InvocationId(
                 test_module_path=test_module_path,
                 test_class_name=None,
@@ -469,9 +474,28 @@ def parse_jest_test_xml(
 
     base_dir = test_config.tests_project_rootdir
 
+    # Fallback: if JUnit XML doesn't have system-out, use subprocess stdout directly
+    global_stdout = ""
+    if run_result is not None:
+        try:
+            global_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
+            # Debug: log if timing markers are found in stdout
+            if global_stdout:
+                marker_count = len(jest_start_pattern.findall(global_stdout))
+                if marker_count > 0:
+                    logger.debug(f"Found {marker_count} timing start markers in Jest stdout")
+                else:
+                    logger.debug(f"No timing start markers found in Jest stdout (len={len(global_stdout)})")
+        except (AttributeError, UnicodeDecodeError):
+            global_stdout = ""
+
     for suite in xml:
         # Extract console output from suite-level system-out (Jest specific)
         suite_stdout = _extract_jest_console_output(suite._elem)  # noqa: SLF001
+
+        # Fallback: use subprocess stdout if XML system-out is empty
+        if not suite_stdout and global_stdout:
+            suite_stdout = global_stdout
 
         # Parse timing markers from the suite's console output
         start_matches = list(jest_start_pattern.finditer(suite_stdout))
@@ -508,7 +532,12 @@ def parse_jest_test_xml(
                 # Default to GENERATED_REGRESSION for Jest tests
                 test_type = TestType.GENERATED_REGRESSION
 
-            test_module_path = module_name_from_file_path(test_file_path, test_config.tests_project_rootdir)
+            # For JavaScript, keep the relative file path with extension intact
+            # (Python uses module_name_from_file_path which strips extensions)
+            try:
+                test_module_path = str(test_file_path.relative_to(test_config.tests_project_rootdir))
+            except ValueError:
+                test_module_path = test_file_path.name
             result = testcase.is_passed
 
             # Check for timeout
@@ -519,10 +548,10 @@ def parse_jest_test_xml(
                     timed_out = True
 
             # Find matching timing markers for this test
-            # Jest test names in markers are sanitized (spaces → underscores)
-            # The marker format is: testModulePath:testFunctionName:funcName:loopIndex:lineId
-            # We need to check group(2) (testFunctionName) and handle sanitization
-            sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
+            # Jest test names in markers are sanitized by codeflash-jest-helper's sanitizeTestId()
+            # which replaces: !#:$ and whitespace with underscores
+            # IMPORTANT: Must match JavaScript's sanitization exactly for marker matching to work
+            sanitized_test_name = re.sub(r"[!#:$\s]+", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
             if not matching_starts:

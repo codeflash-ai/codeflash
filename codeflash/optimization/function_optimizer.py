@@ -67,6 +67,10 @@ from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
+from codeflash.languages.javascript.instrument import (
+    TestingMode as JsTestingMode,
+    inject_profiling_into_existing_js_test,
+)
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
@@ -1570,12 +1574,92 @@ class FunctionOptimizer:
         func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
-        # Skip existing test instrumentation for JavaScript/TypeScript - use generated tests only
+        # Handle JavaScript/TypeScript existing test instrumentation
         elif self.is_js:
-            logger.info(
-                f"JavaScript/TypeScript detected - using generated tests only for '{func_qualname}'. "
-                "Existing test instrumentation not yet supported."
-            )
+            test_file_invocation_positions = defaultdict(list)
+            for tests_in_file in function_to_all_tests.get(func_qualname):
+                test_file_invocation_positions[
+                    (tests_in_file.tests_in_file.test_file, tests_in_file.tests_in_file.test_type)
+                ].append(tests_in_file)
+
+            for (test_file, test_type), tests_in_file_list in test_file_invocation_positions.items():
+                path_obj_test_file = Path(test_file)
+                if test_type == TestType.EXISTING_UNIT_TEST:
+                    existing_test_files_count += 1
+                elif test_type == TestType.REPLAY_TEST:
+                    replay_test_files_count += 1
+                elif test_type == TestType.CONCOLIC_COVERAGE_TEST:
+                    concolic_coverage_test_files_count += 1
+                else:
+                    msg = f"Unexpected test type: {test_type}"
+                    raise ValueError(msg)
+
+                # Use JavaScript-specific instrumentation
+                success, injected_behavior_test = inject_profiling_into_existing_js_test(
+                    mode=JsTestingMode.BEHAVIOR,
+                    test_path=path_obj_test_file,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=self.function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                )
+                if not success:
+                    logger.debug(f"Failed to instrument JavaScript test file {test_file} for behavior testing")
+                    continue
+
+                success, injected_perf_test = inject_profiling_into_existing_js_test(
+                    mode=JsTestingMode.PERFORMANCE,
+                    test_path=path_obj_test_file,
+                    call_positions=[test.position for test in tests_in_file_list],
+                    function_to_optimize=self.function_to_optimize,
+                    tests_project_root=self.test_cfg.tests_project_rootdir,
+                )
+                if not success:
+                    logger.debug(f"Failed to instrument JavaScript test file {test_file} for performance testing")
+                    continue
+
+                # Generate instrumented test file paths
+                new_behavioral_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
+                )
+                new_perf_test_path = Path(
+                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
+                )
+
+                if injected_behavior_test is not None:
+                    with new_behavioral_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_behavior_test)
+                else:
+                    msg = "injected_behavior_test is None"
+                    raise ValueError(msg)
+
+                if injected_perf_test is not None:
+                    with new_perf_test_path.open("w", encoding="utf8") as _f:
+                        _f.write(injected_perf_test)
+
+                unique_instrumented_test_files.add(new_behavioral_test_path)
+                unique_instrumented_test_files.add(new_perf_test_path)
+
+                if not self.test_files.get_by_original_file_path(path_obj_test_file):
+                    self.test_files.add(
+                        TestFile(
+                            instrumented_behavior_file_path=new_behavioral_test_path,
+                            benchmarking_file_path=new_perf_test_path,
+                            original_source=None,
+                            original_file_path=Path(test_file),
+                            test_type=test_type,
+                            tests_in_file=[t.tests_in_file for t in tests_in_file_list],
+                        )
+                    )
+
+            if existing_test_files_count > 0 or replay_test_files_count > 0 or concolic_coverage_test_files_count > 0:
+                logger.info(
+                    f"Instrumented {existing_test_files_count} existing JavaScript unit test file"
+                    f"{'s' if existing_test_files_count != 1 else ''}, {replay_test_files_count} replay test file"
+                    f"{'s' if replay_test_files_count != 1 else ''}, and "
+                    f"{concolic_coverage_test_files_count} concolic coverage test file"
+                    f"{'s' if concolic_coverage_test_files_count != 1 else ''} for {func_qualname}"
+                )
+                console.rule()
         else:
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
