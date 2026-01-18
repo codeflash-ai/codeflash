@@ -2,7 +2,40 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import uuid
 from typing import Optional
+
+import sentry_sdk
+
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_temp_dir
+
+
+def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
+    try:
+        ast.parse(test_code)
+    except SyntaxError:
+        sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
+        return False
+
+    temp_path = (codeflash_temp_dir / f"concolic_test_{uuid.uuid4().hex}.py").resolve()
+    temp_path.write_text(test_code, encoding="utf-8")
+
+    try:
+        result = subprocess.run(
+            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", temp_path.as_posix()],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, Exception):
+        return False
+    else:
+        return result.returncode == 0
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 class AssertCleanup:

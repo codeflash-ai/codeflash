@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codeflash.code_utils.concolic_utils import AssertCleanup
+from codeflash.code_utils.concolic_utils import AssertCleanup, is_valid_concolic_test
 
 
 class TestFirstTopLevelArg:
@@ -93,3 +93,41 @@ class TestFirstTopLevelArg:
 
     def test_tab_whitespace(self, cleanup: AssertCleanup) -> None:
         assert cleanup._first_top_level_arg("\ta\t, b") == "a"
+
+
+class TestIsValidConcolicTest:
+    def test_valid_test_passes_collection(self) -> None:
+        valid_test = """
+import pytest
+
+def test_simple():
+    assert 1 + 1 == 2
+"""
+        assert is_valid_concolic_test(valid_test) is True
+
+    def test_invalid_test_with_side_effect_detected(self) -> None:
+        invalid_test = """
+from typing import TextIO
+from some_module import some_function
+import pytest
+
+def test_some_function():
+    with pytest.raises(SideEffectDetected, match="We've blocked a file writing operation"):
+        some_function(filename="", file=TextIO())
+"""
+        assert is_valid_concolic_test(invalid_test) is False
+
+    def test_syntax_error_is_invalid(self) -> None:
+        invalid_syntax = "def test_broken( assert True"
+        assert is_valid_concolic_test(invalid_syntax) is False
+
+    def test_empty_string_fails_collection(self) -> None:
+        assert is_valid_concolic_test("") is False
+
+    def test_import_only_fails_collection(self) -> None:
+        import_only = "from some_module import some_function"
+        assert is_valid_concolic_test(import_only) is False
+
+    def test_valid_import_but_no_tests_fails_collection(self) -> None:
+        valid_import_no_tests = "import pytest\nimport os"
+        assert is_valid_concolic_test(valid_import_no_tests) is False
