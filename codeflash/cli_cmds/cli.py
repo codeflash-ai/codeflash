@@ -114,6 +114,9 @@ def parse_args() -> Namespace:
         choices=["local", "prod"],
         help="AI service server to use: 'local' for localhost:8000, 'prod' for app.codeflash.ai",
     )
+    parser.add_argument(
+        "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
