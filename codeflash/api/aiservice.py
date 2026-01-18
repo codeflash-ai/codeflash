@@ -129,6 +129,7 @@ class AiServiceClient:
         *,
         is_async: bool = False,
         n_candidates: int = 5,
+        is_numerical_code: bool | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance by making a request to the Django endpoint.
 
@@ -164,6 +165,7 @@ class AiServiceClient:
             "is_async": is_async,
             "call_sequence": self.get_next_sequence(),
             "n_candidates": n_candidates,
+            "is_numerical_code": is_numerical_code,
         }
         logger.debug(f"Sending optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
 
@@ -191,6 +193,58 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def get_jit_rewritten_code(  # noqa: D417
+        self, source_code: str, trace_id: str
+    ) -> list[OptimizedCandidate]:
+        """Rewrite the given python code for performance via jit compilation by making a request to the Django endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize.
+        - trace_id (str): Trace id of optimization run
+
+        Returns
+        -------
+        - List[OptimizationCandidate]: A list of Optimization Candidates.
+
+        """
+        start_time = time.perf_counter()
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
+
+        payload = {
+            "source_code": source_code,
+            "trace_id": trace_id,
+            "dependency_code": "",  # dummy value to please the api endpoint
+            "python_version": "3.12.1",  # dummy value to please the api endpoint
+            "current_username": get_last_commit_author_if_pr_exists(None),
+            "repo_owner": git_repo_owner,
+            "repo_name": git_repo_name,
+        }
+
+        logger.info("!lsp|Rewriting as a JIT function…")
+        console.rule()
+        try:
+            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating jit rewritten candidate: {e}")
+            ph("cli-jit-rewrite-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            console.rule()
+            end_time = time.perf_counter()
+            logger.debug(f"!lsp|Generating jit rewritten code took {end_time - start_time:.2f} seconds.")
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.JIT_REWRITE)
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating jit rewritten candidate: {response.status_code} - {error}")
+        ph("cli-jit-rewrite-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
     def optimize_python_code_line_profiler(  # noqa: D417
         self,
         source_code: str,
@@ -199,6 +253,7 @@ class AiServiceClient:
         line_profiler_results: str,
         n_candidates: int,
         experiment_metadata: ExperimentMetadata | None = None,
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance using line profiler results.
 
@@ -233,6 +288,7 @@ class AiServiceClient:
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
+            "is_numerical_code": is_numerical_code,
         }
 
         try:
@@ -578,6 +634,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -614,6 +671,7 @@ class AiServiceClient:
             "codeflash_version": codeflash_version,
             "is_async": function_to_optimize.is_async,
             "call_sequence": self.get_next_sequence(),
+            "is_numerical_code": is_numerical_code,
         }
         try:
             response = self.make_ai_service_request("/testgen", payload=payload, timeout=self.timeout)

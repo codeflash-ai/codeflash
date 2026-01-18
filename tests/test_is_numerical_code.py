@@ -691,6 +691,203 @@ class ClassB:
         assert is_numerical_code(code, "ClassB.method") is False
 
 
+@patch("codeflash.code_utils.code_extractor.has_numba", True)
+class TestEmptyFunctionName:
+    """Test behavior when function_name is empty/None.
+
+    When function_name is not provided, the function should just check for the
+    presence of numerical imports without looking at a specific function body.
+    """
+
+    def test_empty_string_with_numpy_import(self):
+        """Empty function_name with numpy import should return True."""
+        code = """
+import numpy as np
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_none_with_numpy_import(self):
+        """None function_name with numpy import should return True."""
+        code = """
+import numpy as np
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, None) is True
+
+    def test_empty_string_with_torch_import(self):
+        """Empty function_name with torch import should return True."""
+        code = """
+import torch
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_with_multiple_numerical_imports(self):
+        """Empty function_name with multiple numerical imports should return True."""
+        code = """
+import numpy as np
+import torch
+from scipy import stats
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_without_numerical_imports(self):
+        """Empty function_name without numerical imports should return False."""
+        code = """
+import os
+import json
+from pathlib import Path
+
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, "") is False
+
+    def test_none_without_numerical_imports(self):
+        """None function_name without numerical imports should return False."""
+        code = """
+import os
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, None) is False
+
+    def test_empty_string_with_jax_import(self):
+        """Empty function_name with jax import should return True."""
+        code = """
+import jax
+import jax.numpy as jnp
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_with_tensorflow_import(self):
+        """Empty function_name with tensorflow import should return True."""
+        code = """
+import tensorflow as tf
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_with_math_import(self):
+        """Empty function_name with math import should return True (numba available)."""
+        code = """
+import math
+def calculate(x):
+    return math.sqrt(x)
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_with_scipy_submodule(self):
+        """Empty function_name with scipy submodule import should return True."""
+        code = """
+from scipy.stats import norm
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_with_numba_import(self):
+        """Empty function_name with numba import should return True."""
+        code = """
+from numba import jit
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_code_with_empty_function_name(self):
+        """Empty code with empty function_name should return False."""
+        assert is_numerical_code("", "") is False
+
+    def test_syntax_error_with_empty_function_name(self):
+        """Syntax error code with empty function_name should return False."""
+        code = """
+def broken(
+    import numpy
+"""
+        assert is_numerical_code(code, "") is False
+
+
+@patch("codeflash.code_utils.code_extractor.has_numba", False)
+class TestEmptyFunctionNameWithoutNumba:
+    """Test empty function_name behavior when numba is NOT available.
+
+    When numba is not installed, code using only math/numpy/scipy should return False,
+    since numba is required to optimize such code. Code using torch/jax/tensorflow/numba
+    should still return True.
+    """
+
+    def test_empty_string_numpy_returns_false_without_numba(self):
+        """Empty function_name with numpy should return False when numba unavailable."""
+        code = """
+import numpy as np
+def some_func():
+    pass
+"""
+        assert is_numerical_code(code, "") is False
+
+    def test_empty_string_math_returns_false_without_numba(self):
+        """Empty function_name with math should return False when numba unavailable."""
+        code = """
+import math
+"""
+        assert is_numerical_code(code, "") is False
+
+    def test_empty_string_scipy_returns_false_without_numba(self):
+        """Empty function_name with scipy should return False when numba unavailable."""
+        code = """
+from scipy import stats
+"""
+        assert is_numerical_code(code, "") is False
+
+    def test_empty_string_torch_returns_true_without_numba(self):
+        """Empty function_name with torch should return True even without numba."""
+        code = """
+import torch
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_jax_returns_true_without_numba(self):
+        """Empty function_name with jax should return True even without numba."""
+        code = """
+import jax
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_tensorflow_returns_true_without_numba(self):
+        """Empty function_name with tensorflow should return True even without numba."""
+        code = """
+import tensorflow as tf
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_numba_import_returns_true_without_numba(self):
+        """Empty function_name with numba import should return True."""
+        code = """
+from numba import jit
+"""
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_numpy_and_torch_returns_true_without_numba(self):
+        """Empty function_name with numpy+torch should return True (torch doesn't need numba)."""
+        code = """
+import numpy as np
+import torch
+"""
+        # Returns True because torch is in modules_used and doesn't require numba
+        assert is_numerical_code(code, "") is True
+
+    def test_empty_string_math_and_scipy_returns_false_without_numba(self):
+        """Empty function_name with only math+scipy should return False without numba."""
+        code = """
+import math
+from scipy import stats
+"""
+        # Both math and scipy are in NUMBA_REQUIRED_MODULES
+        assert is_numerical_code(code, "") is False
+
+
 @patch("codeflash.code_utils.code_extractor.has_numba", False)
 class TestNumbaNotAvailable:
     """Test behavior when numba is NOT available in the environment.
