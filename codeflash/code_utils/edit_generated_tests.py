@@ -164,15 +164,17 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             if inv_id.test_class_name
             else inv_id.test_function_name
         )
-        # For non-Python languages, test_module_path is already a file path (e.g., "tests/foo.test.js")
-        # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
+
+        # Detect if test_module_path is a file path (like in js tests) or a Python module name
+        # File paths contain slashes, module names use dots
         test_module_path = inv_id.test_module_path
-        if _is_python_file(Path(test_module_path)):
-            # Python: convert module name to path
-            abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
-        else:
-            # Non-Python: already a file path
+        if "/" in test_module_path or "\\" in test_module_path:
+            # Already a file path - use directly
             abs_path = tests_project_rootdir / Path(test_module_path)
+        else:
+            # Python module name - convert dots to path separators and add .py
+            abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
+
         abs_path_str = str(abs_path.resolve().with_suffix(""))
         # Include both unit test and perf test paths for runtime annotations
         # (performance test runtimes are used for annotations)
