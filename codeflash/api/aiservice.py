@@ -44,7 +44,7 @@ class AiServiceClient:
         self.headers = {"Authorization": f"Bearer {get_codeflash_api_key()}", "Connection": "close"}
         self.llm_call_counter = count(1)
         self.is_local = self.base_url == "http://localhost:8000"
-        self.timeout: float | None = None if self.is_local else 90
+        self.timeout: float | None = 300 if self.is_local else 90
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""
