@@ -2,7 +2,42 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import Optional
+
+import sentry_sdk
+
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+
+
+def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
+    try:
+        ast.parse(test_code)
+    except SyntaxError:
+        sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
+        return False
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write(test_code)
+        temp_path = Path(f.name)
+
+    try:
+        result = subprocess.run(
+            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", str(temp_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, Exception):
+        return False
+    else:
+        return result.returncode == 0
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 class AssertCleanup:
