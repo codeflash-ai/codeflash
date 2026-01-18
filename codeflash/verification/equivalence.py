@@ -77,7 +77,26 @@ def compare_test_results(
         if original_pytest_error:
             original_pytest_error = shorten_pytest_error(original_pytest_error)
 
-        if not pass_fail_only and comparator(
+        if original_test_result.test_type in {
+            TestType.EXISTING_UNIT_TEST,
+            TestType.CONCOLIC_COVERAGE_TEST,
+            TestType.GENERATED_REGRESSION,
+            TestType.REPLAY_TEST,
+        } and (cdd_test_result.did_pass != original_test_result.did_pass):
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.DID_PASS,
+                    original_value=str(original_test_result.did_pass),
+                    candidate_value=str(cdd_test_result.did_pass),
+                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
+
+        elif not pass_fail_only and not comparator(
             original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
         ):
             test_diffs.append(
@@ -114,25 +133,6 @@ def compare_test_results(
                     scope=TestDiffScope.STDOUT,
                     original_value=str(original_test_result.stdout),
                     candidate_value=str(cdd_test_result.stdout),
-                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
-                    candidate_pytest_error=cdd_pytest_error,
-                    original_pass=original_test_result.did_pass,
-                    candidate_pass=cdd_test_result.did_pass,
-                    original_pytest_error=original_pytest_error,
-                )
-            )
-
-        elif original_test_result.test_type in {
-            TestType.EXISTING_UNIT_TEST,
-            TestType.CONCOLIC_COVERAGE_TEST,
-            TestType.GENERATED_REGRESSION,
-            TestType.REPLAY_TEST,
-        } and (cdd_test_result.did_pass != original_test_result.did_pass):
-            test_diffs.append(
-                TestDiff(
-                    scope=TestDiffScope.DID_PASS,
-                    original_value=str(original_test_result.did_pass),
-                    candidate_value=str(cdd_test_result.did_pass),
                     test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
                     candidate_pytest_error=cdd_pytest_error,
                     original_pass=original_test_result.did_pass,
