@@ -70,7 +70,9 @@ def parse_args() -> Namespace:
     create_pr_parser.add_argument(
         "--function", type=str, help="Function name (required if multiple functions in results)"
     )
-    create_pr_parser.add_argument("--git-remote", type=str, help="Git remote to use for PR creation (default: origin)")
+    create_pr_parser.add_argument(
+        "--git-remote", type=str, default="origin", help="Git remote to use for PR creation (default: origin)"
+    )
 
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")
