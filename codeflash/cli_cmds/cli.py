@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cmd_create_pr import create_pr as cmd_create_pr
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -56,6 +57,20 @@ def parse_args() -> Namespace:
         type=str,
         help="The path to the pyproject.toml file which stores the Codeflash config. This is auto-discovered by default.",
     )
+
+    # create-pr subcommand for creating PRs from augmented optimization results
+    create_pr_parser = subparsers.add_parser("create-pr", help="Create a PR from previously applied optimizations")
+    create_pr_parser.set_defaults(func=cmd_create_pr)
+    create_pr_parser.add_argument(
+        "--results-file",
+        type=str,
+        default="codeflash_phase1_results.json",
+        help="Path to augmented output JSON file (default: codeflash_phase1_results.json)",
+    )
+    create_pr_parser.add_argument(
+        "--function", type=str, help="Function name (required if multiple functions in results)"
+    )
+    create_pr_parser.add_argument("--git-remote", type=str, help="Git remote to use for PR creation (default: origin)")
 
     parser.add_argument("--file", help="Try to optimize only this file")
     parser.add_argument("--function", help="Try to optimize only this function within the given file path")

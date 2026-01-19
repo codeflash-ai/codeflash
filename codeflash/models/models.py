@@ -938,6 +938,13 @@ class Phase1FunctionResult(BaseModel):
     candidates: list[Phase1CandidateResult]
     best_candidate_id: Optional[str] = None
     best_speedup_ratio: Optional[float] = None
+    # PR creation data - captured after best candidate is selected
+    file_path: Optional[str] = None
+    existing_tests_source: Optional[str] = None
+    replay_tests_source: Optional[str] = None
+    concolic_tests_source: Optional[str] = None
+    best_candidate_explanation: Optional[str] = None
+    best_runtime_ns: Optional[int] = None
 
 
 class Phase1Output(BaseModel):

@@ -480,6 +480,12 @@ class FunctionOptimizer:
         self.augmented_output = getattr(args, "augmented_output", "codeflash_phase1_results.json") if args else None
         self.augmented_prompts: AugmentedPrompts | None = None
         self.phase1_candidate_results: list[Phase1CandidateResult] = []
+        # PR data captured during process_review for Phase1 output
+        self.phase1_existing_tests: str | None = None
+        self.phase1_replay_tests: str | None = None
+        self.phase1_concolic_tests: str | None = None
+        self.phase1_best_explanation: str | None = None
+        self.phase1_best_runtime: int | None = None
 
     def load_augmented_prompts(self) -> AugmentedPrompts | None:
         if not self.augmented_prompt_file:
@@ -536,6 +542,13 @@ class FunctionOptimizer:
             candidates=self.phase1_candidate_results,
             best_candidate_id=best_candidate_id,
             best_speedup_ratio=best_speedup_ratio,
+            # PR creation data
+            file_path=self.function_to_optimize.file_path.as_posix(),
+            existing_tests_source=self.phase1_existing_tests,
+            replay_tests_source=self.phase1_replay_tests,
+            concolic_tests_source=self.phase1_concolic_tests,
+            best_candidate_explanation=self.phase1_best_explanation,
+            best_runtime_ns=self.phase1_best_runtime,
         )
 
     def write_phase1_output(self, function_result: Phase1FunctionResult) -> None:
@@ -2078,6 +2091,14 @@ class FunctionOptimizer:
         self.log_successful_optimization(new_explanation, generated_tests, exp_type)
 
         best_optimization.explanation_v2 = new_explanation.explanation_message()
+
+        # Capture PR data for Phase1 output in augmented mode
+        if self.augmented_mode:
+            self.phase1_existing_tests = existing_tests
+            self.phase1_replay_tests = replay_tests
+            self.phase1_concolic_tests = concolic_tests
+            self.phase1_best_explanation = new_explanation.explanation_message()
+            self.phase1_best_runtime = best_optimization.runtime
 
         data = {
             "original_code": original_code_combined,
