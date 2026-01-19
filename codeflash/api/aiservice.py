@@ -293,17 +293,21 @@ class AiServiceClient:
         n_candidates: int,
         experiment_metadata: ExperimentMetadata | None = None,
         is_numerical_code: bool | None = None,  # noqa: FBT001
+        language: str = "python",
+        language_version: str | None = None,
     ) -> list[OptimizedCandidate]:
-        """Optimize the given python code for performance using line profiler results.
+        """Optimize code for performance using line profiler results.
 
         Parameters
         ----------
-        - source_code (str): The python code to optimize.
+        - source_code (str): The code to optimize.
         - dependency_code (str): The dependency code used as read-only context for the optimization
         - trace_id (str): Trace id of optimization run
         - line_profiler_results (str): Line profiler output to guide optimization
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
         - n_candidates (int): Number of candidates to generate
+        - language (str): Programming language (python, javascript, typescript)
+        - language_version (str): Language version (e.g., "3.12.0" for Python, "ES2022" for JavaScript)
 
         Returns
         -------
@@ -317,13 +321,18 @@ class AiServiceClient:
         logger.info("Generating optimized candidates with line profiler…")
         console.rule()
 
+        # Set python_version for backward compatibility with Python, or use language_version
+        python_version = language_version if language_version else platform.python_version()
+
         payload = {
             "source_code": source_code,
             "dependency_code": dependency_code,
             "n_candidates": n_candidates,
             "line_profiler_results": line_profiler_results,
             "trace_id": trace_id,
-            "python_version": platform.python_version(),
+            "python_version": python_version,
+            "language": language,
+            "language_version": language_version,
             "experiment_metadata": experiment_metadata,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),

@@ -253,7 +253,20 @@ def run_line_profile_tests(
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,  # noqa: ARG001
     pytest_max_loops: int = 100_000,  # noqa: ARG001
+    js_project_root: Path | None = None,
+    line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
+    # Check if there's a language support for this test framework that implements run_line_profile_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_line_profile_tests"):
+        return language_support.run_line_profile_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=pytest_timeout,
+            project_root=js_project_root,
+            line_profile_output_file=line_profiler_output_file,
+        )
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)

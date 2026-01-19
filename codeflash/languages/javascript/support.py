@@ -902,6 +902,40 @@ class JavaScriptSupport:
             target_duration_ms=int(target_duration_seconds * 1000),
         )
 
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run Jest tests for line profiling.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for the test run.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where line profile results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
+
+        return run_jest_line_profile_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=timeout,
+            project_root=project_root,
+            line_profile_output_file=line_profile_output_file,
+        )
+
 
 @register_language
 class TypeScriptSupport(JavaScriptSupport):

@@ -318,3 +318,123 @@ def run_jest_benchmarking_tests(
         logger.debug(f"Jest benchmarking tests completed in {wall_clock_ns / 1e9:.2f}s")
 
     return result_file_path, result
+
+
+def run_jest_line_profile_tests(
+    test_paths: TestFiles,
+    test_env: dict[str, str],
+    cwd: Path,
+    *,
+    timeout: int | None = None,
+    project_root: Path | None = None,
+    line_profile_output_file: Path | None = None,
+) -> tuple[Path, subprocess.CompletedProcess]:
+    """Run Jest tests for line profiling.
+
+    This runs tests against source code that has been instrumented with line profiler.
+    The instrumentation collects execution counts and timing per line.
+
+    Args:
+        test_paths: TestFiles object containing test file information.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds for the subprocess.
+        project_root: JavaScript project root (directory containing package.json).
+        line_profile_output_file: Path where line profile results will be written.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result).
+
+    """
+    result_file_path = get_run_tmp_file(Path("jest_line_profile_results.xml"))
+
+    # Get test files to run - use instrumented behavior files if available, otherwise benchmarking files
+    test_files = []
+    for file in test_paths.test_files:
+        if file.instrumented_behavior_file_path:
+            test_files.append(str(file.instrumented_behavior_file_path))
+        elif file.benchmarking_file_path:
+            test_files.append(str(file.benchmarking_file_path))
+
+    # Use provided project_root, or detect it as fallback
+    if project_root is None and test_files:
+        first_test_file = Path(test_files[0])
+        project_root = _find_node_project_root(first_test_file)
+
+    effective_cwd = project_root if project_root else cwd
+    logger.debug(f"Jest line profiling working directory: {effective_cwd}")
+
+    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    _ensure_runtime_files(effective_cwd)
+
+    # Build Jest command for line profiling - simple run without benchmarking loops
+    jest_cmd = [
+        "npx",
+        "jest",
+        "--reporters=default",
+        "--reporters=jest-junit",
+        "--runInBand",  # Run tests serially for consistent line profiling
+        "--forceExit",
+    ]
+
+    if test_files:
+        jest_cmd.append("--runTestsByPath")
+        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+
+    if timeout:
+        jest_cmd.append(f"--testTimeout={timeout * 1000}")
+
+    # Set up environment
+    jest_env = test_env.copy()
+    jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
+    jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
+    jest_env["JEST_JUNIT_OUTPUT_NAME"] = result_file_path.name
+    jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
+    jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
+    jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
+    # Set codeflash output file for the jest helper
+    codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_line_profile.sqlite"))
+    jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
+    jest_env["CODEFLASH_TEST_ITERATION"] = "0"
+    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
+    jest_env["CODEFLASH_MODE"] = "line_profile"
+    # Seed random number generator for reproducibility
+    jest_env["CODEFLASH_RANDOM_SEED"] = "42"
+    # Pass the line profile output file path to the instrumented code
+    if line_profile_output_file:
+        jest_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
+
+    subprocess_timeout = timeout or 600
+
+    logger.debug(f"Running Jest line profile tests: {' '.join(jest_cmd)}")
+
+    start_time_ns = time.perf_counter_ns()
+    try:
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
+        )
+        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        # Jest sends console.log output to stderr by default - move it to stdout
+        if result.stderr and not result.stdout:
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
+            )
+        elif result.stderr:
+            result = subprocess.CompletedProcess(
+                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
+            )
+        logger.debug(f"Jest line profile result: returncode={result.returncode}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Jest line profile tests timed out after {subprocess_timeout}s")
+        result = subprocess.CompletedProcess(
+            args=jest_cmd, returncode=-1, stdout="", stderr="Line profile tests timed out"
+        )
+    except FileNotFoundError:
+        logger.error("Jest not found for line profiling")
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
+    finally:
+        wall_clock_ns = time.perf_counter_ns() - start_time_ns
+        logger.debug(f"Jest line profile tests completed in {wall_clock_ns / 1e9:.2f}s")
+
+    return result_file_path, result

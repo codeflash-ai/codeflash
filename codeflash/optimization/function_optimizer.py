@@ -873,16 +873,12 @@ class FunctionOptimizer:
 
         Returns the BestOptimization and optional benchmark tree.
         """
-        # Skip line profiling for non-Python languages until implementation is ready
-        if not self._is_python:
-            line_profile_test_results = {"timings": {}, "unit": 0, "str_out": ""}
-        else:
-            with progress_bar("Running line-by-line profiling"):
-                line_profile_test_results = self.line_profiler_step(
-                    code_context=code_context,
-                    original_helper_code=original_helper_code,
-                    candidate_index=candidate_index,
-                )
+        with progress_bar("Running line-by-line profiling"):
+            line_profile_test_results = self.line_profiler_step(
+                code_context=code_context,
+                original_helper_code=original_helper_code,
+                candidate_index=candidate_index,
+            )
 
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
 
@@ -1230,6 +1226,7 @@ class FunctionOptimizer:
             if self.experiment_id
             else None,
             is_numerical_code=self.is_numerical_code,
+            language=self.function_to_optimize.language,
         )
 
         processor = CandidateProcessor(
@@ -2314,14 +2311,10 @@ class FunctionOptimizer:
                 f"Test coverage is {coverage_pct}%, which is below the required threshold of {COVERAGE_THRESHOLD}%."
             )
 
-        # Skip line profiler for non-Python languages (not yet supported)
-        if not self._is_python:
-            line_profile_results = {"timings": {}, "unit": 0, "str_out": ""}
-        else:
-            with progress_bar("Running line profiler to identify performance bottlenecks..."):
-                line_profile_results = self.line_profiler_step(
-                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
-                )
+        with progress_bar("Running line profiler to identify performance bottlenecks..."):
+            line_profile_results = self.line_profiler_step(
+                code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+            )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
             if self.function_to_optimize.is_async and not not self._is_python:
@@ -2661,6 +2654,8 @@ class FunctionOptimizer:
                     pytest_min_loops=1,
                     pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
+                    js_project_root=self.test_cfg.js_project_root,
+                    line_profiler_output_file=line_profiler_output_file,
                 )
             elif testing_type == TestingMode.PERFORMANCE:
                 result_file_path, run_result = run_benchmarking_tests(
@@ -2725,6 +2720,11 @@ class FunctionOptimizer:
             if testing_type == TestingMode.PERFORMANCE:
                 results.perf_stdout = run_result.stdout
             return results, coverage_results
+        # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
+        # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON
+        if not self._is_python:
+            # Return TestResults to indicate tests ran, actual parsing happens in _line_profiler_step_javascript
+            return TestResults(test_results=[]), None
         results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
         return results, coverage_results
 
@@ -2781,6 +2781,16 @@ class FunctionOptimizer:
     def line_profiler_step(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
+        # Dispatch to language-specific implementation
+        if self._is_python:
+            return self._line_profiler_step_python(code_context, original_helper_code, candidate_index)
+        else:
+            return self._line_profiler_step_javascript(code_context, original_helper_code, candidate_index)
+
+    def _line_profiler_step_python(
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
+    ) -> dict:
+        """Python-specific line profiler using decorator imports."""
         # Check if candidate code contains JIT decorators - line profiler doesn't work with JIT compiled code
         candidate_fto_code = Path(self.function_to_optimize.file_path).read_text("utf-8")
         if contains_jit_decorator(candidate_fto_code):
@@ -2832,3 +2842,122 @@ class FunctionOptimizer:
                 f"Couldn't run line profiler for original function {self.function_to_optimize.function_name}"
             )
         return line_profile_results
+
+    def _line_profiler_step_javascript(
+        self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
+    ) -> dict:
+        """JavaScript/TypeScript-specific line profiler using source instrumentation."""
+        from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
+
+        source_file_path = Path(self.function_to_optimize.file_path)
+        line_profiler_output_file = get_run_tmp_file(Path("js_line_profile_results.json"))
+
+        # Read current source code (which has the optimized function)
+        current_source = source_file_path.read_text("utf-8")
+
+        # Create line profiler and instrument source
+        profiler = JavaScriptLineProfiler(output_file=line_profiler_output_file)
+
+        # Find the function in the CURRENT source file by name
+        # (the optimized code may have different line numbers than the original)
+        language_support = get_language_support(self.function_to_optimize.language)
+        if language_support is None:
+            logger.warning(f"No language support found for {self.function_to_optimize.language}")
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        discovered_functions = language_support.discover_functions(source_file_path)
+        func_info = None
+        for func in discovered_functions:
+            if func.name == self.function_to_optimize.function_name:
+                func_info = func
+                break
+
+        if func_info is None:
+            logger.warning(
+                f"Could not find function {self.function_to_optimize.function_name} in {source_file_path}"
+            )
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        try:
+            console.rule()
+
+            # Instrument source code
+            instrumented_source = profiler.instrument_source(
+                source=current_source,
+                file_path=source_file_path,
+                functions=[func_info],
+            )
+
+            # Write instrumented code to source file
+            source_file_path.write_text(instrumented_source, encoding="utf-8")
+            logger.debug(f"Wrote instrumented source to {source_file_path}")
+
+            test_env = self.get_test_env(
+                codeflash_loop_index=0, codeflash_test_iteration=candidate_index, codeflash_tracer_disable=1
+            )
+
+            # Run tests (behavioral tests work since instrumentation is in source)
+            line_profile_results, _ = self.run_and_parse_tests(
+                testing_type=TestingMode.LINE_PROFILE,
+                test_env=test_env,
+                test_files=self.test_files,
+                optimization_iteration=0,
+                testing_time=TOTAL_LOOPING_TIME_EFFECTIVE,
+                enable_coverage=False,
+                code_context=code_context,
+                line_profiler_output_file=line_profiler_output_file,
+            )
+
+        except Exception as e:
+            logger.warning(f"JavaScript line profiling failed: {e}")
+            return {"timings": {}, "unit": 0, "str_out": ""}
+        finally:
+            # Restore source code (remove instrumentation)
+            source_file_path.write_text(current_source, encoding="utf-8")
+            logger.debug(f"Restored source to {source_file_path}")
+
+        # Parse results if we got a dict back (success case from Python path)
+        if isinstance(line_profile_results, dict) and line_profile_results.get("str_out"):
+            return line_profile_results
+
+        # For JavaScript, try to parse results from output file
+        # This should be checked before treating empty TestResults as timeout
+        if line_profiler_output_file.exists():
+            parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
+            if parsed_results.get("timings"):
+                # Format output string for display
+                str_out = FunctionOptimizer._format_js_line_profile_output(parsed_results)
+                return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
+
+        # Handle timeout or other failures (only if no output file was created)
+        if isinstance(line_profile_results, TestResults) and not line_profile_results.test_results:
+            logger.warning(
+                f"Timeout occurred while running line profiler for {self.function_to_optimize.function_name}"
+            )
+            return {"timings": {}, "unit": 0, "str_out": ""}
+
+        logger.warning(f"No line profiler output file found at {line_profiler_output_file}")
+        return {"timings": {}, "unit": 0, "str_out": ""}
+
+    @staticmethod
+    def _format_js_line_profile_output(parsed_results: dict) -> str:
+        """Format JavaScript line profiler results for display."""
+        if not parsed_results.get("timings"):
+            return ""
+
+        lines = ["Line Profile Results:"]
+        for file_path, line_data in parsed_results.get("timings", {}).items():
+            lines.append(f"\nFile: {file_path}")
+            lines.append("-" * 60)
+            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}")
+            lines.append("-" * 60)
+
+            total_time = sum(data.get("time_ns", 0) for data in line_data.values())
+            for line_num, data in sorted(line_data.items()):
+                hits = data.get("hits", 0)
+                time_ns = data.get("time_ns", 0)
+                time_ms = time_ns / 1e6
+                pct = (time_ns / total_time * 100) if total_time > 0 else 0
+                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%")
+
+        return "\n".join(lines)

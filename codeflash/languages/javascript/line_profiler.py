@@ -82,46 +82,44 @@ class JavaScriptLineProfiler:
         """Generate JavaScript code for profiler initialization."""
         return f"""
 // Codeflash line profiler initialization
+// @ts-nocheck
 const {self.profiler_var} = {{
     stats: {{}},
-    startTime: process.hrtime.bigint(),
+    startTime: Date.now(),
+    lastLineTime: Date.now(),
 
-    recordLine: function(file, line) {{
-        const key = `${{file}}:${{line}}`;
+    totalHits: 0,
+    hit: function(file, line) {{
+        const now = Date.now();
+        const key = file + ':' + line;
         if (!this.stats[key]) {{
-            this.stats[key] = {{ hits: 0, time: 0n, file: file, line: line }};
+            this.stats[key] = {{ hits: 0, time: 0, file: file, line: line }};
         }}
-        const start = process.hrtime.bigint();
-        return () => {{
-            const end = process.hrtime.bigint();
-            this.stats[key].hits++;
-            this.stats[key].time += (end - start);
-        }};
+        this.stats[key].hits++;
+        this.stats[key].time += (now - this.lastLineTime);
+        this.lastLineTime = now;
+        this.totalHits++;
+        // Save every 100 hits to ensure we capture results even with --forceExit
+        if (this.totalHits % 100 === 0) {{
+            this.save();
+        }}
     }},
 
     save: function() {{
         const fs = require('fs');
-        const path = require('path');
-        const outputDir = path.dirname('{self.output_file.as_posix()}');
-        if (!fs.existsSync(outputDir)) {{
-            fs.mkdirSync(outputDir, {{ recursive: true }});
+        const pathModule = require('path');
+        const outputDir = pathModule.dirname('{self.output_file.as_posix()}');
+        try {{
+            if (!fs.existsSync(outputDir)) {{
+                fs.mkdirSync(outputDir, {{ recursive: true }});
+            }}
+            fs.writeFileSync(
+                '{self.output_file.as_posix()}',
+                JSON.stringify(this.stats, null, 2)
+            );
+        }} catch (e) {{
+            console.error('Failed to save line profile results:', e);
         }}
-
-        // Convert BigInt to string for JSON serialization
-        const serializable = {{}};
-        for (const [key, value] of Object.entries(this.stats)) {{
-            serializable[key] = {{
-                hits: value.hits,
-                time: value.time.toString(),
-                file: value.file,
-                line: value.line
-            }};
-        }}
-
-        fs.writeFileSync(
-            '{self.output_file.as_posix()}',
-            JSON.stringify(serializable, null, 2)
-        );
     }}
 }};
 """
@@ -129,10 +127,16 @@ const {self.profiler_var} = {{
     def _generate_profiler_save(self) -> str:
         """Generate JavaScript code to save profiler results."""
         return f"""
-// Save profiler results on process exit
+// Save profiler results on process exit and periodically
+// Use beforeExit for graceful shutdowns
+process.on('beforeExit', () => {self.profiler_var}.save());
 process.on('exit', () => {self.profiler_var}.save());
 process.on('SIGINT', () => {{ {self.profiler_var}.save(); process.exit(); }});
 process.on('SIGTERM', () => {{ {self.profiler_var}.save(); process.exit(); }});
+
+// For Jest --forceExit compatibility, save periodically (every 500ms)
+const __codeflash_save_interval__ = setInterval(() => {self.profiler_var}.save(), 500);
+if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // Don't keep process alive
 """
 
     def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path) -> list[str]:
@@ -162,17 +166,22 @@ process.on('SIGTERM', () => {{ {self.profiler_var}.save(); process.exit(); }});
             return func_lines
 
         # Add profiling to each executable line
-        for i, line in enumerate(func_lines, start=func.start_line):
-            if i in executable_lines and line.strip() and not line.strip().startswith("//"):
+        # executable_lines contains 1-indexed line numbers within the function snippet
+        for local_idx, line in enumerate(func_lines):
+            local_line_num = local_idx + 1  # 1-indexed within function
+            global_line_num = func.start_line + local_idx  # Global line number in original file
+            stripped = line.strip()
+
+            # Skip empty lines, comments, and closing braces
+            if local_line_num in executable_lines and stripped and not stripped.startswith("//") and stripped != "}":
                 # Get indentation
                 indent = len(line) - len(line.lstrip())
                 indent_str = " " * indent
 
-                # Add profiling wrapper
+                # Add hit() call before the line
                 profiled_line = (
-                    f"{indent_str}const __prof_{i}__ = {self.profiler_var}.recordLine('{file_path.as_posix()}', {i});\n"
-                    f"{line.rstrip()}\n"
-                    f"{indent_str}__prof_{i}__();\n"
+                    f"{indent_str}{self.profiler_var}.hit('{file_path.as_posix()}', {global_line_num});\n"
+                    f"{line}"
                 )
                 instrumented_lines.append(profiled_line)
             else:
