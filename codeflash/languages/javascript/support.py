@@ -129,6 +129,23 @@ class JavaScriptSupport:
             logger.warning(f"Failed to parse {file_path}: {e}")
             return []
 
+    def _get_test_patterns(self) -> list[str]:
+        """Get test file patterns for this language.
+
+        Override in subclasses to provide language-specific patterns.
+
+        Returns:
+            List of glob patterns for test files.
+        """
+        return [
+            "*.test.js",
+            "*.test.jsx",
+            "*.spec.js",
+            "*.spec.jsx",
+            "__tests__/**/*.js",
+            "__tests__/**/*.jsx",
+        ]
+
     def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests via static analysis.
 
@@ -145,15 +162,8 @@ class JavaScriptSupport:
         """
         result: dict[str, list[TestInfo]] = {}
 
-        # Find all test files (Jest conventions)
-        test_patterns = [
-            "*.test.js",
-            "*.test.jsx",
-            "*.spec.js",
-            "*.spec.jsx",
-            "__tests__/**/*.js",
-            "__tests__/**/*.jsx",
-        ]
+        # Find all test files using language-specific patterns
+        test_patterns = self._get_test_patterns()
 
         test_files: list[Path] = []
         for pattern in test_patterns:
@@ -918,3 +928,81 @@ class TypeScriptSupport(JavaScriptSupport):
     def file_extensions(self) -> tuple[str, ...]:
         """File extensions for TypeScript files."""
         return (".ts", ".tsx", ".mts")
+
+    def _get_test_patterns(self) -> list[str]:
+        """Get test file patterns for TypeScript.
+
+        Includes TypeScript patterns plus JavaScript patterns for mixed projects.
+
+        Returns:
+            List of glob patterns for test files.
+        """
+        return [
+            "*.test.ts",
+            "*.test.tsx",
+            "*.spec.ts",
+            "*.spec.tsx",
+            "__tests__/**/*.ts",
+            "__tests__/**/*.tsx",
+        ] + super()._get_test_patterns()
+
+    def get_test_file_suffix(self) -> str:
+        """Get the test file suffix for TypeScript.
+
+        Returns:
+            Jest test file suffix for TypeScript.
+        """
+        return ".test.ts"
+
+    def validate_syntax(self, source: str) -> bool:
+        """Check if TypeScript source code is syntactically valid.
+
+        Uses tree-sitter TypeScript parser to parse and check for errors.
+
+        Args:
+            source: Source code to validate.
+
+        Returns:
+            True if valid, False otherwise.
+        """
+        try:
+            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+            tree = analyzer.parse(source)
+            return not tree.root_node.has_error
+        except Exception:
+            return False
+
+    def format_code(self, source: str, file_path: Path | None = None) -> str:
+        """Format TypeScript code using prettier (if available).
+
+        Args:
+            source: Source code to format.
+            file_path: Optional file path for context.
+
+        Returns:
+            Formatted source code.
+        """
+        try:
+            # Determine file extension for prettier
+            if file_path:
+                stdin_filepath = str(file_path.name)
+            else:
+                stdin_filepath = "file.ts"
+
+            # Try to use prettier via npx
+            result = subprocess.run(
+                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
+                check=False,
+                input=source,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                return result.stdout
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        except Exception as e:
+            logger.debug(f"Prettier formatting failed: {e}")
+
+        return source

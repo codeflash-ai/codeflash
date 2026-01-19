@@ -78,7 +78,12 @@ class Optimizer:
         """
         current = file_path.parent if file_path.is_file() else file_path
         while current != current.parent:  # Stop at filesystem root
-            if (current / "package.json").exists() or (current / "jest.config.js").exists():
+            if (
+                (current / "package.json").exists()
+                or (current / "jest.config.js").exists()
+                or (current / "jest.config.ts").exists()
+                or (current / "tsconfig.json").exists()
+            ):
                 return current
             current = current.parent
         return None
