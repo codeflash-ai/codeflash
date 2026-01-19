@@ -31,6 +31,7 @@ def _find_node_project_root(file_path: Path) -> Path | None:
 
     Returns:
         The project root directory, or None if not found.
+
     """
     current = file_path.parent if file_path.is_file() else file_path
     while current != current.parent:  # Stop at filesystem root
@@ -53,6 +54,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     Args:
         project_root: The project root directory.
+
     """
     from codeflash.languages.javascript.runtime import get_all_runtime_files
 
@@ -87,6 +89,7 @@ def run_jest_behavioral_tests(
 
     Returns:
         Tuple of (result_file_path, subprocess_result, coverage_json_path, None).
+
     """
     result_file_path = get_run_tmp_file(Path("jest_results.xml"))
 
@@ -215,6 +218,7 @@ def run_jest_benchmarking_tests(
 
     Returns:
         Tuple of (result_file_path, subprocess_result).
+
     """
     result_file_path = get_run_tmp_file(Path("jest_perf_results.xml"))
 

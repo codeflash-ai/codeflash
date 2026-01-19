@@ -230,9 +230,7 @@ class Optimizer:
         # For JavaScript/TypeScript, skip Python-specific AST parsing
         if language in ("javascript", "typescript"):
             validated_original_code: dict[Path, ValidCode] = {
-                original_module_path: ValidCode(
-                    source_code=original_module_code, normalized_code=original_module_code
-                )
+                original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
             }
             return validated_original_code, None
 

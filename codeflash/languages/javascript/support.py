@@ -119,7 +119,7 @@ class JavaScriptSupport:
                         parents=tuple(parents),
                         is_async=func.is_async,
                         is_method=func.is_method,
-                        language=Language.JAVASCRIPT,
+                        language=self.language,
                     )
                 )
 
@@ -136,15 +136,9 @@ class JavaScriptSupport:
 
         Returns:
             List of glob patterns for test files.
+
         """
-        return [
-            "*.test.js",
-            "*.test.jsx",
-            "*.spec.js",
-            "*.spec.jsx",
-            "__tests__/**/*.js",
-            "__tests__/**/*.jsx",
-        ]
+        return ["*.test.js", "*.test.jsx", "*.spec.js", "*.spec.jsx", "__tests__/**/*.js", "__tests__/**/*.jsx"]
 
     def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests via static analysis.
@@ -936,6 +930,7 @@ class TypeScriptSupport(JavaScriptSupport):
 
         Returns:
             List of glob patterns for test files.
+
         """
         return [
             "*.test.ts",
@@ -951,6 +946,7 @@ class TypeScriptSupport(JavaScriptSupport):
 
         Returns:
             Jest test file suffix for TypeScript.
+
         """
         return ".test.ts"
 
@@ -964,6 +960,7 @@ class TypeScriptSupport(JavaScriptSupport):
 
         Returns:
             True if valid, False otherwise.
+
         """
         try:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
@@ -981,6 +978,7 @@ class TypeScriptSupport(JavaScriptSupport):
 
         Returns:
             Formatted source code.
+
         """
         try:
             # Determine file extension for prettier
