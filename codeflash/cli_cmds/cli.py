@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from argparse import SUPPRESS, ArgumentParser, Namespace
 from pathlib import Path
@@ -108,6 +109,12 @@ def parse_args() -> Namespace:
         help="(Deprecated) Async function optimization is now enabled by default. This flag is ignored.",
     )
     parser.add_argument(
+        "--server",
+        type=str,
+        choices=["local", "prod"],
+        help="AI service server to use: 'local' for localhost:8000, 'prod' for app.codeflash.ai",
+    )
+    parser.add_argument(
         "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
     )
 
@@ -123,6 +130,9 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         get_repo_owner_and_name,
     )
     from codeflash.code_utils.github_utils import require_github_app_or_exit
+
+    if args.server:
+        os.environ["CODEFLASH_AIS_SERVER"] = args.server
 
     is_init: bool = args.command.startswith("init") if args.command else False
     if args.verbose:
