@@ -20,7 +20,10 @@
         "groups": [
           {
             "group": "🚀 Quickstart",
-            "pages": ["getting-started/local-installation"]
+            "pages": [
+              "getting-started/local-installation",
+              "getting-started/javascript-installation"
+            ]
           },
           {
             "group": "🏠 Overview",
