@@ -8,11 +8,42 @@
  * @param n - The index of the Fibonacci number to calculate
  * @returns The nth Fibonacci number
  */
+const memo: Map<number, number> = new Map();
+
+/**
+ * Optimized fibonacci with memoization and a fast iterative path for integer n.
+ */
 export function fibonacci(n: number): number {
+    if (memo.has(n)) {
+        return memo.get(n)!;
+    }
+
     if (n <= 1) {
+        memo.set(n, n);
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast path for integer inputs: iterative O(n)
+    if (Number.isInteger(n)) {
+        // compute bottom-up to avoid recursion and repeated work
+        let a = 0;
+        let b = 1;
+        // handle n === 0 or n === 1 already above, so start at 2
+        for (let i = 2, len = n; i <= len; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        memo.set(0, 0);
+        memo.set(1, 1);
+        memo.set(n, b);
+        return b;
+    }
+
+    // Non-integer fallback: use memoized recursion to preserve original behavior
+    const result = fibonacci(n - 1) + fibonacci(n - 2);
+    memo.set(n, result);
+    return result;
 }
 
 /**
