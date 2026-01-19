@@ -4148,3 +4148,183 @@ def standardize_quotes(text: str) -> str:
     func_pos = result.index("def _build_quote_translation_table")
     assign_pos = result.index("_QUOTE_TABLE = _build_quote_translation_table()")
     assert func_pos < assign_pos, "Function definition must come before assignment that calls it"
+
+
+def test_add_global_assignments_forloop_calls_function_defined_later() -> None:
+    """Test that for-loops calling functions are placed AFTER those function definitions.
+
+    This is the specific bug case: NameError: name 'unicode_to_char' is not defined
+
+    When the original file has a function defined later (e.g., after standardize_quotes),
+    and the optimized code adds a for-loop that calls that function, the for-loop must
+    be placed AFTER the function definition, not at the top of the file.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code where unicode_to_char is defined AFTER the main function
+    # This mirrors the real-world case where the helper is at the bottom
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with a for-loop that calls unicode_to_char at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_UNICODE_VALUES = ["U+0022", "U+201C", "U+201D"]
+_TRANSLATION_TABLE = {}
+
+for code in _DOUBLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(code)
+    _TRANSLATION_TABLE[ord(ch)] = ord('"')
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        # Also try to actually execute it to catch runtime NameErrors
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError (for-loop placed before function): {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for code in _DOUBLE_QUOTE_UNICODE_VALUES" in result, "For-loop should be transferred"
+
+    # Verify correct ordering: function must come before the for-loop that calls it
+    func_pos = result.index("def unicode_to_char")
+    forloop_pos = result.index("for code in _DOUBLE_QUOTE_UNICODE_VALUES")
+    assert func_pos < forloop_pos, (
+        f"Function definition must come before for-loop that calls it.\n"
+        f"Function at position {func_pos}, for-loop at position {forloop_pos}\n"
+        f"Generated code:\n{result}"
+    )
+
+
+def test_add_global_assignments_forloop_uses_computed_variable() -> None:
+    """Test that for-loops are placed after variables they depend on.
+
+    This is the specific bug case: NameError: name '_double_chars' is not defined
+
+    When optimized code computes a variable and then uses it in a for-loop,
+    the assignment must come before the for-loop.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def process_text(text: str) -> str:
+    return text
+'''
+
+    # Optimized code where _double_chars is computed and then used in a for-loop
+    optimized_code = '''_UNICODE_VALUES = ["U+0022", "U+201C"]
+_double_chars = tuple(chr(int(u.replace("U+", ""), 16)) for u in _UNICODE_VALUES)
+
+_TRANSLATION = {}
+for ch in _double_chars:
+    _TRANSLATION[ord(ch)] = ord('"')
+
+def process_text(text: str) -> str:
+    return text.translate(_TRANSLATION)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError (variable not defined before for-loop): {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for ch in _double_chars" in result, "For-loop should be transferred"
+
+    # Verify correct ordering: _double_chars assignment must come before the for-loop
+    assign_pos = result.index("_double_chars = ")
+    forloop_pos = result.index("for ch in _double_chars")
+    assert assign_pos < forloop_pos, (
+        f"Variable assignment must come before for-loop that uses it.\n"
+        f"Assignment at position {assign_pos}, for-loop at position {forloop_pos}\n"
+        f"Generated code:\n{result}"
+    )
+
+
+def test_add_global_assignments_multiple_forloops_with_dependencies() -> None:
+    """Test that multiple for-loops with function dependencies are ordered correctly.
+
+    This tests the real-world case from standardize_quotes optimization where:
+    1. unicode_to_char function is used
+    2. Multiple for-loops build translation tables
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code with function defined after main function
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with multiple for-loops that depend on unicode_to_char
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {"U+0022": '"', "U+201C": '"'}
+single_quotes = {"U+0027": "'", "U+2018": "'"}
+
+_translation_table = {}
+
+for unicode_val in double_quotes:
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = ord('"')
+
+for unicode_val in single_quotes:
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = ord("'")
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_table)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify both for-loops are present
+    assert "for unicode_val in double_quotes" in result, "First for-loop should be transferred"
+    assert "for unicode_val in single_quotes" in result, "Second for-loop should be transferred"
+
+    # Verify correct ordering: function must come before all for-loops
+    func_pos = result.index("def unicode_to_char")
+    first_forloop_pos = result.index("for unicode_val in double_quotes")
+    second_forloop_pos = result.index("for unicode_val in single_quotes")
+
+    assert func_pos < first_forloop_pos, "Function must come before first for-loop"
+    assert func_pos < second_forloop_pos, "Function must come before second for-loop"

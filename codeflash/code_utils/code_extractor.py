@@ -479,9 +479,11 @@ class DottedImportCollector(cst.CSTVisitor):
 
 
 class ImportInserter(cst.CSTTransformer):
-    """Transformer that inserts global statements after the last import.
+    """Transformer that inserts global statements into a module.
 
-    Handles both simple statements and compound statements (for, while, with, try).
+    - Simple statements (assignments, etc.) are inserted after imports
+    - Compound statements (for, while, with, try) are inserted at the END of the module
+      because they may call functions that are defined later in the file
     """
 
     def __init__(self, global_statements: list[cst.BaseStatement], last_import_line: int) -> None:
@@ -493,23 +495,38 @@ class ImportInserter(cst.CSTTransformer):
         if not self.global_statements:
             return updated_node
 
-        # If no imports, insert at the beginning
-        if self.last_import_line == 0:
-            updated_body = list(self.global_statements) + list(updated_node.body)
-            return updated_node.with_changes(body=updated_body)
+        # Separate simple statements from compound statements
+        simple_statements = []
+        compound_statements = []
+        for stmt in self.global_statements:
+            if isinstance(stmt, cst.SimpleStatementLine):
+                simple_statements.append(stmt)
+            else:
+                # For, While, With, Try, If, etc. are compound statements
+                compound_statements.append(stmt)
 
-        # Find the insertion point: after the last import line
-        # last_import_line is 1-indexed, so compare with i + 1
-        insertion_index = 0
-        for i in range(len(updated_node.body)):
-            if i + 1 == self.last_import_line:
-                insertion_index = i + 1
-                break
-
-        # Insert global statements at the insertion point
         updated_body = list(updated_node.body)
-        for j, stmt in enumerate(self.global_statements):
-            updated_body.insert(insertion_index + j, stmt)
+
+        # Insert simple statements after imports (or at beginning if no imports)
+        if simple_statements:
+            if self.last_import_line == 0:
+                # No imports, insert at the beginning
+                for j, stmt in enumerate(simple_statements):
+                    updated_body.insert(j, stmt)
+            else:
+                # Find insertion point after last import
+                insertion_index = 0
+                for i in range(len(updated_body)):
+                    if i + 1 == self.last_import_line:
+                        insertion_index = i + 1
+                        break
+                for j, stmt in enumerate(simple_statements):
+                    updated_body.insert(insertion_index + j, stmt)
+
+        # Append compound statements at the END of the module
+        # This ensures they run after all function definitions
+        if compound_statements:
+            updated_body.extend(compound_statements)
 
         return updated_node.with_changes(body=updated_body)
 
