@@ -138,6 +138,8 @@ def create_pr(args: Namespace) -> None:
         optimization_review="",
         root_dir=git_root_dir(),
         git_remote=getattr(args, "git_remote", None),
+        precomputed_test_report=func_result.test_report,
+        precomputed_loop_count=func_result.loop_count,
     )
 
     # Cleanup results file after successful PR creation

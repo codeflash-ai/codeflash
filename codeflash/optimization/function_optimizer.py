@@ -486,6 +486,8 @@ class FunctionOptimizer:
         self.phase1_concolic_tests: str | None = None
         self.phase1_best_explanation: str | None = None
         self.phase1_best_runtime: int | None = None
+        self.phase1_test_report: dict[str, dict[str, int]] | None = None
+        self.phase1_loop_count: int | None = None
 
     def load_augmented_prompts(self) -> AugmentedPrompts | None:
         if not self.augmented_prompt_file:
@@ -549,6 +551,8 @@ class FunctionOptimizer:
             concolic_tests_source=self.phase1_concolic_tests,
             best_candidate_explanation=self.phase1_best_explanation,
             best_runtime_ns=self.phase1_best_runtime,
+            test_report=self.phase1_test_report,
+            loop_count=self.phase1_loop_count,
         )
 
     def write_phase1_output(self, function_result: Phase1FunctionResult) -> None:
@@ -2099,6 +2103,13 @@ class FunctionOptimizer:
             self.phase1_concolic_tests = concolic_tests
             self.phase1_best_explanation = new_explanation.explanation_message()
             self.phase1_best_runtime = best_optimization.runtime
+            # Capture test results for PR creation
+            self.phase1_test_report = {
+                tt.to_name(): counts
+                for tt, counts in new_explanation.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
+                if tt.to_name()  # Skip empty names
+            }
+            self.phase1_loop_count = new_explanation.winning_benchmarking_test_results.number_of_loops()
 
         data = {
             "original_code": original_code_combined,

@@ -186,6 +186,8 @@ def check_create_pr(
     root_dir: Path,
     git_remote: Optional[str] = None,
     optimization_review: str = "",
+    precomputed_test_report: Optional[dict[str, dict[str, int]]] = None,
+    precomputed_loop_count: Optional[int] = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -222,6 +224,8 @@ def check_create_pr(
                 benchmark_details=explanation.benchmark_details,
                 original_async_throughput=explanation.original_async_throughput,
                 best_async_throughput=explanation.best_async_throughput,
+                precomputed_test_report=precomputed_test_report,
+                precomputed_loop_count=precomputed_loop_count,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,
@@ -274,6 +278,8 @@ def check_create_pr(
                 benchmark_details=explanation.benchmark_details,
                 original_async_throughput=explanation.original_async_throughput,
                 best_async_throughput=explanation.best_async_throughput,
+                precomputed_test_report=precomputed_test_report,
+                precomputed_loop_count=precomputed_loop_count,
             ),
             existing_tests=existing_tests_source,
             generated_tests=generated_original_test_source,

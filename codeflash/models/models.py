@@ -945,6 +945,9 @@ class Phase1FunctionResult(BaseModel):
     concolic_tests_source: Optional[str] = None
     best_candidate_explanation: Optional[str] = None
     best_runtime_ns: Optional[int] = None
+    # Test results summary for PR creation
+    test_report: Optional[dict[str, dict[str, int]]] = None  # test_type_name -> {passed: int, failed: int}
+    loop_count: Optional[int] = None
 
 
 class Phase1Output(BaseModel):

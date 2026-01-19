@@ -23,13 +23,25 @@ class PrComment:
     benchmark_details: Optional[list[BenchmarkDetail]] = None
     original_async_throughput: Optional[int] = None
     best_async_throughput: Optional[int] = None
+    # Optional pre-computed values (used by create-pr CLI command)
+    precomputed_test_report: Optional[dict[str, dict[str, int]]] = None
+    precomputed_loop_count: Optional[int] = None
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
-        report_table = {
-            test_type.to_name(): result
-            for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
-            if test_type.to_name()
-        }
+        # Use precomputed values if available, otherwise compute from TestResults
+        if self.precomputed_test_report is not None:
+            report_table = self.precomputed_test_report
+        else:
+            report_table = {
+                test_type.to_name(): result
+                for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
+                if test_type.to_name()
+            }
+        loop_count = (
+            self.precomputed_loop_count
+            if self.precomputed_loop_count is not None
+            else self.winning_benchmarking_test_results.number_of_loops()
+        )
 
         result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
@@ -39,7 +51,7 @@ class PrComment:
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,
             "speedup_pct": self.speedup_pct,
-            "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
+            "loop_count": loop_count,
             "report_table": report_table,
             "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }

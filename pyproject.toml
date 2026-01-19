@@ -43,6 +43,7 @@ dependencies = [
     "codeflash-benchmark",
     "filelock",
     "pytest-asyncio>=1.2.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.urls]
