@@ -48,7 +48,13 @@ def get_names_in_expression(node: cst.BaseExpression) -> set[str]:
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
-    """Collects all global assignment statements."""
+    """Collects all global assignment statements.
+
+    Only collects simple assignments at module level, NOT inside:
+    - Functions/classes (scope_depth)
+    - If/else blocks (if_else_depth)
+    - For/while loops, with statements, try blocks (compound_depth)
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -57,6 +63,9 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         # Track scope depth to identify global assignments
         self.scope_depth = 0
         self.if_else_depth = 0
+        # Track other compound statements (for, while, with, try) where assignments
+        # inside them depend on loop variables or context managers
+        self.compound_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:  # noqa: ARG002
         self.scope_depth += 1
@@ -83,9 +92,37 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         # Else blocks are already counted as part of the if statement
         return True
 
+    def visit_For(self, node: cst.For) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_For(self, original_node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_While(self, node: cst.While) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_While(self, original_node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_With(self, node: cst.With) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_With(self, original_node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Try(self, node: cst.Try) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
     def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
-        # Only process global assignments (not inside functions, classes, etc.)
-        if self.scope_depth == 0 and self.if_else_depth == 0:  # We're at module level
+        # Only process global assignments (not inside functions, classes, loops, etc.)
+        if self.scope_depth == 0 and self.if_else_depth == 0 and self.compound_depth == 0:
             for target in node.targets:
                 if isinstance(target.target, cst.Name):
                     name = target.target.value
@@ -123,7 +160,13 @@ def find_insertion_index_after_imports(node: cst.Module) -> int:
 
 
 class GlobalAssignmentTransformer(cst.CSTTransformer):
-    """Transforms global assignments in the original file with those from the new file."""
+    """Transforms global assignments in the original file with those from the new file.
+
+    Only transforms simple assignments at module level, NOT inside:
+    - Functions/classes (scope_depth)
+    - If/else blocks (if_else_depth)
+    - For/while loops, with statements, try blocks (compound_depth)
+    """
 
     def __init__(self, new_assignments: dict[str, cst.Assign], new_assignment_order: list[str]) -> None:
         super().__init__()
@@ -132,6 +175,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.processed_assignments: set[str] = set()
         self.scope_depth = 0
         self.if_else_depth = 0
+        self.compound_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.scope_depth += 1
@@ -158,8 +202,36 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         # Else blocks are already counted as part of the if statement
         pass
 
+    def visit_For(self, node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_For(self, original_node: cst.For, updated_node: cst.For) -> cst.For:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_While(self, node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_While(self, original_node: cst.While, updated_node: cst.While) -> cst.While:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_With(self, node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_With(self, original_node: cst.With, updated_node: cst.With) -> cst.With:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_Try(self, node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_Try(self, original_node: cst.Try, updated_node: cst.Try) -> cst.Try:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
-        if self.scope_depth > 0 or self.if_else_depth > 0:
+        if self.scope_depth > 0 or self.if_else_depth > 0 or self.compound_depth > 0:
             return updated_node
 
         # Check if this is a global assignment we need to replace
@@ -243,12 +315,17 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
 
 class GlobalStatementCollector(cst.CSTVisitor):
-    """Visitor that collects all global statements (excluding imports and functions/classes)."""
+    """Visitor that collects all global statements (excluding imports and functions/classes).
+
+    Collects both simple statements and compound statements (for, while, with, try)
+    at module level.
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self.global_statements = []
+        self.global_statements: list[cst.BaseStatement] = []
         self.in_function_or_class = False
+        self.compound_depth = 0
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: ARG002
         # Don't visit inside classes
@@ -266,8 +343,44 @@ class GlobalStatementCollector(cst.CSTVisitor):
     def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.in_function_or_class = False
 
+    def visit_For(self, node: cst.For) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_For(self, original_node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_While(self, node: cst.While) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_While(self, original_node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_With(self, node: cst.With) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_With(self, original_node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Try(self, node: cst.Try) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
-        if not self.in_function_or_class:
+        if not self.in_function_or_class and self.compound_depth == 0:
             for statement in node.body:
                 # Skip imports
                 if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign)):
@@ -366,40 +479,42 @@ class DottedImportCollector(cst.CSTVisitor):
 
 
 class ImportInserter(cst.CSTTransformer):
-    """Transformer that inserts global statements after the last import."""
+    """Transformer that inserts global statements after the last import.
 
-    def __init__(self, global_statements: list[cst.SimpleStatementLine], last_import_line: int) -> None:
+    Handles both simple statements and compound statements (for, while, with, try).
+    """
+
+    def __init__(self, global_statements: list[cst.BaseStatement], last_import_line: int) -> None:
         super().__init__()
         self.global_statements = global_statements
         self.last_import_line = last_import_line
-        self.current_line = 0
-        self.inserted = False
-
-    def leave_SimpleStatementLine(
-        self,
-        original_node: cst.SimpleStatementLine,  # noqa: ARG002
-        updated_node: cst.SimpleStatementLine,
-    ) -> cst.Module:
-        self.current_line += 1
-
-        # If we're right after the last import and haven't inserted yet
-        if self.current_line == self.last_import_line and not self.inserted:
-            self.inserted = True
-            return cst.Module(body=[updated_node, *self.global_statements])
-
-        return cst.Module(body=[updated_node])
 
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
-        # If there were no imports, add at the beginning of the module
-        if self.last_import_line == 0 and not self.inserted:
-            updated_body = list(updated_node.body)
-            for stmt in reversed(self.global_statements):
-                updated_body.insert(0, stmt)
+        if not self.global_statements:
+            return updated_node
+
+        # If no imports, insert at the beginning
+        if self.last_import_line == 0:
+            updated_body = list(self.global_statements) + list(updated_node.body)
             return updated_node.with_changes(body=updated_body)
-        return updated_node
+
+        # Find the insertion point: after the last import line
+        # last_import_line is 1-indexed, so compare with i + 1
+        insertion_index = 0
+        for i in range(len(updated_node.body)):
+            if i + 1 == self.last_import_line:
+                insertion_index = i + 1
+                break
+
+        # Insert global statements at the insertion point
+        updated_body = list(updated_node.body)
+        for j, stmt in enumerate(self.global_statements):
+            updated_body.insert(insertion_index + j, stmt)
+
+        return updated_node.with_changes(body=updated_body)
 
 
-def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.SimpleStatementLine]]:
+def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.BaseStatement]]:
     """Extract global statements from source code."""
     module = cst.parse_module(source_code)
     collector = GlobalStatementCollector()

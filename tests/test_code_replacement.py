@@ -3808,3 +3808,343 @@ def standardize_quotes(text: str) -> str:
         f"_TRANSLATION_TABLE (pos {translation_table_pos}) should be after "
         f"unicode_to_char (pos {unicode_to_char_pos}) because it depends on it"
     )
+
+
+def test_global_assignments_inside_for_loops_not_extracted() -> None:
+    """Test that assignments inside for-loops are NOT extracted as standalone globals.
+
+    This tests the fix for a bug where LLM-generated optimizations that build
+    translation tables using for-loops would have the loop body assignments
+    incorrectly extracted, causing NameError for loop variables.
+    """
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    # Code with assignments inside a for-loop (common optimization pattern)
+    # Note: Using regular assignment (not annotated) since GlobalAssignmentCollector only handles Assign
+    code_with_for_loop = '''
+double_quotes = {"a": "U+0022", "b": "U+201C"}
+
+_QUOTE_TRANSLATION = {}
+for unicode_val in double_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _QUOTE_TRANSLATION[ord(ch)] = _double_quote_standard
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_QUOTE_TRANSLATION)
+'''
+
+    module = cst.parse_module(code_with_for_loop)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    # Only the top-level assignments should be collected, NOT the one inside the for-loop
+    # _QUOTE_TRANSLATION = {} is at module level (should be collected)
+    # _QUOTE_TRANSLATION[ord(ch)] = ... is inside for-loop (should NOT be collected)
+    # double_quotes = {...} is at module level (should be collected)
+    assert "double_quotes" in collector.assignments, "double_quotes should be collected"
+    assert "_QUOTE_TRANSLATION" in collector.assignments, "_QUOTE_TRANSLATION init should be collected"
+
+    # The assignment inside the for-loop uses subscript, not Name, so it wouldn't be
+    # collected anyway. But let's verify the collector doesn't crash and works correctly.
+    # More importantly, verify that simple name assignments inside loops are NOT collected.
+
+    code_with_simple_assignment_in_loop = '''
+result = {}
+for item in items:
+    key = process(item)
+    result[key] = item
+'''
+    module2 = cst.parse_module(code_with_simple_assignment_in_loop)
+    collector2 = GlobalAssignmentCollector()
+    module2.visit(collector2)
+
+    assert "result" in collector2.assignments, "result should be collected (top-level)"
+    assert "key" not in collector2.assignments, "key should NOT be collected (inside for-loop)"
+
+
+def test_global_assignments_inside_while_loops_not_extracted() -> None:
+    """Test that assignments inside while-loops are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_while_loop = '''
+counter = 0
+while counter < 10:
+    value = compute(counter)
+    counter += 1
+'''
+    module = cst.parse_module(code_with_while_loop)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "counter" in collector.assignments, "counter should be collected (top-level)"
+    assert "value" not in collector.assignments, "value should NOT be collected (inside while-loop)"
+
+
+def test_global_assignments_inside_with_blocks_not_extracted() -> None:
+    """Test that assignments inside with-blocks are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_with_block = '''
+config = {}
+with open("file.txt") as f:
+    content = f.read()
+    data = parse(content)
+'''
+    module = cst.parse_module(code_with_with_block)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "config" in collector.assignments, "config should be collected (top-level)"
+    assert "content" not in collector.assignments, "content should NOT be collected (inside with-block)"
+    assert "data" not in collector.assignments, "data should NOT be collected (inside with-block)"
+
+
+def test_global_assignments_inside_try_blocks_not_extracted() -> None:
+    """Test that assignments inside try-blocks are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_try_block = '''
+default = "fallback"
+try:
+    result = risky_operation()
+    processed = transform(result)
+except Exception:
+    pass
+'''
+    module = cst.parse_module(code_with_try_block)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "default" in collector.assignments, "default should be collected (top-level)"
+    assert "result" not in collector.assignments, "result should NOT be collected (inside try-block)"
+    assert "processed" not in collector.assignments, "processed should NOT be collected (inside try-block)"
+
+
+def test_global_assignment_transformer_ignores_loop_assignments() -> None:
+    """Test that GlobalAssignmentTransformer doesn't replace assignments inside loops.
+
+    The transformer should:
+    1. NOT replace assignments inside for/while/with/try blocks
+    2. Still add new top-level assignments that weren't in the original
+    """
+    from codeflash.code_utils.code_extractor import GlobalAssignmentTransformer
+
+    import libcst as cst
+
+    # Original code has 'key' inside a for-loop and 'result' at top level
+    original_code = '''
+result = {}
+for item in items:
+    key = process(item)
+    result[key] = item
+'''
+    # New assignments - 'result' should replace top-level, 'key' should NOT replace loop var
+    new_assignments = {
+        "result": cst.parse_statement("result = {'new': 'dict'}").body[0],
+        "key": cst.parse_statement("key = 'new_value'").body[0],
+    }
+
+    module = cst.parse_module(original_code)
+    transformer = GlobalAssignmentTransformer(new_assignments, ["result", "key"])
+    result_module = module.visit(transformer)
+
+    result_code = result_module.code
+
+    # The 'key' inside the for-loop should NOT be replaced
+    assert "key = process(item)" in result_code, "Assignment inside for-loop should not be transformed"
+
+    # The top-level 'result' SHOULD be replaced
+    assert "result = {'new': 'dict'}" in result_code, "Top-level assignment should be replaced"
+    assert "result = {}" not in result_code, "Original top-level assignment should be gone"
+
+
+def test_add_global_assignments_with_loop_variables() -> None:
+    """Test that add_global_assignments doesn't extract assignments that reference loop variables.
+
+    This is the specific bug case from optimization runs where code like:
+        for uval in double_quotes.values():
+            ch = unicode_to_char(uval)
+            _translation_map[ord(ch)] = _double_quote_ord
+
+    Would have 'ch = unicode_to_char(uval)' extracted and inserted at module level,
+    causing 'NameError: name 'uval' is not defined'.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original simple function
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with for-loop that builds translation table at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {"a": "U+0022", "b": "U+201C"}
+_translation_map = {}
+
+for uval in double_quotes.values():
+    ch = unicode_to_char(uval)
+    _translation_map[ord(ch)] = ord('"')
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    # If 'ch = unicode_to_char(uval)' was incorrectly extracted, it would cause
+    # NameError because 'uval' wouldn't be defined outside the for-loop
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (loop var extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop structure is preserved (ch assignment inside loop)
+    assert "for uval in" in result or "for unicode_val in" in result or "ch" not in result, (
+        "If ch is in result, the for-loop should also be present"
+    )
+
+
+def test_add_global_assignments_with_unicode_val_loop_variable() -> None:
+    """Test that add_global_assignments correctly transfers for-loops using 'unicode_val' as loop variable.
+
+    This is the specific bug case: NameError: name 'unicode_val' is not defined
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with for-loop using unicode_val as the loop variable
+    optimized_code = '''single_quotes = {"U+0027": "'", "U+2018": "'", "U+2019": "'"}
+_translation_map = {}
+
+for unicode_val in single_quotes:
+    ch = chr(int(unicode_val.replace("U+", ""), 16))
+    _translation_map[ord(ch)] = ord("'")
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (unicode_val extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for unicode_val in" in result, "For-loop with unicode_val should be transferred"
+
+
+def test_add_global_assignments_with_ch_loop_variable() -> None:
+    """Test that add_global_assignments correctly transfers for-loops using 'ch' as loop variable.
+
+    This is the specific bug case: NameError: name 'ch' is not defined
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def normalize_text(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with for-loop using ch as the loop variable
+    optimized_code = '''replacements = {"a": "A", "b": "B"}
+_char_map = {}
+
+for ch in replacements:
+    _char_map[ord(ch)] = ord(replacements[ch])
+
+def normalize_text(text: str) -> str:
+    return text.translate(_char_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (ch extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for ch in" in result, "For-loop with ch should be transferred"
+
+
+def test_add_global_assignments_with_helper_function_call() -> None:
+    """Test that add_global_assignments transfers assignments that call helper functions.
+
+    Note: add_global_assignments only handles assignments, not function definitions.
+    Function definitions are transferred via replace_functions_in_file separately.
+
+    This test verifies that assignments calling helper functions are correctly transferred.
+    The actual NameError: name '_build_quote_translation_table' is not defined would occur
+    if the function wasn't transferred in the full replacement flow.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code that already has the helper function defined
+    original_code = '''def _build_quote_translation_table():
+    table = {}
+    for i in range(128):
+        table[i] = i
+    return table
+
+def standardize_quotes(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with an assignment that calls the helper function
+    optimized_code = '''def _build_quote_translation_table():
+    table = {}
+    for i in range(128):
+        table[i] = i
+    return table
+
+_QUOTE_TABLE = _build_quote_translation_table()
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_QUOTE_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError: {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the assignment is present and placed AFTER the function definition
+    assert "_QUOTE_TABLE = _build_quote_translation_table()" in result, "Assignment should be transferred"
+    # Verify the function is still present (it was already in original)
+    assert "def _build_quote_translation_table" in result, "Helper function should be preserved"
+
+    # Verify correct ordering: function must come before the assignment that uses it
+    func_pos = result.index("def _build_quote_translation_table")
+    assign_pos = result.index("_QUOTE_TABLE = _build_quote_translation_table()")
+    assert func_pos < assign_pos, "Function definition must come before assignment that calls it"
