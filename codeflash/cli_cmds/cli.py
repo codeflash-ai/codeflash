@@ -117,6 +117,22 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
     )
+    parser.add_argument(
+        "--augmented",
+        action="store_true",
+        help="Enable augmented optimization mode for two-phase optimization workflow",
+    )
+    parser.add_argument(
+        "--augmented-prompt-file",
+        type=str,
+        help="Path to YAML file with custom system_prompt and user_prompt for Phase 2",
+    )
+    parser.add_argument(
+        "--augmented-output",
+        type=str,
+        default="codeflash_phase1_results.json",
+        help="Path to write Phase 1 results JSON (default: codeflash_phase1_results.json)",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -174,6 +190,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             "The --async flag is deprecated and will be removed in a future version. "
             "Async function optimization is now enabled by default."
         )
+
+    if args.augmented_prompt_file and not args.augmented:
+        exit_with_message("--augmented-prompt-file requires --augmented flag", error_on_exit=True)
+
+    if args.augmented_prompt_file:
+        prompt_file = Path(args.augmented_prompt_file)
+        if not prompt_file.exists():
+            exit_with_message(f"Augmented prompt file {args.augmented_prompt_file} does not exist", error_on_exit=True)
+        args.augmented_prompt_file = prompt_file.resolve()
 
     return args
 

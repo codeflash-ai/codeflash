@@ -4,16 +4,19 @@ import ast
 import concurrent.futures
 import logging
 import os
+import platform
 import queue
 import random
 import subprocess
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
 import sentry_sdk
+import yaml
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -81,6 +84,7 @@ from codeflash.models.models import (
     AdaptiveOptimizedCandidate,
     AIServiceAdaptiveOptimizeRequest,
     AIServiceCodeRepairRequest,
+    AugmentedPrompts,
     BestOptimization,
     CandidateEvaluationContext,
     CodeOptimizationContext,
@@ -92,6 +96,9 @@ from codeflash.models.models import (
     OptimizedCandidateResult,
     OptimizedCandidateSource,
     OriginalCodeBaseline,
+    Phase1CandidateResult,
+    Phase1FunctionResult,
+    Phase1Output,
     TestFile,
     TestFiles,
     TestingMode,
@@ -468,6 +475,100 @@ class FunctionOptimizer:
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
         self.is_numerical_code: bool | None = None
 
+        self.augmented_mode = getattr(args, "augmented", False) if args else False
+        self.augmented_prompt_file = getattr(args, "augmented_prompt_file", None) if args else None
+        self.augmented_output = getattr(args, "augmented_output", "codeflash_phase1_results.json") if args else None
+        self.augmented_prompts: AugmentedPrompts | None = None
+        self.phase1_candidate_results: list[Phase1CandidateResult] = []
+
+    def load_augmented_prompts(self) -> AugmentedPrompts | None:
+        if not self.augmented_prompt_file:
+            return None
+        prompt_path = Path(self.augmented_prompt_file)
+        if not prompt_path.exists():
+            logger.error(f"Augmented prompt file not found: {prompt_path}")
+            return None
+        with prompt_path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if not data or "system_prompt" not in data or "user_prompt" not in data:
+            logger.error("Augmented prompt file must contain 'system_prompt' and 'user_prompt' keys")
+            return None
+        return AugmentedPrompts(system_prompt=data["system_prompt"], user_prompt=data["user_prompt"])
+
+    def collect_phase1_candidate_result(
+        self,
+        candidate: OptimizedCandidate,
+        eval_ctx: CandidateEvaluationContext,
+        test_failures: list[str] | None = None,
+        test_diffs: list[dict] | None = None,
+    ) -> Phase1CandidateResult:
+        speedup = eval_ctx.get_speedup_ratio(candidate.optimization_id)
+        runtime = eval_ctx.get_optimized_runtime(candidate.optimization_id)
+        is_correct = eval_ctx.is_correct.get(candidate.optimization_id, False)
+        line_profiler = eval_ctx.optimized_line_profiler_results.get(candidate.optimization_id)
+        return Phase1CandidateResult(
+            optimization_id=candidate.optimization_id,
+            source_code=candidate.source_code.markdown,
+            explanation=candidate.explanation,
+            speedup_ratio=speedup,
+            runtime_ns=int(runtime) if runtime else None,
+            is_correct=is_correct,
+            line_profiler_results=line_profiler,
+            test_failures=test_failures,
+            test_diffs=test_diffs,
+        )
+
+    def get_phase1_function_result(
+        self,
+        code_context: CodeOptimizationContext,
+        original_runtime_ns: int | None,
+        original_line_profiler_results: str | None,
+        best_candidate_id: str | None,
+        best_speedup_ratio: float | None,
+    ) -> Phase1FunctionResult:
+        return Phase1FunctionResult(
+            function_name=self.function_to_optimize.function_name,
+            trace_id=self.function_trace_id,
+            original_source_code=code_context.read_writable_code.markdown,
+            dependency_code=code_context.read_only_context_code if code_context.read_only_context_code else None,
+            original_runtime_ns=original_runtime_ns,
+            original_line_profiler_results=original_line_profiler_results,
+            candidates=self.phase1_candidate_results,
+            best_candidate_id=best_candidate_id,
+            best_speedup_ratio=best_speedup_ratio,
+        )
+
+    def write_phase1_output(self, function_result: Phase1FunctionResult) -> None:
+        from codeflash.version import __version__ as codeflash_version
+
+        output_path = Path(self.augmented_output) if self.augmented_output else Path("codeflash_phase1_results.json")
+        output = Phase1Output(
+            codeflash_version=codeflash_version,
+            timestamp=datetime.now(tz=timezone.utc).isoformat(),
+            python_version=platform.python_version(),
+            functions=[function_result],
+            total_functions=1,
+            successful_optimizations=1 if function_result.best_candidate_id else 0,
+        )
+        with output_path.open("w", encoding="utf-8") as f:
+            f.write(output.model_dump_json(indent=2))
+        logger.info(f"Phase 1 results written to {output_path}")
+
+    def get_augmented_candidates(self, code_context: CodeOptimizationContext) -> list[OptimizedCandidate]:
+        if not self.augmented_prompts:
+            logger.error("Augmented prompts not loaded")
+            return []
+        candidates = self.aiservice_client.augmented_optimize(
+            source_code=code_context.read_writable_code.markdown,
+            system_prompt=self.augmented_prompts.system_prompt,
+            user_prompt=self.augmented_prompts.user_prompt,
+            trace_id=self.function_trace_id,
+            dependency_code=code_context.read_only_context_code if code_context.read_only_context_code else None,
+            n_candidates=3,
+        )
+        logger.info(f"Received {len(candidates)} augmented optimization candidates")
+        return candidates
+
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
@@ -633,6 +734,7 @@ class FunctionOptimizer:
                 read_only_context_code=code_context.read_only_context_code,
                 run_experiment=should_run_experiment,
                 is_numerical_code=self.is_numerical_code,
+                code_context=code_context,
             )
 
             concurrent.futures.wait([future_tests, future_optimizations])
@@ -700,6 +802,23 @@ class FunctionOptimizer:
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)
+
+        if self.augmented_mode:
+            function_result = self.get_phase1_function_result(
+                code_context=code_context,
+                original_runtime_ns=original_code_baseline.runtime if original_code_baseline else None,
+                original_line_profiler_results=original_code_baseline.line_profile_results.get("str_out")
+                if original_code_baseline and original_code_baseline.line_profile_results
+                else None,
+                best_candidate_id=best_optimization.candidate.optimization_id if best_optimization else None,
+                best_speedup_ratio=performance_gain(
+                    original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime
+                )
+                if best_optimization
+                else None,
+            )
+            self.write_phase1_output(function_result)
+
         if not best_optimization:
             return Failure(f"No best optimizations found for function {self.function_to_optimize.qualified_name}")
         return Success(best_optimization)
@@ -1195,6 +1314,11 @@ class FunctionOptimizer:
                 exp_type=exp_type,
             )
 
+        if self.augmented_mode:
+            for candidate in candidates:
+                phase1_result = self.collect_phase1_candidate_result(candidate=candidate, eval_ctx=eval_ctx)
+                self.phase1_candidate_results.append(phase1_result)
+
         return best_optimization
 
     def call_adaptive_optimize(
@@ -1601,8 +1725,31 @@ class FunctionOptimizer:
         read_only_context_code: str,
         run_experiment: bool = False,  # noqa: FBT001, FBT002
         is_numerical_code: bool | None = None,  # noqa: FBT001
+        code_context: CodeOptimizationContext | None = None,
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
+        if self.augmented_mode and self.augmented_prompt_file:
+            self.augmented_prompts = self.load_augmented_prompts()
+            if not self.augmented_prompts:
+                return Failure("Failed to load augmented prompts from file")
+            if code_context is None:
+                return Failure("Code context required for augmented mode")
+            augmented_candidates = self.get_augmented_candidates(code_context)
+            if not augmented_candidates:
+                return Failure(
+                    f"/!\\ NO AUGMENTED OPTIMIZATIONS GENERATED for {self.function_to_optimize.function_name}"
+                )
+            future_references = self.executor.submit(
+                get_opt_review_metrics,
+                self.function_to_optimize_source_code,
+                self.function_to_optimize.file_path,
+                self.function_to_optimize.qualified_name,
+                self.project_root,
+                self.test_cfg.tests_root,
+            )
+            function_references = future_references.result()
+            return Success((OptimizationSet(control=augmented_candidates, experiment=None), function_references))
+
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
         future_optimization_candidates = self.executor.submit(
             self.aiservice_client.optimize_python_code,

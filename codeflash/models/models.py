@@ -489,6 +489,7 @@ class OptimizedCandidateSource(str, Enum):
     REPAIR = "REPAIR"
     ADAPTIVE = "ADAPTIVE"
     JIT_REWRITE = "JIT_REWRITE"
+    AUGMENTED = "AUGMENTED"
 
 
 @dataclass(frozen=True)
@@ -913,3 +914,41 @@ class TestResults(BaseModel):  # noqa: PLW1641
                 return False
         sys.setrecursionlimit(original_recursion_limit)
         return True
+
+
+class Phase1CandidateResult(BaseModel):
+    optimization_id: str
+    source_code: str
+    explanation: str
+    speedup_ratio: Optional[float] = None
+    runtime_ns: Optional[int] = None
+    is_correct: bool
+    line_profiler_results: Optional[str] = None
+    test_failures: Optional[list[str]] = None
+    test_diffs: Optional[list[dict]] = None
+
+
+class Phase1FunctionResult(BaseModel):
+    function_name: str
+    trace_id: str
+    original_source_code: str
+    dependency_code: Optional[str] = None
+    original_runtime_ns: Optional[int] = None
+    original_line_profiler_results: Optional[str] = None
+    candidates: list[Phase1CandidateResult]
+    best_candidate_id: Optional[str] = None
+    best_speedup_ratio: Optional[float] = None
+
+
+class Phase1Output(BaseModel):
+    codeflash_version: str
+    timestamp: str
+    python_version: str
+    functions: list[Phase1FunctionResult]
+    total_functions: int
+    successful_optimizations: int
+
+
+class AugmentedPrompts(BaseModel):
+    system_prompt: str
+    user_prompt: str

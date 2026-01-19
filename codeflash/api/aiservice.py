@@ -193,6 +193,75 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def augmented_optimize(  # noqa: D417
+        self,
+        source_code: str,
+        system_prompt: str,
+        user_prompt: str,
+        trace_id: str,
+        dependency_code: str | None = None,
+        n_candidates: int = 3,
+    ) -> list[OptimizedCandidate]:
+        """Optimize code with custom prompts via /ai/augmented-optimize endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize (markdown format).
+        - system_prompt (str): Custom system prompt for the LLM.
+        - user_prompt (str): Custom user prompt for the LLM.
+        - trace_id (str): Trace id of optimization run.
+        - dependency_code (str | None): Optional dependency code context.
+        - n_candidates (int): Number of candidates to generate (max 3).
+
+        Returns
+        -------
+        - list[OptimizedCandidate]: A list of Optimization Candidates.
+
+        """
+        logger.info("Generating augmented optimization candidates…")
+        console.rule()
+        start_time = time.perf_counter()
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
+
+        payload = {
+            "source_code": source_code,
+            "dependency_code": dependency_code,
+            "trace_id": trace_id,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "n_candidates": min(n_candidates, 3),
+            "python_version": platform.python_version(),
+            "codeflash_version": codeflash_version,
+            "current_username": get_last_commit_author_if_pr_exists(None),
+            "repo_owner": git_repo_owner,
+            "repo_name": git_repo_name,
+        }
+        logger.debug(f"Sending augmented optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
+
+        try:
+            response = self.make_ai_service_request("/augmented-optimize", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating augmented optimization candidates: {e}")
+            ph("cli-augmented-optimize-error-caught", {"error": str(e)})
+            console.rule()
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            end_time = time.perf_counter()
+            logger.debug(f"!lsp|Generating augmented optimizations took {end_time - start_time:.2f} seconds.")
+            logger.info(f"!lsp|Received {len(optimizations_json)} augmented optimization candidates.")
+            console.rule()
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.AUGMENTED)
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating augmented optimization candidates: {response.status_code} - {error}")
+        ph("cli-augmented-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
     def get_jit_rewritten_code(  # noqa: D417
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
