@@ -592,18 +592,31 @@ class Optimizer:
 
     @staticmethod
     def find_leftover_instrumented_test_files(test_root: Path) -> list[Path]:
-        """Search for all paths within the test_root that match the following patterns.
+        """Search for all paths within the test_root that match instrumented test file patterns.
 
+        Python patterns:
         - 'test.*__perf_test_{0,1}.py'
         - 'test_.*__unit_test_{0,1}.py'
         - 'test_.*__perfinstrumented.py'
         - 'test_.*__perfonlyinstrumented.py'
+
+        JavaScript/TypeScript patterns:
+        - '*__perfinstrumented.test.{js,ts,jsx,tsx}'
+        - '*__perfonlyinstrumented.test.{js,ts,jsx,tsx}'
+        - '*__perfinstrumented.spec.{js,ts,jsx,tsx}'
+        - '*__perfonlyinstrumented.spec.{js,ts,jsx,tsx}'
+
         Returns a list of matching file paths.
         """
         import re
 
         pattern = re.compile(
-            r"(?:test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py)$"
+            r"(?:"
+            # Python patterns
+            r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
+            # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
+            r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)"
+            r")$"
         )
 
         return [

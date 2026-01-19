@@ -143,50 +143,107 @@ def _instrument_js_test_code(
     # Track invocations for unique IDs
     invocation_counter = [0]
 
-    # Track current test name for better invocation IDs
-    current_test_name = ["unknown"]
-
     def get_test_context(code_before: str) -> str:
         """Extract the current test name from preceding code."""
-        # Look for test('name', ...) or it('name', ...) pattern
-        test_match = re.search(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]", code_before[-500:])
-        if test_match:
-            return test_match.group(1).replace(" ", "_").replace("'", "")[:50]
+        # Look for ALL test('name', ...) or it('name', ...) patterns and get the LAST one
+        # This ensures we get the most recent test context
+        test_matches = list(re.finditer(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]", code_before))
+        if test_matches:
+            last_match = test_matches[-1]
+            return last_match.group(1).replace(" ", "_").replace("'", "")[:50]
         return "test"
 
-    def wrap_expect_call(match: re.Match) -> str:
-        """Wrap a function call inside expect() with codeflash capture."""
-        leading_ws = match.group(1)
-        args = match.group(2)
-        suffix = match.group(3)
+    # Use a function-based approach to handle nested parentheses properly
+    # The simple regex [^)]* fails for nested parens like func(getN(5))
 
-        invocation_counter[0] += 1
-        test_context = get_test_context(code[: match.start()])
-        invocation_id = f"{test_context}_{invocation_counter[0]}"
+    def find_and_replace_expect_calls(code: str) -> str:
+        """Find expect(func(...)) patterns and replace them, handling nested parens."""
+        result = []
+        i = 0
+        pattern = re.compile(rf"(\s*)expect\s*\(\s*{re.escape(func_name)}\s*\(")
 
-        # Generate the wrapped call
-        # expect(func(args)).toBe(x) -> expect(codeflash.capture(...)).toBe(x)
-        wrapped = (
-            f"{leading_ws}expect(codeflash.{capture_func}('{qualified_name}', "
-            f"() => {func_name}({args}), {{"
-            f"testFunctionName: '{test_context}', "
-            f"testModulePath: '{test_file_path}', "
-            f"functionGettingTested: '{qualified_name}', "
-            f"invocationId: '{invocation_id}'"
-            f"}})){suffix}"
-        )
+        while i < len(code):
+            match = pattern.search(code, i)
+            if not match:
+                result.append(code[i:])
+                break
 
-        return wrapped
+            # Add everything before the match
+            result.append(code[i:match.start()])
 
-    # Pattern to match expect(func(args)).toBe/toEqual/etc patterns
-    # This pattern handles nested parentheses in arguments better
-    # Group 1: leading whitespace/expect(
-    # Group 2: function arguments (may contain nested parens)
-    # Group 3: ).toBe/toEqual suffix
+            leading_ws = match.group(1)
 
-    # Match expect(funcName(args)).toXXX(value) pattern
-    expect_pattern = rf"(\s*expect\s*\(){re.escape(func_name)}\(([^)]*)\)(\)\.to\w+\([^)]*\))"
-    code = re.sub(expect_pattern, wrap_expect_call, code)
+            # Find the matching closing paren of func_name(
+            func_call_start = match.end() - 1  # Position of ( after func_name
+            args_start = match.end()
+
+            # Count parentheses to find matching close
+            paren_depth = 1
+            pos = args_start
+            while pos < len(code) and paren_depth > 0:
+                if code[pos] == '(':
+                    paren_depth += 1
+                elif code[pos] == ')':
+                    paren_depth -= 1
+                pos += 1
+
+            if paren_depth != 0:
+                # Unmatched parens, skip this match
+                result.append(code[match.start():match.end()])
+                i = match.end()
+                continue
+
+            # pos is now right after the closing ) of func_name(args)
+            args = code[args_start:pos - 1]
+
+            # Skip whitespace and find the closing ) of expect(
+            expect_close_pos = pos
+            while expect_close_pos < len(code) and code[expect_close_pos].isspace():
+                expect_close_pos += 1
+
+            if expect_close_pos >= len(code) or code[expect_close_pos] != ')':
+                # No closing ) for expect, skip
+                result.append(code[match.start():match.end()])
+                i = match.end()
+                continue
+
+            expect_close_pos += 1  # Move past )
+
+            # Now look for .toXXX(value)
+            assertion_match = re.match(r'(\.to\w+\([^)]*\))', code[expect_close_pos:])
+            if not assertion_match:
+                # No assertion found, skip
+                result.append(code[match.start():match.end()])
+                i = match.end()
+                continue
+
+            assertion = assertion_match.group(1)
+            end_pos = expect_close_pos + assertion_match.end()
+
+            # Generate the wrapped call
+            # The capture function signature is: capture(funcName, lineId, fn, ...args)
+            invocation_counter[0] += 1
+            line_id = str(invocation_counter[0])
+
+            # Build args list - need to handle empty args case
+            args_str = args.strip()
+            if args_str:
+                wrapped = (
+                    f"{leading_ws}expect(codeflash.{capture_func}('{qualified_name}', "
+                    f"'{line_id}', {func_name}, {args_str})){assertion}"
+                )
+            else:
+                wrapped = (
+                    f"{leading_ws}expect(codeflash.{capture_func}('{qualified_name}', "
+                    f"'{line_id}', {func_name})){assertion}"
+                )
+
+            result.append(wrapped)
+            i = end_pos
+
+        return ''.join(result)
+
+    code = find_and_replace_expect_calls(code)
 
     return code
 

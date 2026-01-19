@@ -1594,16 +1594,34 @@ class FunctionOptimizer:
                     continue
 
                 # Generate instrumented test file paths
-                new_behavioral_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfinstrumented{os.path.splitext(test_file)[1]}"
-                )
-                new_perf_test_path = Path(
-                    f"{os.path.splitext(test_file)[0]}__perfonlyinstrumented{os.path.splitext(test_file)[1]}"
-                )
+                # For JS/TS, preserve .test.ts or .spec.ts suffix for Jest pattern matching
+                def get_instrumented_path(original_path: str, suffix: str) -> Path:
+                    """Generate instrumented test file path preserving .test/.spec pattern."""
+                    path_obj = Path(original_path)
+                    stem = path_obj.stem  # e.g., "fibonacci.test"
+                    ext = path_obj.suffix  # e.g., ".ts"
+
+                    # Check for .test or .spec in stem (JS/TS pattern)
+                    if ".test" in stem:
+                        # fibonacci.test -> fibonacci__suffix.test
+                        base, _ = stem.rsplit(".test", 1)
+                        new_stem = f"{base}{suffix}.test"
+                    elif ".spec" in stem:
+                        base, _ = stem.rsplit(".spec", 1)
+                        new_stem = f"{base}{suffix}.spec"
+                    else:
+                        # Default Python-style: add suffix before extension
+                        new_stem = f"{stem}{suffix}"
+
+                    return path_obj.parent / f"{new_stem}{ext}"
+
+                new_behavioral_test_path = get_instrumented_path(test_file, "__perfinstrumented")
+                new_perf_test_path = get_instrumented_path(test_file, "__perfonlyinstrumented")
 
                 if injected_behavior_test is not None:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_behavior_test)
+                    logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
                 else:
                     msg = "injected_behavior_test is None"
                     raise ValueError(msg)
@@ -1611,6 +1629,7 @@ class FunctionOptimizer:
                 if injected_perf_test is not None:
                     with new_perf_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_perf_test)
+                    logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
