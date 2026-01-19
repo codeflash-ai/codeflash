@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from importlib.util import find_spec
 from itertools import chain
@@ -23,6 +24,27 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import FunctionSource
+
+
+class NameCollector(cst.CSTVisitor):
+    """Collects all Name nodes referenced in a CST expression.
+
+    Used to find what names an assignment depends on (e.g., function calls in the RHS).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: cst.Name) -> None:
+        self.names.add(node.value)
+
+
+def get_names_in_expression(node: cst.BaseExpression) -> set[str]:
+    """Extract all names referenced in a CST expression."""
+    collector = NameCollector()
+    node.visit(collector)
+    return collector.names
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
@@ -154,20 +176,54 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
 
-        # Find assignments to append
+        # Find assignments to append (with their names for dependency analysis)
         assignments_to_append = [
-            self.new_assignments[name]
+            (name, self.new_assignments[name])
             for name in self.new_assignment_order
             if name not in self.processed_assignments and name in self.new_assignments
         ]
 
-        if assignments_to_append:
-            # after last top-level imports
-            insert_index = find_insertion_index_after_imports(updated_node)
+        if not assignments_to_append:
+            return updated_node.with_changes(body=new_statements)
 
+        # Build a map of where functions/classes/assignments are defined in the module
+        # Maps name -> index AFTER the definition (i.e., the first valid insertion point)
+        definition_positions: dict[str, int] = {}
+        for i, stmt in enumerate(new_statements):
+            if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
+                definition_positions[stmt.name.value] = i + 1
+            elif isinstance(stmt, cst.SimpleStatementLine):
+                # Check for assignments
+                for child in stmt.body:
+                    if isinstance(child, cst.Assign):
+                        for target in child.targets:
+                            if isinstance(target.target, cst.Name):
+                                definition_positions[target.target.value] = i + 1
+
+        # Find the default insertion index (after imports)
+        default_insert_index = find_insertion_index_after_imports(updated_node)
+
+        # For each assignment, determine its minimum insertion index
+        # by finding the max position of all functions/names it depends on
+        assignments_by_insert_index: dict[int, list[cst.Assign]] = defaultdict(list)
+        for _name, assignment in assignments_to_append:
+            # Get names referenced in the assignment's value (RHS)
+            dependencies = get_names_in_expression(assignment.value)
+
+            # Find the minimum insertion index (after all dependencies are defined)
+            min_insert_index = default_insert_index
+            for dep_name in dependencies:
+                if dep_name in definition_positions:
+                    min_insert_index = max(min_insert_index, definition_positions[dep_name])
+
+            assignments_by_insert_index[min_insert_index].append(assignment)
+
+        # Insert assignments at their appropriate positions
+        # Process in reverse order of indices to avoid offset issues when inserting
+        for insert_index in sorted(assignments_by_insert_index.keys(), reverse=True):
+            assignments = assignments_by_insert_index[insert_index]
             assignment_lines = [
-                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                for assignment in assignments_to_append
+                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()]) for assignment in assignments
             ]
 
             new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))

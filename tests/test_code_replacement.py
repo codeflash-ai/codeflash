@@ -3743,3 +3743,68 @@ def _collect_repeated_tools(tool_objs: list[Tool]) -> Iterator[Tool]:
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
+
+
+def test_global_assignments_with_function_dependencies() -> None:
+    """Test that global assignments that depend on functions are inserted after those functions.
+
+    This tests the fix for a bug where LLM-generated optimizations that use module-level
+    code like `_TABLE = unicode_to_char(...)` would fail because the assignment was inserted
+    before the function definition.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original file: standardize_quotes first, unicode_to_char second
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Standardize quotes in text."""
+    return text
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Convert unicode value to char."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code: defines unicode_to_char first, then module-level code that uses it
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Convert unicode value to char."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_CODES = ("U+0022", "U+201C")
+_TRANSLATION_TABLE = {ord(unicode_to_char(c)): ord('"') for c in _CODES}
+
+def standardize_quotes(text: str) -> str:
+    """Standardize quotes in text."""
+    return text.translate(_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The assignment that depends on unicode_to_char should be inserted AFTER unicode_to_char
+    # not after imports (which would cause a NameError)
+
+    # Parse the result and verify the order
+    import libcst as cst
+
+    module = cst.parse_module(result)
+
+    # Find positions of key elements
+    unicode_to_char_pos = None
+    translation_table_pos = None
+
+    for i, stmt in enumerate(module.body):
+        if isinstance(stmt, cst.FunctionDef) and stmt.name.value == "unicode_to_char":
+            unicode_to_char_pos = i
+        elif isinstance(stmt, cst.SimpleStatementLine):
+            for child in stmt.body:
+                if isinstance(child, cst.Assign):
+                    for target in child.targets:
+                        if isinstance(target.target, cst.Name) and target.target.value == "_TRANSLATION_TABLE":
+                            translation_table_pos = i
+
+    # Verify that _TRANSLATION_TABLE comes AFTER unicode_to_char
+    assert unicode_to_char_pos is not None, "unicode_to_char function not found in result"
+    assert translation_table_pos is not None, "_TRANSLATION_TABLE assignment not found in result"
+    assert translation_table_pos > unicode_to_char_pos, (
+        f"_TRANSLATION_TABLE (pos {translation_table_pos}) should be after "
+        f"unicode_to_char (pos {unicode_to_char_pos}) because it depends on it"
+    )
