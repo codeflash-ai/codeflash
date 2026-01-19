@@ -314,6 +314,56 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         return updated_node.with_changes(body=new_statements)
 
 
+class FunctionDefCollector(cst.CSTVisitor):
+    """Collects all top-level function definitions from a module.
+
+    Used to find new helper functions in optimized code that need to be transferred.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.function_defs: dict[str, cst.FunctionDef] = {}
+        self.function_order: list[str] = []
+        self.in_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: ARG002
+        self.in_class = True
+        return False  # Don't visit inside classes
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.in_class = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        if not self.in_class:
+            name = node.name.value
+            self.function_defs[name] = node
+            self.function_order.append(name)
+        return False  # Don't visit inside functions
+
+
+class FunctionNameCollector(cst.CSTVisitor):
+    """Collects all top-level function and class names from a module."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+        self.in_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        if not self.in_class:
+            self.names.add(node.name.value)
+        self.in_class = True
+        return False
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.in_class = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        if not self.in_class:
+            self.names.add(node.name.value)
+        return False
+
+
 class GlobalStatementCollector(cst.CSTVisitor):
     """Visitor that collects all global statements (excluding imports and functions/classes).
 
@@ -478,6 +528,41 @@ class DottedImportCollector(cst.CSTVisitor):
             self._collect_imports_from_block(node.body)
 
 
+class FunctionDefInserter(cst.CSTTransformer):
+    """Transformer that inserts new function definitions into a module.
+
+    New function definitions are inserted after imports but before any code that depends on them.
+    """
+
+    def __init__(self, function_defs: list[cst.FunctionDef], last_import_line: int) -> None:
+        super().__init__()
+        self.function_defs = function_defs
+        self.last_import_line = last_import_line
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        if not self.function_defs:
+            return updated_node
+
+        updated_body = list(updated_node.body)
+
+        # Insert function definitions after imports (or at beginning if no imports)
+        if self.last_import_line == 0:
+            # No imports, insert at the beginning
+            for j, func_def in enumerate(self.function_defs):
+                updated_body.insert(j, func_def)
+        else:
+            # Find insertion point after last import
+            insertion_index = 0
+            for i in range(len(updated_body)):
+                if i + 1 == self.last_import_line:
+                    insertion_index = i + 1
+                    break
+            for j, func_def in enumerate(self.function_defs):
+                updated_body.insert(insertion_index + j, func_def)
+
+        return updated_node.with_changes(body=updated_body)
+
+
 class ImportInserter(cst.CSTTransformer):
     """Transformer that inserts global statements into a module.
 
@@ -574,6 +659,20 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     src_module, new_added_global_statements = extract_global_statements(src_module_code)
     dst_module, existing_global_statements = extract_global_statements(dst_module_code)
 
+    # Collect function definitions from source and destination
+    src_func_collector = FunctionDefCollector()
+    src_module.visit(src_func_collector)
+
+    dst_name_collector = FunctionNameCollector()
+    dst_module.visit(dst_name_collector)
+
+    # Find new function definitions that don't exist in destination
+    new_function_defs: list[cst.FunctionDef] = [
+        src_func_collector.function_defs[func_name]
+        for func_name in src_func_collector.function_order
+        if func_name not in dst_name_collector.names
+    ]
+
     unique_global_statements = []
     for stmt in new_added_global_statements:
         if any(
@@ -596,6 +695,14 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     else:
         # No new statements to insert, reuse already-parsed dst_module
         original_module = dst_module
+
+    # Insert new function definitions if any
+    if new_function_defs:
+        last_import_line = find_last_import_line(mod_dst_code)
+        transformer = FunctionDefInserter(new_function_defs, last_import_line)
+        modified_module = original_module.visit(transformer)
+        mod_dst_code = modified_module.code
+        original_module = cst.parse_module(mod_dst_code)
 
     # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file

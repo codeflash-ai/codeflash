@@ -4328,3 +4328,638 @@ def standardize_quotes(text: str) -> str:
 
     assert func_pos < first_forloop_pos, "Function must come before first for-loop"
     assert func_pos < second_forloop_pos, "Function must come before second for-loop"
+
+
+# =============================================================================
+# Real-world standardize_quotes optimization tests
+# These tests verify the fixes work for the actual optimization scenarios
+# =============================================================================
+
+
+def test_standardize_quotes_optimization_candidate_6_pattern() -> None:
+    """Test optimization pattern from candidate 6 that caused NameError: name '_double_chars' is not defined.
+
+    This pattern uses tuple comprehensions at module level that depend on unicode_to_char,
+    then uses those tuples in for-loops to build translation tables.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original standardize_quotes code structure
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    double_quotes = {
+        '"': "U+0022",
+        '"': "U+201C",
+        '"': "U+201D",
+    }
+    single_quotes = {
+        "'": "U+0027",
+        "'": "U+2018",
+        "'": "U+2019",
+    }
+
+    double_quote_standard = '"'
+    single_quote_standard = "'"
+
+    for unicode_val in double_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, double_quote_standard)
+
+    for unicode_val in single_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, single_quote_standard)
+
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 6 pattern: precompute chars using tuple comprehension
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {
+    '"': "U+0022",
+    '"': "U+201C",
+    '"': "U+201D",
+}
+single_quotes = {
+    "'": "U+0027",
+    "'": "U+2018",
+    "'": "U+2019",
+}
+
+_double_chars = tuple(unicode_to_char(u) for u in double_quotes.values())
+_single_chars = tuple(unicode_to_char(u) for u in single_quotes.values())
+
+_QUOTE_TRANSLATION: dict[int, str] = {}
+_double_quote_standard = '"'
+_single_quote_standard = "'"
+
+for _ch in _double_chars:
+    _QUOTE_TRANSLATION[ord(_ch)] = _double_quote_standard
+
+for _ch in _single_chars:
+    _QUOTE_TRANSLATION[ord(_ch)] = _single_quote_standard
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 6 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify key elements are present
+    assert "_double_chars = tuple" in result, "_double_chars assignment should be present"
+    assert "for _ch in _double_chars" in result, "First for-loop should be present"
+    assert "for _ch in _single_chars" in result, "Second for-loop should be present"
+
+    # Verify ordering: unicode_to_char must come before _double_chars assignment
+    func_pos = result.index("def unicode_to_char")
+    double_chars_pos = result.index("_double_chars = tuple")
+    assert func_pos < double_chars_pos, "unicode_to_char must be defined before _double_chars"
+
+
+def test_standardize_quotes_optimization_candidate_7_pattern() -> None:
+    """Test optimization pattern from candidate 7 that caused NameError: name 'unicode_to_char' is not defined.
+
+    This pattern moves quote dictionaries to module level and builds translation
+    table using for-loops that call unicode_to_char.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 7 pattern: module-level for-loops calling unicode_to_char
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_UNICODE_VALUES = [
+    "U+0022",
+    "U+201C",
+    "U+201D",
+]
+
+_SINGLE_QUOTE_UNICODE_VALUES = [
+    "U+0027",
+    "U+2018",
+    "U+2019",
+]
+
+_QUOTE_TRANSLATION_TABLE = {}
+_double_replacement_ord = ord('"')
+_single_replacement_ord = ord("'")
+
+for u in _DOUBLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(u)
+    _QUOTE_TRANSLATION_TABLE[ord(ch)] = _double_replacement_ord
+
+for u in _SINGLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(u)
+    _QUOTE_TRANSLATION_TABLE[ord(ch)] = _single_replacement_ord
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is correctly populated by the for-loops
+        # This verifies that the for-loops execute correctly and call unicode_to_char
+        translation_table = namespace.get("_QUOTE_TRANSLATION_TABLE")
+        assert translation_table is not None, "_QUOTE_TRANSLATION_TABLE should be defined"
+        # 8220 = U+201C (left double quote), 8221 = U+201D (right double quote)
+        # 34 = ord('"') = ASCII double quote
+        assert 8220 in translation_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in translation_table, "Right double quote (U+201D) should be in table"
+        assert translation_table[8220] == 34, "Left double quote should map to ASCII quote"
+        assert translation_table[8221] == 34, "Right double quote should map to ASCII quote"
+
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 7 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify for-loops are present and ordered correctly
+    assert "for u in _DOUBLE_QUOTE_UNICODE_VALUES" in result
+    assert "for u in _SINGLE_QUOTE_UNICODE_VALUES" in result
+
+    func_pos = result.index("def unicode_to_char")
+    first_loop_pos = result.index("for u in _DOUBLE_QUOTE_UNICODE_VALUES")
+    assert func_pos < first_loop_pos, "unicode_to_char must be defined before for-loops"
+
+
+def test_standardize_quotes_optimization_candidate_9_pattern() -> None:
+    """Test optimization pattern from candidate 9 that caused NameError: name 'unicode_to_char' is not defined.
+
+    This pattern is similar to candidate 7 but with slightly different variable names.
+    It builds a translation table at module level using for-loops.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code with unicode_to_char defined AFTER standardize_quotes
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    double_quotes = {'"': "U+0022", '"': "U+201C"}
+    single_quotes = {"'": "U+0027", "'": "U+2018"}
+
+    for unicode_val in double_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, '"')
+
+    for unicode_val in single_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, "'")
+
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 9 pattern
+    # Use proper Unicode escape sequences for the curly quote characters as keys
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {'"': "U+0022", '\u201c': "U+201C", '\u201d': "U+201D"}
+single_quotes = {"'": "U+0027", '\u2018': "U+2018", '\u2019': "U+2019"}
+
+_translation_table = {}
+
+_double_standard_ord = ord('"')
+for unicode_val in double_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = _double_standard_ord
+
+_single_standard_ord = ord("'")
+for unicode_val in single_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = _single_standard_ord
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_translation_table)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is correctly populated by the for-loops
+        # This verifies that the for-loops execute correctly and call unicode_to_char
+        translation_table = namespace.get("_translation_table")
+        assert translation_table is not None, "_translation_table should be defined"
+        # 8220 = U+201C (left double quote), 8221 = U+201D (right double quote)
+        # 8216 = U+2018 (left single quote), 8217 = U+2019 (right single quote)
+        assert 8220 in translation_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in translation_table, "Right double quote (U+201D) should be in table"
+        assert 8216 in translation_table, "Left single quote (U+2018) should be in table"
+        assert 8217 in translation_table, "Right single quote (U+2019) should be in table"
+        # Verify mappings to ASCII quotes
+        assert translation_table[8220] == 34, "Left double quote should map to ASCII double quote"
+        assert translation_table[8221] == 34, "Right double quote should map to ASCII double quote"
+        assert translation_table[8216] == 39, "Left single quote should map to ASCII single quote"
+        assert translation_table[8217] == 39, "Right single quote should map to ASCII single quote"
+
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 9 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify ordering: unicode_to_char must come before module-level for-loops
+    # Use \nfor to find module-level (unindented) for-loops, not those inside functions
+    func_pos = result.index("def unicode_to_char")
+    first_loop = result.index("\nfor unicode_val in double_quotes.values()")
+    second_loop = result.index("\nfor unicode_val in single_quotes.values()")
+
+    assert func_pos < first_loop, "unicode_to_char must be defined before first for-loop"
+    assert func_pos < second_loop, "unicode_to_char must be defined before second for-loop"
+    assert first_loop < second_loop, "For-loops should maintain their relative order"
+
+
+def test_standardize_quotes_testgen_postprocessing_with_translation_table() -> None:
+    """Test end-to-end postprocessing pipeline for standardize_quotes with translation table pattern.
+
+    This simulates the testgen endpoint returning generated tests for an optimization
+    that uses module-level for-loops to build a translation table, and verifies
+    the postprocessing pipeline (add_global_assignments + test postprocessing) works correctly.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import remove_functions_from_generated_tests
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original code (what we're optimizing)
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Simulated testgen optimization response with module-level for-loops
+    # This pattern builds a translation table at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_CODES = ["U+0022", "U+201C", "U+201D"]
+_SINGLE_QUOTE_CODES = ["U+0027", "U+2018", "U+2019"]
+
+_QUOTE_TABLE = {}
+
+for _code in _DOUBLE_QUOTE_CODES:
+    _ch = unicode_to_char(_code)
+    _QUOTE_TABLE[ord(_ch)] = ord('"')
+
+for _code in _SINGLE_QUOTE_CODES:
+    _ch = unicode_to_char(_code)
+    _QUOTE_TABLE[ord(_ch)] = ord("'")
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TABLE)
+'''
+
+    # Simulated generated test code
+    generated_test_source = '''import pytest
+from module import standardize_quotes
+
+def test_standardize_quotes_basic():
+    """Test basic quote standardization."""
+    result = standardize_quotes("Hello world")
+    assert result == "Hello world"
+
+def test_standardize_quotes_unicode_double():
+    """Test unicode double quote conversion."""
+    result = standardize_quotes("Say \\u201chello\\u201d")
+    assert '"' in result
+
+def test_standardize_quotes_empty():
+    """Test empty string."""
+    result = standardize_quotes("")
+    assert result == ""
+'''
+
+    # Step 1: Process optimization code through add_global_assignments
+    processed_optimization = add_global_assignments(optimized_code, original_code)
+
+    # Verify optimization code compiles and executes without NameError
+    try:
+        compiled = compile(processed_optimization, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is populated
+        quote_table = namespace.get("_QUOTE_TABLE")
+        assert quote_table is not None, "_QUOTE_TABLE should be defined"
+        assert 8220 in quote_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in quote_table, "Right double quote (U+201D) should be in table"
+    except NameError as e:
+        raise AssertionError(f"Optimization code failed with NameError: {e}\n\n{processed_optimization}") from e
+
+    # Step 2: Process generated tests through remove_functions_from_generated_tests
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="",
+        instrumented_perf_test_source="",
+        behavior_file_path=Path("test_standardize_quotes.py"),
+        perf_file_path=Path("test_standardize_quotes_perf.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Simulate removing a failed test
+    processed_tests = remove_functions_from_generated_tests(
+        generated_tests_list, ["test_standardize_quotes_empty"]
+    )
+
+    # Verify the test was removed and others remain
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_quotes_basic" in result_source
+    assert "test_standardize_quotes_unicode_double" in result_source
+    assert "test_standardize_quotes_empty" not in result_source
+
+
+def test_standardize_quotes_testgen_postprocessing_with_dict_comprehension() -> None:
+    """Test postprocessing pipeline for standardize_quotes with dict comprehension pattern.
+
+    This simulates an optimization that uses dict comprehension with calls to
+    a helper function, ensuring the global assignments are correctly ordered.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import add_runtime_comments_to_generated_tests
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization using dict comprehension (depends on unicode_to_char being defined first)
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_UNICODES = {"U+0022": '"', "U+201C": '"', "U+201D": '"'}
+_SINGLE_UNICODES = {"U+0027": "'", "U+2018": "'", "U+2019": "'"}
+
+# Build translation table using comprehension
+_TRANSLATION = {
+    ord(unicode_to_char(code)): ord(target)
+    for mapping in [_DOUBLE_UNICODES, _SINGLE_UNICODES]
+    for code, target in mapping.items()
+}
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_TRANSLATION)
+'''
+
+    # Process optimization code
+    processed_optimization = add_global_assignments(optimized_code, original_code)
+
+    # Verify code compiles and translation dict is built
+    try:
+        compiled = compile(processed_optimization, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        translation = namespace.get("_TRANSLATION")
+        assert translation is not None, "_TRANSLATION should be defined"
+        # Verify the mapping contains unicode quote codes
+        assert len(translation) >= 4, "Translation table should have at least 4 entries"
+    except NameError as e:
+        raise AssertionError(f"Dict comprehension pattern failed with NameError: {e}") from e
+
+    # Create mock generated tests with runtime data
+    generated_test_source = '''def test_standardize_double_quotes():
+    result = standardize_quotes("\\u201chello\\u201d")
+    assert result == '"hello"'
+
+def test_standardize_single_quotes():
+    result = standardize_quotes("\\u2018world\\u2019")
+    assert result == "'world'"
+'''
+
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="",
+        instrumented_perf_test_source="",
+        behavior_file_path=Path("test_quotes.py"),
+        perf_file_path=Path("test_quotes_perf.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Mock runtime data for add_runtime_comments_to_generated_tests
+    # (Empty dicts since we don't have actual runtime data in this test)
+    original_runtimes: dict = {}
+    optimized_runtimes: dict = {}
+
+    # Process through runtime comments (should handle empty runtimes gracefully)
+    processed_tests = add_runtime_comments_to_generated_tests(
+        generated_tests_list, original_runtimes, optimized_runtimes
+    )
+
+    # Verify tests are still valid
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_double_quotes" in result_source
+    assert "test_standardize_single_quotes" in result_source
+
+
+def test_standardize_quotes_testgen_full_pipeline_integration() -> None:
+    """Test complete integration of testgen postprocessing pipeline for standardize_quotes.
+
+    This test simulates the full flow:
+    1. Original code with the function to optimize
+    2. LLM-generated optimization with module-level for-loops
+    3. Processing through add_global_assignments
+    4. Generated tests processing through remove_functions + add_runtime_comments
+    5. Final verification that everything compiles and is correct
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import (
+        add_runtime_comments_to_generated_tests,
+        remove_functions_from_generated_tests,
+    )
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original FTO code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes.
+
+    Args:
+        text: Input text that may contain unicode quotes.
+
+    Returns:
+        Text with unicode quotes replaced by ASCII quotes.
+    """
+    double_quotes = {'"': "U+0022", '\u201c': "U+201C", '\u201d': "U+201D"}
+    single_quotes = {"'": "U+0027", '\u2018': "U+2018", '\u2019': "U+2019"}
+
+    for char, unicode_val in double_quotes.items():
+        if char != '"':
+            text = text.replace(char, '"')
+
+    for char, unicode_val in single_quotes.items():
+        if char != "'":
+            text = text.replace(char, "'")
+
+    return text
+'''
+
+    # LLM-generated optimization with a NEW helper function and module-level call
+    # This tests that add_global_assignments transfers new function definitions
+    optimized_code = '''def _build_translation_table() -> dict[int, int]:
+    """Build translation table for quote standardization."""
+    table = {}
+    # Double quotes
+    for code in [0x0022, 0x201C, 0x201D]:
+        table[code] = 0x0022  # Map to ASCII double quote
+    # Single quotes
+    for code in [0x0027, 0x2018, 0x2019]:
+        table[code] = 0x0027  # Map to ASCII single quote
+    return table
+
+_QUOTE_TRANSLATION_TABLE = _build_translation_table()
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION_TABLE)
+'''
+
+    # Step 1: Process optimization through add_global_assignments
+    processed_code = add_global_assignments(optimized_code, original_code)
+
+    # Verify optimization code structure - new function should be transferred
+    assert "_build_translation_table" in processed_code, "New helper function should be present"
+    assert "_QUOTE_TRANSLATION_TABLE = _build_translation_table()" in processed_code
+
+    # Verify code executes without errors
+    namespace = {}
+    exec(compile(processed_code, "<test>", "exec"), namespace)
+
+    # Verify the translation table is correctly built
+    table = namespace["_QUOTE_TRANSLATION_TABLE"]
+    assert table[0x201C] == 0x0022, "Left double quote should map to ASCII double quote"
+    assert table[0x201D] == 0x0022, "Right double quote should map to ASCII double quote"
+    assert table[0x2018] == 0x0027, "Left single quote should map to ASCII single quote"
+    assert table[0x2019] == 0x0027, "Right single quote should map to ASCII single quote"
+
+    # Step 2: Create mock generated tests
+    generated_test_source = '''import pytest
+
+def test_standardize_quotes_no_change():
+    """Test text without unicode quotes."""
+    result = standardize_quotes("Hello, World!")
+    assert result == "Hello, World!"
+
+def test_standardize_quotes_double_unicode():
+    """Test double quote unicode conversion."""
+    text = "She said \\u201cHello\\u201d"
+    result = standardize_quotes(text)
+    assert result == 'She said "Hello"'
+
+def test_standardize_quotes_single_unicode():
+    """Test single quote unicode conversion."""
+    text = "It\\u2019s a test"
+    result = standardize_quotes(text)
+    assert result == "It's a test"
+
+def test_standardize_quotes_mixed():
+    """Test mixed quote types."""
+    text = "\\u201cIt\\u2019s \\u2018great\\u2019\\u201d"
+    result = standardize_quotes(text)
+    assert result == '"It\\'s \\'great\\'\"'
+
+def test_standardize_quotes_failing():
+    """This test will be removed as failed."""
+    result = standardize_quotes("test")
+    assert result == "wrong"
+'''
+
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="instrumented_behavior_placeholder",
+        instrumented_perf_test_source="instrumented_perf_placeholder",
+        behavior_file_path=Path("tests/test_standardize_quotes__unit_test_0.py"),
+        perf_file_path=Path("tests/test_standardize_quotes__perf_test_0.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Step 3: Remove failed tests
+    tests_to_remove = ["test_standardize_quotes_failing"]
+    processed_tests = remove_functions_from_generated_tests(generated_tests_list, tests_to_remove)
+
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_quotes_no_change" in result_source
+    assert "test_standardize_quotes_double_unicode" in result_source
+    assert "test_standardize_quotes_single_unicode" in result_source
+    assert "test_standardize_quotes_mixed" in result_source
+    assert "test_standardize_quotes_failing" not in result_source
+
+    # Step 4: Add runtime comments (with empty data to test graceful handling)
+    final_tests = add_runtime_comments_to_generated_tests(processed_tests, {}, {})
+
+    # Verify final output is still valid Python
+    final_source = final_tests.generated_tests[0].generated_original_test_source
+    compile(final_source, "<test>", "exec")  # Should not raise
+
+    # Count remaining test functions
+    test_count = final_source.count("def test_")
+    assert test_count == 4, f"Should have 4 tests after removing failed one, got {test_count}"
