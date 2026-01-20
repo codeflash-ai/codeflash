@@ -120,6 +120,7 @@ class JavaScriptSupport:
                         is_async=func.is_async,
                         is_method=func.is_method,
                         language=self.language,
+                        doc_start_line=func.doc_start_line,
                     )
                 )
 
@@ -174,6 +175,7 @@ class JavaScriptSupport:
                         is_async=func.is_async,
                         is_method=func.is_method,
                         language=self.language,
+                        doc_start_line=func.doc_start_line,
                     )
                 )
 
@@ -298,16 +300,27 @@ class JavaScriptSupport:
             logger.error(f"Failed to read {function.file_path}: {e}")
             return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVASCRIPT)
 
-        # Extract the function source
+        # Find imports and helper functions
+        analyzer = get_analyzer_for_file(function.file_path)
+
+        # Find the FunctionNode to get doc_start_line for JSDoc inclusion
+        tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
+        target_func = None
+        for func in tree_functions:
+            if func.name == function.name and func.start_line == function.start_line:
+                target_func = func
+                break
+
+        # Extract the function source, including JSDoc if present
         lines = source.splitlines(keepends=True)
         if function.start_line and function.end_line:
-            target_lines = lines[function.start_line - 1 : function.end_line]
+            # Use doc_start_line if available, otherwise fall back to start_line
+            effective_start = (target_func.doc_start_line if target_func else None) or function.start_line
+            target_lines = lines[effective_start - 1 : function.end_line]
             target_code = "".join(target_lines)
         else:
             target_code = ""
 
-        # Find imports and helper functions
-        analyzer = get_analyzer_for_file(function.file_path)
         imports = analyzer.find_imports(source)
 
         # Find helper functions called by target
@@ -365,16 +378,24 @@ class JavaScriptSupport:
         calls = analyzer.find_function_calls(source, target_func)
         calls_set = set(calls)
 
+        # Split source into lines for JSDoc extraction
+        lines = source.splitlines(keepends=True)
+
         # Match calls to functions in the same file
         for func in all_functions:
             if func.name in calls_set and func.name != function.name:
+                # Extract source including JSDoc if present
+                effective_start = func.doc_start_line or func.start_line
+                helper_lines = lines[effective_start - 1 : func.end_line]
+                helper_source = "".join(helper_lines)
+
                 helpers.append(
                     HelperFunction(
                         name=func.name,
                         qualified_name=func.name,
                         file_path=function.file_path,
-                        source_code=func.source_text,
-                        start_line=func.start_line,
+                        source_code=helper_source,
+                        start_line=effective_start,  # Start from JSDoc if present
                         end_line=func.end_line,
                     )
                 )
@@ -429,7 +450,8 @@ class JavaScriptSupport:
     def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
-        Uses text-based replacement with line numbers.
+        Uses text-based replacement with line numbers. Includes JSDoc comments
+        in the replacement region if present.
 
         Args:
             source: Original source code.
@@ -450,7 +472,23 @@ class JavaScriptSupport:
         if lines and not lines[-1].endswith("\n"):
             lines[-1] += "\n"
 
-        # Get indentation from original function's first line
+        # Find the FunctionNode to get doc_start_line for JSDoc inclusion
+        if function.file_path:
+            analyzer = get_analyzer_for_file(function.file_path)
+        else:
+            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+        tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
+        target_func = None
+        for func in tree_functions:
+            if func.name == function.name and func.start_line == function.start_line:
+                target_func = func
+                break
+
+        # Use doc_start_line if available, otherwise fall back to start_line
+        effective_start = (target_func.doc_start_line if target_func else None) or function.start_line
+
+        # Get indentation from original function's first line (declaration, not JSDoc)
         if function.start_line <= len(lines):
             original_first_line = lines[function.start_line - 1]
             original_indent = len(original_first_line) - len(original_first_line.lstrip())
@@ -458,12 +496,21 @@ class JavaScriptSupport:
             original_indent = 0
 
         # Get indentation from new function's first line
+        # Skip JSDoc lines to find the actual function declaration
         new_lines = new_source.splitlines(keepends=True)
-        if new_lines:
-            new_first_line = new_lines[0]
-            new_indent = len(new_first_line) - len(new_first_line.lstrip())
-        else:
-            new_indent = 0
+        func_decl_line = new_lines[0] if new_lines else ""
+        for line in new_lines:
+            stripped = line.strip()
+            if (
+                stripped
+                and not stripped.startswith("/**")
+                and not stripped.startswith("*")
+                and not stripped.startswith("//")
+            ):
+                func_decl_line = line
+                break
+
+        new_indent = len(func_decl_line) - len(func_decl_line.lstrip())
 
         # Calculate indent adjustment needed
         indent_diff = original_indent - new_indent
@@ -487,8 +534,8 @@ class JavaScriptSupport:
         if new_lines and not new_lines[-1].endswith("\n"):
             new_lines[-1] += "\n"
 
-        # Build result
-        before = lines[: function.start_line - 1]
+        # Build result using effective_start (includes JSDoc)
+        before = lines[: effective_start - 1]
         after = lines[function.end_line :]
 
         result_lines = before + new_lines + after

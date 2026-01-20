@@ -575,13 +575,15 @@ def replace_function_definitions_for_language(
 def _extract_function_from_code(lang_support: LanguageSupport, source_code: str, function_name: str) -> str | None:
     """Extract a specific function's source code from a code string.
 
+    Includes JSDoc/docstring comments if present.
+
     Args:
         lang_support: Language support instance.
         source_code: The full source code containing the function.
         function_name: Name of the function to extract.
 
     Returns:
-        The function's source code, or None if not found.
+        The function's source code (including doc comments), or None if not found.
 
     """
     try:
@@ -590,13 +592,12 @@ def _extract_function_from_code(lang_support: LanguageSupport, source_code: str,
         for func in functions:
             if func.name == function_name:
                 # Extract the function's source using line numbers
+                # Use doc_start_line if available to include JSDoc/docstring
                 lines = source_code.splitlines(keepends=True)
-                if func.start_line and func.end_line and func.start_line <= len(lines):
-                    func_lines = lines[func.start_line - 1 : func.end_line]
+                effective_start = func.doc_start_line or func.start_line
+                if effective_start and func.end_line and effective_start <= len(lines):
+                    func_lines = lines[effective_start - 1 : func.end_line]
                     return "".join(func_lines)
-                # Fallback to source_text if available
-                if func.source_text:
-                    return func.source_text
     except Exception as e:
         logger.debug(f"Error extracting function {function_name}: {e}")
 

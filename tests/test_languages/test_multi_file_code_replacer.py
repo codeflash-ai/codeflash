@@ -1,6 +1,9 @@
 new_code = """```javascript:code_to_optimize_js/calculator.js
 const { sumArray, average, findMax, findMin } = require('./math_helpers');
 
+/**
+ * This is a modified comment
+ */
 function calculateStats(numbers) {
     if (numbers.length === 0) {
         return {
@@ -37,6 +40,11 @@ function calculateStats(numbers) {
 }
 ```
 ```javascript:code_to_optimize_js/math_helpers.js
+/**
+ * Normalize an array of numbers to a 0-1 range.
+ * @param numbers - Array of numbers to normalize
+ * @returns Normalized array
+ */
 function findMax(numbers) {
     if (numbers.length === 0) return -Infinity;
 
@@ -50,6 +58,11 @@ function findMax(numbers) {
     return max;
 }
 
+/**
+ * Find the minimum value in an array.
+ * @param numbers - Array of numbers
+ * @returns The minimum value
+ */
 function findMin(numbers) {
     if (numbers.length === 0) return Infinity;
 
@@ -143,9 +156,7 @@ const { sumArray, average, findMax, findMin } = require('./math_helpers');
 
 
 /**
- * Calculate statistics for an array of numbers.
- * @param numbers - Array of numbers to analyze
- * @returns Object containing sum, average, min, max, and range
+ * This is a modified comment
  */
 function calculateStats(numbers) {
     if (numbers.length === 0) {
@@ -260,9 +271,9 @@ function average(numbers) {
 }
 
 /**
- * Find the maximum value in an array.
- * @param numbers - Array of numbers
- * @returns The maximum value
+ * Normalize an array of numbers to a 0-1 range.
+ * @param numbers - Array of numbers to normalize
+ * @returns Normalized array
  */
 function findMax(numbers) {
     if (numbers.length === 0) return -Infinity;

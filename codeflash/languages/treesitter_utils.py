@@ -67,6 +67,7 @@ class FunctionNode:
     class_name: str | None
     parent_function: str | None
     source_text: str
+    doc_start_line: int | None = None  # Line where JSDoc comment starts (or None if no JSDoc)
 
 
 @dataclass
@@ -296,6 +297,9 @@ class TreeSitterAnalyzer:
         # Get source text
         source_text = self.get_node_text(node, source_bytes)
 
+        # Find preceding JSDoc comment
+        doc_start_line = self._find_preceding_jsdoc(node, source_bytes)
+
         return FunctionNode(
             name=name,
             node=node,
@@ -310,7 +314,56 @@ class TreeSitterAnalyzer:
             class_name=current_class if is_method else None,
             parent_function=current_function,
             source_text=source_text,
+            doc_start_line=doc_start_line,
         )
+
+    def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:
+        """Find JSDoc comment immediately preceding a function node.
+
+        For regular functions, looks at the previous sibling of the function node.
+        For arrow functions assigned to variables, looks at the previous sibling
+        of the variable declaration.
+
+        Args:
+            node: The function node to find JSDoc for.
+            source_bytes: The source code as bytes.
+
+        Returns:
+            The start line (1-indexed) of the JSDoc, or None if no JSDoc found.
+
+        """
+        target_node = node
+
+        # For arrow functions, look at parent variable declaration
+        if node.type == "arrow_function":
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                grandparent = parent.parent
+                if grandparent and grandparent.type in ("lexical_declaration", "variable_declaration"):
+                    target_node = grandparent
+
+        # For function expressions assigned to variables, also look at parent
+        if node.type in ("function_expression", "generator_function"):
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                grandparent = parent.parent
+                if grandparent and grandparent.type in ("lexical_declaration", "variable_declaration"):
+                    target_node = grandparent
+
+        # Get the previous sibling node
+        prev_sibling = target_node.prev_named_sibling
+
+        # Check if it's a comment node with JSDoc pattern
+        if prev_sibling and prev_sibling.type == "comment":
+            comment_text = self.get_node_text(prev_sibling, source_bytes)
+            if comment_text.strip().startswith("/**"):
+                # Verify it's immediately preceding (no blank lines between)
+                comment_end_line = prev_sibling.end_point[0]
+                function_start_line = target_node.start_point[0]
+                if function_start_line - comment_end_line <= 1:
+                    return prev_sibling.start_point[0] + 1  # 1-indexed
+
+        return None
 
     def _get_name_from_assignment(self, node: Node, source_bytes: bytes) -> str:
         """Try to extract function name from parent variable declaration or assignment.

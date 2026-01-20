@@ -78,6 +78,7 @@ class FunctionInfo:
     language: Language = Language.PYTHON
     start_col: int | None = None
     end_col: int | None = None
+    doc_start_line: int | None = None  # Line where docstring/JSDoc starts (or None if no doc comment)
 
     @property
     def qualified_name(self) -> str:
