@@ -1,5 +1,6 @@
 import array
 import ast
+import builtins
 import datetime
 import decimal
 import enum
@@ -14,6 +15,12 @@ import sentry_sdk
 
 from codeflash.cli_cmds.console import logger
 from codeflash.picklepatch.pickle_placeholder import PicklePlaceholderAccessError
+
+_GOT_EXCEPTION_RE = re.compile(r"got (\w+)\(['\"]")
+
+_BUILTIN_EXCEPTION_TYPES = {
+    name: obj for name, obj in builtins.__dict__.items() if isinstance(obj, type) and issubclass(obj, BaseException)
+}
 
 HAS_NUMPY = find_spec("numpy") is not None
 HAS_SQLALCHEMY = find_spec("sqlalchemy") is not None
@@ -34,14 +41,16 @@ def _extract_exception_from_message(msg: str) -> Optional[BaseException]:  # noq
     """
     # Pattern: "got ExceptionType('message')" or "got ExceptionType("message")"
     # This pattern is used by torch._dynamo and potentially other libraries
-    match = re.search(r"got (\w+)\(['\"]", msg)
+    # Fast-path: avoid running the regex if the obvious substring isn't present.
+    if "got " not in msg:
+        return None
+
+    match = _GOT_EXCEPTION_RE.search(msg)
     if match:
         exc_name = match.group(1)
         # Try to find this exception type in builtins
-        import builtins
-
-        exc_class = getattr(builtins, exc_name, None)
-        if exc_class is not None and isinstance(exc_class, type) and issubclass(exc_class, BaseException):
+        exc_class = _BUILTIN_EXCEPTION_TYPES.get(exc_name)
+        if exc_class is not None:
             return exc_class()
     return None
 
