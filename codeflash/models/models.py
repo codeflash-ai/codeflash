@@ -412,7 +412,7 @@ class TestFiles(BaseModel):
         )
 
     @staticmethod
-    @lru_cache(maxsize=1024)
+    @lru_cache(maxsize=4096)
     def _normalize_path_for_comparison(path: Path) -> str:
         """Normalize a path for cross-platform comparison.
 
