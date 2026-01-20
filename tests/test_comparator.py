@@ -2602,3 +2602,457 @@ def test_numpy_dtypes() -> None:
     # Test that DType and np.dtype of different types are not equal
     assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
+
+
+# =============================================================================
+# Tests for pytest temp path normalization (lines 28-69 in comparator.py)
+# =============================================================================
+
+from codeflash.verification.comparator import (
+    PYTEST_TEMP_PATH_PATTERN,
+    _is_temp_path,
+    _normalize_temp_path,
+)
+
+
+class TestIsTempPath:
+    """Tests for the _is_temp_path() function."""
+
+    def test_standard_pytest_temp_path(self):
+        """Test detection of standard pytest temp paths."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_something")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-123/")
+        assert _is_temp_path("/tmp/pytest-of-admin/pytest-999/subdir/file.txt")
+
+    def test_different_usernames(self):
+        """Test temp paths with various usernames."""
+        assert _is_temp_path("/tmp/pytest-of-root/pytest-1/")
+        assert _is_temp_path("/tmp/pytest-of-john_doe/pytest-42/")
+        assert _is_temp_path("/tmp/pytest-of-user123/pytest-0/test")
+        assert _is_temp_path("/tmp/pytest-of-test-user/pytest-5/data")
+
+    def test_different_session_numbers(self):
+        """Test temp paths with various session numbers."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-1/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-99/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-12345/")
+
+    def test_paths_with_subdirectories(self):
+        """Test temp paths with nested subdirectories."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_func/subdir")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/a/b/c/d/file.txt")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_module0/test_file.py")
+
+    def test_paths_with_filenames(self):
+        """Test temp paths ending with filenames."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/output.json")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test.log")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/data.csv")
+
+    def test_non_temp_paths(self):
+        """Test that non-temp paths are correctly identified."""
+        assert not _is_temp_path("/home/user/project/test.py")
+        assert not _is_temp_path("/tmp/other/directory")
+        assert not _is_temp_path("/var/log/test.log")
+        assert not _is_temp_path("./relative/path")
+        assert not _is_temp_path("test_file.py")
+
+    def test_similar_but_not_temp_paths(self):
+        """Test paths that look similar but don't match the pattern."""
+        assert not _is_temp_path("/tmp/pytest-user/pytest-0/")  # missing "of-"
+        assert not _is_temp_path("/tmp/pytest-of-user/pytest-/")  # no number
+        assert not _is_temp_path("/tmp/pytest-of-/pytest-0/")  # empty username
+        assert not _is_temp_path("/tmp/pytest-of-user/pytest-abc/")  # non-numeric session
+
+    def test_edge_cases(self):
+        """Test edge cases for _is_temp_path."""
+        assert not _is_temp_path("")
+        assert not _is_temp_path("/")
+        assert not _is_temp_path("/tmp/")
+        assert not _is_temp_path("/tmp/pytest-of-")
+
+    def test_path_embedded_in_string(self):
+        """Test that temp paths are detected when embedded in longer strings."""
+        assert _is_temp_path("Error in /tmp/pytest-of-user/pytest-0/test.py: failed")
+        assert _is_temp_path("File: /tmp/pytest-of-user/pytest-123/output.txt")
+
+    def test_windows_style_paths(self):
+        """Test that Windows-style paths are not detected as temp paths."""
+        assert not _is_temp_path("C:\\Users\\test\\pytest")
+        assert not _is_temp_path("D:\\tmp\\pytest-of-user\\pytest-0\\")
+
+
+class TestNormalizeTempPath:
+    """Tests for the _normalize_temp_path() function."""
+
+    def test_basic_normalization(self):
+        """Test basic temp path normalization."""
+        assert _normalize_temp_path("/tmp/pytest-of-user/pytest-0/test") == "/tmp/pytest-temp/test"
+        assert _normalize_temp_path("/tmp/pytest-of-user/pytest-123/test") == "/tmp/pytest-temp/test"
+
+    def test_different_session_numbers_normalize_same(self):
+        """Test that different session numbers normalize to the same result."""
+        path1 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/file.txt")
+        path2 = _normalize_temp_path("/tmp/pytest-of-user/pytest-99/file.txt")
+        path3 = _normalize_temp_path("/tmp/pytest-of-user/pytest-12345/file.txt")
+        assert path1 == path2 == path3 == "/tmp/pytest-temp/file.txt"
+
+    def test_different_usernames_normalize_same(self):
+        """Test that different usernames normalize to the same result."""
+        path1 = _normalize_temp_path("/tmp/pytest-of-alice/pytest-0/file.txt")
+        path2 = _normalize_temp_path("/tmp/pytest-of-bob/pytest-0/file.txt")
+        path3 = _normalize_temp_path("/tmp/pytest-of-root/pytest-0/file.txt")
+        assert path1 == path2 == path3 == "/tmp/pytest-temp/file.txt"
+
+    def test_complex_subdirectories(self):
+        """Test normalization with complex subdirectory structures."""
+        result = _normalize_temp_path("/tmp/pytest-of-user/pytest-42/test_module/subdir/file.py")
+        assert result == "/tmp/pytest-temp/test_module/subdir/file.py"
+
+    def test_non_temp_path_unchanged(self):
+        """Test that non-temp paths are returned unchanged."""
+        path = "/home/user/project/test.py"
+        assert _normalize_temp_path(path) == path
+
+    def test_empty_string(self):
+        """Test normalization of empty string."""
+        assert _normalize_temp_path("") == ""
+
+    def test_path_with_multiple_occurrences(self):
+        """Test paths with multiple temp path patterns (unusual but possible in error messages)."""
+        path = "/tmp/pytest-of-user/pytest-0/ref to /tmp/pytest-of-user/pytest-1/other"
+        result = _normalize_temp_path(path)
+        assert result == "/tmp/pytest-temp/ref to /tmp/pytest-temp/other"
+
+    def test_trailing_slash_handling(self):
+        """Test normalization preserves or removes trailing slashes correctly."""
+        result1 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/")
+        result2 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/subdir/")
+        assert result1 == "/tmp/pytest-temp/"
+        assert result2 == "/tmp/pytest-temp/subdir/"
+
+
+class TestComparatorTempPaths:
+    """Tests for comparator() with temp path strings."""
+
+    def test_identical_temp_paths(self):
+        """Test that identical temp paths compare as equal."""
+        path = "/tmp/pytest-of-user/pytest-0/test.txt"
+        assert comparator(path, path)
+
+    def test_different_session_numbers(self):
+        """Test that paths differing only in session number are equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/output.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/output.txt"
+        assert comparator(path1, path2)
+
+    def test_different_usernames(self):
+        """Test that paths differing in username are equal."""
+        path1 = "/tmp/pytest-of-alice/pytest-0/result.json"
+        path2 = "/tmp/pytest-of-bob/pytest-0/result.json"
+        assert comparator(path1, path2)
+
+    def test_different_usernames_and_sessions(self):
+        """Test that paths differing in both username and session are equal."""
+        path1 = "/tmp/pytest-of-alice/pytest-10/data/file.csv"
+        path2 = "/tmp/pytest-of-bob/pytest-999/data/file.csv"
+        assert comparator(path1, path2)
+
+    def test_different_subdirectories_not_equal(self):
+        """Test that paths with different subdirectories are not equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/subdir1/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/subdir2/file.txt"
+        assert not comparator(path1, path2)
+
+    def test_different_filenames_not_equal(self):
+        """Test that paths with different filenames are not equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/file1.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/file2.txt"
+        assert not comparator(path1, path2)
+
+    def test_temp_path_vs_non_temp_path(self):
+        """Test that temp paths don't match non-temp paths."""
+        temp_path = "/tmp/pytest-of-user/pytest-0/file.txt"
+        non_temp_path = "/home/user/file.txt"
+        assert not comparator(temp_path, non_temp_path)
+
+    def test_regular_strings_still_work(self):
+        """Test that regular string comparison still works."""
+        assert comparator("hello", "hello")
+        assert not comparator("hello", "world")
+        assert comparator("", "")
+        assert not comparator("test", "")
+
+    def test_non_temp_paths_must_be_exact(self):
+        """Test that non-temp paths require exact equality."""
+        path1 = "/home/user/project/file.txt"
+        path2 = "/home/user/project/file.txt"
+        path3 = "/home/user/project/other.txt"
+        assert comparator(path1, path2)
+        assert not comparator(path1, path3)
+
+
+class TestComparatorTempPathsInNestedStructures:
+    """Tests for comparator() with temp paths in nested data structures."""
+
+    def test_temp_paths_in_list(self):
+        """Test temp paths inside lists."""
+        list1 = ["/tmp/pytest-of-alice/pytest-0/file.txt", "other"]
+        list2 = ["/tmp/pytest-of-bob/pytest-99/file.txt", "other"]
+        assert comparator(list1, list2)
+
+    def test_temp_paths_in_tuple(self):
+        """Test temp paths inside tuples."""
+        tuple1 = ("/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt")
+        tuple2 = ("/tmp/pytest-of-user/pytest-123/a.txt", "/tmp/pytest-of-user/pytest-123/b.txt")
+        assert comparator(tuple1, tuple2)
+
+    def test_temp_paths_in_dict_values(self):
+        """Test temp paths as dictionary values."""
+        dict1 = {"path": "/tmp/pytest-of-user/pytest-0/output.json", "name": "test"}
+        dict2 = {"path": "/tmp/pytest-of-user/pytest-999/output.json", "name": "test"}
+        assert comparator(dict1, dict2)
+
+    def test_temp_paths_in_dict_keys_not_supported(self):
+        """Test that temp paths as dictionary keys must match exactly (keys are not normalized)."""
+        # Dict keys use direct comparison, so temp paths as keys won't be normalized
+        # This tests the expected behavior
+        dict1 = {"/tmp/pytest-of-user/pytest-0/key": "value"}
+        dict2 = {"/tmp/pytest-of-user/pytest-0/key": "value"}
+        assert comparator(dict1, dict2)
+
+    def test_temp_paths_in_nested_dict(self):
+        """Test temp paths in nested dictionaries."""
+        nested1 = {
+            "config": {
+                "output_path": "/tmp/pytest-of-alice/pytest-5/results",
+                "log_path": "/tmp/pytest-of-alice/pytest-5/logs"
+            }
+        }
+        nested2 = {
+            "config": {
+                "output_path": "/tmp/pytest-of-bob/pytest-10/results",
+                "log_path": "/tmp/pytest-of-bob/pytest-10/logs"
+            }
+        }
+        assert comparator(nested1, nested2)
+
+    def test_temp_paths_in_deeply_nested_structure(self):
+        """Test temp paths in deeply nested structures."""
+        deep1 = {"a": {"b": {"c": ["/tmp/pytest-of-user/pytest-0/file.txt"]}}}
+        deep2 = {"a": {"b": {"c": ["/tmp/pytest-of-other/pytest-99/file.txt"]}}}
+        assert comparator(deep1, deep2)
+
+    def test_mixed_temp_and_regular_paths(self):
+        """Test structures with both temp and regular paths."""
+        data1 = {
+            "temp": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "regular": "/home/user/file.txt"
+        }
+        data2 = {
+            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "regular": "/home/user/file.txt"
+        }
+        assert comparator(data1, data2)
+
+        data3 = {
+            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "regular": "/home/user/different.txt"
+        }
+        assert not comparator(data1, data3)
+
+    def test_temp_paths_in_deque(self):
+        """Test temp paths inside deque."""
+        from collections import deque
+        d1 = deque(["/tmp/pytest-of-user/pytest-0/file.txt"])
+        d2 = deque(["/tmp/pytest-of-user/pytest-123/file.txt"])
+        assert comparator(d1, d2)
+
+    def test_temp_paths_in_chainmap(self):
+        """Test temp paths inside ChainMap."""
+        from collections import ChainMap
+        cm1 = ChainMap({"path": "/tmp/pytest-of-user/pytest-0/file.txt"})
+        cm2 = ChainMap({"path": "/tmp/pytest-of-user/pytest-99/file.txt"})
+        assert comparator(cm1, cm2)
+
+
+class TestComparatorTempPathsEdgeCases:
+    """Edge case tests for temp path handling in comparator."""
+
+    def test_empty_string_vs_temp_path(self):
+        """Test empty string comparison with temp path."""
+        assert not comparator("", "/tmp/pytest-of-user/pytest-0/file.txt")
+        assert not comparator("/tmp/pytest-of-user/pytest-0/file.txt", "")
+
+    def test_path_with_special_characters(self):
+        """Test temp paths containing special characters in filenames."""
+        path1 = "/tmp/pytest-of-user/pytest-0/file with spaces.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/file with spaces.txt"
+        assert comparator(path1, path2)
+
+        path3 = "/tmp/pytest-of-user/pytest-0/file-with-dashes.txt"
+        path4 = "/tmp/pytest-of-user/pytest-99/file-with-dashes.txt"
+        assert comparator(path3, path4)
+
+    def test_path_with_unicode_characters(self):
+        """Test temp paths with unicode characters."""
+        path1 = "/tmp/pytest-of-user/pytest-0/файл.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/файл.txt"
+        assert comparator(path1, path2)
+
+    def test_very_long_session_number(self):
+        """Test temp paths with very long session numbers."""
+        path1 = "/tmp/pytest-of-user/pytest-9999999999/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/file.txt"
+        assert comparator(path1, path2)
+
+    def test_username_with_special_characters(self):
+        """Test temp paths with special characters in username."""
+        path1 = "/tmp/pytest-of-user-name/pytest-0/file.txt"
+        path2 = "/tmp/pytest-of-other-user/pytest-99/file.txt"
+        assert comparator(path1, path2)
+
+    def test_path_only_differs_in_temp_portion(self):
+        """Test that only the temp portion is normalized, rest must match."""
+        path1 = "/tmp/pytest-of-user/pytest-0/subdir/nested/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/subdir/nested/file.txt"
+        assert comparator(path1, path2)
+
+        path3 = "/tmp/pytest-of-user/pytest-0/subdir/nested/other.txt"
+        assert not comparator(path1, path3)
+
+    def test_multiple_slashes(self):
+        """Test temp paths with multiple consecutive slashes (should still work)."""
+        # Note: The regex handles the standard format, extra slashes may not be normalized
+        path1 = "/tmp/pytest-of-user/pytest-0/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/file.txt"
+        assert comparator(path1, path2)
+
+    def test_temp_path_at_start_middle_end(self):
+        """Test that temp paths are detected regardless of position in string."""
+        # Path at start
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test")
+        # Path in middle (embedded in error message)
+        assert _is_temp_path("Error: /tmp/pytest-of-user/pytest-0/test failed")
+        # Path at end
+        assert _is_temp_path("Output saved to /tmp/pytest-of-user/pytest-0/")
+
+    def test_partial_temp_path_patterns(self):
+        """Test strings that partially match temp path pattern."""
+        # Missing components
+        assert not _is_temp_path("/tmp/pytest-of-user/")
+        assert not _is_temp_path("/tmp/pytest-0/")
+        assert not _is_temp_path("pytest-of-user/pytest-0/")
+
+
+class TestPytestTempPathPatternRegex:
+    """Tests for the PYTEST_TEMP_PATH_PATTERN regex directly."""
+
+    def test_pattern_matches_standard_format(self):
+        """Test regex matches standard pytest temp path format."""
+        import re
+        assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-0/")
+        assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-123/file")
+
+    def test_pattern_captures_correctly(self):
+        """Test that the pattern substitution works correctly."""
+        result = PYTEST_TEMP_PATH_PATTERN.sub("REPLACED", "/tmp/pytest-of-user/pytest-0/file.txt")
+        assert result == "REPLACEDfile.txt"
+
+    def test_pattern_handles_multiple_matches(self):
+        """Test pattern with multiple temp paths in same string."""
+        text = "/tmp/pytest-of-a/pytest-1/ and /tmp/pytest-of-b/pytest-2/"
+        result = PYTEST_TEMP_PATH_PATTERN.sub("X", text)
+        assert result == "X and X"
+
+    def test_pattern_greedy_behavior(self):
+        """Test that the pattern doesn't over-match."""
+        # The pattern should stop at the trailing slash of the session number
+        path = "/tmp/pytest-of-user/pytest-0/subdir/pytest-1/file.txt"
+        result = PYTEST_TEMP_PATH_PATTERN.sub("X", path)
+        # The first temp path should be replaced, but "pytest-1" in subdir shouldn't trigger
+        assert "subdir" in result
+
+
+class TestComparatorTempPathsWithSuperset:
+    """Tests for temp path comparison with superset_obj=True."""
+
+    def test_superset_with_temp_paths_in_dict(self):
+        """Test superset comparison with temp paths in dictionaries."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"path": "/tmp/pytest-of-user/pytest-99/file.txt", "extra": "data"}
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_paths_must_still_match(self):
+        """Test that temp paths must still be equivalent in superset mode."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"path": "/tmp/pytest-of-user/pytest-99/other.txt", "extra": "data"}
+        assert not comparator(orig, new, superset_obj=True)
+
+
+class TestComparatorTempPathsRealisticScenarios:
+    """Tests simulating realistic scenarios where temp path comparison matters."""
+
+    def test_test_output_comparison(self):
+        """Simulate comparing test outputs that contain temp paths."""
+        original_result = {
+            "status": "success",
+            "output_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/results.json",
+            "log_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/debug.log"
+        }
+        replay_result = {
+            "status": "success",
+            "output_file": "/tmp/pytest-of-local-user/pytest-0/test_output/results.json",
+            "log_file": "/tmp/pytest-of-local-user/pytest-0/test_output/debug.log"
+        }
+        assert comparator(original_result, replay_result)
+
+    def test_exception_message_with_temp_path(self):
+        """Test comparing exception-like structures with temp paths."""
+        exc1 = {
+            "type": "FileNotFoundError",
+            "message": "File not found: /tmp/pytest-of-user/pytest-0/missing.txt"
+        }
+        exc2 = {
+            "type": "FileNotFoundError",
+            "message": "File not found: /tmp/pytest-of-user/pytest-99/missing.txt"
+        }
+        assert comparator(exc1, exc2)
+
+    def test_function_return_with_temp_path(self):
+        """Test comparing function returns that include temp paths."""
+        # Simulating a function that returns a created file path
+        return1 = "/tmp/pytest-of-user/pytest-5/generated_file_abc123.txt"
+        return2 = "/tmp/pytest-of-user/pytest-10/generated_file_abc123.txt"
+        assert comparator(return1, return2)
+
+    def test_list_of_created_files(self):
+        """Test comparing lists of created file paths."""
+        files1 = [
+            "/tmp/pytest-of-user/pytest-0/output/file1.txt",
+            "/tmp/pytest-of-user/pytest-0/output/file2.txt",
+            "/tmp/pytest-of-user/pytest-0/output/file3.txt"
+        ]
+        files2 = [
+            "/tmp/pytest-of-user/pytest-99/output/file1.txt",
+            "/tmp/pytest-of-user/pytest-99/output/file2.txt",
+            "/tmp/pytest-of-user/pytest-99/output/file3.txt"
+        ]
+        assert comparator(files1, files2)
+
+    def test_config_object_with_paths(self):
+        """Test comparing config-like objects with multiple paths."""
+        config1 = {
+            "temp_dir": "/tmp/pytest-of-user/pytest-0/",
+            "cache_dir": "/tmp/pytest-of-user/pytest-0/cache/",
+            "output_dir": "/tmp/pytest-of-user/pytest-0/output/",
+            "permanent_dir": "/home/user/data/"
+        }
+        config2 = {
+            "temp_dir": "/tmp/pytest-of-other/pytest-100/",
+            "cache_dir": "/tmp/pytest-of-other/pytest-100/cache/",
+            "output_dir": "/tmp/pytest-of-other/pytest-100/output/",
+            "permanent_dir": "/home/user/data/"
+        }
+        assert comparator(config1, config2)

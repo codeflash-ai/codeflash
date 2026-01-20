@@ -25,6 +25,25 @@ HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 
+# Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
+# These paths vary between test runs but are logically equivalent
+PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # noqa: S108
+
+
+def _normalize_temp_path(path: str) -> str:
+    """Normalize temporary file paths by replacing session-specific components.
+
+    Pytest creates temp directories like /tmp/pytest-of-<user>/pytest-<N>/
+    where N is a session number that increments. When comparing return values
+    from different test runs, these paths should be considered equivalent.
+    """
+    return PYTEST_TEMP_PATH_PATTERN.sub("/tmp/pytest-temp/", path)  # noqa: S108
+
+
+def _is_temp_path(s: str) -> bool:
+    """Check if a string looks like a pytest temp path."""
+    return PYTEST_TEMP_PATH_PATTERN.search(s) is not None
+
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
@@ -40,10 +59,18 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
+        # Handle strings separately to normalize temp paths
+        if isinstance(orig, str):
+            if orig == new:
+                return True
+            # If strings differ, check if they're temp paths that differ only in session number
+            if _is_temp_path(orig) and _is_temp_path(new):
+                return _normalize_temp_path(orig) == _normalize_temp_path(new)
+            return False
+
         if isinstance(
             orig,
             (
-                str,
                 int,
                 bool,
                 complex,
