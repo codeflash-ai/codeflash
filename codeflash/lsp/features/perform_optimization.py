@@ -163,4 +163,6 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
         "task_id": params.task_id,
         "explanation": best_optimization.explanation_v2,
         "optimizationReview": function_optimizer.optimization_review.capitalize(),
+        "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+        "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
     }
