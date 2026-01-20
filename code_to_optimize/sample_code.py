@@ -230,6 +230,40 @@ def tridiagonal_solve_torch(a, b, c, d):
     dtype = b.dtype
     n = b.shape[0]
 
+    # If inputs are on CPU and no gradient tracking is required, perform the
+    # computation in NumPy to avoid creating many small PyTorch tensors.
+    # This preserves numerical results and device/dtype for the returned tensor.
+    if device.type == "cpu" and (not getattr(a, "requires_grad", False)) and (not getattr(b, "requires_grad", False)) and (not getattr(c, "requires_grad", False)) and (not getattr(d, "requires_grad", False)):
+        # Convert to NumPy arrays once (avoids per-iteration tensor ops)
+        a_np = a.detach().numpy() if isinstance(a, torch.Tensor) else np.asarray(a)
+        b_np = b.detach().numpy() if isinstance(b, torch.Tensor) else np.asarray(b)
+        c_np = c.detach().numpy() if isinstance(c, torch.Tensor) else np.asarray(c)
+        d_np = d.detach().numpy() if isinstance(d, torch.Tensor) else np.asarray(d)
+
+        c_prime = np.empty(n - 1, dtype=b_np.dtype)
+        d_prime = np.empty(n, dtype=b_np.dtype)
+        x_np = np.empty(n, dtype=b_np.dtype)
+
+        c_prime[0] = c_np[0] / b_np[0]
+        d_prime[0] = d_np[0] / b_np[0]
+
+        for i in range(1, n - 1):
+            denom = b_np[i] - a_np[i - 1] * c_prime[i - 1]
+            c_prime[i] = c_np[i] / denom
+            d_prime[i] = (d_np[i] - a_np[i - 1] * d_prime[i - 1]) / denom
+
+        denom = b_np[n - 1] - a_np[n - 2] * c_prime[n - 2]
+        d_prime[n - 1] = (d_np[n - 1] - a_np[n - 2] * d_prime[n - 2]) / denom
+
+        x_np[n - 1] = d_prime[n - 1]
+        for i in range(n - 2, -1, -1):
+            x_np[i] = d_prime[i] - c_prime[i] * x_np[i + 1]
+
+        # Convert back to torch with original dtype/device
+        # Use from_numpy then to(...) to ensure correct device/dtype
+        return torch.from_numpy(x_np).to(device=device, dtype=dtype)
+
+    # Otherwise (GPU or any requires_grad True), keep everything in PyTorch.
     c_prime = torch.zeros(n - 1, device=device, dtype=dtype)
     d_prime = torch.zeros(n, device=device, dtype=dtype)
     x = torch.zeros(n, device=device, dtype=dtype)
