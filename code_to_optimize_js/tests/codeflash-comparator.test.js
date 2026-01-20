@@ -1174,3 +1174,713 @@ describe('Helper Functions', () => {
         });
     });
 });
+
+// ============================================================================
+// NEW FEATURES - STRICT CONSTRUCTOR TYPE CHECKING
+// ============================================================================
+
+describe('Strict Constructor Type Checking', () => {
+    test('different constructor types return false early', () => {
+        // Number vs String
+        expect(comparator(5, '5')).toBe(false);
+    });
+
+    test('same constructor types pass through', () => {
+        expect(comparator(5, 10)).toBe(false); // Different values but same type
+        expect(comparator(5, 5)).toBe(true);
+    });
+
+    test('Date vs Object with same properties fails type check', () => {
+        const date = new Date('2024-01-01');
+        const obj = { getTime: () => date.getTime() };
+        expect(comparator(date, obj)).toBe(false);
+    });
+
+    test('Array vs Object fails type check', () => {
+        expect(comparator([1, 2, 3], { 0: 1, 1: 2, 2: 3 })).toBe(false);
+    });
+
+    test('custom class instances with different constructors', () => {
+        class Foo { constructor() { this.x = 1; } }
+        class Bar { constructor() { this.x = 1; } }
+        expect(comparator(new Foo(), new Bar())).toBe(false);
+    });
+
+    test('custom class vs plain object', () => {
+        class Point { constructor(x, y) { this.x = x; this.y = y; } }
+        expect(comparator(new Point(1, 2), { x: 1, y: 2 })).toBe(false);
+    });
+
+    test('plain objects from same realm pass', () => {
+        expect(comparator({ a: 1 }, { a: 1 })).toBe(true);
+    });
+
+    test('Set vs Map fails type check', () => {
+        expect(comparator(new Set([1, 2]), new Map([[1, 2]]))).toBe(false);
+    });
+
+    test('TypedArray vs regular array fails type check', () => {
+        expect(comparator(new Int32Array([1, 2, 3]), [1, 2, 3])).toBe(false);
+    });
+
+    test('different TypedArray types fail type check', () => {
+        expect(comparator(new Int8Array([1, 2]), new Uint8Array([1, 2]))).toBe(false);
+        expect(comparator(new Float32Array([1.0]), new Float64Array([1.0]))).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - NODE.JS BUFFER SUPPORT
+// ============================================================================
+
+describe('Node.js Buffer Support', () => {
+    test('identical Buffers are equal', () => {
+        const buf1 = Buffer.from([1, 2, 3, 4]);
+        const buf2 = Buffer.from([1, 2, 3, 4]);
+        expect(comparator(buf1, buf2)).toBe(true);
+    });
+
+    test('different Buffers are not equal', () => {
+        const buf1 = Buffer.from([1, 2, 3, 4]);
+        const buf2 = Buffer.from([1, 2, 3, 5]);
+        expect(comparator(buf1, buf2)).toBe(false);
+    });
+
+    test('Buffers with different lengths are not equal', () => {
+        const buf1 = Buffer.from([1, 2, 3]);
+        const buf2 = Buffer.from([1, 2, 3, 4]);
+        expect(comparator(buf1, buf2)).toBe(false);
+    });
+
+    test('empty Buffers are equal', () => {
+        const buf1 = Buffer.from([]);
+        const buf2 = Buffer.from([]);
+        expect(comparator(buf1, buf2)).toBe(true);
+    });
+
+    test('Buffer from string', () => {
+        const buf1 = Buffer.from('hello');
+        const buf2 = Buffer.from('hello');
+        const buf3 = Buffer.from('world');
+        expect(comparator(buf1, buf2)).toBe(true);
+        expect(comparator(buf1, buf3)).toBe(false);
+    });
+
+    test('Buffer from hex', () => {
+        const buf1 = Buffer.from('deadbeef', 'hex');
+        const buf2 = Buffer.from('deadbeef', 'hex');
+        const buf3 = Buffer.from('cafebabe', 'hex');
+        expect(comparator(buf1, buf2)).toBe(true);
+        expect(comparator(buf1, buf3)).toBe(false);
+    });
+
+    test('Buffer.alloc', () => {
+        const buf1 = Buffer.alloc(4, 0xff);
+        const buf2 = Buffer.alloc(4, 0xff);
+        const buf3 = Buffer.alloc(4, 0x00);
+        expect(comparator(buf1, buf2)).toBe(true);
+        expect(comparator(buf1, buf3)).toBe(false);
+    });
+
+    test('Buffer vs Uint8Array are not equal', () => {
+        const buf = Buffer.from([1, 2, 3]);
+        const arr = new Uint8Array([1, 2, 3]);
+        // Buffer extends Uint8Array but has different constructor
+        expect(comparator(buf, arr)).toBe(false);
+    });
+
+    test('Buffer vs Array are not equal', () => {
+        const buf = Buffer.from([1, 2, 3]);
+        expect(comparator(buf, [1, 2, 3])).toBe(false);
+    });
+
+    test('large Buffers', () => {
+        const size = 10000;
+        const buf1 = Buffer.alloc(size);
+        const buf2 = Buffer.alloc(size);
+        for (let i = 0; i < size; i++) {
+            buf1[i] = i % 256;
+            buf2[i] = i % 256;
+        }
+        expect(comparator(buf1, buf2)).toBe(true);
+        buf2[size - 1] = 0;
+        expect(comparator(buf1, buf2)).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - SHAREDARRAYBUFFER SUPPORT
+// ============================================================================
+
+describe('SharedArrayBuffer Support', () => {
+    // Note: SharedArrayBuffer may not be available in all environments
+    // Skip tests if not available
+    const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+
+    (hasSharedArrayBuffer ? test : test.skip)('identical SharedArrayBuffers are equal', () => {
+        const sab1 = new SharedArrayBuffer(4);
+        const sab2 = new SharedArrayBuffer(4);
+        new Uint8Array(sab1).set([1, 2, 3, 4]);
+        new Uint8Array(sab2).set([1, 2, 3, 4]);
+        expect(comparator(sab1, sab2)).toBe(true);
+    });
+
+    (hasSharedArrayBuffer ? test : test.skip)('different SharedArrayBuffers are not equal', () => {
+        const sab1 = new SharedArrayBuffer(4);
+        const sab2 = new SharedArrayBuffer(4);
+        new Uint8Array(sab1).set([1, 2, 3, 4]);
+        new Uint8Array(sab2).set([1, 2, 3, 5]);
+        expect(comparator(sab1, sab2)).toBe(false);
+    });
+
+    (hasSharedArrayBuffer ? test : test.skip)('SharedArrayBuffers with different lengths are not equal', () => {
+        const sab1 = new SharedArrayBuffer(4);
+        const sab2 = new SharedArrayBuffer(8);
+        expect(comparator(sab1, sab2)).toBe(false);
+    });
+
+    (hasSharedArrayBuffer ? test : test.skip)('empty SharedArrayBuffers are equal', () => {
+        const sab1 = new SharedArrayBuffer(0);
+        const sab2 = new SharedArrayBuffer(0);
+        expect(comparator(sab1, sab2)).toBe(true);
+    });
+
+    (hasSharedArrayBuffer ? test : test.skip)('SharedArrayBuffer vs ArrayBuffer are not equal', () => {
+        const sab = new SharedArrayBuffer(4);
+        const ab = new ArrayBuffer(4);
+        new Uint8Array(sab).set([1, 2, 3, 4]);
+        new Uint8Array(ab).set([1, 2, 3, 4]);
+        expect(comparator(sab, ab)).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - BIGINT TYPED ARRAYS
+// ============================================================================
+
+describe('BigInt TypedArrays', () => {
+    describe('BigInt64Array', () => {
+        test('identical BigInt64Arrays are equal', () => {
+            const arr1 = new BigInt64Array([1n, 2n, 3n]);
+            const arr2 = new BigInt64Array([1n, 2n, 3n]);
+            expect(comparator(arr1, arr2)).toBe(true);
+        });
+
+        test('different BigInt64Arrays are not equal', () => {
+            const arr1 = new BigInt64Array([1n, 2n, 3n]);
+            const arr2 = new BigInt64Array([1n, 2n, 4n]);
+            expect(comparator(arr1, arr2)).toBe(false);
+        });
+
+        test('BigInt64Array with negative values', () => {
+            const arr1 = new BigInt64Array([-1n, -2n, -3n]);
+            const arr2 = new BigInt64Array([-1n, -2n, -3n]);
+            expect(comparator(arr1, arr2)).toBe(true);
+        });
+
+        test('BigInt64Array with large values', () => {
+            const large = 9223372036854775807n; // Max BigInt64
+            const arr1 = new BigInt64Array([large, -large - 1n]);
+            const arr2 = new BigInt64Array([large, -large - 1n]);
+            expect(comparator(arr1, arr2)).toBe(true);
+        });
+
+        test('empty BigInt64Arrays are equal', () => {
+            expect(comparator(new BigInt64Array([]), new BigInt64Array([]))).toBe(true);
+        });
+    });
+
+    describe('BigUint64Array', () => {
+        test('identical BigUint64Arrays are equal', () => {
+            const arr1 = new BigUint64Array([1n, 2n, 3n]);
+            const arr2 = new BigUint64Array([1n, 2n, 3n]);
+            expect(comparator(arr1, arr2)).toBe(true);
+        });
+
+        test('different BigUint64Arrays are not equal', () => {
+            const arr1 = new BigUint64Array([1n, 2n, 3n]);
+            const arr2 = new BigUint64Array([1n, 2n, 4n]);
+            expect(comparator(arr1, arr2)).toBe(false);
+        });
+
+        test('BigUint64Array with large values', () => {
+            const large = 18446744073709551615n; // Max BigUint64
+            const arr1 = new BigUint64Array([0n, large]);
+            const arr2 = new BigUint64Array([0n, large]);
+            expect(comparator(arr1, arr2)).toBe(true);
+        });
+    });
+
+    test('BigInt64Array vs BigUint64Array are not equal', () => {
+        const signed = new BigInt64Array([1n, 2n]);
+        const unsigned = new BigUint64Array([1n, 2n]);
+        expect(comparator(signed, unsigned)).toBe(false);
+    });
+
+    test('BigInt64Array vs regular array are not equal', () => {
+        const typed = new BigInt64Array([1n, 2n]);
+        expect(comparator(typed, [1n, 2n])).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - ENHANCED ERROR COMPARISON
+// ============================================================================
+
+describe('Enhanced Error Comparison', () => {
+    test('errors with same name and message are equal', () => {
+        const e1 = new Error('test');
+        const e2 = new Error('test');
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('errors with custom properties are compared', () => {
+        const e1 = new Error('test');
+        e1.code = 'ERR_TEST';
+        e1.statusCode = 500;
+
+        const e2 = new Error('test');
+        e2.code = 'ERR_TEST';
+        e2.statusCode = 500;
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('errors with different custom properties are not equal', () => {
+        const e1 = new Error('test');
+        e1.code = 'ERR_TEST';
+
+        const e2 = new Error('test');
+        e2.code = 'ERR_OTHER';
+
+        expect(comparator(e1, e2)).toBe(false);
+    });
+
+    test('errors with different number of custom properties are not equal', () => {
+        const e1 = new Error('test');
+        e1.code = 'ERR_TEST';
+
+        const e2 = new Error('test');
+        e2.code = 'ERR_TEST';
+        e2.extra = 'value';
+
+        expect(comparator(e1, e2)).toBe(false);
+    });
+
+    test('errors with nested custom properties', () => {
+        const e1 = new Error('test');
+        e1.data = { nested: { value: 42 }, arr: [1, 2, 3] };
+
+        const e2 = new Error('test');
+        e2.data = { nested: { value: 42 }, arr: [1, 2, 3] };
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('errors with nested custom properties differ', () => {
+        const e1 = new Error('test');
+        e1.data = { nested: { value: 42 } };
+
+        const e2 = new Error('test');
+        e2.data = { nested: { value: 43 } };
+
+        expect(comparator(e1, e2)).toBe(false);
+    });
+
+    test('underscore properties are ignored', () => {
+        const e1 = new Error('test');
+        e1._internal = 'value1';
+        e1.code = 'ERR';
+
+        const e2 = new Error('test');
+        e2._internal = 'different';
+        e2.code = 'ERR';
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('TypeError with custom properties', () => {
+        const e1 = new TypeError('type error');
+        e1.field = 'username';
+
+        const e2 = new TypeError('type error');
+        e2.field = 'username';
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('RangeError with custom properties', () => {
+        const e1 = new RangeError('out of range');
+        e1.min = 0;
+        e1.max = 100;
+        e1.actual = 150;
+
+        const e2 = new RangeError('out of range');
+        e2.min = 0;
+        e2.max = 100;
+        e2.actual = 150;
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('SyntaxError with custom properties', () => {
+        const e1 = new SyntaxError('invalid syntax');
+        e1.line = 10;
+        e1.column = 5;
+
+        const e2 = new SyntaxError('invalid syntax');
+        e2.line = 10;
+        e2.column = 5;
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+
+    test('custom Error subclass', () => {
+        class CustomError extends Error {
+            constructor(message, code) {
+                super(message);
+                this.name = 'CustomError';
+                this.code = code;
+            }
+        }
+
+        const e1 = new CustomError('custom', 'ERR_CUSTOM');
+        const e2 = new CustomError('custom', 'ERR_CUSTOM');
+
+        expect(comparator(e1, e2)).toBe(true);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - WEAKREF SUPPORT
+// ============================================================================
+
+describe('WeakRef Support', () => {
+    // Note: WeakRef may not be available in all environments
+    const hasWeakRef = typeof WeakRef !== 'undefined';
+
+    (hasWeakRef ? test : test.skip)('same WeakRef reference is equal', () => {
+        const obj = { value: 42 };
+        const ref = new WeakRef(obj);
+        expect(comparator(ref, ref)).toBe(true);
+    });
+
+    (hasWeakRef ? test : test.skip)('different WeakRef instances are not equal (reference comparison)', () => {
+        const obj = { value: 42 };
+        const ref1 = new WeakRef(obj);
+        const ref2 = new WeakRef(obj);
+        // WeakRefs are compared by reference only
+        expect(comparator(ref1, ref2)).toBe(false);
+    });
+
+    (hasWeakRef ? test : test.skip)('WeakRefs to different objects are not equal', () => {
+        const obj1 = { value: 1 };
+        const obj2 = { value: 1 };
+        const ref1 = new WeakRef(obj1);
+        const ref2 = new WeakRef(obj2);
+        expect(comparator(ref1, ref2)).toBe(false);
+    });
+
+    (hasWeakRef ? test : test.skip)('WeakRef vs plain object are not equal', () => {
+        const obj = { value: 42 };
+        const ref = new WeakRef(obj);
+        expect(comparator(ref, obj)).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - GENERATOR SUPPORT
+// ============================================================================
+
+describe('Generator Support', () => {
+    test('same generator reference is equal', () => {
+        function* gen() {
+            yield 1;
+            yield 2;
+        }
+        const g = gen();
+        expect(comparator(g, g)).toBe(true);
+    });
+
+    test('different generator instances are not equal (reference comparison)', () => {
+        function* gen() {
+            yield 1;
+            yield 2;
+        }
+        const g1 = gen();
+        const g2 = gen();
+        // Generators are compared by reference only (consuming would alter state)
+        expect(comparator(g1, g2)).toBe(false);
+    });
+
+    test('generators from different functions are not equal', () => {
+        function* gen1() { yield 1; }
+        function* gen2() { yield 1; }
+        expect(comparator(gen1(), gen2())).toBe(false);
+    });
+
+    test('generator vs iterator object are not equal', () => {
+        function* gen() { yield 1; }
+        const arr = [1];
+        expect(comparator(gen(), arr[Symbol.iterator]())).toBe(false);
+    });
+
+    test('generator function vs generator instance are not equal', () => {
+        function* gen() { yield 1; }
+        expect(comparator(gen, gen())).toBe(false);
+    });
+
+    test('async generator same reference', () => {
+        async function* asyncGen() {
+            yield 1;
+        }
+        const g = asyncGen();
+        expect(comparator(g, g)).toBe(true);
+    });
+
+    test('different async generator instances are not equal', () => {
+        async function* asyncGen() {
+            yield 1;
+        }
+        expect(comparator(asyncGen(), asyncGen())).toBe(false);
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - ITERATOR SUPPORT
+// ============================================================================
+
+describe('Iterator Support', () => {
+    describe('Map Iterators', () => {
+        test('same Map iterator reference is equal', () => {
+            const map = new Map([[1, 'a'], [2, 'b']]);
+            const iter = map.keys();
+            expect(comparator(iter, iter)).toBe(true);
+        });
+
+        test('different Map.keys() iterators are not equal', () => {
+            const map = new Map([[1, 'a'], [2, 'b']]);
+            expect(comparator(map.keys(), map.keys())).toBe(false);
+        });
+
+        test('different Map.values() iterators are not equal', () => {
+            const map = new Map([[1, 'a'], [2, 'b']]);
+            expect(comparator(map.values(), map.values())).toBe(false);
+        });
+
+        test('different Map.entries() iterators are not equal', () => {
+            const map = new Map([[1, 'a'], [2, 'b']]);
+            expect(comparator(map.entries(), map.entries())).toBe(false);
+        });
+
+        test('Map.keys() vs Map.values() are not equal', () => {
+            const map = new Map([[1, 'a']]);
+            expect(comparator(map.keys(), map.values())).toBe(false);
+        });
+    });
+
+    describe('Set Iterators', () => {
+        test('same Set iterator reference is equal', () => {
+            const set = new Set([1, 2, 3]);
+            const iter = set.values();
+            expect(comparator(iter, iter)).toBe(true);
+        });
+
+        test('different Set.values() iterators are not equal', () => {
+            const set = new Set([1, 2, 3]);
+            expect(comparator(set.values(), set.values())).toBe(false);
+        });
+
+        test('different Set.keys() iterators are not equal', () => {
+            const set = new Set([1, 2, 3]);
+            expect(comparator(set.keys(), set.keys())).toBe(false);
+        });
+
+        test('different Set.entries() iterators are not equal', () => {
+            const set = new Set([1, 2, 3]);
+            expect(comparator(set.entries(), set.entries())).toBe(false);
+        });
+    });
+
+    describe('Array Iterators', () => {
+        test('same Array iterator reference is equal', () => {
+            const arr = [1, 2, 3];
+            const iter = arr[Symbol.iterator]();
+            expect(comparator(iter, iter)).toBe(true);
+        });
+
+        test('different Array iterators are not equal', () => {
+            const arr = [1, 2, 3];
+            expect(comparator(arr[Symbol.iterator](), arr[Symbol.iterator]())).toBe(false);
+        });
+
+        test('different array.values() iterators are not equal', () => {
+            const arr = [1, 2, 3];
+            expect(comparator(arr.values(), arr.values())).toBe(false);
+        });
+
+        test('different array.keys() iterators are not equal', () => {
+            const arr = [1, 2, 3];
+            expect(comparator(arr.keys(), arr.keys())).toBe(false);
+        });
+
+        test('different array.entries() iterators are not equal', () => {
+            const arr = [1, 2, 3];
+            expect(comparator(arr.entries(), arr.entries())).toBe(false);
+        });
+    });
+
+    describe('String Iterators', () => {
+        test('same String iterator reference is equal', () => {
+            const str = 'hello';
+            const iter = str[Symbol.iterator]();
+            expect(comparator(iter, iter)).toBe(true);
+        });
+
+        test('different String iterators are not equal', () => {
+            const str = 'hello';
+            expect(comparator(str[Symbol.iterator](), str[Symbol.iterator]())).toBe(false);
+        });
+    });
+
+    describe('Custom Iterators', () => {
+        test('custom iterator same reference is equal', () => {
+            const customIterator = {
+                [Symbol.iterator]() { return this; },
+                next() { return { done: true, value: undefined }; }
+            };
+            expect(comparator(customIterator, customIterator)).toBe(true);
+        });
+
+        test('different custom iterators are not equal', () => {
+            const createIterator = () => ({
+                [Symbol.iterator]() { return this; },
+                next() { return { done: true, value: undefined }; }
+            });
+            expect(comparator(createIterator(), createIterator())).toBe(false);
+        });
+    });
+});
+
+// ============================================================================
+// NEW FEATURES - SYMBOL PROPERTIES IN OBJECTS
+// ============================================================================
+
+describe('Symbol Properties in Objects', () => {
+    test('objects with same Symbol properties are equal', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value', regular: 1 };
+        const obj2 = { [sym]: 'value', regular: 1 };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('objects with different Symbol values are not equal', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value1' };
+        const obj2 = { [sym]: 'value2' };
+        expect(comparator(obj1, obj2)).toBe(false);
+    });
+
+    test('objects with different Symbol keys are not equal', () => {
+        const sym1 = Symbol('test1');
+        const sym2 = Symbol('test2');
+        const obj1 = { [sym1]: 'value' };
+        const obj2 = { [sym2]: 'value' };
+        expect(comparator(obj1, obj2)).toBe(false);
+    });
+
+    test('object with Symbol vs object without Symbol are not equal', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value', regular: 1 };
+        const obj2 = { regular: 1 };
+        expect(comparator(obj1, obj2)).toBe(false);
+    });
+
+    test('objects with multiple Symbol properties', () => {
+        const sym1 = Symbol('a');
+        const sym2 = Symbol('b');
+        const obj1 = { [sym1]: 1, [sym2]: 2 };
+        const obj2 = { [sym1]: 1, [sym2]: 2 };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('objects with nested Symbol property values', () => {
+        const sym = Symbol('nested');
+        const obj1 = { [sym]: { deep: { value: 42 } } };
+        const obj2 = { [sym]: { deep: { value: 42 } } };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('objects with nested Symbol property values differ', () => {
+        const sym = Symbol('nested');
+        const obj1 = { [sym]: { deep: { value: 42 } } };
+        const obj2 = { [sym]: { deep: { value: 43 } } };
+        expect(comparator(obj1, obj2)).toBe(false);
+    });
+
+    test('Symbol.for creates shared Symbols that work correctly', () => {
+        const sym = Symbol.for('shared');
+        const obj1 = { [sym]: 'value' };
+        const obj2 = { [Symbol.for('shared')]: 'value' };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('well-known Symbols are compared correctly', () => {
+        const obj1 = { [Symbol.toStringTag]: 'CustomObject' };
+        const obj2 = { [Symbol.toStringTag]: 'CustomObject' };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('superset mode with Symbol properties', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value' };
+        const obj2 = { [sym]: 'value', extra: 'prop' };
+        expect(comparator(obj1, obj2, { supersetObj: true })).toBe(true);
+    });
+
+    test('superset mode requires all Symbol properties from original', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value', regular: 1 };
+        const obj2 = { regular: 1 };
+        expect(comparator(obj1, obj2, { supersetObj: true })).toBe(false);
+    });
+
+    test('superset mode with Symbol properties - values must match', () => {
+        const sym = Symbol('test');
+        const obj1 = { [sym]: 'value1' };
+        const obj2 = { [sym]: 'value2', extra: 'prop' };
+        expect(comparator(obj1, obj2, { supersetObj: true })).toBe(false);
+    });
+
+    test('empty objects with no Symbols are equal', () => {
+        expect(comparator({}, {})).toBe(true);
+    });
+
+    test('Symbol-only objects', () => {
+        const sym = Symbol('only');
+        const obj1 = { [sym]: 42 };
+        const obj2 = { [sym]: 42 };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('mixed Symbol and string keys', () => {
+        const sym = Symbol('mixed');
+        const obj1 = { a: 1, [sym]: 2, b: 3 };
+        const obj2 = { a: 1, [sym]: 2, b: 3 };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('Symbol properties with array values', () => {
+        const sym = Symbol('array');
+        const obj1 = { [sym]: [1, 2, 3] };
+        const obj2 = { [sym]: [1, 2, 3] };
+        expect(comparator(obj1, obj2)).toBe(true);
+    });
+
+    test('Symbol properties with array values differ', () => {
+        const sym = Symbol('array');
+        const obj1 = { [sym]: [1, 2, 3] };
+        const obj2 = { [sym]: [1, 2, 4] };
+        expect(comparator(obj1, obj2)).toBe(false);
+    });
+});
