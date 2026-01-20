@@ -265,22 +265,58 @@ def leapfrog_integration_torch(
     pos = positions.clone()
     vel = velocities.clone()
 
+
+    # Precompute shapes and broadcasted mass row to avoid repeating work
+    n = pos.shape[0]
+    dim = pos.shape[1]
+
+    masses_row = masses.unsqueeze(0)
+
+    # Preallocate buffers to reduce per-iteration allocations
+    diff = torch.empty((n, n, dim), dtype=pos.dtype, device=pos.device)
+    dist_sq = torch.empty((n, n), dtype=pos.dtype, device=pos.device)
+    dist = torch.empty_like(dist_sq)
+    dist_cubed = torch.empty_like(dist_sq)
+    acc = torch.empty_like(pos)
+
+    softening_sq = softening * softening
+    half_dt = 0.5 * dt
+
     for _ in range(n_steps):
-        diff = pos.unsqueeze(0) - pos.unsqueeze(1)
+        # Compute pairwise displacement vectors (n, n, dim)
+        torch.sub(pos.unsqueeze(0), pos.unsqueeze(1), out=diff)
 
-        dist_sq = torch.sum(diff ** 2, dim=-1) + softening ** 2
-        dist = torch.sqrt(dist_sq)
-        dist_cubed = dist_sq * dist
+        # Sum squared distances across last axis and add softening^2
+        # dist_sq = sum(diff ** 2, dim=-1) + softening^2
+        torch.sum(diff * diff, dim=-1, out=dist_sq)
+        dist_sq.add_(softening_sq)
 
+        # dist = sqrt(dist_sq)
+        torch.sqrt(dist_sq, out=dist)
+
+        # dist_cubed = dist_sq * dist
+        torch.mul(dist_sq, dist, out=dist_cubed)
+
+        # Replace any zero entries with ones (preserve original behavior)
+        # This handles the rare edge-case where dist_cubed == 0
+        # Use torch.where to avoid data-dependent branching
         dist_cubed = torch.where(dist_cubed == 0, torch.ones_like(dist_cubed), dist_cubed)
 
-        force_factor = G * masses.unsqueeze(0) / dist_cubed
+        # force_factor = G * masses_row / dist_cubed
+        # Reuse dist_cubed buffer to hold force factors to avoid extra allocation
+        torch.div(masses_row, dist_cubed, out=dist_cubed)
+        if G != 1.0:
+            dist_cubed.mul_(G)
 
-        acc = torch.sum(force_factor.unsqueeze(-1) * diff, dim=1)
+        # Scale diff by force factors and sum to get accelerations:
+        # acc = sum(force_factor.unsqueeze(-1) * diff, dim=1)
+        torch.mul(diff, dist_cubed.unsqueeze(-1), out=diff)
+        torch.sum(diff, dim=1, out=acc)
 
-        vel = vel + 0.5 * dt * acc
+        # Leapfrog update (preserve original update ordering and numeric results)
+        vel = vel + half_dt * acc
         pos = pos + dt * vel
-        vel = vel + 0.5 * dt * acc
+        vel = vel + half_dt * acc
 
     return pos, vel
 
