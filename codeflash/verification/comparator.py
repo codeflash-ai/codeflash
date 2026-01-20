@@ -314,6 +314,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             # Handle numba typed Dict
             if isinstance(orig, NumbaDict):
+                if superset_obj:
+                    # Allow new dict to have more keys, but all orig keys must exist with equal values
+                    return all(key in new and comparator(orig[key], new[key], superset_obj) for key in orig)
                 if len(orig) != len(new):
                     return False
                 for key in orig:

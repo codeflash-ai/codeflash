@@ -2810,3 +2810,61 @@ def test_numba_jit_functions() -> None:
 
     # Different functions with different code should not compare equal
     assert not comparator(add, multiply)
+
+
+def test_numba_superset_obj() -> None:
+    """Test comparator for numba types with superset_obj=True."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test NumbaDict with superset_obj=True
+    orig_dict = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    orig_dict["x"] = 1
+    orig_dict["y"] = 2
+
+    # New dict with same keys - should pass
+    new_dict_same = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_same["x"] = 1
+    new_dict_same["y"] = 2
+    assert comparator(orig_dict, new_dict_same, superset_obj=True)
+
+    # New dict with extra keys - should pass with superset_obj=True
+    new_dict_superset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_superset["x"] = 1
+    new_dict_superset["y"] = 2
+    new_dict_superset["z"] = 3
+    assert comparator(orig_dict, new_dict_superset, superset_obj=True)
+    # But should fail with superset_obj=False
+    assert not comparator(orig_dict, new_dict_superset, superset_obj=False)
+
+    # New dict missing keys - should fail even with superset_obj=True
+    new_dict_subset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_subset["x"] = 1
+    assert not comparator(orig_dict, new_dict_subset, superset_obj=True)
+
+    # New dict with different values - should fail
+    new_dict_diff = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_diff["x"] = 1
+    new_dict_diff["y"] = 99
+    assert not comparator(orig_dict, new_dict_diff, superset_obj=True)
+
+    # Test NumbaList with superset_obj=True (lists don't support superset semantics)
+    orig_list = NumbaList([1, 2, 3])
+    new_list_same = NumbaList([1, 2, 3])
+    new_list_longer = NumbaList([1, 2, 3, 4])
+
+    assert comparator(orig_list, new_list_same, superset_obj=True)
+    # Lists must have same length regardless of superset_obj
+    assert not comparator(orig_list, new_list_longer, superset_obj=True)
+
+    # Test empty dict with superset_obj=True
+    empty_orig = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new["a"] = 1
+    # Empty orig should match any superset
+    assert comparator(empty_orig, non_empty_new, superset_obj=True)
+    assert not comparator(empty_orig, non_empty_new, superset_obj=False)
