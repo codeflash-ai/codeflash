@@ -26,12 +26,33 @@ HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 
 
+def _extract_exception_from_message(msg: str) -> Optional[BaseException]:  # noqa: FA100
+    """Try to extract a wrapped exception type from an error message.
+
+    Looks for patterns like "got ExceptionType('..." that indicate a wrapped exception.
+    Returns a synthetic exception of that type if found in builtins, None otherwise.
+    """
+    # Pattern: "got ExceptionType('message')" or "got ExceptionType("message")"
+    # This pattern is used by torch._dynamo and potentially other libraries
+    match = re.search(r"got (\w+)\(['\"]", msg)
+    if match:
+        exc_name = match.group(1)
+        # Try to find this exception type in builtins
+        import builtins
+
+        exc_class = getattr(builtins, exc_name, None)
+        if exc_class is not None and isinstance(exc_class, type) and issubclass(exc_class, BaseException):
+            return exc_class()
+    return None
+
+
 def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # noqa: FA100
     """Get the wrapped exception if this is a simple wrapper.
 
     Returns the inner exception if:
     - exc is an ExceptionGroup with exactly one exception
     - exc has a __cause__ (explicit chaining via 'raise X from Y')
+    - exc message contains a wrapped exception type pattern (e.g., "got IndexError('...")")
 
     Returns None if exc is not a wrapper or wraps multiple exceptions.
     """
@@ -43,7 +64,8 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     # Check for explicit exception chaining (__cause__)
     if exc.__cause__ is not None:
         return exc.__cause__
-    return None
+    # Try to extract wrapped exception type from the message (library-agnostic)
+    return _extract_exception_from_message(str(exc))
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
