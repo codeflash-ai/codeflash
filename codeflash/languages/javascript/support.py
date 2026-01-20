@@ -579,33 +579,6 @@ class JavaScriptSupport:
         tracer = JavaScriptTracer(output_file)
         return tracer.instrument_source(source, functions[0].file_path, list(functions))
 
-    def instrument_for_line_profiling(
-        self, source: str, functions: Sequence[FunctionInfo], output_file: Path | None = None
-    ) -> str:
-        """Add line profiling instrumentation to track line-level execution.
-
-        Args:
-            source: Source code to instrument.
-            functions: Functions to add line profiling to.
-            output_file: Optional output file for profiling data.
-
-        Returns:
-            Instrumented source code.
-
-        """
-        if not functions:
-            return source
-
-        from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
-
-        # Use first function's file path if output_file not specified
-        if output_file is None:
-            file_path = functions[0].file_path
-            output_file = file_path.parent / ".codeflash" / "line_profile.json"
-
-        profiler = JavaScriptLineProfiler(output_file)
-        return profiler.instrument_source(source, functions[0].file_path, list(functions))
-
     def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
         """Add timing instrumentation to test code.
 
@@ -822,6 +795,70 @@ class JavaScriptSupport:
             tests_project_root=tests_project_root,
             mode=mode,
         )
+
+    def instrument_source_for_line_profiler(
+        # TODO: use the context to instrument helper files also
+        self,
+        func_info: FunctionInfo,
+        line_profiler_output_file: Path,
+    ) -> bool:
+        from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
+
+        source_file_path = Path(func_info.file_path)
+
+        current_source = source_file_path.read_text("utf-8")
+
+        # Create line profiler and instrument source
+        profiler = JavaScriptLineProfiler(output_file=line_profiler_output_file)
+        try:
+            instrumented_source = profiler.instrument_source(
+                source=current_source, file_path=source_file_path, functions=[func_info]
+            )
+
+            # Write instrumented code to source file
+            source_file_path.write_text(instrumented_source, encoding="utf-8")
+            logger.debug(f"Wrote instrumented source to {source_file_path}")  # noqa: G004
+            return True  # noqa: TRY300
+        except Exception as e:
+            logger.warning(f"Failed to instrument source for line profiling: {e}")  # noqa: G004
+            return False
+
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+        from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
+
+        if line_profiler_output_file.exists():
+            parsed_results = JavaScriptLineProfiler.parse_results(line_profiler_output_file)
+            if parsed_results.get("timings"):
+                # Format output string for display
+                str_out = self._format_js_line_profile_output(parsed_results)
+                return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
+        logger.warning(f"No line profiler output file found at {line_profiler_output_file}")  # noqa: G004
+        return {"timings": {}, "unit": 0, "str_out": ""}
+
+    def _format_js_line_profile_output(self, parsed_results: dict) -> str:
+        """Format JavaScript line profiler results for display."""
+        if not parsed_results.get("timings"):
+            return ""
+
+        lines = ["Line Profile Results:"]
+        for file_path, line_data in parsed_results.get("timings", {}).items():
+            lines.append(f"\nFile: {file_path}")
+            lines.append("-" * 80)
+            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}  {'Content'}")
+            lines.append("-" * 80)
+
+            total_time_ms = sum(data.get("time_ms", 0) for data in line_data.values())
+            for line_num, data in sorted(line_data.items()):
+                hits = data.get("hits", 0)
+                time_ms = data.get("time_ms", 0)
+                pct = (time_ms / total_time_ms * 100) if total_time_ms > 0 else 0
+                content = data.get("content", "")
+                # Truncate long lines for display
+                if len(content) > 50:
+                    content = content[:47] + "..."
+                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%  {content}")
+
+        return "\n".join(lines)
 
     # === Test Execution ===
 

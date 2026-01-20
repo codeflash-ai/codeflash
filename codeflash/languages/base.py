@@ -584,6 +584,14 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def instrument_source_for_line_profiler(self, func_info: FunctionInfo, line_profiler_output_file: Path) -> bool:
+        """Instrument source code before line profiling."""
+        ...
+
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+        """Parse line profiler output."""
+        ...
+
     # === Test Framework ===
 
     @property
