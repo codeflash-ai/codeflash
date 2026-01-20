@@ -68,13 +68,13 @@ from codeflash.code_utils.formatter import format_code, format_generated_code, s
 from codeflash.code_utils.git_utils import git_root_dir
 from codeflash.code_utils.instrument_existing_tests import inject_profiling_into_existing_test
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
-from codeflash.languages.registry import get_language_support
 from codeflash.code_utils.static_analysis import get_first_top_level_function_or_method_ast
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
+from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
@@ -875,9 +875,7 @@ class FunctionOptimizer:
         """
         with progress_bar("Running line-by-line profiling"):
             line_profile_test_results = self.line_profiler_step(
-                code_context=code_context,
-                original_helper_code=original_helper_code,
-                candidate_index=candidate_index,
+                code_context=code_context, original_helper_code=original_helper_code, candidate_index=candidate_index
             )
 
         eval_ctx.record_line_profiler_result(candidate.optimization_id, line_profile_test_results["str_out"])
@@ -1149,27 +1147,29 @@ class FunctionOptimizer:
                 )
                 if future_adaptive_optimization:
                     self.future_adaptive_optimizations.append(future_adaptive_optimization)
-            else:
-                future_refinement = self.executor.submit(
-                    aiservice_client.optimize_python_code_refinement,
-                    request=[
-                        AIServiceRefinerRequest(
-                            optimization_id=best_optimization.candidate.optimization_id,
-                            original_source_code=code_context.read_writable_code.markdown,
-                            read_only_dependency_code=code_context.read_only_context_code,
-                            original_code_runtime=original_code_baseline.runtime,
-                            optimized_source_code=best_optimization.candidate.source_code.markdown,
-                            optimized_explanation=best_optimization.candidate.explanation,
-                            optimized_code_runtime=best_optimization.runtime,
-                            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
-                            trace_id=self.get_trace_id(exp_type),
-                            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-                            function_references=function_references,
-                        )
-                    ],
-                )
-                self.future_all_refinements.append(future_refinement)
+            else:  # noqa: PLR5501
+                # TODO: handle other languages refinement
+                if self._is_python:
+                    future_refinement = self.executor.submit(
+                        aiservice_client.optimize_python_code_refinement,
+                        request=[
+                            AIServiceRefinerRequest(
+                                optimization_id=best_optimization.candidate.optimization_id,
+                                original_source_code=code_context.read_writable_code.markdown,
+                                read_only_dependency_code=code_context.read_only_context_code,
+                                original_code_runtime=original_code_baseline.runtime,
+                                optimized_source_code=best_optimization.candidate.source_code.markdown,
+                                optimized_explanation=best_optimization.candidate.explanation,
+                                optimized_code_runtime=best_optimization.runtime,
+                                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+                                trace_id=self.get_trace_id(exp_type),
+                                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                                optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+                                function_references=function_references,
+                            )
+                        ],
+                    )
+                    self.future_all_refinements.append(future_refinement)
 
         # Display runtime information
         if is_LSP_enabled():
@@ -2258,7 +2258,7 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async and not not self._is_python:
+        if self.function_to_optimize.is_async and self._is_python:
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
@@ -2317,7 +2317,7 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
-            if self.function_to_optimize.is_async and not not self._is_python:
+            if self.function_to_optimize.is_async and self._is_python:
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2784,8 +2784,7 @@ class FunctionOptimizer:
         # Dispatch to language-specific implementation
         if self._is_python:
             return self._line_profiler_step_python(code_context, original_helper_code, candidate_index)
-        else:
-            return self._line_profiler_step_javascript(code_context, original_helper_code, candidate_index)
+        return self._line_profiler_step_javascript(code_context, original_helper_code, candidate_index)
 
     def _line_profiler_step_python(
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
@@ -2873,9 +2872,7 @@ class FunctionOptimizer:
                 break
 
         if func_info is None:
-            logger.warning(
-                f"Could not find function {self.function_to_optimize.function_name} in {source_file_path}"
-            )
+            logger.warning(f"Could not find function {self.function_to_optimize.function_name} in {source_file_path}")
             return {"timings": {}, "unit": 0, "str_out": ""}
 
         try:
@@ -2883,9 +2880,7 @@ class FunctionOptimizer:
 
             # Instrument source code
             instrumented_source = profiler.instrument_source(
-                source=current_source,
-                file_path=source_file_path,
-                functions=[func_info],
+                source=current_source, file_path=source_file_path, functions=[func_info]
             )
 
             # Write instrumented code to source file
@@ -2948,16 +2943,19 @@ class FunctionOptimizer:
         lines = ["Line Profile Results:"]
         for file_path, line_data in parsed_results.get("timings", {}).items():
             lines.append(f"\nFile: {file_path}")
-            lines.append("-" * 60)
-            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}")
-            lines.append("-" * 60)
+            lines.append("-" * 80)
+            lines.append(f"{'Line':>6}  {'Hits':>8}  {'Time (ms)':>12}  {'% Time':>8}  {'Content'}")
+            lines.append("-" * 80)
 
-            total_time = sum(data.get("time_ns", 0) for data in line_data.values())
+            total_time_ms = sum(data.get("time_ms", 0) for data in line_data.values())
             for line_num, data in sorted(line_data.items()):
                 hits = data.get("hits", 0)
-                time_ns = data.get("time_ns", 0)
-                time_ms = time_ns / 1e6
-                pct = (time_ns / total_time * 100) if total_time > 0 else 0
-                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%")
+                time_ms = data.get("time_ms", 0)
+                pct = (time_ms / total_time_ms * 100) if total_time_ms > 0 else 0
+                content = data.get("content", "")
+                # Truncate long lines for display
+                if len(content) > 50:
+                    content = content[:47] + "..."
+                lines.append(f"{line_num:>6}  {hits:>8}  {time_ms:>12.3f}  {pct:>7.1f}%  {content}")
 
         return "\n".join(lines)

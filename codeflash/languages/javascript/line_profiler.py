@@ -57,11 +57,10 @@ class JavaScriptLineProfiler:
         if not functions:
             return source
 
-        # Add profiler initialization at the top
-        profiler_init = self._generate_profiler_init()
+        # Initialize line contents map to collect source content during instrumentation
+        self.line_contents: dict[str, str] = {}
 
         # Add instrumentation to each function
-        instrumented_source = source
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
@@ -73,6 +72,9 @@ class JavaScriptLineProfiler:
 
         instrumented_source = "".join(lines)
 
+        # Add profiler initialization at the top (after collecting line contents)
+        profiler_init = self._generate_profiler_init()
+
         # Add profiler save at the end
         profiler_save = self._generate_profiler_save()
 
@@ -80,24 +82,45 @@ class JavaScriptLineProfiler:
 
     def _generate_profiler_init(self) -> str:
         """Generate JavaScript code for profiler initialization."""
+        # Serialize line contents map for embedding in JavaScript
+        line_contents_json = json.dumps(getattr(self, "line_contents", {}))
+
         return f"""
 // Codeflash line profiler initialization
 // @ts-nocheck
 const {self.profiler_var} = {{
     stats: {{}},
-    startTime: Date.now(),
-    lastLineTime: Date.now(),
+    lineContents: {line_contents_json},
+    lastLineTime: null,
+    lastKey: null,
 
     totalHits: 0,
+
+    // Called at the start of each function to reset timing state
+    // This prevents "between function calls" time from being attributed to the last line
+    enterFunction: function() {{
+        this.lastKey = null;
+        this.lastLineTime = null;
+    }},
+
     hit: function(file, line) {{
-        const now = Date.now();
+        const now = performance.now();  // microsecond precision
+
+        // Attribute elapsed time to the PREVIOUS line (the one that was executing)
+        if (this.lastKey !== null && this.lastLineTime !== null) {{
+            this.stats[this.lastKey].time += (now - this.lastLineTime);
+        }}
+
         const key = file + ':' + line;
         if (!this.stats[key]) {{
             this.stats[key] = {{ hits: 0, time: 0, file: file, line: line }};
         }}
         this.stats[key].hits++;
-        this.stats[key].time += (now - this.lastLineTime);
+
+        // Record current line as the one now executing
+        this.lastKey = key;
         this.lastLineTime = now;
+
         this.totalHits++;
         // Save every 100 hits to ensure we capture results even with --forceExit
         if (this.totalHits % 100 === 0) {{
@@ -113,9 +136,17 @@ const {self.profiler_var} = {{
             if (!fs.existsSync(outputDir)) {{
                 fs.mkdirSync(outputDir, {{ recursive: true }});
             }}
+            // Merge line contents into stats before saving
+            const statsWithContent = {{}};
+            for (const key of Object.keys(this.stats)) {{
+                statsWithContent[key] = {{
+                    ...this.stats[key],
+                    content: this.lineContents[key] || ''
+                }};
+            }}
             fs.writeFileSync(
                 '{self.output_file.as_posix()}',
-                JSON.stringify(this.stats, null, 2)
+                JSON.stringify(statsWithContent, null, 2)
             );
         }} catch (e) {{
             console.error('Failed to save line profile results:', e);
@@ -167,10 +198,27 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
 
         # Add profiling to each executable line
         # executable_lines contains 1-indexed line numbers within the function snippet
+        function_entry_added = False
+
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
             global_line_num = func.start_line + local_idx  # Global line number in original file
             stripped = line.strip()
+
+            # Add enterFunction() call after the opening brace of the function
+            if not function_entry_added and "{" in line:
+                # Find indentation for the function body (use next line's indentation or default)
+                body_indent = "    "  # Default 4 spaces
+                if local_idx + 1 < len(func_lines):
+                    next_line = func_lines[local_idx + 1]
+                    if next_line.strip():
+                        body_indent = " " * (len(next_line) - len(next_line.lstrip()))
+
+                # Add the line with enterFunction() call after it
+                instrumented_lines.append(line)
+                instrumented_lines.append(f"{body_indent}{self.profiler_var}.enterFunction();\n")
+                function_entry_added = True
+                continue
 
             # Skip empty lines, comments, and closing braces
             if local_line_num in executable_lines and stripped and not stripped.startswith("//") and stripped != "}":
@@ -178,10 +226,13 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
                 indent = len(line) - len(line.lstrip())
                 indent_str = " " * indent
 
+                # Store line content for the profiler output
+                content_key = f"{file_path.as_posix()}:{global_line_num}"
+                self.line_contents[content_key] = stripped
+
                 # Add hit() call before the line
                 profiled_line = (
-                    f"{indent_str}{self.profiler_var}.hit('{file_path.as_posix()}', {global_line_num});\n"
-                    f"{line}"
+                    f"{indent_str}{self.profiler_var}.hit('{file_path.as_posix()}', {global_line_num});\n{line}"
                 )
                 instrumented_lines.append(profiled_line)
             else:
@@ -254,13 +305,21 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             for key, stats in data.items():
                 file_path, line_num = key.rsplit(":", 1)
                 line_num = int(line_num)
-                time_ns = int(stats["time"])
+                # performance.now() returns milliseconds, convert to nanoseconds
+                time_ms = float(stats["time"])
+                time_ns = int(time_ms * 1e6)
                 hits = stats["hits"]
 
                 if file_path not in timings:
                     timings[file_path] = {}
 
-                timings[file_path][line_num] = {"hits": hits, "time_ns": time_ns, "time_s": time_ns * 1e-9}
+                content = stats.get("content", "")
+                timings[file_path][line_num] = {
+                    "hits": hits,
+                    "time_ns": time_ns,
+                    "time_ms": time_ms,
+                    "content": content,
+                }
 
             return {
                 "timings": timings,
