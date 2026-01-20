@@ -31,6 +31,7 @@ def process_data(items):
 1. Open any Python file in your project
 2. The extension analyzes your code automatically
 3. Functions that can be optimized show an "optimize" hint above them
+![CodeLens hint above function](../../images/CodeLens.png)
 4. Click the hint to start optimization
 
 <Tip>
@@ -62,6 +63,8 @@ The **Optimization** tab is your main interface for selecting code to optimize. 
 
 ### File and Function Selection
 
+![Optimization tab with file and function selectors](../../images/optimization-tab.png)
+
 At the top of the Optimization tab, you'll find two dropdown selectors:
 
 1. **FILE** — Select a Python file from your workspace
@@ -90,6 +93,7 @@ Below the file/function selectors, you'll find two action cards for common optim
 #### Optimize Current File
 
 - **Icon:** Lightning bolt
+![Optimize current file quick action card](../../images/Optimize-current-file.png)
 - **Action:** Analyze and optimize all functions in the currently opened file
 - **How to use:** Click the card to optimize all functions in the active editor tab
 
@@ -101,6 +105,7 @@ Below the file/function selectors, you'll find two action cards for common optim
 #### Optimize Changed Code
 
 - **Icon:** Git diff symbol (intertwined links)
+![Optimize Changed Code quick action card](../../images/optimize-code-diff.png)
 - **Action:** Optimize functions in your Git diff
 - **How to use:** Click the card to automatically detect and optimize all modified functions in your current Git changes
 
@@ -138,6 +143,7 @@ When you haven't started any optimizations yet, the Tasks tab shows:
 
 Once optimizations complete, you'll see a list showing:
 
+![Completed optimizations list in Tasks tab](../../images/optimized-function-tab-tasks.png)
 - **Function Name** — The name of the optimized function
 - **Status Badge** — Shows completion status with speedup information:
   - "Completed (Xx Faster)" — Displays the performance improvement
@@ -183,6 +189,8 @@ Once you've selected functions to optimize (via any method above), here's what h
 ## Reviewing Optimizations
 
 After an optimization completes, you can review it in the Tasks tab or via inline comments.
+
+![Detailed optimization explanation view](../../images/optimization-details-explaination.png)
 
 ### In the Tasks Tab
 
