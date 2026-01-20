@@ -2657,6 +2657,52 @@ def test_numpy_typing_types() -> None:
         nbit2 = npt.NBitBase()
         # NBitBase instances with empty __dict__ should compare as equal
         assert comparator(nbit1, nbit2)
+        # Also test with superset_obj=True
+        assert comparator(nbit1, nbit2, superset_obj=True)
     except TypeError:
         # NBitBase may not be instantiable in all numpy versions
         pass
+
+
+def test_numpy_typing_superset_obj() -> None:
+    """Test comparator with superset_obj=True for numpy types."""
+    try:
+        import numpy as np
+        import numpy.typing as npt
+    except ImportError:
+        pytest.skip("numpy or numpy.typing not available")
+
+    # Test numpy arrays with object dtype containing dicts (superset scenario)
+    a1 = np.array([{'a': 1}], dtype=object)
+    a2 = np.array([{'a': 1, 'b': 2}], dtype=object)  # superset
+    assert comparator(a1, a2, superset_obj=True)
+    assert not comparator(a1, a2, superset_obj=False)
+
+    # Test extended precision types with superset_obj=True
+    c1 = np.clongdouble(1 + 2j)
+    c2 = np.clongdouble(1 + 2j)
+    assert comparator(c1, c2, superset_obj=True)
+
+    l1 = np.longdouble(1.5)
+    l2 = np.longdouble(1.5)
+    assert comparator(l1, l2, superset_obj=True)
+
+    # Test NDArray type alias with superset_obj=True
+    arr_type1 = npt.NDArray[np.float64]
+    arr_type2 = npt.NDArray[np.float64]
+    assert comparator(arr_type1, arr_type2, superset_obj=True)
+
+    # Test numpy structured arrays (np.void) with superset_obj=True
+    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
+    a_struct = np.array([('Alice', 25)], dtype=dt)
+    b_struct = np.array([('Alice', 25)], dtype=dt)
+    assert comparator(a_struct[0], b_struct[0], superset_obj=True)
+
+    # Test numpy random generators with superset_obj=True
+    rng1 = np.random.default_rng(seed=42)
+    rng2 = np.random.default_rng(seed=42)
+    assert comparator(rng1, rng2, superset_obj=True)
+
+    rs1 = np.random.RandomState(seed=42)
+    rs2 = np.random.RandomState(seed=42)
+    assert comparator(rs1, rs2, superset_obj=True)
