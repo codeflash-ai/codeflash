@@ -292,15 +292,28 @@ def longest_increasing_subsequence_length_torch(arr):
         return 0
 
     device = arr.device
-    dp = torch.ones(n, device=device, dtype=torch.int64)
+    dtype = arr.dtype
 
-    for i in range(1, n):
-        for j in range(i):
-            if arr[j] < arr[i]:
-                if dp[j] + 1 > dp[i]:
-                    dp[i] = dp[j] + 1
+    # Use patience algorithm: maintain tails[k] = smallest tail value of an
+    # increasing subsequence with length k+1. This yields O(n log n) runtime.
+    tails = torch.empty(n, device=device, dtype=dtype)
+    length = 0
 
-    return int(torch.max(dp).item())
+    for x in arr:
+        if length == 0:
+            tails[0] = x
+            length = 1
+            continue
+
+        # find insertion index in sorted tails[:length]
+        # torch.searchsorted returns a 0-dim tensor; use .item() to get an int
+        idx = torch.searchsorted(tails[:length], x)
+        pos = idx.item()
+        tails[pos] = x
+        if pos == length:
+            length += 1
+
+    return int(length)
 
 
 def _tridiagonal_forward_cond_tf(i, _c_prime, _d_prime, n, _a, _b, _c, _d):
