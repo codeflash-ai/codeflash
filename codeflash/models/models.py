@@ -374,42 +374,35 @@ class TestFiles(BaseModel):
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         normalized = self._normalize_path_for_comparison(file_path)
-        return next(
-            (
-                test_file
-                for test_file in self.test_files
-                if test_file.original_file_path is not None
-                and normalized == self._normalize_path_for_comparison(test_file.original_file_path)
-            ),
-            None,
-        )
+        for test_file in self.test_files:
+            if test_file.original_file_path is None:
+                continue
+            normalized_test_path = self._normalize_path_for_comparison(test_file.original_file_path)
+            if normalized == normalized_test_path:
+                return test_file
+        return None
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         normalized = self._normalize_path_for_comparison(file_path)
-        return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if normalized == self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
-                or (
-                    test_file.benchmarking_file_path is not None
-                    and normalized == self._normalize_path_for_comparison(test_file.benchmarking_file_path)
-                )
-            ),
-            None,
-        )
+        for test_file in self.test_files:
+            normalized_behavior_path = self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
+            if normalized == normalized_behavior_path:
+                return test_file.test_type
+            if test_file.benchmarking_file_path is not None:
+                normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
+                if normalized == normalized_benchmark_path:
+                    return test_file.test_type
+        return None
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         normalized = self._normalize_path_for_comparison(file_path)
-        return next(
-            (
-                test_file.test_type
-                for test_file in self.test_files
-                if test_file.original_file_path is not None
-                and normalized == self._normalize_path_for_comparison(test_file.original_file_path)
-            ),
-            None,
-        )
+        for test_file in self.test_files:
+            if test_file.original_file_path is None:
+                continue
+            normalized_test_path = self._normalize_path_for_comparison(test_file.original_file_path)
+            if normalized == normalized_test_path:
+                return test_file.test_type
+        return None
 
     @staticmethod
     @lru_cache(maxsize=4096)
