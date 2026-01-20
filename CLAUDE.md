@@ -80,16 +80,18 @@ from codeflash.code_utils.git_worktree_utils import create_detached_worktree, re
 
 - **Line length**: 120 characters
 - **Python**: 3.9+ syntax
-- **Tooling**: Ruff for linting/formatting, mypy strict mode
+- **Tooling**: Ruff for linting/formatting, mypy strict mode, pre-commit hooks
 - **Comments**: Minimal - only explain "why", not "what"
 - **Docstrings**: Do not add unless explicitly requested
+- **Naming**: Prefer public functions (no leading underscore) - Python doesn't have true private functions
 - **Paths**: Always use absolute paths, handle encoding explicitly (UTF-8)
 
-## Git Commits
+## Git Commits & Pull Requests
 
 - Use conventional commit format: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
 - Keep commits atomic - one logical change per commit
 - Commit message body should be concise (1-2 sentences max)
+- PR titles should also use conventional format
 
 # Agent Rules <!-- tessl-managed -->
 
