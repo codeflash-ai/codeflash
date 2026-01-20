@@ -1,0 +1,125 @@
+---
+title: "Setup Commands"
+description: "Initialize projects, set up GitHub Actions, and verify Codeflash installation"
+icon: "wrench"
+sidebarTitle: "Setup Commands"
+keywords: ["setup", "init", "installation", "github actions", "verify"]
+---
+
+# Setup Commands
+
+Commands for initializing Codeflash in your project, setting up continuous optimization, and verifying your installation.
+
+---
+
+## `codeflash init`
+
+Initialize Codeflash for your Python project. This creates the configuration in `pyproject.toml`.
+
+<CodeGroup>
+```bash Basic
+codeflash init
+```
+
+```bash With Formatter Override
+codeflash init --override-formatter-check
+```
+</CodeGroup>
+
+<Tip>
+  The `init` command will guide you through an interactive setup process,
+  including API key configuration, module selection, and GitHub App
+  installation.
+</Tip>
+
+**What it does:**
+
+- Prompts for your Python module directory (`module-root`)
+- Prompts for your test directory (`tests-root`)
+- Configures code formatter preferences
+- Sets up telemetry preferences
+- Optionally installs the Codeflash VS Code extension
+- Optionally sets up GitHub Actions workflow
+
+---
+
+## `codeflash init-actions`
+
+Set up GitHub Actions workflow for continuous optimization on every pull request.
+
+```bash
+codeflash init-actions
+```
+
+**What it does:**
+
+- Creates a workflow file in `.github/workflows/`
+- Opens a PR with the workflow configuration
+- Requires the Codeflash GitHub App to be installed
+
+<Warning>
+  This command requires the Codeflash GitHub App to be installed on your repository. If you haven't installed it, you'll be prompted with a link to do so.
+</Warning>
+
+---
+
+## `codeflash vscode-install`
+
+Install the Codeflash extension for VS Code, Cursor, or Windsurf.
+
+```bash
+codeflash vscode-install
+```
+
+**What it does:**
+
+- Detects which editor you're using (VS Code, Cursor, or Windsurf)
+- Downloads and installs the appropriate extension
+- Works with both Marketplace and Open VSX sources
+
+<Tip>
+  This command is also run automatically during `codeflash init` if you choose to install the extension.
+</Tip>
+
+---
+
+## `codeflash --verify-setup`
+
+Verify your Codeflash installation by running a sample optimization.
+
+```bash
+codeflash --verify-setup
+```
+
+**What it does:**
+
+- Creates a temporary demo file
+- Runs a sample optimization
+- Verifies all components are working correctly
+- Cleans up the demo file afterward
+
+<Note>
+  This command takes about 3 minutes to complete. It's a great way to ensure everything is set up correctly before optimizing your actual code.
+</Note>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Optimization Commands"
+    icon="bullseye"
+    href="/cli-reference/optimization"
+  >
+    Learn how to optimize functions
+  </Card>
+  <Card
+    title="Flags Reference"
+    icon="list"
+    href="/cli-reference/flags"
+  >
+    Complete flag reference
+  </Card>
+</CardGroup>
+
