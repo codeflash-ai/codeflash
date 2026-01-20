@@ -2602,3 +2602,148 @@ def test_numpy_dtypes() -> None:
     # Test that DType and np.dtype of different types are not equal
     assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
+
+
+def test_numba_typed_list() -> None:
+    """Test comparator for numba.typed.List."""
+    try:
+        import numba
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal lists
+    a = NumbaList([1, 2, 3])
+    b = NumbaList([1, 2, 3])
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaList([1, 2, 4])
+    assert not comparator(a, c)
+
+    # Test different lengths
+    d = NumbaList([1, 2, 3, 4])
+    assert not comparator(a, d)
+
+    # Test empty lists
+    e = NumbaList.empty_list(item_type=numba.int64)
+    f = NumbaList.empty_list(item_type=numba.int64)
+    assert comparator(e, f)
+
+    # Test nested values (floats)
+    g = NumbaList([1.0, 2.0, 3.0])
+    h = NumbaList([1.0, 2.0, 3.0])
+    assert comparator(g, h)
+
+    i = NumbaList([1.0, 2.0, 4.0])
+    assert not comparator(g, i)
+
+
+def test_numba_typed_dict() -> None:
+    """Test comparator for numba.typed.Dict."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal dicts
+    a = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    a["x"] = 1
+    a["y"] = 2
+
+    b = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    b["x"] = 1
+    b["y"] = 2
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    c["x"] = 1
+    c["y"] = 3
+    assert not comparator(a, c)
+
+    # Test different keys
+    d = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    d["x"] = 1
+    d["z"] = 2
+    assert not comparator(a, d)
+
+    # Test different lengths
+    e = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    e["x"] = 1
+    assert not comparator(a, e)
+
+    # Test empty dicts
+    f = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    g = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    assert comparator(f, g)
+
+
+def test_numba_types() -> None:
+    """Test comparator for numba type objects."""
+    try:
+        import numba
+        from numba import types
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test basic numeric types
+    assert comparator(numba.int64, numba.int64)
+    assert comparator(numba.float64, numba.float64)
+    assert comparator(numba.int32, numba.int32)
+    assert comparator(numba.float32, numba.float32)
+
+    # Test different types
+    assert not comparator(numba.int64, numba.float64)
+    assert not comparator(numba.int32, numba.int64)
+    assert not comparator(numba.float32, numba.float64)
+
+    # Test boolean type
+    assert comparator(numba.boolean, numba.boolean)
+    assert not comparator(numba.boolean, numba.int64)
+
+    # Test array types
+    arr_type1 = types.Array(numba.float64, 1, 'C')
+    arr_type2 = types.Array(numba.float64, 1, 'C')
+    arr_type3 = types.Array(numba.float64, 2, 'C')
+    arr_type4 = types.Array(numba.int64, 1, 'C')
+
+    assert comparator(arr_type1, arr_type2)
+    assert not comparator(arr_type1, arr_type3)  # different ndim
+    assert not comparator(arr_type1, arr_type4)  # different dtype
+
+
+def test_numba_jit_functions() -> None:
+    """Test comparator for numba JIT-compiled functions."""
+    try:
+        from numba import jit
+    except ImportError:
+        pytest.skip("numba not available")
+
+    @jit(nopython=True)
+    def add(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def add2(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def multiply(x, y):
+        return x * y
+
+    # Compile the functions by calling them
+    add(1, 2)
+    add2(1, 2)
+    multiply(1, 2)
+
+    # Same function should compare equal to itself
+    assert comparator(add, add)
+
+    # Different functions (even with same code) should not compare equal
+    # since they are distinct function objects
+    assert not comparator(add, add2)
+
+    # Different functions with different code should not compare equal
+    assert not comparator(add, multiply)
