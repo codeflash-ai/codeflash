@@ -384,15 +384,7 @@ class TestFiles(BaseModel):
 
     def get_test_type_by_instrumented_file_path(self, file_path: Path) -> TestType | None:
         normalized = self._normalize_path_for_comparison(file_path)
-        for test_file in self.test_files:
-            normalized_behavior_path = self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
-            if normalized == normalized_behavior_path:
-                return test_file.test_type
-            if test_file.benchmarking_file_path is not None:
-                normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
-                if normalized == normalized_benchmark_path:
-                    return test_file.test_type
-        return None
+        return self._path_to_test_type.get(normalized)
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
         normalized = self._normalize_path_for_comparison(file_path)
@@ -424,6 +416,16 @@ class TestFiles(BaseModel):
 
     def __len__(self) -> int:
         return len(self.test_files)
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._path_to_test_type: dict[str, TestType] = {}
+        for test_file in self.test_files:
+            normalized_behavior_path = self._normalize_path_for_comparison(test_file.instrumented_behavior_file_path)
+            self._path_to_test_type[normalized_behavior_path] = test_file.test_type
+            if test_file.benchmarking_file_path is not None:
+                normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
+                self._path_to_test_type[normalized_benchmark_path] = test_file.test_type
 
 
 class OptimizationSet(BaseModel):
