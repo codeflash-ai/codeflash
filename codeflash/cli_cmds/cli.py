@@ -20,7 +20,7 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
+    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     init_parser.set_defaults(func=init_codeflash)
 
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
@@ -28,7 +28,7 @@ def parse_args() -> Namespace:
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
 
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     from codeflash.tracer import main as tracer_main
 
@@ -70,8 +70,8 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--module-root",
         type=str,
-        help="Path to the project's Python module that you want to optimize."
-        " This is the top-level root directory where all the Python source code is located.",
+        help="Path to the project's module that you want to optimize."
+        " This is the top-level root directory where all the source code is located.",
     )
     parser.add_argument(
         "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."

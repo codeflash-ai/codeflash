@@ -26,6 +26,18 @@ from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo, se
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
+# Import JS/TS init module
+from codeflash.cli_cmds.init_javascript import (
+    JsPackageManager,
+    JSSetupInfo,
+    ProjectLanguage,
+    detect_project_language,
+    determine_js_package_manager,
+    get_js_codeflash_command,
+    get_js_dependency_installation_commands,
+    get_js_runtime_setup_string,
+    init_js_project,
+)
 from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -57,6 +69,8 @@ CODEFLASH_LOGO: str = (
 
 @dataclass(frozen=True)
 class CLISetupInfo:
+    """Setup info for Python projects."""
+
     module_root: str
     tests_root: str
     benchmarks_root: Union[str, None]
@@ -68,12 +82,16 @@ class CLISetupInfo:
 
 @dataclass(frozen=True)
 class VsCodeSetupInfo:
+    """Setup info for VSCode extension initialization."""
+
     module_root: str
     tests_root: str
     formatter: Union[str, list[str]]
 
 
 class DependencyManager(Enum):
+    """Python dependency managers."""
+
     PIP = auto()
     POETRY = auto()
     UV = auto()
@@ -95,6 +113,14 @@ def init_codeflash() -> None:
         console.print(welcome_panel)
         console.print()
 
+        # Detect project language
+        project_language = detect_project_language()
+
+        if project_language in (ProjectLanguage.JAVASCRIPT, ProjectLanguage.TYPESCRIPT):
+            init_js_project(project_language)
+            return
+
+        # Python project flow
         did_add_new_key = prompt_api_key()
 
         should_modify, config = should_modify_pyproject_toml()
@@ -1168,6 +1194,48 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
         working-directory: ./{working_dir}"""
 
 
+# ============================================================================
+# JavaScript/TypeScript GitHub Actions Support
+# ============================================================================
+# Note: JS package manager and workflow helper functions are imported from init_javascript.py
+
+
+def detect_project_language_for_workflow(project_root: Path) -> str:
+    """Detect the primary language of the project for workflow generation.
+
+    Returns: 'python', 'javascript', or 'typescript'
+    """
+    # Check for TypeScript config
+    if (project_root / "tsconfig.json").exists():
+        return "typescript"
+
+    # Check for JavaScript/TypeScript indicators
+    has_package_json = (project_root / "package.json").exists()
+    has_pyproject = (project_root / "pyproject.toml").exists()
+
+    if has_package_json and not has_pyproject:
+        # Pure JS/TS project
+        return "javascript"
+    if has_pyproject and not has_package_json:
+        # Pure Python project
+        return "python"
+
+    # Both exist - count files to determine primary language
+    js_count = 0
+    py_count = 0
+    for file in project_root.rglob("*"):
+        if file.is_file():
+            suffix = file.suffix.lower()
+            if suffix in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}:
+                js_count += 1
+            elif suffix == ".py":
+                py_count += 1
+
+    if js_count > py_count:
+        return "javascript"
+    return "python"
+
+
 def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
     """Collect important repository files and directory structure for workflow generation.
 
@@ -1386,6 +1454,23 @@ def customize_codeflash_yaml_content(
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
 
+    # Detect project language
+    project_language = detect_project_language_for_workflow(Path.cwd())
+
+    if project_language in ("javascript", "typescript"):
+        # JavaScript/TypeScript project
+        return _customize_js_workflow_content(optimize_yml_content, git_root, benchmark_mode)
+
+    # Python project (default)
+    return _customize_python_workflow_content(optimize_yml_content, git_root, benchmark_mode)
+
+
+def _customize_python_workflow_content(
+    optimize_yml_content: str,
+    git_root: Path,
+    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
+) -> str:
+    """Customize workflow content for Python projects."""
     # Get dependency installation commands
     toml_path = Path.cwd() / "pyproject.toml"
     try:
@@ -1404,7 +1489,7 @@ def customize_codeflash_yaml_content(
 
     python_depmanager_installation = get_dependency_manager_installation_string(dep_manager)
     optimize_yml_content = optimize_yml_content.replace(
-        "{{ setup_python_dependency_manager }}", python_depmanager_installation
+        "{{ setup_runtime_environment }}", python_depmanager_installation
     )
     install_deps_cmd = get_dependency_installation_commands(dep_manager)
 
@@ -1413,6 +1498,51 @@ def customize_codeflash_yaml_content(
     # Add codeflash command
     codeflash_cmd = get_codeflash_github_action_command(dep_manager)
 
+    if benchmark_mode:
+        codeflash_cmd += " --benchmark"
+    return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
+
+
+def _customize_js_workflow_content(
+    optimize_yml_content: str,
+    git_root: Path,
+    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
+) -> str:
+    """Customize workflow content for JavaScript/TypeScript projects."""
+    project_root = Path.cwd()
+    package_json_path = project_root / "package.json"
+
+    if not package_json_path.exists():
+        click.echo(
+            f"I couldn't find a package.json in the current directory.{LF}"
+            f"Please run `npm init` or create a package.json file first."
+        )
+        apologize_and_exit()
+
+    # Determine working directory relative to git root
+    if project_root == git_root:
+        working_dir = ""
+    else:
+        rel_path = str(project_root.relative_to(git_root))
+        working_dir = f"""defaults:
+      run:
+        working-directory: ./{rel_path}"""
+
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
+    # Determine package manager
+    pkg_manager = determine_js_package_manager(project_root)
+
+    # Setup runtime environment
+    runtime_setup = get_js_runtime_setup_string(pkg_manager)
+    optimize_yml_content = optimize_yml_content.replace("{{ setup_runtime_environment }}", runtime_setup)
+
+    # Install dependencies
+    install_deps_cmd = get_js_dependency_installation_commands(pkg_manager)
+    optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
+
+    # Codeflash command
+    codeflash_cmd = get_js_codeflash_command(pkg_manager)
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)

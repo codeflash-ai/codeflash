@@ -4,12 +4,21 @@ This module provides paths to JavaScript files that are injected into
 user projects during test instrumentation and execution.
 """
 
+import sys
 from pathlib import Path
 
-# TEMPORARY: Currently pointing to the development directory.
-# In the future, these scripts should be published as an npm package (e.g., @codeflash/runtime)
-# and this module should read from the installed package location in the user's node_modules.
-RUNTIME_DIR = Path(__file__).parent.parent.parent.parent.parent / "code_to_optimize_js"
+
+def _get_runtime_dir() -> Path:
+    """Get the runtime directory, handling both normal and PyInstaller-frozen scenarios."""
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller bundle - files are in _MEIPASS
+        base_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+        return base_path / "codeflash" / "languages" / "javascript" / "runtime"
+    # Normal Python execution - files are alongside this module
+    return Path(__file__).parent
+
+
+RUNTIME_DIR = _get_runtime_dir()
 
 
 def get_jest_helper_path() -> Path:

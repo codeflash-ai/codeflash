@@ -24,11 +24,35 @@ if TYPE_CHECKING:
 
 
 def generate_concolic_tests(
-    test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
+    test_cfg: TestConfig,
+    args: Namespace,
+    function_to_optimize: FunctionToOptimize,
+    function_to_optimize_ast: ast.AST,
+    language: str = "python",
 ) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
+    """Generate concolic tests using CrossHair (Python only).
+
+    CrossHair is a Python-specific symbolic execution tool. For non-Python languages
+    (JavaScript, TypeScript, etc.), this function returns early with empty results.
+
+    Args:
+        test_cfg: Test configuration
+        args: Command line arguments
+        function_to_optimize: The function being optimized
+        function_to_optimize_ast: AST of the function (Python ast.FunctionDef)
+        language: Language of the code ('python', 'javascript', 'typescript')
+
+    Returns:
+        Tuple of (function_to_tests mapping, concolic test suite code)
+    """
     start_time = time.perf_counter()
     function_to_concolic_tests = {}
     concolic_test_suite_code = ""
+
+    # CrossHair is Python-only - skip for other languages
+    if language != "python":
+        logger.debug(f"Skipping concolic test generation for {language} (CrossHair is Python-only)")
+        return function_to_concolic_tests, concolic_test_suite_code
 
     if is_LSP_enabled():
         logger.debug("Skipping concolic test generation in LSP mode")

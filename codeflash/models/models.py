@@ -35,6 +35,11 @@ from codeflash.verification.comparator import comparator
 
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
+    """Request model for code refinement API.
+
+    Supports multi-language optimization refinement with optional multi-file context.
+    """
+
     optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
@@ -48,6 +53,11 @@ class AIServiceRefinerRequest:
     optimized_line_profiler_results: str
     function_references: str | None = None
     call_sequence: int | None = None
+    # Multi-language support
+    language: str = "python"  # 'python', 'javascript', 'typescript'
+    language_version: str | None = None  # e.g., '3.11.0' for Python, 'ES2022' for JS
+    # Multi-file context support
+    additional_context_files: dict[str, str] | None = None  # {filepath: content} for imported modules
 
 
 # this should be possible to auto serialize

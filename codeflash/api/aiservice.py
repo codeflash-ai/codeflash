@@ -393,19 +393,21 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         return None
 
-    def optimize_python_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
-        """Optimize the given python code for performance by making a request to the Django endpoint.
+    def optimize_code_refinement(self, request: list[AIServiceRefinerRequest]) -> list[OptimizedCandidate]:
+        """Refine optimization candidates for improved performance.
+
+        Supports Python, JavaScript, and TypeScript code refinement with optional
+        multi-file context for better understanding of imports and dependencies.
 
         Args:
-        request: A list of optimization candidate details for refinement
+            request: A list of optimization candidate details for refinement
 
         Returns:
-        -------
-        - List[OptimizationCandidate]: A list of Optimization Candidates.
-
+            List of refined optimization candidates
         """
-        payload = [
-            {
+        payload = []
+        for opt in request:
+            item = {
                 "optimization_id": opt.optimization_id,
                 "original_source_code": opt.original_source_code,
                 "read_only_dependency_code": opt.read_only_dependency_code,
@@ -418,11 +420,26 @@ class AiServiceClient:
                 "speedup": opt.speedup,
                 "trace_id": opt.trace_id,
                 "function_references": opt.function_references,
-                "python_version": platform.python_version(),
                 "call_sequence": self.get_next_sequence(),
+                # Multi-language support
+                "language": opt.language,
             }
-            for opt in request
-        ]
+
+            # Add language version - always include python_version for backward compatibility
+            item["python_version"] = platform.python_version()
+            if opt.language == "python":
+                pass  # python_version already set
+            elif opt.language_version:
+                item["language_version"] = opt.language_version
+            else:
+                item["language_version"] = "ES2022"  # Default for JS/TS
+
+            # Add multi-file context if provided
+            if opt.additional_context_files:
+                item["additional_context_files"] = opt.additional_context_files
+
+            payload.append(item)
+
         try:
             response = self.make_ai_service_request("/refinement", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
@@ -443,6 +460,9 @@ class AiServiceClient:
         ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
         console.rule()
         return []
+
+    # Alias for backward compatibility
+    optimize_python_code_refinement = optimize_code_refinement
 
     def code_repair(self, request: AIServiceCodeRepairRequest) -> OptimizedCandidate | None:
         """Repair the optimization candidate that is not matching the test result of the original code.

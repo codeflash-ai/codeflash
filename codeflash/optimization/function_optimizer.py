@@ -645,10 +645,10 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
             test_ext = self.language_support.get_test_file_suffix() if not self._is_python else ".py"
-            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}")
+            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}", language=self.function_to_optimize.language)
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
-            code_print(concolic_test_str)
+            code_print(concolic_test_str, language=self.function_to_optimize.language)
 
         function_to_all_tests = {
             key: self.function_to_tests.get(key, set()) | function_to_concolic_tests.get(key, set())
@@ -686,6 +686,7 @@ class FunctionOptimizer:
             code_context.read_writable_code.flat,
             file_name=self.function_to_optimize.file_path,
             function_name=self.function_to_optimize.function_name,
+            language=self.function_to_optimize.language,
         )
 
         with progress_bar(
@@ -1041,10 +1042,13 @@ class FunctionOptimizer:
 
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
+        # Use correct extension based on language
+        ext = ".py" if self._is_python else self.language_support.file_extensions[0]
         code_print(
             candidate.source_code.flat,
-            file_name=f"candidate_{candidate_index}.py",
+            file_name=f"candidate_{candidate_index}{ext}",
             lsp_message_id=LSPMessageId.CANDIDATE.value,
+            language=self.function_to_optimize.language,
         )
 
         # Try to replace function with optimized code
@@ -1146,29 +1150,29 @@ class FunctionOptimizer:
                 )
                 if future_adaptive_optimization:
                     self.future_adaptive_optimizations.append(future_adaptive_optimization)
-            else:  # noqa: PLR5501
-                # TODO: handle other languages refinement
-                if self._is_python:
-                    future_refinement = self.executor.submit(
-                        aiservice_client.optimize_python_code_refinement,
-                        request=[
-                            AIServiceRefinerRequest(
-                                optimization_id=best_optimization.candidate.optimization_id,
-                                original_source_code=code_context.read_writable_code.markdown,
-                                read_only_dependency_code=code_context.read_only_context_code,
-                                original_code_runtime=original_code_baseline.runtime,
-                                optimized_source_code=best_optimization.candidate.source_code.markdown,
-                                optimized_explanation=best_optimization.candidate.explanation,
-                                optimized_code_runtime=best_optimization.runtime,
-                                speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
-                                trace_id=self.get_trace_id(exp_type),
-                                original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                                optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-                                function_references=function_references,
-                            )
-                        ],
-                    )
-                    self.future_all_refinements.append(future_refinement)
+            else:
+                # Refinement for all languages (Python, JavaScript, TypeScript)
+                future_refinement = self.executor.submit(
+                    aiservice_client.optimize_code_refinement,
+                    request=[
+                        AIServiceRefinerRequest(
+                            optimization_id=best_optimization.candidate.optimization_id,
+                            original_source_code=code_context.read_writable_code.markdown,
+                            read_only_dependency_code=code_context.read_only_context_code,
+                            original_code_runtime=original_code_baseline.runtime,
+                            optimized_source_code=best_optimization.candidate.source_code.markdown,
+                            optimized_explanation=best_optimization.candidate.explanation,
+                            optimized_code_runtime=best_optimization.runtime,
+                            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+                            trace_id=self.get_trace_id(exp_type),
+                            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+                            function_references=function_references,
+                            language=self.function_to_optimize.language,
+                        )
+                    ],
+                )
+                self.future_all_refinements.append(future_refinement)
 
         # Display runtime information
         if is_LSP_enabled():
@@ -1750,7 +1754,12 @@ class FunctionOptimizer:
             )
 
         future_concolic_tests = self.executor.submit(
-            generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
+            generate_concolic_tests,
+            self.test_cfg,
+            self.args,
+            self.function_to_optimize,
+            self.function_to_optimize_ast,
+            language=self.function_to_optimize.language,
         )
 
         if not self.args.no_gen_tests:
@@ -1966,11 +1975,14 @@ class FunctionOptimizer:
 
             if best_optimization:
                 logger.info("h2|Best candidate 🚀")
+                # Use correct extension based on language
+                best_ext = ".py" if self._is_python else self.language_support.file_extensions[0]
                 code_print(
                     best_optimization.candidate.source_code.flat,
-                    file_name="best_candidate.py",
+                    file_name=f"best_candidate{best_ext}",
                     function_name=self.function_to_optimize.function_name,
                     lsp_message_id=LSPMessageId.BEST_CANDIDATE.value,
+                    language=self.function_to_optimize.language,
                 )
                 processed_benchmark_info = None
                 if self.args.benchmark:

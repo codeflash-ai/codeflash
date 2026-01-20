@@ -98,17 +98,35 @@ def code_print(
     file_name: Optional[str] = None,
     function_name: Optional[str] = None,
     lsp_message_id: Optional[str] = None,
+    language: str = "python",
 ) -> None:
+    """Print code with syntax highlighting.
+
+    Args:
+        code_str: The code to print
+        file_name: Optional file name for LSP
+        function_name: Optional function name for LSP
+        lsp_message_id: Optional LSP message ID
+        language: Programming language for syntax highlighting ('python', 'javascript', 'typescript')
+    """
     if is_LSP_enabled():
         lsp_log(
             LspCodeMessage(code=code_str, file_name=file_name, function_name=function_name, message_id=lsp_message_id)
         )
         return
-    """Print code with syntax highlighting."""
+
     from rich.syntax import Syntax
 
+    # Map codeflash language names to rich/pygments lexer names
+    lexer_map = {
+        "python": "python",
+        "javascript": "javascript",
+        "typescript": "typescript",
+    }
+    lexer = lexer_map.get(language, "python")
+
     console.rule()
-    console.print(Syntax(code_str, "python", line_numbers=True, theme="github-dark"))
+    console.print(Syntax(code_str, lexer, line_numbers=True, theme="github-dark"))
     console.rule()
 
 
