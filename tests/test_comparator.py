@@ -2990,6 +2990,180 @@ class TestComparatorTempPathsWithSuperset:
         new = {"path": "/tmp/pytest-of-user/pytest-99/other.txt", "extra": "data"}
         assert not comparator(orig, new, superset_obj=True)
 
+    def test_superset_nested_dict_with_temp_paths(self):
+        """Test superset comparison with temp paths in nested dictionaries."""
+        orig = {
+            "config": {
+                "output": "/tmp/pytest-of-alice/pytest-5/results.json"
+            }
+        }
+        new = {
+            "config": {
+                "output": "/tmp/pytest-of-bob/pytest-100/results.json",
+                "debug": True
+            },
+            "metadata": {"version": "1.0"}
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_multiple_temp_paths_in_dict(self):
+        """Test superset with multiple temp paths in dictionary values."""
+        orig = {
+            "input": "/tmp/pytest-of-user/pytest-0/input.txt",
+            "output": "/tmp/pytest-of-user/pytest-0/output.txt"
+        }
+        new = {
+            "input": "/tmp/pytest-of-user/pytest-99/input.txt",
+            "output": "/tmp/pytest-of-user/pytest-99/output.txt",
+            "log": "/tmp/pytest-of-user/pytest-99/debug.log"
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_path_in_list_inside_dict(self):
+        """Test superset with temp paths in lists inside dictionaries."""
+        orig = {
+            "files": ["/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt"]
+        }
+        new = {
+            "files": ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"],
+            "count": 2
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_false_when_temp_path_missing(self):
+        """Test superset fails when temp path key is missing in new."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"other": "data"}
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_path_with_different_filenames_fails(self):
+        """Test superset fails when normalized temp paths have different filenames."""
+        orig = {
+            "result": "/tmp/pytest-of-user/pytest-0/output_v1.json"
+        }
+        new = {
+            "result": "/tmp/pytest-of-user/pytest-99/output_v2.json",
+            "extra": "data"
+        }
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_mixed_temp_and_regular_paths(self):
+        """Test superset with mix of temp paths and regular paths."""
+        orig = {
+            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "config_file": "/etc/app/config.yaml"
+        }
+        new = {
+            "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "config_file": "/etc/app/config.yaml",
+            "extra_key": "extra_value"
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_regular_path_must_match_exactly(self):
+        """Test that regular paths must match exactly even in superset mode."""
+        orig = {
+            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "config_file": "/etc/app/config.yaml"
+        }
+        new = {
+            "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "config_file": "/etc/app/other.yaml",
+            "extra_key": "extra_value"
+        }
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_deeply_nested_temp_paths(self):
+        """Test superset with deeply nested structures containing temp paths."""
+        orig = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "path": "/tmp/pytest-of-user/pytest-0/deep.txt"
+                    }
+                }
+            }
+        }
+        new = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "path": "/tmp/pytest-of-other/pytest-999/deep.txt",
+                        "extra": True
+                    },
+                    "sibling": "value"
+                }
+            },
+            "top_level_extra": 123
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_with_attrs_class_containing_temp_paths(self):
+        """Test superset with attrs classes containing temp paths."""
+        try:
+            import attr
+        except ImportError:
+            pytest.skip("attrs not installed")
+
+        @attr.s
+        class Config:
+            path = attr.ib()
+            name = attr.ib(default="default")
+
+        # Test that temp paths are normalized in attrs classes
+        orig = Config(path="/tmp/pytest-of-user/pytest-0/config.json")
+        new = Config(path="/tmp/pytest-of-user/pytest-99/config.json")
+        assert comparator(orig, new, superset_obj=True)
+
+        # Test that different non-temp values still fail
+        orig2 = Config(path="/tmp/pytest-of-user/pytest-0/config.json", name="name1")
+        new2 = Config(path="/tmp/pytest-of-user/pytest-99/config.json", name="name2")
+        assert not comparator(orig2, new2, superset_obj=True)
+
+    def test_superset_with_class_dict_containing_temp_paths(self):
+        """Test superset with regular class objects containing temp paths."""
+        class Result:
+            def __init__(self, output_path):
+                self.output_path = output_path
+
+        class ResultExtended:
+            def __init__(self, output_path, extra=None):
+                self.output_path = output_path
+                self.extra = extra
+
+        # Note: These are different classes, so type check will fail first
+        # Let's use the same class
+        orig = Result("/tmp/pytest-of-user/pytest-0/result.json")
+        new = Result("/tmp/pytest-of-user/pytest-99/result.json")
+        # Add extra attribute to new
+        new.extra_field = "extra_data"
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_list_temp_paths_must_have_same_length(self):
+        """Test that lists with temp paths must have same length even in superset mode."""
+        # superset_obj doesn't apply to list lengths - they must match
+        orig = ["/tmp/pytest-of-user/pytest-0/a.txt"]
+        new = ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"]
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_tuple_temp_paths_must_have_same_length(self):
+        """Test that tuples with temp paths must have same length even in superset mode."""
+        orig = ("/tmp/pytest-of-user/pytest-0/a.txt",)
+        new = ("/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt")
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_with_exception_containing_temp_path(self):
+        """Test superset with exception objects containing temp paths in attributes."""
+        class CustomError(Exception):
+            def __init__(self, message, path):
+                super().__init__(message)
+                self.path = path
+
+        orig = CustomError("File error", "/tmp/pytest-of-user/pytest-0/file.txt")
+        new = CustomError("File error", "/tmp/pytest-of-user/pytest-99/file.txt")
+        new.extra_info = "additional data"
+        assert comparator(orig, new, superset_obj=True)
+
 
 class TestComparatorTempPathsRealisticScenarios:
     """Tests simulating realistic scenarios where temp path comparison matters."""
