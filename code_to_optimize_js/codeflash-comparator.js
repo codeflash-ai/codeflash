@@ -9,15 +9,9 @@
  * - Floating point comparison with relative tolerance (like Python's math.isclose)
  * - Deep comparison of objects, arrays, Maps, Sets
  * - Handles special values: NaN, Infinity, -Infinity, undefined, null
- * - Handles TypedArrays (including BigInt64Array, BigUint64Array), Date, RegExp, Error objects
- * - Node.js Buffer support
- * - SharedArrayBuffer support
- * - Error objects with custom properties comparison
- * - WeakRef, Generator, and Iterator support (reference comparison)
- * - Symbol property comparison in objects
+ * - Handles TypedArrays, Date, RegExp, Error objects
  * - Circular reference detection
  * - Superset mode: allows new object to have additional keys
- * - Strict constructor type checking for early mismatch detection
  *
  * Usage:
  *   const { comparator } = require('./codeflash-comparator');
@@ -135,19 +129,6 @@ function comparator(orig, newVal, options = {}) {
             return a === b;
         }
 
-        // === Strict constructor type checking ===
-        // Check constructor mismatch early (similar to Python's type checking)
-        const constructorA = a?.constructor;
-        const constructorB = b?.constructor;
-        if (constructorA !== constructorB) {
-            // Allow comparison if both are plain objects from different realms
-            const nameA = constructorA?.name;
-            const nameB = constructorB?.name;
-            if (nameA !== nameB) {
-                return false;
-            }
-        }
-
         // === Type checking ===
         const typeA = typeof a;
         const typeB = typeof b;
@@ -202,6 +183,19 @@ function comparator(orig, newVal, options = {}) {
             return visited.get(a) === b;
         }
 
+        // Get constructor names for type comparison
+        const constructorA = a.constructor?.name || 'Object';
+        const constructorB = b.constructor?.name || 'Object';
+
+        // Different constructors means different types
+        // Exception: plain objects might have different constructors due to different realms
+        if (constructorA !== constructorB) {
+            // Allow comparison between plain objects from different realms
+            if (!(constructorA === 'Object' && constructorB === 'Object')) {
+                return false;
+            }
+        }
+
         // Mark as visited before recursing
         visited.set(a, b);
 
@@ -223,14 +217,6 @@ function comparator(orig, newVal, options = {}) {
                 if (a instanceof Float32Array || a instanceof Float64Array) {
                     for (let i = 0; i < a.length; i++) {
                         if (!isClose(a[i], b[i], opts.rtol, opts.atol)) return false;
-                    }
-                    return true;
-                }
-
-                // For BigInt arrays, use exact comparison
-                if (a instanceof BigInt64Array || a instanceof BigUint64Array) {
-                    for (let i = 0; i < a.length; i++) {
-                        if (a[i] !== b[i]) return false;
                     }
                     return true;
                 }
@@ -262,13 +248,6 @@ function comparator(orig, newVal, options = {}) {
                     if (a.getUint8(i) !== b.getUint8(i)) return false;
                 }
                 return true;
-            }
-
-            // === Node.js Buffer ===
-            if (typeof Buffer !== 'undefined' && Buffer.isBuffer(a)) {
-                if (!Buffer.isBuffer(b)) return false;
-                if (a.length !== b.length) return false;
-                return a.equals(b);
             }
 
             // === SharedArrayBuffer ===
