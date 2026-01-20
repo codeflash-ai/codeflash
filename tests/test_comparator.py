@@ -2688,30 +2688,93 @@ def test_numba_types() -> None:
     except ImportError:
         pytest.skip("numba not available")
 
-    # Test basic numeric types
+    # Test basic numeric types from numba module
     assert comparator(numba.int64, numba.int64)
     assert comparator(numba.float64, numba.float64)
     assert comparator(numba.int32, numba.int32)
     assert comparator(numba.float32, numba.float32)
 
+    # Test basic numeric types from numba.types module
+    assert comparator(types.int64, types.int64)
+    assert comparator(types.float64, types.float64)
+    assert comparator(types.int8, types.int8)
+    assert comparator(types.int16, types.int16)
+    assert comparator(types.uint8, types.uint8)
+    assert comparator(types.uint16, types.uint16)
+    assert comparator(types.uint32, types.uint32)
+    assert comparator(types.uint64, types.uint64)
+    assert comparator(types.complex64, types.complex64)
+    assert comparator(types.complex128, types.complex128)
+
     # Test different types
     assert not comparator(numba.int64, numba.float64)
     assert not comparator(numba.int32, numba.int64)
     assert not comparator(numba.float32, numba.float64)
+    assert not comparator(types.int8, types.int16)
+    assert not comparator(types.uint32, types.int32)
+    assert not comparator(types.complex64, types.complex128)
 
     # Test boolean type
     assert comparator(numba.boolean, numba.boolean)
+    assert comparator(types.boolean, types.boolean)
     assert not comparator(numba.boolean, numba.int64)
+
+    # Test special types
+    assert comparator(types.none, types.none)
+    assert comparator(types.void, types.void)
+    assert comparator(types.pyobject, types.pyobject)
+    assert comparator(types.unicode_type, types.unicode_type)
+    # Note: types.none and types.void are the same object in numba
+    assert comparator(types.none, types.void)
+    assert not comparator(types.unicode_type, types.pyobject)
+    assert not comparator(types.none, types.int64)
 
     # Test array types
     arr_type1 = types.Array(numba.float64, 1, 'C')
     arr_type2 = types.Array(numba.float64, 1, 'C')
     arr_type3 = types.Array(numba.float64, 2, 'C')
     arr_type4 = types.Array(numba.int64, 1, 'C')
+    arr_type5 = types.Array(numba.float64, 1, 'F')  # Fortran order
 
     assert comparator(arr_type1, arr_type2)
     assert not comparator(arr_type1, arr_type3)  # different ndim
     assert not comparator(arr_type1, arr_type4)  # different dtype
+    assert not comparator(arr_type1, arr_type5)  # different layout
+
+    # Test tuple types
+    tuple_type1 = types.UniTuple(types.int64, 3)
+    tuple_type2 = types.UniTuple(types.int64, 3)
+    tuple_type3 = types.UniTuple(types.int64, 4)
+    tuple_type4 = types.UniTuple(types.float64, 3)
+
+    assert comparator(tuple_type1, tuple_type2)
+    assert not comparator(tuple_type1, tuple_type3)  # different count
+    assert not comparator(tuple_type1, tuple_type4)  # different dtype
+
+    # Test heterogeneous tuple types
+    hetero_tuple1 = types.Tuple([types.int64, types.float64])
+    hetero_tuple2 = types.Tuple([types.int64, types.float64])
+    hetero_tuple3 = types.Tuple([types.int64, types.int64])
+
+    assert comparator(hetero_tuple1, hetero_tuple2)
+    assert not comparator(hetero_tuple1, hetero_tuple3)
+
+    # Test ListType and DictType
+    list_type1 = types.ListType(types.int64)
+    list_type2 = types.ListType(types.int64)
+    list_type3 = types.ListType(types.float64)
+
+    assert comparator(list_type1, list_type2)
+    assert not comparator(list_type1, list_type3)
+
+    dict_type1 = types.DictType(types.unicode_type, types.int64)
+    dict_type2 = types.DictType(types.unicode_type, types.int64)
+    dict_type3 = types.DictType(types.unicode_type, types.float64)
+    dict_type4 = types.DictType(types.int64, types.int64)
+
+    assert comparator(dict_type1, dict_type2)
+    assert not comparator(dict_type1, dict_type3)  # different value type
+    assert not comparator(dict_type1, dict_type4)  # different key type
 
 
 def test_numba_jit_functions() -> None:
