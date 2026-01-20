@@ -1680,6 +1680,81 @@ def test_exceptions_comparator():
 
     assert not comparator(module7, module2)
 
+
+def test_torch_runtime_error_wrapping():
+    """Test that TorchRuntimeError wrapping is handled correctly.
+
+    When torch.compile is used, exceptions are wrapped in TorchRuntimeError.
+    The comparator should consider an IndexError equivalent to a TorchRuntimeError
+    that wraps an IndexError.
+    """
+    # Create a mock TorchRuntimeError class that mimics torch._dynamo.exc.TorchRuntimeError
+    class TorchRuntimeError(Exception):
+        """Mock TorchRuntimeError for testing."""
+
+        pass
+
+    # Monkey-patch the __module__ to match torch._dynamo.exc
+    TorchRuntimeError.__module__ = "torch._dynamo.exc"
+
+    # Test 1: TorchRuntimeError with __cause__ set to the same exception type
+    index_error = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    torch_error = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    torch_error.__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+
+    # These should be considered equivalent since TorchRuntimeError wraps IndexError
+    assert comparator(index_error, torch_error)
+    assert comparator(torch_error, index_error)
+
+    # Test 2: TorchRuntimeError without __cause__ but with matching error type in message
+    torch_error_no_cause = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    assert comparator(index_error, torch_error_no_cause)
+    assert comparator(torch_error_no_cause, index_error)
+
+    # Test 3: Different exception types should not be equivalent
+    value_error = ValueError("some value error")
+    torch_error_index = TorchRuntimeError("got IndexError('some error')")
+    torch_error_index.__cause__ = IndexError("some error")
+    assert not comparator(value_error, torch_error_index)
+    assert not comparator(torch_error_index, value_error)
+
+    # Test 4: TorchRuntimeError wrapping a different type should not match
+    type_error = TypeError("some type error")
+    torch_error_with_index = TorchRuntimeError("got IndexError('index error')")
+    torch_error_with_index.__cause__ = IndexError("index error")
+    assert not comparator(type_error, torch_error_with_index)
+
+    # Test 5: Two TorchRuntimeErrors wrapping the same exception type
+    torch_error1 = TorchRuntimeError("got IndexError('error 1')")
+    torch_error1.__cause__ = IndexError("error 1")
+    torch_error2 = TorchRuntimeError("got IndexError('error 2')")
+    torch_error2.__cause__ = IndexError("error 2")
+    assert comparator(torch_error1, torch_error2)
+
+    # Test 6: Regular exception comparison still works
+    error1 = IndexError("same error")
+    error2 = IndexError("same error")
+    assert comparator(error1, error2)
+
+    # Test 7: Exception wrapped in tuple (return value scenario from debug output)
+    orig_return = (
+        ("tensor1", "tensor2"),
+        {},
+        IndexError("index 0 is out of bounds for dimension 0 with size 0"),
+    )
+    torch_wrapped_return = (
+        ("tensor1", "tensor2"),
+        {},
+        TorchRuntimeError("Dynamo failed: got IndexError('index 0 is out of bounds for dimension 0 with size 0')"),
+    )
+    torch_wrapped_return[2].__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    assert comparator(orig_return, torch_wrapped_return)
+
+
 def test_collections() -> None:
     # Deque
     a = deque([1, 2, 3])

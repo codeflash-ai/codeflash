@@ -9,7 +9,7 @@ import platform
 import numpy as np
 import pytest
 
-tf = pytest.importorskip("tensorflow")
+import tensorflow as tf
 
 from code_to_optimize.sample_code import (
     leapfrog_integration_tf,

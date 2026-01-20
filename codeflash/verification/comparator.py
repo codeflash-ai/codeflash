@@ -8,7 +8,7 @@ import re
 import types
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
-from typing import Any
+from typing import Any, Optional
 
 import sentry_sdk
 
@@ -16,6 +16,64 @@ from codeflash.cli_cmds.console import logger
 from codeflash.picklepatch.pickle_placeholder import PicklePlaceholderAccessError
 
 HAS_NUMPY = find_spec("numpy") is not None
+
+
+def _is_torch_runtime_error(exc: BaseException) -> bool:
+    """Check if an exception is a TorchRuntimeError from torch.compile/Dynamo."""
+    # Check by class name to avoid importing torch
+    return type(exc).__name__ == "TorchRuntimeError" and "torch._dynamo" in type(exc).__module__
+
+
+def _get_wrapped_exception_from_torch_runtime_error(exc: BaseException) -> Optional[BaseException]:  # noqa: FA100
+    """Extract the underlying exception wrapped by TorchRuntimeError.
+
+    TorchRuntimeError from torch.compile/Dynamo wraps the original exception
+    using Python's exception chaining (__cause__).
+    """
+    if not _is_torch_runtime_error(exc):
+        return None
+
+    # First try to get the chained exception via __cause__
+    if exc.__cause__ is not None:
+        return exc.__cause__
+
+    return None
+
+
+def _exceptions_are_equivalent(orig: BaseException, new: BaseException) -> bool:
+    """Check if two exceptions are semantically equivalent.
+
+    This handles the case where torch.compile wraps exceptions in TorchRuntimeError
+    while the original code raises the underlying exception directly.
+    """
+    # If types match, they're potentially equivalent (will be compared further)
+    if type(orig).__name__ == type(new).__name__:
+        return True
+
+    # Check if one is a TorchRuntimeError wrapping the other's type
+    if _is_torch_runtime_error(new):
+        wrapped = _get_wrapped_exception_from_torch_runtime_error(new)
+        if wrapped is not None and type(wrapped).__name__ == type(orig).__name__:
+            return True
+        # Also check the error message for the wrapped exception type
+        # TorchRuntimeError message contains "got ExceptionType('...')"
+        error_msg = str(new)
+        orig_type_name = type(orig).__name__
+        if f"got {orig_type_name}(" in error_msg or f"got {orig_type_name}:" in error_msg:
+            return True
+
+    if _is_torch_runtime_error(orig):
+        wrapped = _get_wrapped_exception_from_torch_runtime_error(orig)
+        if wrapped is not None and type(wrapped).__name__ == type(new).__name__:
+            return True
+        error_msg = str(orig)
+        new_type_name = type(new).__name__
+        if f"got {new_type_name}(" in error_msg or f"got {new_type_name}:" in error_msg:
+            return True
+
+    return False
+
+
 HAS_SQLALCHEMY = find_spec("sqlalchemy") is not None
 HAS_SCIPY = find_spec("scipy") is not None
 HAS_PANDAS = find_spec("pandas") is not None
@@ -34,7 +92,15 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             new_type_obj = type(new)
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
             if type_obj.__name__ != new_type_obj.__name__ or type_obj.__qualname__ != new_type_obj.__qualname__:
-                return False
+                # Special case: allow TorchRuntimeError to be compared with the exception it wraps
+                if isinstance(orig, BaseException) and isinstance(new, BaseException):
+                    if _exceptions_are_equivalent(orig, new):
+                        # Continue to exception comparison logic below
+                        pass
+                    else:
+                        return False
+                else:
+                    return False
         if isinstance(orig, (list, tuple, deque, ChainMap)):
             if len(orig) != len(new):
                 return False
@@ -73,11 +139,34 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 # The test results should be rejected as the behavior of the unpickleable object is unknown.
                 logger.debug("Unable to verify behavior of unpickleable object in replay test")
                 return False
-            # if str(orig) != str(new):
-            #     return False
+
+            # Handle TorchRuntimeError wrapping: compare the wrapped exception instead
+            orig_to_compare = orig
+            new_to_compare = new
+
+            if _is_torch_runtime_error(new) and not _is_torch_runtime_error(orig):
+                # new is TorchRuntimeError wrapping orig's type
+                wrapped = _get_wrapped_exception_from_torch_runtime_error(new)
+                if wrapped is not None and type(wrapped).__name__ == type(orig).__name__:
+                    new_to_compare = wrapped
+                elif f"got {type(orig).__name__}(" in str(new) or f"got {type(orig).__name__}:" in str(new):
+                    # The wrapped exception type matches, but we can't extract it
+                    # Consider them equivalent since the same error occurred
+                    return True
+
+            if _is_torch_runtime_error(orig) and not _is_torch_runtime_error(new):
+                # orig is TorchRuntimeError wrapping new's type
+                wrapped = _get_wrapped_exception_from_torch_runtime_error(orig)
+                if wrapped is not None and type(wrapped).__name__ == type(new).__name__:
+                    orig_to_compare = wrapped
+                elif f"got {type(new).__name__}(" in str(orig) or f"got {type(new).__name__}:" in str(orig):
+                    # The wrapped exception type matches, but we can't extract it
+                    # Consider them equivalent since the same error occurred
+                    return True
+
             # compare the attributes of the two exception objects to determine if they are equivalent.
-            orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
-            new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
+            orig_dict = {k: v for k, v in orig_to_compare.__dict__.items() if not k.startswith("_")}
+            new_dict = {k: v for k, v in new_to_compare.__dict__.items() if not k.startswith("_")}
             return comparator(orig_dict, new_dict, superset_obj)
 
         if HAS_JAX:
