@@ -19,6 +19,9 @@ from codeflash.context.unused_definition_remover import (
     remove_unused_definitions_by_function_names,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
+
+# Language support imports for multi-language code context extraction
+from codeflash.languages.base import Language
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -27,9 +30,6 @@ from codeflash.models.models import (
     FunctionSource,
 )
 from codeflash.optimization.function_context import belongs_to_function_qualified
-
-# Language support imports for multi-language code context extraction
-from codeflash.languages.base import Language
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -204,6 +204,9 @@ def get_code_optimization_context_for_language(
     Uses the language support abstraction to extract code context and converts
     it to the CodeOptimizationContext format expected by the pipeline.
 
+    This function supports multi-file context extraction, grouping helpers by file
+    and creating proper CodeStringsMarkdown with file paths for multi-file replacement.
+
     Args:
         function_to_optimize: The function to extract context for.
         project_root_path: Root of the project.
@@ -212,6 +215,7 @@ def get_code_optimization_context_for_language(
 
     Returns:
         CodeOptimizationContext with target code and dependencies.
+
     """
     from codeflash.languages import get_language_support
     from codeflash.languages.base import FunctionInfo, ParentInfo
@@ -221,9 +225,7 @@ def get_code_optimization_context_for_language(
     lang_support = get_language_support(language)
 
     # Convert FunctionToOptimize to FunctionInfo for language support
-    parents = tuple(
-        ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents
-    )
+    parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
     func_info = FunctionInfo(
         name=function_to_optimize.function_name,
         file_path=function_to_optimize.file_path,
@@ -236,62 +238,80 @@ def get_code_optimization_context_for_language(
     )
 
     # Extract code context using language support
-    code_context = lang_support.extract_code_context(
-        func_info, project_root_path, project_root_path
-    )
+    code_context = lang_support.extract_code_context(func_info, project_root_path, project_root_path)
 
     # Build imports string if available
     imports_code = "\n".join(code_context.imports) if code_context.imports else ""
 
-    # Build the target code with imports
-    target_code = code_context.target_code
-    if imports_code:
-        target_code = imports_code + "\n\n" + target_code
-
-    # Create CodeString for the target function
+    # Get relative path for target file
     try:
-        relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
     except ValueError:
-        relative_path = function_to_optimize.file_path
+        target_relative_path = function_to_optimize.file_path
 
-    target_code_string = CodeString(code=target_code, file_path=relative_path, language=function_to_optimize.language)
-
-    # Build read-writable code markdown
-    read_writable_code = CodeStringsMarkdown(
-        code_strings=[target_code_string],
-        language=function_to_optimize.language,
-    )
-
-    # Build helper functions code
-    helper_code_strings = []
+    # Group helpers by file path
+    helpers_by_file: dict[Path, list] = defaultdict(list)
     helper_function_sources = []
-    for helper in code_context.helper_functions:
-        try:
-            helper_relative_path = helper.file_path.resolve().relative_to(project_root_path.resolve())
-        except ValueError:
-            helper_relative_path = helper.file_path
 
-        helper_code_strings.append(CodeString(
-            code=helper.source_code,
-            file_path=helper_relative_path,
-            language=function_to_optimize.language,
-        ))
+    for helper in code_context.helper_functions:
+        helpers_by_file[helper.file_path].append(helper)
 
         # Convert to FunctionSource for pipeline compatibility
-        helper_function_sources.append(FunctionSource(
-            file_path=helper.file_path,
-            qualified_name=helper.qualified_name,
-            fully_qualified_name=helper.qualified_name,
-            only_function_name=helper.name,
-            source_code=helper.source_code,
-            jedi_definition=None,
-        ))
+        helper_function_sources.append(
+            FunctionSource(
+                file_path=helper.file_path,
+                qualified_name=helper.qualified_name,
+                fully_qualified_name=helper.qualified_name,
+                only_function_name=helper.name,
+                source_code=helper.source_code,
+                jedi_definition=None,
+            )
+        )
 
-    # Build testgen context (includes target + helpers)
-    testgen_code_strings = [target_code_string] + helper_code_strings
+    # Build read-writable code (target file + same-file helpers)
+    read_writable_code_strings = []
+
+    # Combine target code with same-file helpers
+    target_file_code = code_context.target_code
+    same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
+    if same_file_helpers:
+        helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
+        target_file_code = target_file_code + "\n\n" + helper_code
+
+    # Add imports to target file code
+    if imports_code:
+        target_file_code = imports_code + "\n\n" + target_file_code
+
+    read_writable_code_strings.append(
+        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
+    )
+
+    # Add helper files (cross-file helpers)
+    for file_path, file_helpers in helpers_by_file.items():
+        if file_path == function_to_optimize.file_path:
+            continue  # Already included in target file
+
+        try:
+            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+        except ValueError:
+            helper_relative_path = file_path
+
+        # Combine all helpers from this file
+        combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
+
+        read_writable_code_strings.append(
+            CodeString(
+                code=combined_helper_code, file_path=helper_relative_path, language=function_to_optimize.language
+            )
+        )
+
+    read_writable_code = CodeStringsMarkdown(
+        code_strings=read_writable_code_strings, language=function_to_optimize.language
+    )
+
+    # Build testgen context (same as read_writable for non-Python)
     testgen_context = CodeStringsMarkdown(
-        code_strings=testgen_code_strings,
-        language=function_to_optimize.language,
+        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
     )
 
     # Check token limits
@@ -303,14 +323,14 @@ def get_code_optimization_context_for_language(
     if testgen_tokens > testgen_token_limit:
         raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
 
-    # Generate code hash from target code
-    code_hash = hashlib.sha256(target_code.encode("utf-8")).hexdigest()
+    # Generate code hash from all read-writable code
+    code_hash = hashlib.sha256(read_writable_code.flat.encode("utf-8")).hexdigest()
 
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
         read_only_context_code=code_context.read_only_context,
-        hashing_code_context=target_code,
+        hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
         preexisting_objects=set(),  # Not implemented for non-Python yet

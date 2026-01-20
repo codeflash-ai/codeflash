@@ -129,6 +129,60 @@ class JavaScriptSupport:
             logger.warning(f"Failed to parse {file_path}: {e}")
             return []
 
+    def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionInfo]:
+        """Find all functions in source code string.
+
+        Uses tree-sitter to parse the source and find functions.
+
+        Args:
+            source: The source code to analyze.
+            file_path: Optional file path for context (used for language detection).
+
+        Returns:
+            List of FunctionInfo objects for discovered functions.
+
+        """
+        try:
+            # Use JavaScript analyzer by default, or detect from file path
+            if file_path:
+                analyzer = get_analyzer_for_file(file_path)
+            else:
+                analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+            tree_functions = analyzer.find_functions(
+                source, include_methods=True, include_arrow_functions=True, require_name=True
+            )
+
+            functions: list[FunctionInfo] = []
+            for func in tree_functions:
+                # Build parents list
+                parents: list[ParentInfo] = []
+                if func.class_name:
+                    parents.append(ParentInfo(name=func.class_name, type="ClassDef"))
+                if func.parent_function:
+                    parents.append(ParentInfo(name=func.parent_function, type="FunctionDef"))
+
+                functions.append(
+                    FunctionInfo(
+                        name=func.name,
+                        file_path=file_path or Path("unknown"),
+                        start_line=func.start_line,
+                        end_line=func.end_line,
+                        start_col=func.start_col,
+                        end_col=func.end_col,
+                        parents=tuple(parents),
+                        is_async=func.is_async,
+                        is_method=func.is_method,
+                        language=self.language,
+                    )
+                )
+
+            return functions
+
+        except Exception as e:
+            logger.warning(f"Failed to parse source: {e}")
+            return []
+
     def _get_test_patterns(self) -> list[str]:
         """Get test file patterns for this language.
 
@@ -277,7 +331,21 @@ class JavaScriptSupport:
     def _find_helper_functions(
         self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
     ) -> list[HelperFunction]:
-        """Find helper functions called by the target function."""
+        """Find helper functions called by the target function.
+
+        This method finds helpers in both the same file and imported files.
+
+        Args:
+            function: The target function to find helpers for.
+            source: Source code of the file containing the function.
+            analyzer: TreeSitterAnalyzer for parsing.
+            imports: List of ImportInfo objects from the source file.
+            module_root: Root directory of the module/project.
+
+        Returns:
+            List of HelperFunction objects from same file and imported files.
+
+        """
         helpers: list[HelperFunction] = []
 
         # Get all functions in the same file
@@ -295,10 +363,11 @@ class JavaScriptSupport:
 
         # Find function calls within target
         calls = analyzer.find_function_calls(source, target_func)
+        calls_set = set(calls)
 
         # Match calls to functions in the same file
         for func in all_functions:
-            if func.name in calls and func.name != function.name:
+            if func.name in calls_set and func.name != function.name:
                 helpers.append(
                     HelperFunction(
                         name=func.name,
@@ -310,7 +379,28 @@ class JavaScriptSupport:
                     )
                 )
 
-        # TODO: Follow imports to find helpers in other files
+        # Find helpers in imported files
+        try:
+            from codeflash.languages.javascript.import_resolver import ImportResolver, MultiFileHelperFinder
+
+            import_resolver = ImportResolver(module_root)
+            helper_finder = MultiFileHelperFinder(module_root, import_resolver)
+
+            cross_file_helpers = helper_finder.find_helpers(
+                function=function,
+                source=source,
+                analyzer=analyzer,
+                imports=imports,
+                max_depth=2,  # Target → helpers → helpers of helpers
+            )
+
+            # Add cross-file helpers to the list
+            for file_path, file_helpers in cross_file_helpers.items():
+                if file_path != function.file_path:
+                    helpers.extend(file_helpers)
+
+        except Exception as e:
+            logger.debug(f"Failed to find cross-file helpers: {e}")
 
         return helpers
 

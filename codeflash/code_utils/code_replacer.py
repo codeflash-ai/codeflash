@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import LanguageSupport
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -505,8 +506,13 @@ def replace_function_definitions_for_language(
     language = Language(optimized_code.language)
     lang_support = get_language_support(language)
 
-    # If we have function_to_optimize with line info, use it for precise replacement
-    if function_to_optimize and function_to_optimize.starting_line and function_to_optimize.ending_line:
+    # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
+    if (
+        function_to_optimize
+        and function_to_optimize.starting_line
+        and function_to_optimize.ending_line
+        and function_to_optimize.file_path == module_abspath
+    ):
         parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
         func_info = FunctionInfo(
             name=function_to_optimize.function_name,
@@ -517,19 +523,44 @@ def replace_function_definitions_for_language(
             is_async=function_to_optimize.is_async,
             language=language,
         )
-        new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
-    else:
-        # Fallback: find function in source and replace
-        # This is less precise but works when we don't have line info
-        functions = lang_support.discover_functions(module_abspath)
-        new_code = original_source_code
-        for func in functions:
-            qualified_name = func.qualified_name
-            if qualified_name in function_names or func.name in function_names:
-                new_code = lang_support.replace_function(new_code, func, code_to_apply)
-                break
+        # Extract just the target function from the optimized code
+        optimized_func = _extract_function_from_code(lang_support, code_to_apply, function_to_optimize.function_name)
+        if optimized_func:
+            new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
         else:
-            # No matching function found
+            # Fallback: use the entire optimized code (for simple single-function files)
+            new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
+    else:
+        # For helper files or when we don't have precise line info:
+        # Find each function by name in both original and optimized code
+        # Then replace with the corresponding optimized version
+        new_code = original_source_code
+        modified = False
+
+        # Get the list of function names to replace
+        functions_to_replace = list(function_names)
+
+        for func_name in functions_to_replace:
+            # Re-discover functions from current code state to get correct line numbers
+            current_functions = lang_support.discover_functions_from_source(new_code, module_abspath)
+
+            # Find the function in current code
+            func = None
+            for f in current_functions:
+                if func_name in (f.qualified_name, f.name):
+                    func = f
+                    break
+
+            if func is None:
+                continue
+
+            # Extract just this function from the optimized code
+            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name)
+            if optimized_func:
+                new_code = lang_support.replace_function(new_code, func, optimized_func)
+                modified = True
+
+        if not modified:
             logger.warning(f"Could not find function {function_names} in {module_abspath}")
             return False
 
@@ -539,6 +570,37 @@ def replace_function_definitions_for_language(
 
     module_abspath.write_text(new_code, encoding="utf8")
     return True
+
+
+def _extract_function_from_code(lang_support: LanguageSupport, source_code: str, function_name: str) -> str | None:
+    """Extract a specific function's source code from a code string.
+
+    Args:
+        lang_support: Language support instance.
+        source_code: The full source code containing the function.
+        function_name: Name of the function to extract.
+
+    Returns:
+        The function's source code, or None if not found.
+
+    """
+    try:
+        # Use the language support to find functions in the source
+        functions = lang_support.discover_functions_from_source(source_code, None)
+        for func in functions:
+            if func.name == function_name:
+                # Extract the function's source using line numbers
+                lines = source_code.splitlines(keepends=True)
+                if func.start_line and func.end_line and func.start_line <= len(lines):
+                    func_lines = lines[func.start_line - 1 : func.end_line]
+                    return "".join(func_lines)
+                # Fallback to source_text if available
+                if func.source_text:
+                    return func.source_text
+    except Exception as e:
+        logger.debug(f"Error extracting function {function_name}: {e}")
+
+    return None
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:

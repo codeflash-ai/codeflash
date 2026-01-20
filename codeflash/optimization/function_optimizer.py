@@ -1055,9 +1055,7 @@ class FunctionOptimizer:
                 original_helper_code=original_helper_code,
             )
             if not did_update:
-                logger.warning(
-                    "force_lsp|No functions were replaced in the optimized code. Skipping optimization candidate."
-                )
+                logger.info("No functions were replaced in the optimized code. Skipping optimization candidate.")
                 console.rule()
                 return None
         except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:

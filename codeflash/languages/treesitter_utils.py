@@ -1,5 +1,4 @@
-"""
-Tree-sitter utilities for cross-language code analysis.
+"""Tree-sitter utilities for cross-language code analysis.
 
 This module provides a unified interface for parsing and analyzing code
 across multiple languages using tree-sitter.
@@ -11,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from tree_sitter import Language, Node, Parser
 
@@ -83,20 +82,31 @@ class ImportInfo:
     end_line: int
 
 
+@dataclass
+class ExportInfo:
+    """Represents an export statement."""
+
+    exported_names: list[tuple[str, str | None]]  # [(name, alias), ...] for named exports
+    default_export: str | None  # Name of default exported function/class/value
+    is_reexport: bool  # Whether this is a re-export (export { x } from './other')
+    reexport_source: str | None  # Module path for re-exports
+    start_line: int
+    end_line: int
+
+
 class TreeSitterAnalyzer:
-    """
-    Cross-language code analysis using tree-sitter.
+    """Cross-language code analysis using tree-sitter.
 
     This class provides methods to parse and analyze JavaScript/TypeScript code,
     finding functions, imports, and other code structures.
     """
 
     def __init__(self, language: TreeSitterLanguage | str):
-        """
-        Initialize the analyzer for a specific language.
+        """Initialize the analyzer for a specific language.
 
         Args:
             language: The language to analyze (TreeSitterLanguage enum or string).
+
         """
         if isinstance(language, str):
             language = TreeSitterLanguage(language)
@@ -111,22 +121,21 @@ class TreeSitterAnalyzer:
         return self._parser
 
     def parse(self, source: str | bytes) -> Tree:
-        """
-        Parse source code into a tree-sitter tree.
+        """Parse source code into a tree-sitter tree.
 
         Args:
             source: Source code as string or bytes.
 
         Returns:
             The parsed tree.
+
         """
         if isinstance(source, str):
             source = source.encode("utf8")
         return self.parser.parse(source)
 
     def get_node_text(self, node: Node, source: bytes) -> str:
-        """
-        Extract the source text for a tree-sitter node.
+        """Extract the source text for a tree-sitter node.
 
         Args:
             node: The tree-sitter node.
@@ -134,18 +143,14 @@ class TreeSitterAnalyzer:
 
         Returns:
             The text content of the node.
+
         """
         return source[node.start_byte : node.end_byte].decode("utf8")
 
     def find_functions(
-        self,
-        source: str,
-        include_methods: bool = True,
-        include_arrow_functions: bool = True,
-        require_name: bool = True,
+        self, source: str, include_methods: bool = True, include_arrow_functions: bool = True, require_name: bool = True
     ) -> list[FunctionNode]:
-        """
-        Find all function definitions in source code.
+        """Find all function definitions in source code.
 
         Args:
             source: The source code to analyze.
@@ -155,6 +160,7 @@ class TreeSitterAnalyzer:
 
         Returns:
             List of FunctionNode objects describing found functions.
+
         """
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
@@ -210,9 +216,7 @@ class TreeSitterAnalyzer:
                 new_class = self.get_node_text(name_node, source_bytes)
 
         if node.type in function_types:
-            func_info = self._extract_function_info(
-                node, source_bytes, current_class, current_function
-            )
+            func_info = self._extract_function_info(node, source_bytes, current_class, current_function)
 
             if func_info:
                 # Check if we should include this function
@@ -248,11 +252,7 @@ class TreeSitterAnalyzer:
             )
 
     def _extract_function_info(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        current_class: str | None,
-        current_function: str | None,
+        self, node: Node, source_bytes: bytes, current_class: str | None, current_function: str | None
     ) -> FunctionNode | None:
         """Extract function information from a tree-sitter node."""
         name = ""
@@ -313,8 +313,7 @@ class TreeSitterAnalyzer:
         )
 
     def _get_name_from_assignment(self, node: Node, source_bytes: bytes) -> str:
-        """
-        Try to extract function name from parent variable declaration or assignment.
+        """Try to extract function name from parent variable declaration or assignment.
 
         Handles patterns like:
         - const foo = () => {}
@@ -338,7 +337,7 @@ class TreeSitterAnalyzer:
             if left_node:
                 if left_node.type == "identifier":
                     return self.get_node_text(left_node, source_bytes)
-                elif left_node.type == "member_expression":
+                if left_node.type == "member_expression":
                     # For obj.method = ..., get the property name
                     prop_node = left_node.child_by_field_name("property")
                     if prop_node:
@@ -353,14 +352,14 @@ class TreeSitterAnalyzer:
         return ""
 
     def find_imports(self, source: str) -> list[ImportInfo]:
-        """
-        Find all import statements in source code.
+        """Find all import statements in source code.
 
         Args:
             source: The source code to analyze.
 
         Returns:
             List of ImportInfo objects describing imports.
+
         """
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
@@ -370,12 +369,7 @@ class TreeSitterAnalyzer:
 
         return imports
 
-    def _walk_tree_for_imports(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        imports: list[ImportInfo],
-    ) -> None:
+    def _walk_tree_for_imports(self, node: Node, source_bytes: bytes, imports: list[ImportInfo]) -> None:
         """Recursively walk the tree to find import statements."""
         if node.type == "import_statement":
             import_info = self._extract_import_info(node, source_bytes)
@@ -416,9 +410,7 @@ class TreeSitterAnalyzer:
         # Process import clause
         for child in node.children:
             if child.type == "import_clause":
-                self._process_import_clause(
-                    child, source_bytes, default_import, named_imports, namespace_import
-                )
+                self._process_import_clause(child, source_bytes, default_import, named_imports, namespace_import)
                 # Re-extract after processing
                 for clause_child in child.children:
                     if clause_child.type == "identifier":
@@ -430,11 +422,7 @@ class TreeSitterAnalyzer:
                                 alias_node = spec.child_by_field_name("alias")
                                 if name_node:
                                     name = self.get_node_text(name_node, source_bytes)
-                                    alias = (
-                                        self.get_node_text(alias_node, source_bytes)
-                                        if alias_node
-                                        else None
-                                    )
+                                    alias = self.get_node_text(alias_node, source_bytes) if alias_node else None
                                     named_imports.append((name, alias))
                     elif clause_child.type == "namespace_import":
                         # import * as X
@@ -465,11 +453,32 @@ class TreeSitterAnalyzer:
     ) -> None:
         """Process an import clause to extract imports."""
         # This is a helper that modifies the lists in place
-        pass  # Processing is done inline in _extract_import_info
+        # Processing is done inline in _extract_import_info
 
     def _extract_require_info(self, node: Node, source_bytes: bytes) -> ImportInfo | None:
-        """Extract import information from a require() call."""
-        args_node = node.child_by_field_name("arguments")
+        """Extract import information from a require() call.
+
+        Handles various CommonJS require patterns:
+        - const foo = require('./module')           -> default import
+        - const { a, b } = require('./module')      -> named imports
+        - const { a: aliasA } = require('./module') -> named imports with alias
+        - const foo = require('./module').bar       -> property access (named import)
+        - require('./module')                       -> side effect import
+        """
+        # Handle require().property pattern - the call_expression is inside member_expression
+        actual_require_node = node
+        property_access = None
+
+        # Check if this require is part of a member_expression like require('./m').foo
+        if node.parent and node.parent.type == "member_expression":
+            member_node = node.parent
+            prop_node = member_node.child_by_field_name("property")
+            if prop_node:
+                property_access = self.get_node_text(prop_node, source_bytes)
+            # Use the member expression's parent for variable assignment lookup
+            node = member_node
+
+        args_node = actual_require_node.child_by_field_name("arguments")
         if not args_node:
             return None
 
@@ -485,30 +494,302 @@ class TreeSitterAnalyzer:
 
         # Try to get the variable name from assignment
         default_import = None
+        named_imports: list[tuple[str, str | None]] = []
+
         parent = node.parent
         if parent and parent.type == "variable_declarator":
             name_node = parent.child_by_field_name("name")
             if name_node:
                 if name_node.type == "identifier":
-                    default_import = self.get_node_text(name_node, source_bytes)
+                    var_name = self.get_node_text(name_node, source_bytes)
+                    if property_access:
+                        # const foo = require('./module').bar
+                        # This imports 'bar' from the module and assigns to 'foo'
+                        named_imports.append((property_access, var_name if var_name != property_access else None))
+                    else:
+                        # const foo = require('./module')
+                        default_import = var_name
                 elif name_node.type == "object_pattern":
                     # Destructuring: const { a, b } = require('...')
-                    # Handled as named imports
-                    pass
+                    named_imports = self._extract_object_pattern_names(name_node, source_bytes)
+        elif property_access:
+            # require('./module').foo without assignment - still track the property access
+            named_imports.append((property_access, None))
 
         return ImportInfo(
             module_path=module_path,
             default_import=default_import,
-            named_imports=[],
+            named_imports=named_imports,
             namespace_import=None,
             is_type_only=False,
+            start_line=actual_require_node.start_point[0] + 1,
+            end_line=actual_require_node.end_point[0] + 1,
+        )
+
+    def _extract_object_pattern_names(self, node: Node, source_bytes: bytes) -> list[tuple[str, str | None]]:
+        """Extract names from an object pattern (destructuring).
+
+        Handles patterns like:
+        - { a, b }         -> [('a', None), ('b', None)]
+        - { a: aliasA }    -> [('a', 'aliasA')]
+        - { a, b: aliasB } -> [('a', None), ('b', 'aliasB')]
+        """
+        names: list[tuple[str, str | None]] = []
+
+        for child in node.children:
+            if child.type == "shorthand_property_identifier_pattern":
+                # { a } - shorthand, name equals value
+                name = self.get_node_text(child, source_bytes)
+                names.append((name, None))
+            elif child.type == "pair_pattern":
+                # { a: aliasA } - renamed import
+                key_node = child.child_by_field_name("key")
+                value_node = child.child_by_field_name("value")
+                if key_node and value_node:
+                    original_name = self.get_node_text(key_node, source_bytes)
+                    alias = self.get_node_text(value_node, source_bytes)
+                    names.append((original_name, alias))
+
+        return names
+
+    def find_exports(self, source: str) -> list[ExportInfo]:
+        """Find all export statements in source code.
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            List of ExportInfo objects describing exports.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        exports: list[ExportInfo] = []
+
+        self._walk_tree_for_exports(tree.root_node, source_bytes, exports)
+
+        return exports
+
+    def _walk_tree_for_exports(self, node: Node, source_bytes: bytes, exports: list[ExportInfo]) -> None:
+        """Recursively walk the tree to find export statements."""
+        # Handle ES module export statements
+        if node.type == "export_statement":
+            export_info = self._extract_export_info(node, source_bytes)
+            if export_info:
+                exports.append(export_info)
+
+        # Handle CommonJS exports: module.exports = ... or exports.foo = ...
+        if node.type == "assignment_expression":
+            export_info = self._extract_commonjs_export(node, source_bytes)
+            if export_info:
+                exports.append(export_info)
+
+        for child in node.children:
+            self._walk_tree_for_exports(child, source_bytes, exports)
+
+    def _extract_export_info(self, node: Node, source_bytes: bytes) -> ExportInfo | None:
+        """Extract export information from an export statement node."""
+        exported_names: list[tuple[str, str | None]] = []
+        default_export: str | None = None
+        is_reexport = False
+        reexport_source: str | None = None
+
+        # Check for re-export source (export { x } from './other')
+        source_node = node.child_by_field_name("source")
+        if source_node:
+            is_reexport = True
+            reexport_source = self.get_node_text(source_node, source_bytes).strip("'\"")
+
+        for child in node.children:
+            # Handle 'export default'
+            if child.type == "default":
+                # Find what's being exported as default
+                for sibling in node.children:
+                    if sibling.type == "function_declaration" or sibling.type == "class_declaration":
+                        name_node = sibling.child_by_field_name("name")
+                        if name_node:
+                            default_export = self.get_node_text(name_node, source_bytes)
+                        else:
+                            default_export = "default"
+                    elif sibling.type == "identifier":
+                        default_export = self.get_node_text(sibling, source_bytes)
+                    elif sibling.type in ("arrow_function", "function_expression", "object", "array"):
+                        default_export = "default"
+                break
+
+            # Handle named exports: export { a, b as c }
+            if child.type == "export_clause":
+                for spec in child.children:
+                    if spec.type == "export_specifier":
+                        name_node = spec.child_by_field_name("name")
+                        alias_node = spec.child_by_field_name("alias")
+                        if name_node:
+                            name = self.get_node_text(name_node, source_bytes)
+                            alias = self.get_node_text(alias_node, source_bytes) if alias_node else None
+                            exported_names.append((name, alias))
+
+            # Handle direct exports: export function foo() {}
+            if child.type == "function_declaration":
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    name = self.get_node_text(name_node, source_bytes)
+                    exported_names.append((name, None))
+
+            # Handle direct class exports: export class Foo {}
+            if child.type == "class_declaration":
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    name = self.get_node_text(name_node, source_bytes)
+                    exported_names.append((name, None))
+
+            # Handle variable exports: export const foo = ...
+            if child.type == "lexical_declaration":
+                for decl in child.children:
+                    if decl.type == "variable_declarator":
+                        name_node = decl.child_by_field_name("name")
+                        if name_node and name_node.type == "identifier":
+                            name = self.get_node_text(name_node, source_bytes)
+                            exported_names.append((name, None))
+
+        # Skip if no exports found
+        if not exported_names and not default_export:
+            return None
+
+        return ExportInfo(
+            exported_names=exported_names,
+            default_export=default_export,
+            is_reexport=is_reexport,
+            reexport_source=reexport_source,
             start_line=node.start_point[0] + 1,
             end_line=node.end_point[0] + 1,
         )
 
-    def find_function_calls(self, source: str, within_function: FunctionNode) -> list[str]:
+    def _extract_commonjs_export(self, node: Node, source_bytes: bytes) -> ExportInfo | None:
+        """Extract export information from CommonJS module.exports or exports.* patterns.
+
+        Handles patterns like:
+        - module.exports = function() {}       -> default export
+        - module.exports = { foo, bar }        -> named exports
+        - module.exports.foo = function() {}   -> named export 'foo'
+        - exports.foo = function() {}          -> named export 'foo'
+        - module.exports = require('./other')  -> re-export
         """
-        Find all function calls within a specific function's body.
+        left_node = node.child_by_field_name("left")
+        right_node = node.child_by_field_name("right")
+
+        if not left_node or not right_node:
+            return None
+
+        # Check if this is a module.exports or exports.* pattern
+        if left_node.type != "member_expression":
+            return None
+
+        left_text = self.get_node_text(left_node, source_bytes)
+
+        exported_names: list[tuple[str, str | None]] = []
+        default_export: str | None = None
+        is_reexport = False
+        reexport_source: str | None = None
+
+        if left_text == "module.exports":
+            # module.exports = something
+            if right_node.type == "function_expression" or right_node.type == "arrow_function":
+                # module.exports = function foo() {} or module.exports = () => {}
+                name_node = right_node.child_by_field_name("name")
+                if name_node:
+                    default_export = self.get_node_text(name_node, source_bytes)
+                else:
+                    default_export = "default"
+            elif right_node.type == "identifier":
+                # module.exports = someFunction
+                default_export = self.get_node_text(right_node, source_bytes)
+            elif right_node.type == "object":
+                # module.exports = { foo, bar, baz: qux }
+                for child in right_node.children:
+                    if child.type == "shorthand_property_identifier":
+                        # { foo } - exports function named foo
+                        name = self.get_node_text(child, source_bytes)
+                        exported_names.append((name, None))
+                    elif child.type == "pair":
+                        # { baz: qux } - exports qux as baz
+                        key_node = child.child_by_field_name("key")
+                        value_node = child.child_by_field_name("value")
+                        if key_node and value_node:
+                            export_name = self.get_node_text(key_node, source_bytes)
+                            local_name = self.get_node_text(value_node, source_bytes)
+                            # In CommonJS { baz: qux }, baz is the exported name, qux is local
+                            exported_names.append((local_name, export_name))
+            elif right_node.type == "call_expression":
+                # module.exports = require('./other') - re-export
+                func_node = right_node.child_by_field_name("function")
+                if func_node and self.get_node_text(func_node, source_bytes) == "require":
+                    is_reexport = True
+                    args_node = right_node.child_by_field_name("arguments")
+                    if args_node:
+                        for arg in args_node.children:
+                            if arg.type == "string":
+                                reexport_source = self.get_node_text(arg, source_bytes).strip("'\"")
+                                break
+                    default_export = "default"
+            else:
+                # module.exports = something else (class, etc.)
+                default_export = "default"
+
+        elif left_text.startswith("module.exports."):
+            # module.exports.foo = something
+            prop_name = left_text.split(".", 2)[2]  # Get 'foo' from 'module.exports.foo'
+            exported_names.append((prop_name, None))
+
+        elif left_text.startswith("exports."):
+            # exports.foo = something
+            prop_name = left_text.split(".", 1)[1]  # Get 'foo' from 'exports.foo'
+            exported_names.append((prop_name, None))
+
+        else:
+            # Not a CommonJS export pattern
+            return None
+
+        # Skip if no exports found
+        if not exported_names and not default_export:
+            return None
+
+        return ExportInfo(
+            exported_names=exported_names,
+            default_export=default_export,
+            is_reexport=is_reexport,
+            reexport_source=reexport_source,
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+        )
+
+    def is_function_exported(self, source: str, function_name: str) -> tuple[bool, str | None]:
+        """Check if a function is exported and get its export name.
+
+        Args:
+            source: The source code to analyze.
+            function_name: The name of the function to check.
+
+        Returns:
+            Tuple of (is_exported, export_name). export_name may differ from
+            function_name if exported with an alias.
+
+        """
+        exports = self.find_exports(source)
+
+        for export in exports:
+            # Check default export
+            if export.default_export == function_name:
+                return (True, "default")
+
+            # Check named exports
+            for name, alias in export.exported_names:
+                if name == function_name:
+                    return (True, alias if alias else name)
+
+        return (False, None)
+
+    def find_function_calls(self, source: str, within_function: FunctionNode) -> list[str]:
+        """Find all function calls within a specific function's body.
 
         Args:
             source: The full source code.
@@ -516,6 +797,7 @@ class TreeSitterAnalyzer:
 
         Returns:
             List of function names that are called.
+
         """
         calls: list[str] = []
         source_bytes = source.encode("utf8")
@@ -536,12 +818,7 @@ class TreeSitterAnalyzer:
 
         return list(set(calls))  # Remove duplicates
 
-    def _walk_tree_for_calls(
-        self,
-        node: Node,
-        source_bytes: bytes,
-        calls: list[str],
-    ) -> None:
+    def _walk_tree_for_calls(self, node: Node, source_bytes: bytes, calls: list[str]) -> None:
         """Recursively find function calls in a subtree."""
         if node.type == "call_expression":
             func_node = node.child_by_field_name("function")
@@ -558,8 +835,7 @@ class TreeSitterAnalyzer:
             self._walk_tree_for_calls(child, source_bytes, calls)
 
     def has_return_statement(self, function_node: FunctionNode, source: str) -> bool:
-        """
-        Check if a function has a return statement.
+        """Check if a function has a return statement.
 
         Args:
             function_node: The function to check.
@@ -567,6 +843,7 @@ class TreeSitterAnalyzer:
 
         Returns:
             True if the function has a return statement.
+
         """
         source_bytes = source.encode("utf8")
 
@@ -585,12 +862,7 @@ class TreeSitterAnalyzer:
             return True
 
         # Don't recurse into nested function definitions
-        if node.type in (
-            "function_declaration",
-            "function_expression",
-            "arrow_function",
-            "method_definition",
-        ):
+        if node.type in ("function_declaration", "function_expression", "arrow_function", "method_definition"):
             # Only check the current function, not nested ones
             body_node = node.child_by_field_name("body")
             if body_node:
@@ -607,21 +879,20 @@ class TreeSitterAnalyzer:
 
 
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
-    """
-    Get the appropriate TreeSitterAnalyzer for a file based on its extension.
+    """Get the appropriate TreeSitterAnalyzer for a file based on its extension.
 
     Args:
         file_path: Path to the file.
 
     Returns:
         TreeSitterAnalyzer configured for the file's language.
+
     """
     suffix = file_path.suffix.lower()
 
     if suffix in (".ts",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-    elif suffix in (".tsx",):
+    if suffix in (".tsx",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
-    else:
-        # Default to JavaScript for .js, .jsx, .mjs, .cjs
-        return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+    # Default to JavaScript for .js, .jsx, .mjs, .cjs
+    return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
