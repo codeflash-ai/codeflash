@@ -230,24 +230,42 @@ def tridiagonal_solve_torch(a, b, c, d):
     dtype = b.dtype
     n = b.shape[0]
 
-    c_prime = torch.zeros(n - 1, device=device, dtype=dtype)
-    d_prime = torch.zeros(n, device=device, dtype=dtype)
-    x = torch.zeros(n, device=device, dtype=dtype)
+    # Use uninitialized tensors and overwrite all positions before use to avoid zeroing cost.
+    c_prime = torch.empty(n - 1, device=device, dtype=dtype)
+    d_prime = torch.empty(n, device=device, dtype=dtype)
+    x = torch.empty(n, device=device, dtype=dtype)
 
-    c_prime[0] = c[0] / b[0]
-    d_prime[0] = d[0] / b[0]
+    # Local references to avoid repeated global/attribute lookups
+    a_l = a
+    b_l = b
+    c_l = c
+    d_l = d
+    cp = c_prime
+    dp = d_prime
+    x_l = x
+
+    # Preserve original behavior (will raise same errors for invalid sizes)
+    cp[0] = c_l[0] / b_l[0]
+    dp[0] = d_l[0] / b_l[0]
+
+    # Forward elimination: minimize repeated indexing and allocations
 
     for i in range(1, n - 1):
-        denom = b[i] - a[i - 1] * c_prime[i - 1]
-        c_prime[i] = c[i] / denom
-        d_prime[i] = (d[i] - a[i - 1] * d_prime[i - 1]) / denom
+        ai_1 = a_l[i - 1]
+        denom = b_l[i] - ai_1 * cp[i - 1]
+        # compute and assign using temporaries to avoid duplicate indexing
+        ci = c_l[i] / denom
+        dpi = (d_l[i] - ai_1 * dp[i - 1]) / denom
+        cp[i] = ci
+        dp[i] = dpi
 
-    denom = b[n - 1] - a[n - 2] * c_prime[n - 2]
-    d_prime[n - 1] = (d[n - 1] - a[n - 2] * d_prime[n - 2]) / denom
+    denom = b_l[n - 1] - a_l[n - 2] * cp[n - 2]
+    dp[n - 1] = (d_l[n - 1] - a_l[n - 2] * dp[n - 2]) / denom
 
-    x[n - 1] = d_prime[n - 1]
+    # Back substitution
+    x_l[n - 1] = dp[n - 1]
     for i in range(n - 2, -1, -1):
-        x[i] = d_prime[i] - c_prime[i] * x[i + 1]
+        x_l[i] = dp[i] - cp[i] * x_l[i + 1]
 
     return x
 
