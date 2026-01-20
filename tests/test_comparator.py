@@ -1659,6 +1659,317 @@ def test_exceptions_comparator():
     zero_division_exc3 = ZeroDivisionError("Different message")
     assert comparator(zero_division_exc1, zero_division_exc3)
 
+
+def test_exception_chaining_cause_comparator():
+    """Test that comparator handles exception chaining via __cause__ correctly."""
+
+    # ========== Exception chaining tests (__cause__) ==========
+
+    # Exception with __cause__ should match the cause exception
+    cause_exc = ValueError("root cause")
+    wrapper_exc = RuntimeError("wrapper")
+    wrapper_exc.__cause__ = cause_exc
+    assert comparator(cause_exc, wrapper_exc)
+    assert comparator(wrapper_exc, cause_exc)
+
+    # Two exceptions with equivalent __cause__ should match
+    cause1 = KeyError("key")
+    cause2 = KeyError("key")
+    wrapper1 = RuntimeError("wrap1")
+    wrapper2 = RuntimeError("wrap2")
+    wrapper1.__cause__ = cause1
+    wrapper2.__cause__ = cause2
+    assert comparator(wrapper1, wrapper2)
+
+    # Exception with __cause__ vs unwrapped different exception should not match
+    cause_val = ValueError("value error")
+    wrapper_with_cause = RuntimeError("runtime")
+    wrapper_with_cause.__cause__ = cause_val
+    different_exc = TypeError("type error")
+    assert not comparator(wrapper_with_cause, different_exc)
+    assert not comparator(different_exc, wrapper_with_cause)
+
+    # Nested __cause__ chain should unwrap recursively
+    root_cause = ValueError("root")
+    middle = TypeError("middle")
+    middle.__cause__ = root_cause
+    outer = RuntimeError("outer")
+    outer.__cause__ = middle
+    assert comparator(root_cause, outer)
+    assert comparator(outer, root_cause)
+
+    # ========== Same type comparisons still work ==========
+
+    # Same exception types should still compare as before
+    exc1 = ValueError("same message")
+    exc2 = ValueError("same message")
+    assert comparator(exc1, exc2)
+
+    exc3 = ValueError("different message")
+    assert comparator(exc1, exc3)  # Same type, different message still matches
+
+    # ========== Edge cases ==========
+
+    # Exception with None __cause__ (default) should not unwrap
+    no_cause_exc = RuntimeError("no cause")
+    assert no_cause_exc.__cause__ is None
+    assert not comparator(no_cause_exc, ValueError("different"))
+
+    # Self-comparison should work
+    self_exc = ValueError("self")
+    assert comparator(self_exc, self_exc)
+
+    # ========== Custom exceptions with __cause__ ==========
+
+    class CustomError(Exception):
+        def __init__(self, message, code):
+            super().__init__(message)
+            self.code = code
+
+    # Custom exception wrapped with __cause__
+    custom_cause = CustomError("cause", 1)
+    custom_wrapper = RuntimeError("wrapper")
+    custom_wrapper.__cause__ = custom_cause
+    custom_matching = CustomError("cause", 1)
+    assert comparator(custom_matching, custom_wrapper)
+
+    # Custom exception with different attributes should not match via __cause__
+    custom_different = CustomError("cause", 99)
+    custom_wrapper2 = RuntimeError("wrapper")
+    custom_wrapper2.__cause__ = custom_different
+    assert not comparator(custom_matching, custom_wrapper2)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_wrapper_comparator():
+    """Test that comparator handles ExceptionGroup wrappers correctly.
+
+    This tests the case where one exception is wrapped in an ExceptionGroup
+    (Python 3.11+ feature).
+    """
+    # ExceptionGroup with single exception should match the unwrapped exception
+    inner_exc = ValueError("test error")
+    wrapped_exc = ExceptionGroup("group", [inner_exc])
+    assert comparator(inner_exc, wrapped_exc)
+    assert comparator(wrapped_exc, inner_exc)
+
+    # ExceptionGroup with single exception should match another identical exception
+    inner_exc1 = ValueError("test error")
+    inner_exc2 = ValueError("test error")
+    wrapped_exc1 = ExceptionGroup("group", [inner_exc1])
+    assert comparator(inner_exc2, wrapped_exc1)
+    assert comparator(wrapped_exc1, inner_exc2)
+
+    # ExceptionGroup with multiple exceptions should NOT match a single exception
+    inner_exc_a = ValueError("error a")
+    inner_exc_b = TypeError("error b")
+    multi_wrapped = ExceptionGroup("multi", [inner_exc_a, inner_exc_b])
+    assert not comparator(inner_exc_a, multi_wrapped)
+    assert not comparator(multi_wrapped, inner_exc_a)
+
+    # Two ExceptionGroups wrapping equivalent single exceptions should match
+    wrapped_a = ExceptionGroup("group a", [ValueError("same")])
+    wrapped_b = ExceptionGroup("group b", [ValueError("same")])
+    assert comparator(wrapped_a, wrapped_b)
+
+    # Two ExceptionGroups with different inner exceptions should not match
+    wrapped_diff_a = ExceptionGroup("group", [ValueError("error")])
+    wrapped_diff_b = ExceptionGroup("group", [TypeError("error")])
+    assert not comparator(wrapped_diff_a, wrapped_diff_b)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_nested_wrappers():
+    """Test nested ExceptionGroup and mixed wrapper scenarios."""
+
+    # Nested ExceptionGroup should unwrap recursively
+    deep_inner = ValueError("deep")
+    level1 = ExceptionGroup("level1", [deep_inner])
+    level2 = ExceptionGroup("level2", [level1])
+    assert comparator(deep_inner, level2)
+    assert comparator(level2, deep_inner)
+
+    # Mixed nesting: ExceptionGroup containing exception with __cause__
+    inner_cause = ValueError("inner cause")
+    chained_exc = TypeError("chained")
+    chained_exc.__cause__ = inner_cause
+    group_with_chained = ExceptionGroup("group", [chained_exc])
+    # This should match because: group_with_chained -> chained_exc -> inner_cause
+    assert comparator(inner_cause, group_with_chained)
+    assert comparator(group_with_chained, inner_cause)
+
+    # Self-comparison should work
+    self_exc = ValueError("self")
+    wrapped_self = ExceptionGroup("group", [self_exc])
+    assert comparator(wrapped_self, wrapped_self)
+
+    # ExceptionGroup -> exception with __cause__
+    deepest = ValueError("deepest")
+    with_cause = TypeError("with cause")
+    with_cause.__cause__ = deepest
+    outer_group = ExceptionGroup("outer", [with_cause])
+
+    assert comparator(deepest, outer_group)
+    assert comparator(outer_group, deepest)
+    assert comparator(with_cause, outer_group)
+    assert comparator(outer_group, with_cause)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_with_custom_exceptions():
+    """Test ExceptionGroup with custom exception classes."""
+
+    class CustomError(Exception):
+        def __init__(self, message, code):
+            super().__init__(message)
+            self.code = code
+
+    custom1 = CustomError("error", 42)
+    custom2 = CustomError("error", 42)
+    wrapped_custom = ExceptionGroup("custom group", [custom1])
+    assert comparator(custom2, wrapped_custom)
+    assert comparator(wrapped_custom, custom2)
+
+    # Custom exception with different attributes should not match
+    custom3 = CustomError("error", 99)
+    wrapped_custom3 = ExceptionGroup("group", [custom3])
+    assert not comparator(custom1, wrapped_custom3)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_with_base_exceptions():
+    """Test ExceptionGroup with BaseException subclasses."""
+
+    # SystemExit wrapped
+    sys_exit = SystemExit(1)
+    wrapped_sys_exit = ExceptionGroup("group", [sys_exit])
+    assert comparator(sys_exit, wrapped_sys_exit)
+
+    # KeyboardInterrupt wrapped
+    kb_interrupt = KeyboardInterrupt()
+    wrapped_kb = ExceptionGroup("group", [kb_interrupt])
+    assert comparator(kb_interrupt, wrapped_kb)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_asymmetric():
+    """Test asymmetric comparisons with ExceptionGroup."""
+
+    # Wrapper on left, unwrapped on right
+    left_wrapped = ExceptionGroup("left", [ValueError("test")])
+    right_unwrapped = ValueError("test")
+    assert comparator(left_wrapped, right_unwrapped)
+
+    # Unwrapped on left, wrapper on right
+    left_unwrapped = ValueError("test")
+    right_wrapped = ExceptionGroup("right", [ValueError("test")])
+    assert comparator(left_unwrapped, right_wrapped)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_empty_edge_case():
+    """Test edge case of empty ExceptionGroup (which Python doesn't allow)."""
+    # Empty ExceptionGroup (edge case - not typical but possible)
+    # Note: ExceptionGroup requires at least one exception, but test the unwrap logic
+    try:
+        empty_group = ExceptionGroup("empty", [])
+    except ValueError:
+        # Python raises ValueError if exceptions list is empty
+        pass
+    else:
+        # If somehow we get an empty group, it shouldn't match
+        assert not comparator(empty_group, ValueError("test"))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_wrapper_with_attributes():
+    """Test exception wrapper comparison with exceptions that have custom attributes."""
+
+    class DetailedError(Exception):
+        def __init__(self, message, details):
+            super().__init__(message)
+            self.details = details
+
+    # Same attributes should match
+    err1 = DetailedError("error", {"key": "value", "count": 42})
+    err2 = DetailedError("error", {"key": "value", "count": 42})
+    wrapped1 = ExceptionGroup("group", [err1])
+    assert comparator(err2, wrapped1)
+
+    # Different attributes should not match
+    err3 = DetailedError("error", {"key": "different", "count": 42})
+    wrapped3 = ExceptionGroup("group", [err3])
+    assert not comparator(err1, wrapped3)
+
+    # Nested dict attributes
+    err_nested1 = DetailedError("error", {"nested": {"a": 1, "b": 2}})
+    err_nested2 = DetailedError("error", {"nested": {"a": 1, "b": 2}})
+    wrapped_nested = ExceptionGroup("group", [err_nested1])
+    assert comparator(err_nested2, wrapped_nested)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_exception_group_does_not_match_non_exceptions():
+    """Test that ExceptionGroup wrapper logic doesn't incorrectly match non-exception types."""
+
+    # Wrapped exception vs non-exception should not match
+    wrapped = ExceptionGroup("group", [ValueError("error")])
+    assert not comparator(wrapped, "some string")
+    assert not comparator("some string", wrapped)
+
+
+def test_exception_does_not_match_non_exceptions():
+    """Test that exception comparison doesn't incorrectly match non-exception types."""
+
+    # Exception vs non-exception should not match
+    exc = ValueError("error")
+    non_exc = "ValueError: error"
+    assert not comparator(exc, non_exc)
+    assert not comparator(non_exc, exc)
+
+    # Exception vs dict (which has similar structure to exception __dict__)
+    exc_with_attrs = ValueError("error")
+    dict_like = {"args": ("error",)}
+    assert not comparator(exc_with_attrs, dict_like)
+
+
+def test_exception_chaining_context_vs_cause():
+    """Test that only __cause__ (explicit chaining) is used for unwrapping, not __context__."""
+
+    # Create exception with __context__ (implicit chaining)
+    original = ValueError("original")
+    try:
+        try:
+            raise original
+        except ValueError:
+            raise TypeError("new error")  # This sets __context__ implicitly
+    except TypeError as e:
+        with_context = e
+
+    # __context__ is set but __cause__ is None
+    assert with_context.__context__ is original
+    assert with_context.__cause__ is None
+
+    # Should NOT match because we only unwrap __cause__, not __context__
+    # The types are different (TypeError vs ValueError) and __cause__ is None
+    assert not comparator(original, with_context)
+    assert not comparator(with_context, original)
+
+    # Now test with explicit __cause__
+    try:
+        try:
+            raise original
+        except ValueError as orig:
+            raise TypeError("new error") from orig  # This sets __cause__ explicitly
+    except TypeError as e:
+        with_cause = e
+
+    assert with_cause.__cause__ is not None
+    # Should match because __cause__ points to equivalent exception
+    assert comparator(original, with_cause)
+    assert comparator(with_cause, original)
+
+
     assert comparator(..., ...)
     assert comparator(Ellipsis, Ellipsis)
 
