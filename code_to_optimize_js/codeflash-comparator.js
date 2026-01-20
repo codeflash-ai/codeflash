@@ -250,6 +250,18 @@ function comparator(orig, newVal, options = {}) {
                 return true;
             }
 
+            // === SharedArrayBuffer ===
+            if (typeof SharedArrayBuffer !== 'undefined' && a instanceof SharedArrayBuffer) {
+                if (!(b instanceof SharedArrayBuffer)) return false;
+                if (a.byteLength !== b.byteLength) return false;
+                const viewA = new Uint8Array(a);
+                const viewB = new Uint8Array(b);
+                for (let i = 0; i < viewA.length; i++) {
+                    if (viewA[i] !== viewB[i]) return false;
+                }
+                return true;
+            }
+
             // === Date ===
             if (a instanceof Date) {
                 if (!(b instanceof Date)) return false;
@@ -272,7 +284,14 @@ function comparator(orig, newVal, options = {}) {
                 // Compare error name and message
                 if (a.name !== b.name) return false;
                 if (a.message !== b.message) return false;
-                // Optionally compare stack traces (usually not, as they differ)
+                // Compare all non-underscore enumerable properties (like Python's __dict__)
+                const propsA = Object.keys(a).filter(k => !k.startsWith('_'));
+                const propsB = Object.keys(b).filter(k => !k.startsWith('_'));
+                if (propsA.length !== propsB.length) return false;
+                for (const key of propsA) {
+                    if (!propsB.includes(key)) return false;
+                    if (!compare(a[key], b[key], depth + 1)) return false;
+                }
                 return true;
             }
 
@@ -314,9 +333,43 @@ function comparator(orig, newVal, options = {}) {
                 return a === b;
             }
 
+            // === WeakRef ===
+            // WeakRefs can only be compared by reference
+            if (typeof WeakRef !== 'undefined' && a instanceof WeakRef) {
+                return a === b;
+            }
+
             // === Promise ===
             // Promises can only be compared by reference
             if (a instanceof Promise) {
+                return a === b;
+            }
+
+            // === Generator ===
+            // Get the generator prototype for comparison
+            const generatorPrototype = Object.getPrototypeOf(function* () {});
+            if (Object.getPrototypeOf(a) === generatorPrototype) {
+                // Generators can only be compared by reference (consuming would alter state)
+                return a === b;
+            }
+
+            // === Map/Set/Array Iterators and Async Generator ===
+            // These are created by .keys(), .values(), .entries() methods or async generator functions
+            const typeName = Object.prototype.toString.call(a);
+            if (
+                typeName === '[object Map Iterator]' ||
+                typeName === '[object Set Iterator]' ||
+                typeName === '[object Array Iterator]' ||
+                typeName === '[object AsyncGenerator]'
+            ) {
+                // Iterators and async generators can only be compared by reference (consuming would alter state)
+                return a === b;
+            }
+
+            // === Generic Iterator objects ===
+            // Objects that implement the iterator protocol
+            if (typeof a[Symbol.iterator] === 'function' && typeof a.next === 'function') {
+                // Iterators compared by reference (can't consume to compare)
                 return a === b;
             }
 
@@ -337,22 +390,37 @@ function comparator(orig, newVal, options = {}) {
 
             const keysA = Object.keys(a);
             const keysB = Object.keys(b);
+            const symbolsA = Object.getOwnPropertySymbols(a);
+            const symbolsB = Object.getOwnPropertySymbols(b);
 
             if (opts.supersetObj) {
                 // In superset mode, all keys from original must exist in new
                 // but new can have additional keys
+                // Check string keys
                 for (const key of keysA) {
                     if (!(key in b)) return false;
                     if (!compare(a[key], b[key], depth + 1)) return false;
+                }
+                // Check symbol keys
+                for (const sym of symbolsA) {
+                    if (!symbolsB.includes(sym)) return false;
+                    if (!compare(a[sym], b[sym], depth + 1)) return false;
                 }
                 return true;
             } else {
                 // Exact key matching
                 if (keysA.length !== keysB.length) return false;
+                if (symbolsA.length !== symbolsB.length) return false;
 
+                // Check string keys
                 for (const key of keysA) {
                     if (!(key in b)) return false;
                     if (!compare(a[key], b[key], depth + 1)) return false;
+                }
+                // Check symbol keys
+                for (const sym of symbolsA) {
+                    if (!symbolsB.includes(sym)) return false;
+                    if (!compare(a[sym], b[sym], depth + 1)) return false;
                 }
                 return true;
             }
