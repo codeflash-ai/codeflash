@@ -454,3 +454,38 @@ def longest_increasing_subsequence_length_tf(arr):
     )
 
     return int(tf.reduce_max(dp))
+
+def python_control_flow(x: torch.Tensor, iters: int):
+    """
+    Intentionally written to be slow in eager mode.
+    Only torch.compile can optimize this meaningfully.
+    """
+    y = x
+    # Preserve original behavior for non-positive iters (no iterations)
+    if iters <= 0:
+        return y
+
+    # Apply the 3-step pattern in a single Python iteration to reduce loop overhead:
+    # For i % 3 == 0: y = sin(y + 1)
+    # For i % 3 == 1: y = sin(y * 1.01)
+    # For i % 3 == 2: y = sin(y - 0.5)
+    cycles = iters // 3
+    rem = iters - cycles * 3
+
+    for _ in range(cycles):
+        y = torch.sin(y + 1)
+        y = torch.sin(y * 1.01)
+        y = torch.sin(y - 0.5)
+
+    # Handle remaining iterations exactly as the original loop would,
+    # preserving the index-dependent operations.
+    start = cycles * 3
+    for i in range(start, start + rem):
+        if i % 3 == 0:
+            y = y + 1
+        elif i % 3 == 1:
+            y = y * 1.01
+        else:
+            y = y - 0.5
+        y = torch.sin(y)
+    return y
