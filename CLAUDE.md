@@ -69,11 +69,6 @@ else:
     error = result.failure()
 ```
 
-**Git worktree isolation** - Optimizations run in isolated worktrees to avoid affecting the main repo:
-```python
-from codeflash.code_utils.git_worktree_utils import create_detached_worktree, remove_worktree
-```
-
 **Use libcst, not ast** - Always use `libcst` for code parsing/modification to preserve formatting.
 
 ## Code Style
