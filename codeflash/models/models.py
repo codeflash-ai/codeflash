@@ -223,6 +223,22 @@ def get_code_block_splitter(file_path: Path) -> str:
     return f"# file: {file_path.as_posix()}"
 
 
+@lru_cache(maxsize=4096)
+def _normalize_path_for_comparison_cached(path_str: str) -> str:
+    """Normalize a path for cross-platform comparison.
+
+    Resolves the path to an absolute path and handles Windows case-insensitivity.
+    """
+    path = Path(path_str)
+    try:
+        resolved = str(path.resolve())
+    except (OSError, RuntimeError):
+        # If resolve fails (e.g., file doesn't exist), use absolute path
+        resolved = str(path.absolute())
+    # Only lowercase on Windows where filesystem is case-insensitive
+    return resolved.lower() if sys.platform == "win32" else resolved
+
+
 markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
@@ -412,19 +428,12 @@ class TestFiles(BaseModel):
         )
 
     @staticmethod
-    @lru_cache(maxsize=4096)
     def _normalize_path_for_comparison(path: Path) -> str:
         """Normalize a path for cross-platform comparison.
 
         Resolves the path to an absolute path and handles Windows case-insensitivity.
         """
-        try:
-            resolved = str(path.resolve())
-        except (OSError, RuntimeError):
-            # If resolve fails (e.g., file doesn't exist), use absolute path
-            resolved = str(path.absolute())
-        # Only lowercase on Windows where filesystem is case-insensitive
-        return resolved.lower() if sys.platform == "win32" else resolved
+        return _normalize_path_for_comparison_cached(str(path))
 
     def __iter__(self) -> Iterator[TestFile]:
         return iter(self.test_files)
