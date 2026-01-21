@@ -3,16 +3,20 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
+import sys
 from collections import defaultdict
 from itertools import chain
 from typing import TYPE_CHECKING, cast
 
+import jedi
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
+from codeflash.code_utils.compat import get_python_executable, is_compiled_or_bundled_binary
 from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
+from codeflash.code_utils.jedi_compat import safe_jedi_executable
 from codeflash.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     extract_names_from_targets,
@@ -35,6 +39,34 @@ if TYPE_CHECKING:
     from libcst import CSTNode
 
     from codeflash.context.unused_definition_remover import UsageInfo
+
+
+def _get_jedi_environment():
+    """Get the appropriate jedi environment based on execution mode."""
+    if is_compiled_or_bundled_binary():
+        # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
+        from jedi.api.environment import InterpreterEnvironment
+        env = InterpreterEnvironment()
+        logger.info(f"Using InterpreterEnvironment for jedi in compiled mode: executable={env.executable}")
+        return env
+    return None  # Let jedi auto-detect in normal mode
+
+
+def _create_jedi_project(path: Path, **kwargs) -> jedi.Project:
+    """Create a jedi.Project with the correct Python environment."""
+    if is_compiled_or_bundled_binary():
+        # In compiled mode: provide sys_path but avoid environment detection
+        if 'sys_path' not in kwargs:
+            kwargs['sys_path'] = list(sys.path)
+        kwargs['smart_sys_path'] = False
+        # Don't set environment_path - we'll pass environment directly to Script
+        return jedi.Project(path=path, **kwargs)
+
+    # When not compiled, use the detected Python executable normally
+    python_executable = get_python_executable()
+    if 'sys_path' not in kwargs:
+        kwargs['sys_path'] = list(sys.path)
+    return jedi.Project(path=path, environment_path=python_executable, **kwargs)
 
 
 def get_code_optimization_context(
@@ -414,36 +446,50 @@ def get_function_to_optimize_as_function_source(
 ) -> FunctionSource:
     import jedi
 
-    # Use jedi to find function to optimize
-    script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
+    try:
+        with safe_jedi_executable():
+            # Use jedi to find function to optimize
+            # Pass environment directly to Script to avoid subprocess spawning in compiled mode
+            script = jedi.Script(
+                path=function_to_optimize.file_path,
+                project=_create_jedi_project(project_root_path),
+                environment=_get_jedi_environment()
+            )
 
-    # Get all names in the file
-    names = script.get_names(all_scopes=True, definitions=True, references=False)
+            # Get all names in the file
+            names = script.get_names(all_scopes=True, definitions=True, references=False)
 
-    # Find the name that matches our function
-    for name in names:
-        try:
-            if (
-                name.type == "function"
-                and name.full_name
-                and name.name == function_to_optimize.function_name
-                and name.full_name.startswith(name.module_name)
-                and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
-            ):
-                return FunctionSource(
-                    file_path=function_to_optimize.file_path,
-                    qualified_name=function_to_optimize.qualified_name,
-                    fully_qualified_name=name.full_name,
-                    only_function_name=name.name,
-                    source_code=name.get_line_code(),
-                    jedi_definition=name,
-                )
-        except Exception as e:
-            logger.exception(f"Error while getting function source: {e}")
-            continue
-    raise ValueError(
-        f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"  # noqa: EM102
-    )
+            # Find the name that matches our function
+            for name in names:
+                try:
+                    if (
+                        name.type == "function"
+                        and name.full_name
+                        and name.name == function_to_optimize.function_name
+                        and name.full_name.startswith(name.module_name)
+                        and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
+                    ):
+                        return FunctionSource(
+                            file_path=function_to_optimize.file_path,
+                            qualified_name=function_to_optimize.qualified_name,
+                            fully_qualified_name=name.full_name,
+                            only_function_name=name.name,
+                            source_code=name.get_line_code(),
+                            jedi_definition=name,
+                        )
+                except Exception as e:
+                    logger.exception(f"Error while getting function source: {e}")
+                    continue
+            raise ValueError(
+                f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"  # noqa: EM102
+            )
+    except Exception as e:
+        # If jedi completely fails, provide a more helpful error message
+        if is_compiled_or_bundled_binary():
+            logger.error(f"Jedi failed to analyze {function_to_optimize.file_path} in compiled mode: {e}")
+        raise ValueError(
+            f"Could not analyze function {function_to_optimize.function_name} in {function_to_optimize.file_path}: {e}"
+        ) from e
 
 
 def get_function_sources_from_jedi(
@@ -453,67 +499,83 @@ def get_function_sources_from_jedi(
 
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
-    for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
-        file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
-        for qualified_function_name in qualified_function_names:
-            names = [
-                ref
-                for ref in file_refs
-                if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
-            ]
-            for name in names:
-                try:
-                    definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
-                except Exception:
-                    logger.debug(f"Error while getting definitions for {qualified_function_name}")
-                    definitions = []
-                if definitions:
-                    # TODO: there can be multiple definitions, see how to handle such cases
-                    definition = definitions[0]
-                    definition_path = definition.module_path
+    with safe_jedi_executable():
+        for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
+            try:
+                # Pass environment directly to Script to avoid subprocess spawning in compiled mode
+                script = jedi.Script(
+                    path=file_path,
+                    project=_create_jedi_project(project_root_path),
+                    environment=_get_jedi_environment()
+                )
+                file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
+            except Exception as e:
+                # Jedi can fail in compiled binaries despite mitigation
+                if is_compiled_or_bundled_binary():
+                    logger.warning(f"Jedi analysis failed in compiled mode for {file_path}, skipping: {e}")
+                    continue
+                else:
+                    # In normal mode, re-raise to surface the real issue
+                    raise
 
-                    # The definition is part of this project and not defined within the original function
-                    is_valid_definition = (
-                        str(definition_path).startswith(str(project_root_path) + os.sep)
-                        and not path_belongs_to_site_packages(definition_path)
-                        and definition.full_name
-                        and not belongs_to_function_qualified(definition, qualified_function_name)
-                        and definition.full_name.startswith(definition.module_name)
-                    )
-                    if is_valid_definition and definition.type == "function":
-                        qualified_name = get_qualified_name(definition.module_name, definition.full_name)
-                        # Avoid nested functions or classes. Only class.function is allowed
-                        if len(qualified_name.split(".")) <= 2:
-                            function_source = FunctionSource(
-                                file_path=definition_path,
-                                qualified_name=qualified_name,
-                                fully_qualified_name=definition.full_name,
-                                only_function_name=definition.name,
-                                source_code=definition.get_line_code(),
-                                jedi_definition=definition,
-                            )
-                            file_path_to_function_source[definition_path].add(function_source)
-                            function_source_list.append(function_source)
-                    # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
-                    # This ensures the class definition with constructor is included in testgen context
-                    elif is_valid_definition and definition.type == "class":
-                        init_qualified_name = get_qualified_name(
-                            definition.module_name, f"{definition.full_name}.__init__"
+            for qualified_function_name in qualified_function_names:
+                names = [
+                    ref
+                    for ref in file_refs
+                    if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
+                ]
+                for name in names:
+                    try:
+                        definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
+                    except Exception:
+                        logger.debug(f"Error while getting definitions for {qualified_function_name}")
+                        definitions = []
+                    if definitions:
+                        # TODO: there can be multiple definitions, see how to handle such cases
+                        definition = definitions[0]
+                        definition_path = definition.module_path
+
+                        # The definition is part of this project and not defined within the original function
+                        is_valid_definition = (
+                            str(definition_path).startswith(str(project_root_path) + os.sep)
+                            and not path_belongs_to_site_packages(definition_path)
+                            and definition.full_name
+                            and not belongs_to_function_qualified(definition, qualified_function_name)
+                            and definition.full_name.startswith(definition.module_name)
                         )
-                        # Only include if it's a top-level class (not nested)
-                        if len(init_qualified_name.split(".")) <= 2:
-                            function_source = FunctionSource(
-                                file_path=definition_path,
-                                qualified_name=init_qualified_name,
-                                fully_qualified_name=f"{definition.full_name}.__init__",
-                                only_function_name="__init__",
-                                source_code=definition.get_line_code(),
-                                jedi_definition=definition,
+                        if is_valid_definition and definition.type == "function":
+                            qualified_name = get_qualified_name(definition.module_name, definition.full_name)
+                            # Avoid nested functions or classes. Only class.function is allowed
+                            if len(qualified_name.split(".")) <= 2:
+                                function_source = FunctionSource(
+                                    file_path=definition_path,
+                                    qualified_name=qualified_name,
+                                    fully_qualified_name=definition.full_name,
+                                    only_function_name=definition.name,
+                                    source_code=definition.get_line_code(),
+                                    jedi_definition=definition,
+                                )
+                                file_path_to_function_source[definition_path].add(function_source)
+                                function_source_list.append(function_source)
+                        # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
+                        # This ensures the class definition with constructor is included in testgen context
+                        elif is_valid_definition and definition.type == "class":
+                            init_qualified_name = get_qualified_name(
+                                definition.module_name, f"{definition.full_name}.__init__"
                             )
-                            file_path_to_function_source[definition_path].add(function_source)
-                            function_source_list.append(function_source)
+                            # Only include if it's a top-level class (not nested)
+                            if len(init_qualified_name.split(".")) <= 2:
+                                function_source = FunctionSource(
+                                    file_path=definition_path,
+                                    qualified_name=init_qualified_name,
+                                    fully_qualified_name=f"{definition.full_name}.__init__",
+                                    only_function_name="__init__",
+                                    source_code=definition.get_line_code(),
+                                    jedi_definition=definition,
+                                )
+                                file_path_to_function_source[definition_path].add(function_source)
+                                function_source_list.append(function_source)
 
     return file_path_to_function_source, function_source_list
 
@@ -568,57 +630,63 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
 
     class_code_strings: list[CodeString] = []
 
-    for name, module_name in imported_names.items():
-        # Skip if already defined in context
-        if name in existing_definitions:
-            continue
-
-        # Try to find the module file using Jedi
-        try:
-            # Create a script that imports the module to resolve it
-            test_code = f"import {module_name}"
-            script = jedi.Script(test_code, project=jedi.Project(path=project_root_path))
-            completions = script.goto(1, len(test_code))
-
-            if not completions:
+    with safe_jedi_executable():
+        for name, module_name in imported_names.items():
+            # Skip if already defined in context
+            if name in existing_definitions:
                 continue
 
-            module_path = completions[0].module_path
-            if not module_path:
+            # Try to find the module file using Jedi
+            try:
+                # Create a script that imports the module to resolve it
+                test_code = f"import {module_name}"
+                # Pass environment directly to Script to avoid subprocess spawning in compiled mode
+                script = jedi.Script(
+                    test_code,
+                    project=_create_jedi_project(project_root_path),
+                    environment=_get_jedi_environment()
+                )
+                completions = script.goto(1, len(test_code))
+
+                if not completions:
+                    continue
+
+                module_path = completions[0].module_path
+                if not module_path:
+                    continue
+
+                # Check if this is a project module (not stdlib/third-party)
+                if not str(module_path).startswith(str(project_root_path) + os.sep):
+                    continue
+                if path_belongs_to_site_packages(module_path):
+                    continue
+
+                # Skip if we've already extracted this class
+                if (module_path, name) in extracted_classes:
+                    continue
+
+                # Parse the module to find the class definition
+                module_source = module_path.read_text(encoding="utf-8")
+                module_tree = ast.parse(module_source)
+
+                for node in ast.walk(module_tree):
+                    if isinstance(node, ast.ClassDef) and node.name == name:
+                        # Extract the class source code
+                        lines = module_source.split("\n")
+                        class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+
+                        # Also extract any necessary imports for the class (base classes, type hints)
+                        class_imports = _extract_imports_for_class(module_tree, node, module_source)
+
+                        full_source = class_imports + "\n\n" + class_source if class_imports else class_source
+
+                        class_code_strings.append(CodeString(code=full_source, file_path=module_path))
+                        extracted_classes.add((module_path, name))
+                        break
+
+            except Exception:
+                logger.debug(f"Error extracting class definition for {name} from {module_name}")
                 continue
-
-            # Check if this is a project module (not stdlib/third-party)
-            if not str(module_path).startswith(str(project_root_path) + os.sep):
-                continue
-            if path_belongs_to_site_packages(module_path):
-                continue
-
-            # Skip if we've already extracted this class
-            if (module_path, name) in extracted_classes:
-                continue
-
-            # Parse the module to find the class definition
-            module_source = module_path.read_text(encoding="utf-8")
-            module_tree = ast.parse(module_source)
-
-            for node in ast.walk(module_tree):
-                if isinstance(node, ast.ClassDef) and node.name == name:
-                    # Extract the class source code
-                    lines = module_source.split("\n")
-                    class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
-
-                    # Also extract any necessary imports for the class (base classes, type hints)
-                    class_imports = _extract_imports_for_class(module_tree, node, module_source)
-
-                    full_source = class_imports + "\n\n" + class_source if class_imports else class_source
-
-                    class_code_strings.append(CodeString(code=full_source, file_path=module_path))
-                    extracted_classes.add((module_path, name))
-                    break
-
-        except Exception:
-            logger.debug(f"Error extracting class definition for {name} from {module_name}")
-            continue
 
     return CodeStringsMarkdown(code_strings=class_code_strings)
 
