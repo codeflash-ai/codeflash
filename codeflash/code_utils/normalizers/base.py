@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+
+class CodeNormalizer(ABC):
     """Abstract base class for language-specific code normalizers.
 
     Subclasses must implement the normalize() method for their specific language.
