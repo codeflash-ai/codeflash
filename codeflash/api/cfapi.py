@@ -171,6 +171,8 @@ def suggest_changes(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
+    original_line_profiler: str = "",
+    optimized_line_profiler: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -182,6 +184,8 @@ def suggest_changes(
     :param file_changes: A dictionary of file changes.
     :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
     :param generated_tests: The generated tests.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object.
     """
     payload = {
@@ -198,6 +202,13 @@ def suggest_changes(
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
     }
+
+    # Add line profiler data if available
+    if original_line_profiler:
+        payload["originalLineProfiler"] = original_line_profiler
+    if optimized_line_profiler:
+        payload["optimizedLineProfiler"] = optimized_line_profiler
+
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
 
@@ -214,6 +225,8 @@ def create_pr(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
+    original_line_profiler: str = "",
+    optimized_line_profiler: str = "",
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -223,6 +236,8 @@ def create_pr(
     :param file_changes: A dictionary of file changes.
     :param pr_comment: The pull request comment object, containing the optimization explanation, best runtime, etc.
     :param generated_tests: The generated tests.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object.
     """
     # convert Path objects to strings
@@ -240,6 +255,13 @@ def create_pr(
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
+
+    # Add line profiler data if available
+    if original_line_profiler:
+        payload["originalLineProfiler"] = original_line_profiler
+    if optimized_line_profiler:
+        payload["optimizedLineProfiler"] = optimized_line_profiler
+
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
 
@@ -269,6 +291,8 @@ def create_staging(
     concolic_tests: str,
     root_dir: Path,
     optimization_review: str = "",
+    original_line_profiler: str = "",
+    optimized_line_profiler: str = "",
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
@@ -279,6 +303,8 @@ def create_staging(
     :param generated_original_test_source: Generated tests for the original function.
     :param function_trace_id: Unique identifier for this optimization trace.
     :param coverage_message: Coverage report or summary.
+    :param original_line_profiler: Line profiler results for original code (markdown format).
+    :param optimized_line_profiler: Line profiler results for optimized code (markdown format).
     :return: The response object from the backend.
     """
     relative_path = explanation.file_path.relative_to(root_dir).as_posix()
@@ -311,6 +337,12 @@ def create_staging(
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
     }
+
+    # Add line profiler data if available
+    if original_line_profiler:
+        payload["originalLineProfiler"] = original_line_profiler
+    if optimized_line_profiler:
+        payload["optimizedLineProfiler"] = optimized_line_profiler
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
 
