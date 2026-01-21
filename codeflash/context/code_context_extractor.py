@@ -44,32 +44,39 @@ if TYPE_CHECKING:
 def _get_jedi_environment():
     """Get the appropriate jedi environment based on execution mode."""
     if is_compiled_or_bundled_binary():
-        # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
-        from jedi.api.environment import InterpreterEnvironment
-        from pathlib import Path
+        try:
+            # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
+            from jedi.api.environment import InterpreterEnvironment
+            from pathlib import Path
 
-        # Create InterpreterEnvironment which uses current process info
-        env = InterpreterEnvironment()
+            logger.info("[_get_jedi_environment] Creating InterpreterEnvironment for compiled binary")
 
-        # Patch the executable and path to point to real Python instead of compiled binary
-        # This allows jedi to find typeshed and other resources
-        real_python_executable = get_python_executable()
-        real_python_path = Path(real_python_executable)
+            # Create InterpreterEnvironment which uses current process info
+            env = InterpreterEnvironment()
 
-        # Get the real sys.prefix (venv root or Python installation)
-        if '.venv' in real_python_executable:
-            # For venv: /path/to/.venv/bin/python3 -> /path/to/.venv
-            real_sys_prefix = str(real_python_path.parent.parent)
-        else:
-            # For system Python: /usr/bin/python3 -> /usr
-            real_sys_prefix = str(real_python_path.parent.parent)
+            # Patch the executable and path to point to real Python instead of compiled binary
+            # This allows jedi to find typeshed and other resources
+            real_python_executable = get_python_executable()
+            real_python_path = Path(real_python_executable)
 
-        env.executable = real_python_executable
-        env._start_executable = real_python_executable
-        env.path = real_sys_prefix
+            # Get the real sys.prefix (venv root or Python installation)
+            if '.venv' in real_python_executable:
+                # For venv: /path/to/.venv/bin/python3 -> /path/to/.venv
+                real_sys_prefix = str(real_python_path.parent.parent)
+            else:
+                # For system Python: /usr/bin/python3 -> /usr
+                real_sys_prefix = str(real_python_path.parent.parent)
 
-        logger.debug(f"InterpreterEnvironment: executable={env.executable}, path={env.path}")
-        return env
+            env.executable = real_python_executable
+            env._start_executable = real_python_executable
+            env.path = real_sys_prefix
+
+            logger.info(f"[_get_jedi_environment] Created: executable={env.executable}, path={env.path}")
+            return env
+        except Exception as e:
+            logger.error(f"[_get_jedi_environment] Failed to create InterpreterEnvironment: {e}", exc_info=True)
+            # Return None to fall back to default behavior
+            return None
 
     return None  # Let jedi auto-detect in normal mode
 

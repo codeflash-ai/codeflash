@@ -9,7 +9,6 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
-import jedi
 import libcst as cst
 from libcst.codemod import CodemodContext
 from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, RemoveImportsVisitor
@@ -1132,6 +1131,8 @@ def find_specific_function_in_file(
         Tuple of (line_number, column_offset) if found, None otherwise
 
     """
+    import jedi
+
     with safe_jedi_executable():
         script = jedi.Script(code=source_code, path=filepath)
         names = script.get_names(all_scopes=True, definitions=True)
@@ -1152,6 +1153,8 @@ def find_specific_function_in_file(
 def get_fn_references_jedi(
     source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
 ) -> list[Path]:
+    import jedi
+
     start_time = time.perf_counter()
     function_position: CodePosition = find_specific_function_in_file(
         source_code, file_path, target_function, target_class
