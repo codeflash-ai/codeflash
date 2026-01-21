@@ -33,7 +33,7 @@ class TestJavaScriptLineProfiler:
         init_code = profiler._generate_profiler_init()
 
         assert profiler.profiler_var in init_code
-        assert "recordLine" in init_code
+        assert "hit" in init_code  # Changed from recordLine to hit
         assert "save" in init_code
         assert str(output_file) in init_code
 
@@ -66,7 +66,7 @@ function add(a, b) {
 
         # Check that profiler initialization is added
         assert profiler.profiler_var in instrumented
-        assert "recordLine" in instrumented
+        assert "hit" in instrumented  # Changed from recordLine to hit
 
         # Clean up
         file_path.unlink()
@@ -184,7 +184,7 @@ function greet(name) {
         file_path.unlink()
 
     def test_javascript_support_instrument_for_line_profiling(self):
-        """Test JavaScriptSupport.instrument_for_line_profiling method."""
+        """Test JavaScriptSupport.instrument_source_for_line_profiler method."""
         from codeflash.languages import get_language_support
 
         js_support = get_language_support(Language.JAVASCRIPT)
@@ -210,12 +210,151 @@ function square(n) {
         )
 
         output_file = file_path.parent / ".codeflash" / "line_profile.json"
-        instrumented = js_support.instrument_for_line_profiling(
-            source, [func_info], output_file=output_file
+        # instrument_source_for_line_profiler modifies the file directly
+        result = js_support.instrument_source_for_line_profiler(
+            func_info=func_info, line_profiler_output_file=output_file
         )
 
+        assert result is True
+        # Read the instrumented code from the file
+        instrumented = file_path.read_text()
         assert "__codeflash_line_profiler__" in instrumented
-        assert "recordLine" in instrumented
+        assert "hit" in instrumented  # Changed from recordLine to hit
 
         # Clean up
         file_path.unlink()
+
+
+class TestImportStyleValidation:
+    """Tests for import style validation and fixing."""
+
+    def test_fix_named_import_for_default_export_commonjs(self):
+        """Test fixing named require to default when source uses default export."""
+        from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+
+        # Source file with default export (module.exports = function)
+        source = """
+module.exports = function decrypt(data) {
+    return data;
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(source)
+            f.flush()
+            source_path = Path(f.name)
+
+        # Test code using wrong import style (named import for default export)
+        test_code = f"""
+const {{ decrypt }} = require('{source_path.as_posix()}');
+
+test('decrypt works', () => {{
+    expect(decrypt('hello')).toBe('hello');
+}});
+"""
+
+        fixed_code = validate_and_fix_import_style(test_code, source_path, "decrypt")
+
+        # Should be fixed to default import
+        assert f"const decrypt = require('{source_path.as_posix()}')" in fixed_code
+        assert "{ decrypt }" not in fixed_code
+
+        # Clean up
+        source_path.unlink()
+
+    def test_fix_named_import_for_default_export_esm(self):
+        """Test fixing named import to default when source uses default export."""
+        from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+
+        # Source file with default export
+        source = """
+export default function decrypt(data) {
+    return data;
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(source)
+            f.flush()
+            source_path = Path(f.name)
+
+        # Test code using wrong import style
+        test_code = f"""
+import {{ decrypt }} from '{source_path.as_posix()}';
+
+test('decrypt works', () => {{
+    expect(decrypt('hello')).toBe('hello');
+}});
+"""
+
+        fixed_code = validate_and_fix_import_style(test_code, source_path, "decrypt")
+
+        # Should be fixed to default import
+        assert f"import decrypt from '{source_path.as_posix()}'" in fixed_code
+        assert "{ decrypt }" not in fixed_code
+
+        # Clean up
+        source_path.unlink()
+
+    def test_fix_default_import_for_named_export(self):
+        """Test fixing default import to named when source uses named export."""
+        from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+
+        # Source file with named export
+        source = """
+function decrypt(data) {
+    return data;
+}
+module.exports = { decrypt };
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(source)
+            f.flush()
+            source_path = Path(f.name)
+
+        # Test code using wrong import style (default import for named export)
+        test_code = f"""
+const decrypt = require('{source_path.as_posix()}');
+
+test('decrypt works', () => {{
+    expect(decrypt('hello')).toBe('hello');
+}});
+"""
+
+        fixed_code = validate_and_fix_import_style(test_code, source_path, "decrypt")
+
+        # Should be fixed to named import
+        assert f"const {{ decrypt }} = require('{source_path.as_posix()}')" in fixed_code
+
+        # Clean up
+        source_path.unlink()
+
+    def test_no_change_when_import_correct(self):
+        """Test that correct imports are not modified."""
+        from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+
+        # Source file with named export
+        source = """
+export function decrypt(data) {
+    return data;
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(source)
+            f.flush()
+            source_path = Path(f.name)
+
+        # Test code with correct import style
+        test_code = f"""
+import {{ decrypt }} from '{source_path.as_posix()}';
+
+test('decrypt works', () => {{
+    expect(decrypt('hello')).toBe('hello');
+}});
+"""
+
+        fixed_code = validate_and_fix_import_style(test_code, source_path, "decrypt")
+
+        # Should not be changed
+        assert fixed_code == test_code
+
+        # Clean up
+        source_path.unlink()

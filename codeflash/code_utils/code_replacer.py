@@ -506,6 +506,14 @@ def replace_function_definitions_for_language(
     language = Language(optimized_code.language)
     lang_support = get_language_support(language)
 
+    # Add any new global declarations from the optimized code to the original source
+    original_source_code = _add_global_declarations_for_language(
+        optimized_code=code_to_apply,
+        original_source=original_source_code,
+        module_abspath=module_abspath,
+        language=language,
+    )
+
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
     if (
         function_to_optimize
@@ -602,6 +610,109 @@ def _extract_function_from_code(lang_support: LanguageSupport, source_code: str,
         logger.debug(f"Error extracting function {function_name}: {e}")
 
     return None
+
+
+def _add_global_declarations_for_language(
+    optimized_code: str, original_source: str, module_abspath: Path, language: Language
+) -> str:
+    """Add new global declarations from optimized code to original source.
+
+    Finds module-level declarations (const, let, var, class, type, interface, enum)
+    in the optimized code that don't exist in the original source and adds them.
+
+    Args:
+        optimized_code: The optimized code that may contain new declarations.
+        original_source: The original source code.
+        module_abspath: Path to the module file (for parser selection).
+        language: The language of the code.
+
+    Returns:
+        Original source with new declarations added after imports.
+
+    """
+    from codeflash.languages.base import Language
+
+    # Only process JavaScript/TypeScript
+    if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+        return original_source
+
+    try:
+        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+        analyzer = get_analyzer_for_file(module_abspath)
+
+        # Find declarations in both original and optimized code
+        original_declarations = analyzer.find_module_level_declarations(original_source)
+        optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
+
+        if not optimized_declarations:
+            return original_source
+
+        # Get names of existing declarations
+        existing_names = {decl.name for decl in original_declarations}
+
+        # Find new declarations (names that don't exist in original)
+        new_declarations = []
+        seen_sources = set()  # Track to avoid duplicates from destructuring
+        for decl in optimized_declarations:
+            if decl.name not in existing_names and decl.source_code not in seen_sources:
+                new_declarations.append(decl)
+                seen_sources.add(decl.source_code)
+
+        if not new_declarations:
+            return original_source
+
+        # Sort by line number to maintain order
+        new_declarations.sort(key=lambda d: d.start_line)
+
+        # Find insertion point (after imports)
+        lines = original_source.splitlines(keepends=True)
+        insertion_line = _find_insertion_line_after_imports_js(lines, analyzer, original_source)
+
+        # Build new declarations string
+        new_decl_code = "\n".join(decl.source_code for decl in new_declarations)
+        new_decl_code = new_decl_code + "\n\n"
+
+        # Insert declarations
+        before = lines[:insertion_line]
+        after = lines[insertion_line:]
+        result_lines = before + [new_decl_code] + after
+
+        return "".join(result_lines)
+
+    except Exception as e:
+        logger.debug(f"Error adding global declarations: {e}")
+        return original_source
+
+
+def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
+    """Find the line index where new declarations should be inserted (after imports).
+
+    Args:
+        lines: Source lines.
+        analyzer: TreeSitter analyzer for the file.
+        source: Full source code.
+
+    Returns:
+        Line index (0-based) for insertion.
+
+    """
+    try:
+        imports = analyzer.find_imports(source)
+        if imports:
+            # Find the last import's end line
+            last_import_end = max(imp.end_line for imp in imports)
+            return last_import_end  # 0-based index = end_line (since end_line is 1-indexed)
+    except Exception:
+        pass
+
+    # Default: insert at beginning (after any shebang/directive comments)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("//") and not stripped.startswith("#!"):
+            return i
+
+    return 0
 
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:

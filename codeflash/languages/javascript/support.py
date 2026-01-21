@@ -332,11 +332,16 @@ class JavaScriptSupport:
             imp_lines = lines[imp.start_line - 1 : imp.end_line]
             import_lines.append("".join(imp_lines).strip())
 
+        # Find module-level declarations (global variables/constants) referenced by the function
+        read_only_context = self._find_referenced_globals(
+            target_code=target_code, helpers=helpers, source=source, analyzer=analyzer, imports=imports
+        )
+
         return CodeContext(
             target_code=target_code,
             target_file=function.file_path,
             helper_functions=helpers,
-            read_only_context="",
+            read_only_context=read_only_context,
             imports=import_lines,
             language=Language.JAVASCRIPT,
         )
@@ -424,6 +429,88 @@ class JavaScriptSupport:
             logger.debug(f"Failed to find cross-file helpers: {e}")
 
         return helpers
+
+    def _find_referenced_globals(
+        self,
+        target_code: str,
+        helpers: list[HelperFunction],
+        source: str,
+        analyzer: TreeSitterAnalyzer,
+        imports: list[Any],
+    ) -> str:
+        """Find module-level declarations referenced by the target function and its helpers.
+
+        Args:
+            target_code: The target function's source code.
+            helpers: List of helper functions.
+            source: Full source code of the file.
+            analyzer: TreeSitterAnalyzer for parsing.
+            imports: List of ImportInfo objects.
+
+        Returns:
+            String containing all referenced global declarations.
+
+        """
+        # Find all module-level declarations in the source file
+        module_declarations = analyzer.find_module_level_declarations(source)
+
+        if not module_declarations:
+            return ""
+
+        # Build a set of names that are imported (so we don't include them as globals)
+        imported_names: set[str] = set()
+        for imp in imports:
+            if imp.default_import:
+                imported_names.add(imp.default_import)
+            if imp.namespace_import:
+                imported_names.add(imp.namespace_import)
+            for name, alias in imp.named_imports:
+                imported_names.add(alias if alias else name)
+
+        # Build a map of declaration name -> declaration info
+        decl_map: dict[str, Any] = {}
+        for decl in module_declarations:
+            # Skip function declarations (they are handled as helpers)
+            # Also skip if it's an import
+            if decl.name not in imported_names:
+                decl_map[decl.name] = decl
+
+        if not decl_map:
+            return ""
+
+        # Find all identifiers referenced in the target code
+        referenced_in_target = analyzer.find_referenced_identifiers(target_code)
+
+        # Also find identifiers referenced in helper functions
+        referenced_in_helpers: set[str] = set()
+        for helper in helpers:
+            helper_refs = analyzer.find_referenced_identifiers(helper.source_code)
+            referenced_in_helpers.update(helper_refs)
+
+        # Combine all referenced identifiers
+        all_references = referenced_in_target | referenced_in_helpers
+
+        # Filter to only module-level declarations that are referenced
+        referenced_globals: list[Any] = []
+        seen_decl_sources: set[str] = set()  # Avoid duplicates for destructuring
+
+        for ref_name in all_references:
+            if ref_name in decl_map:
+                decl = decl_map[ref_name]
+                # Avoid duplicate declarations (same source code)
+                if decl.source_code not in seen_decl_sources:
+                    referenced_globals.append(decl)
+                    seen_decl_sources.add(decl.source_code)
+
+        if not referenced_globals:
+            return ""
+
+        # Sort by line number to maintain original order
+        referenced_globals.sort(key=lambda d: d.start_line)
+
+        # Build the context string
+        global_lines = [decl.source_code for decl in referenced_globals]
+        return "\n".join(global_lines)
 
     def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function.

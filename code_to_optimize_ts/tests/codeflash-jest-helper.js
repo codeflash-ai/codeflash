@@ -392,6 +392,17 @@ function recordResult(testModulePath, testClassName, testFunctionName, funcName,
  * @throws {Error} - Re-throws any error from the function
  */
 function capture(funcName, lineId, fn, ...args) {
+    // Validate that fn is actually a function
+    if (typeof fn !== 'function') {
+        const fnType = fn === null ? 'null' : (fn === undefined ? 'undefined' : typeof fn);
+        throw new TypeError(
+            `codeflash.capture: Expected function '${funcName}' but got ${fnType}. ` +
+            `This usually means the function was not imported correctly. ` +
+            `Check that the import statement matches how the module exports the function ` +
+            `(e.g., default export vs named export, CommonJS vs ES modules).`
+        );
+    }
+
     // Initialize database on first capture
     initDatabase();
 
@@ -616,28 +627,40 @@ function checkStability(runtimes, windowSize) {
 }
 
 /**
- * Capture a function call with internal looping for stable performance measurement.
+ * Capture a function call for performance measurement (single execution per Jest run).
  *
- * This function runs the target function multiple times within a single test execution,
- * similar to Python's pytest_plugin behavior. It provides stable timing by:
- * - Running multiple iterations to warm up JIT
- * - Continuing until timing stabilizes or time limit is reached
- * - Outputting timing data for each iteration
+ * This function executes the target function ONCE and outputs timing data.
+ * Session-level looping is controlled by Python, which runs Jest multiple times
+ * with incrementing CODEFLASH_LOOP_INDEX - matching Python's pytest_plugin behavior.
+ *
+ * The looping architecture matches Python:
+ * - Python runs Jest N times (like pytest loops the session N times)
+ * - Each Jest run executes each test once
+ * - Timing data is collected per Jest run
+ * - Python aggregates and checks stability across all Jest runs
  *
  * Environment Variables:
- *   CODEFLASH_MIN_LOOPS - Minimum number of loops (default: 5)
- *   CODEFLASH_MAX_LOOPS - Maximum number of loops (default: 100000)
- *   CODEFLASH_TARGET_DURATION_MS - Target duration in ms (default: 10000)
- *   CODEFLASH_STABILITY_CHECK - Enable stability checking (default: true)
+ *   CODEFLASH_LOOP_INDEX - Current loop iteration (set by Python, default: 1)
  *
  * @param {string} funcName - Name of the function being tested (static)
  * @param {string} lineId - Line number identifier in test file (static)
  * @param {Function} fn - The function to call
  * @param {...any} args - Arguments to pass to the function
- * @returns {any} - The function's return value from the last iteration
+ * @returns {any} - The function's return value
  * @throws {Error} - Re-throws any error from the function
  */
 function capturePerfLooped(funcName, lineId, fn, ...args) {
+    // Validate that fn is actually a function
+    if (typeof fn !== 'function') {
+        const fnType = fn === null ? 'null' : (fn === undefined ? 'undefined' : typeof fn);
+        throw new TypeError(
+            `codeflash.capturePerfLooped: Expected function '${funcName}' but got ${fnType}. ` +
+            `This usually means the function was not imported correctly. ` +
+            `Check that the import statement matches how the module exports the function ` +
+            `(e.g., default export vs named export, CommonJS vs ES modules).`
+        );
+    }
+
     // Get test context
     // Use TEST_MODULE env var if set, otherwise derive from test file path
     let testModulePath;
@@ -666,93 +689,51 @@ function capturePerfLooped(funcName, lineId, fn, ...args) {
     // Create base testId for invocation tracking
     const baseTestId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}`;
 
-    // Get invocation index (same call site in loops within test)
-    const invocationIndex = getInvocationIndex(baseTestId + ':base');
+    // Get invocation index (same call site called multiple times within same test)
+    const invocationIndex = getInvocationIndex(baseTestId + ':perf');
     const invocationId = `${lineId}_${invocationIndex}`;
 
-    // Track runtimes for stability checking
-    const runtimes = [];
+    // Create stdout tag - LOOP_INDEX comes from env (set by Python for session-level looping)
+    const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
+
+    // Print start tag
+    console.log(`!$######${testStdoutTag}######$!`);
+
+    // Execute function ONCE and measure timing
     let returnValue;
-    let error = null;
+    let durationNs;
 
-    const loopStartTime = Date.now();
-    let loopCount = 0;
+    try {
+        const startTime = getTimeNs();
+        returnValue = fn(...args);
+        const endTime = getTimeNs();
+        durationNs = getDurationNs(startTime, endTime);
 
-    while (true) {
-        loopCount++;
-
-        // Create per-loop stdout tag (uses sanitized names)
-        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopCount}:${invocationId}`;
-
-        // Print start tag
-        console.log(`!$######${testStdoutTag}######$!`);
-
-        // Timing with nanosecond precision
-        let durationNs;
-        try {
-            const startTime = getTimeNs();
-            returnValue = fn(...args);
-            const endTime = getTimeNs();
-            durationNs = getDurationNs(startTime, endTime);
-
-            // Handle promises - for async, we can't easily loop internally
-            // Fall back to single execution for async functions
-            if (returnValue instanceof Promise) {
-                return returnValue.then(
-                    (resolved) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        return resolved;
-                    },
-                    (err) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        throw err;
-                    }
-                );
-            }
-        } catch (e) {
-            durationNs = 0;
-            error = e;
-            // Print end tag even on error
-            console.log(`!######${testStdoutTag}:${durationNs}######!`);
-            throw error;
+        // Handle promises (async functions)
+        if (returnValue instanceof Promise) {
+            return returnValue.then(
+                (resolved) => {
+                    const asyncEndTime = getTimeNs();
+                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
+                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                    return resolved;
+                },
+                (err) => {
+                    const asyncEndTime = getTimeNs();
+                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
+                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                    throw err;
+                }
+            );
         }
-
-        // Print end tag with timing
-        console.log(`!######${testStdoutTag}:${durationNs}######!`);
-
-        // Track runtime for stability
-        runtimes.push(durationNs);
-
-        // Check stopping conditions
-        const elapsedMs = Date.now() - loopStartTime;
-
-        // Stop if we've reached max loops
-        if (loopCount >= MAX_LOOPS) {
-            break;
-        }
-
-        // Stop if we've reached min loops AND exceeded time limit
-        if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS) {
-            break;
-        }
-
-        // Stability check
-        if (STABILITY_CHECK && loopCount >= MIN_LOOPS) {
-            // Estimate total loops based on current rate
-            const rate = loopCount / elapsedMs;
-            const estimatedTotalLoops = Math.floor(rate * TARGET_DURATION_MS);
-            const windowSize = Math.max(3, Math.floor(STABILITY_WINDOW_SIZE * estimatedTotalLoops));
-
-            if (checkStability(runtimes, windowSize)) {
-                // Performance has stabilized
-                break;
-            }
-        }
+    } catch (e) {
+        // Print end tag even on error
+        console.log(`!######${testStdoutTag}:0######!`);
+        throw e;
     }
+
+    // Print end tag with timing
+    console.log(`!######${testStdoutTag}:${durationNs}######!`);
 
     return returnValue;
 }

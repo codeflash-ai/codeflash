@@ -45,6 +45,7 @@ def inject_profiling_into_existing_js_test(
 
     Returns:
         Tuple of (success, instrumented_code).
+
     """
     try:
         with test_path.open(encoding="utf8") as f:
@@ -102,13 +103,7 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
     return False
 
 
-def _instrument_js_test_code(
-    code: str,
-    func_name: str,
-    test_file_path: str,
-    mode: str,
-    qualified_name: str,
-) -> str:
+def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mode: str, qualified_name: str) -> str:
     """Instrument JavaScript test code with profiling capture calls.
 
     Args:
@@ -120,6 +115,7 @@ def _instrument_js_test_code(
 
     Returns:
         Instrumented code.
+
     """
     # Add codeflash helper require if not already present
     if "codeflash-jest-helper" not in code:
@@ -169,7 +165,7 @@ def _instrument_js_test_code(
                 break
 
             # Add everything before the match
-            result.append(code[i:match.start()])
+            result.append(code[i : match.start()])
 
             leading_ws = match.group(1)
 
@@ -181,39 +177,39 @@ def _instrument_js_test_code(
             paren_depth = 1
             pos = args_start
             while pos < len(code) and paren_depth > 0:
-                if code[pos] == '(':
+                if code[pos] == "(":
                     paren_depth += 1
-                elif code[pos] == ')':
+                elif code[pos] == ")":
                     paren_depth -= 1
                 pos += 1
 
             if paren_depth != 0:
                 # Unmatched parens, skip this match
-                result.append(code[match.start():match.end()])
+                result.append(code[match.start() : match.end()])
                 i = match.end()
                 continue
 
             # pos is now right after the closing ) of func_name(args)
-            args = code[args_start:pos - 1]
+            args = code[args_start : pos - 1]
 
             # Skip whitespace and find the closing ) of expect(
             expect_close_pos = pos
             while expect_close_pos < len(code) and code[expect_close_pos].isspace():
                 expect_close_pos += 1
 
-            if expect_close_pos >= len(code) or code[expect_close_pos] != ')':
+            if expect_close_pos >= len(code) or code[expect_close_pos] != ")":
                 # No closing ) for expect, skip
-                result.append(code[match.start():match.end()])
+                result.append(code[match.start() : match.end()])
                 i = match.end()
                 continue
 
             expect_close_pos += 1  # Move past )
 
             # Now look for .toXXX(value)
-            assertion_match = re.match(r'(\.to\w+\([^)]*\))', code[expect_close_pos:])
+            assertion_match = re.match(r"(\.to\w+\([^)]*\))", code[expect_close_pos:])
             if not assertion_match:
                 # No assertion found, skip
-                result.append(code[match.start():match.end()])
+                result.append(code[match.start() : match.end()])
                 i = match.end()
                 continue
 
@@ -241,11 +237,135 @@ def _instrument_js_test_code(
             result.append(wrapped)
             i = end_pos
 
-        return ''.join(result)
+        return "".join(result)
 
     code = find_and_replace_expect_calls(code)
 
     return code
+
+
+def validate_and_fix_import_style(test_code: str, source_file_path: Path, function_name: str) -> str:
+    """Validate and fix import style in generated test code to match source export.
+
+    The AI may generate tests with incorrect import styles (e.g., using named import
+    for a default export). This function detects such mismatches and fixes them.
+
+    Args:
+        test_code: The generated test code.
+        source_file_path: Path to the source file being tested.
+        function_name: Name of the function being tested.
+
+    Returns:
+        Fixed test code with correct import style.
+
+    """
+    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+    # Read source file to determine export style
+    try:
+        source_code = source_file_path.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Could not read source file {source_file_path}: {e}")
+        return test_code
+
+    # Get analyzer for the source file
+    try:
+        analyzer = get_analyzer_for_file(source_file_path)
+        exports = analyzer.find_exports(source_code)
+    except Exception as e:
+        logger.warning(f"Could not analyze exports in {source_file_path}: {e}")
+        return test_code
+
+    if not exports:
+        return test_code
+
+    # Determine how the function is exported
+    is_default_export = False
+    is_named_export = False
+
+    for export in exports:
+        if export.default_export == function_name:
+            is_default_export = True
+            break
+        for name, _alias in export.exported_names:
+            if name == function_name:
+                is_named_export = True
+                break
+        if is_named_export:
+            break
+
+    # If we can't determine export style, don't modify
+    if not is_default_export and not is_named_export:
+        # Check if it might be a default export without name
+        for export in exports:
+            if export.default_export == "default":
+                is_default_export = True
+                break
+
+    if not is_default_export and not is_named_export:
+        return test_code
+
+    # Find import statements in test code that import from the source file
+    # Normalize path for matching
+    source_name = source_file_path.stem
+    source_patterns = [source_name, f"./{source_name}", f"../{source_name}", source_file_path.as_posix()]
+
+    # Pattern for named import: const { funcName } = require(...) or import { funcName } from ...
+    named_require_pattern = re.compile(
+        rf"(const|let|var)\s+\{{\s*{re.escape(function_name)}\s*\}}\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
+    )
+    named_import_pattern = re.compile(rf"import\s+\{{\s*{re.escape(function_name)}\s*\}}\s+from\s+['\"]([^'\"]+)['\"]")
+
+    # Pattern for default import: const funcName = require(...) or import funcName from ...
+    default_require_pattern = re.compile(
+        rf"(const|let|var)\s+{re.escape(function_name)}\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
+    )
+    default_import_pattern = re.compile(rf"import\s+{re.escape(function_name)}\s+from\s+['\"]([^'\"]+)['\"]")
+
+    def is_relevant_import(module_path: str) -> bool:
+        """Check if the module path refers to our source file."""
+        # Normalize and compare
+        module_name = Path(module_path).stem
+        return any(p in module_path or module_name == source_name for p in source_patterns)
+
+    # Check for mismatch and fix
+    if is_default_export:
+        # Function is default exported, but test uses named import - need to fix
+        for match in named_require_pattern.finditer(test_code):
+            module_path = match.group(2)
+            if is_relevant_import(module_path):
+                logger.debug(f"Fixing named require to default for {function_name} from {module_path}")
+                old_import = match.group(0)
+                new_import = f"{match.group(1)} {function_name} = require('{module_path}')"
+                test_code = test_code.replace(old_import, new_import)
+
+        for match in named_import_pattern.finditer(test_code):
+            module_path = match.group(1)
+            if is_relevant_import(module_path):
+                logger.debug(f"Fixing named import to default for {function_name} from {module_path}")
+                old_import = match.group(0)
+                new_import = f"import {function_name} from '{module_path}'"
+                test_code = test_code.replace(old_import, new_import)
+
+    elif is_named_export:
+        # Function is named exported, but test uses default import - need to fix
+        for match in default_require_pattern.finditer(test_code):
+            module_path = match.group(2)
+            if is_relevant_import(module_path):
+                logger.debug(f"Fixing default require to named for {function_name} from {module_path}")
+                old_import = match.group(0)
+                new_import = f"{match.group(1)} {{ {function_name} }} = require('{module_path}')"
+                test_code = test_code.replace(old_import, new_import)
+
+        for match in default_import_pattern.finditer(test_code):
+            module_path = match.group(1)
+            if is_relevant_import(module_path):
+                logger.debug(f"Fixing default import to named for {function_name} from {module_path}")
+                old_import = match.group(0)
+                new_import = f"import {{ {function_name} }} from '{module_path}'"
+                test_code = test_code.replace(old_import, new_import)
+
+    return test_code
 
 
 def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
@@ -257,6 +377,7 @@ def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
 
     Returns:
         Path for instrumented file.
+
     """
     suffix = "_codeflash_behavior" if mode == TestingMode.BEHAVIOR else "_codeflash_perf"
     stem = original_path.stem

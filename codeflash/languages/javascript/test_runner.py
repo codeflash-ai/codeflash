@@ -14,6 +14,11 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.config_consts import (
+    STABILITY_CENTER_TOLERANCE,
+    STABILITY_SPREAD_TOLERANCE,
+    STABILITY_WINDOW_SIZE,
+)
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
 if TYPE_CHECKING:
@@ -189,6 +194,86 @@ def run_jest_behavioral_tests(
     return result_file_path, result, coverage_json_path, None
 
 
+def _parse_timing_from_jest_output(stdout: str) -> dict[str, int]:
+    """Parse timing data from Jest stdout markers.
+
+    Extracts timing information from markers like:
+    !######testModule:testFunc:funcName:loopIndex:invocationId:durationNs######!
+
+    Args:
+        stdout: Jest stdout containing timing markers.
+
+    Returns:
+        Dictionary mapping test case IDs to duration in nanoseconds.
+
+    """
+    import re
+
+    # Pattern: !######module:testFunc:funcName:loopIndex:invocationId:durationNs######!
+    pattern = re.compile(r"!######([^:]+):([^:]*):([^:]+):([^:]+):([^:]+):(\d+)######!")
+
+    timings: dict[str, int] = {}
+    for match in pattern.finditer(stdout):
+        module, test_class, func_name, _loop_index, invocation_id, duration_ns = match.groups()
+        # Create test case ID (same format as Python)
+        test_id = f"{module}:{test_class}:{func_name}:{invocation_id}"
+        timings[test_id] = int(duration_ns)
+
+    return timings
+
+
+def _should_stop_stability(
+    runtimes: list[int],
+    window: int,
+    min_window_size: int,
+    center_rel_tol: float = STABILITY_CENTER_TOLERANCE,
+    spread_rel_tol: float = STABILITY_SPREAD_TOLERANCE,
+) -> bool:
+    """Check if performance has stabilized (matches Python's pytest_plugin.should_stop exactly).
+
+    This function implements the same stability criteria as the Python pytest_plugin.py
+    to ensure consistent behavior between Python and JavaScript performance testing.
+
+    Args:
+        runtimes: List of aggregate runtimes (sum of min per test case).
+        window: Size of the window to check for stability.
+        min_window_size: Minimum number of data points required.
+        center_rel_tol: Center tolerance - all recent points must be within this fraction of median.
+        spread_rel_tol: Spread tolerance - (max-min)/min must be within this fraction.
+
+    Returns:
+        True if performance has stabilized, False otherwise.
+
+    """
+    if len(runtimes) < window:
+        return False
+
+    if len(runtimes) < min_window_size:
+        return False
+
+    recent = runtimes[-window:]
+
+    # Use sorted array for faster median and min/max operations
+    recent_sorted = sorted(recent)
+    mid = window // 2
+    m = recent_sorted[mid] if window % 2 else (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
+
+    # 1) All recent points close to the median
+    centered = True
+    for r in recent:
+        if abs(r - m) / m > center_rel_tol:
+            centered = False
+            break
+
+    # 2) Window spread is small
+    r_min, r_max = recent_sorted[0], recent_sorted[-1]
+    if r_min == 0:
+        return False
+    spread_ok = (r_max - r_min) / r_min <= spread_rel_tol
+
+    return centered and spread_ok
+
+
 def run_jest_benchmarking_tests(
     test_paths: TestFiles,
     test_env: dict[str, str],
@@ -197,40 +282,37 @@ def run_jest_benchmarking_tests(
     timeout: int | None = None,
     project_root: Path | None = None,
     min_loops: int = 5,
-    max_loops: int = 100_000,
+    max_loops: int = 100,
     target_duration_ms: int = 10_000,
     stability_check: bool = True,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    """Run Jest benchmarking tests with internal looping for stable measurements.
+    """Run Jest benchmarking tests with session-level looping for stable measurements.
+
+    This matches Python's pytest_plugin behavior:
+    - Run Jest multiple times (like pytest loops the session)
+    - Each Jest run executes each test once
+    - Timing data is collected per Jest run
+    - Stability is checked across all Jest runs (session-level)
 
     Args:
         test_paths: TestFiles object containing test file information.
         test_env: Environment variables for the test run.
         cwd: Working directory for running tests.
-        timeout: Optional timeout in seconds for the subprocess.
+        timeout: Optional timeout in seconds per Jest invocation.
         project_root: JavaScript project root (directory containing package.json).
-        min_loops: Minimum number of loops to run for each test case.
-        max_loops: Maximum number of loops to run for each test case.
-        target_duration_ms: Target TOTAL duration in milliseconds for looping.
-            This is divided among test cases since JavaScript uses capturePerfLooped
-            which loops internally per test case, unlike Python's external looping.
+        min_loops: Minimum number of Jest runs (session loops).
+        max_loops: Maximum number of Jest runs (session loops).
+        target_duration_ms: Target TOTAL duration in milliseconds for all loops.
         stability_check: Whether to enable stability-based early stopping.
 
     Returns:
-        Tuple of (result_file_path, subprocess_result).
+        Tuple of (result_file_path, subprocess_result with combined stdout from all runs).
 
     """
     result_file_path = get_run_tmp_file(Path("jest_perf_results.xml"))
 
     # Get performance test files
     test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
-
-    # Count approximate number of test cases to divide time budget
-    # JavaScript's capturePerfLooped loops internally per test case, so we need to divide
-    # the total time budget among test cases to avoid timeout
-    num_test_cases = len(test_files) * 10  # Estimate ~10 test cases per file (conservative)
-    # Use at least 500ms per test case for fast functions, cap at 2 seconds
-    per_test_duration_ms = max(500, min(2000, target_duration_ms // max(1, num_test_cases)))
 
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
@@ -253,7 +335,7 @@ def run_jest_benchmarking_tests(
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
 
-    # Set up environment
+    # Base environment setup
     jest_env = test_env.copy()
     jest_env["JEST_JUNIT_OUTPUT_FILE"] = str(result_file_path)
     jest_env["JEST_JUNIT_OUTPUT_DIR"] = str(result_file_path.parent)
@@ -261,63 +343,122 @@ def run_jest_benchmarking_tests(
     jest_env["JEST_JUNIT_CLASSNAME"] = "{filepath}"
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
-    # Include console.log output in JUnit XML for timing marker parsing
     jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
-    # Set codeflash output file for the jest helper to write timing data (SQLite format)
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
     jest_env["CODEFLASH_TEST_ITERATION"] = "0"
-    jest_env["CODEFLASH_LOOP_INDEX"] = "1"
     jest_env["CODEFLASH_MODE"] = "performance"
-    # Looping configuration for stable performance measurements
-    jest_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
-    jest_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
-    # Use per-test duration instead of total duration
-    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(per_test_duration_ms)
-    jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
-    # Seed random number generator for reproducible test runs across original and optimized code
     jest_env["CODEFLASH_RANDOM_SEED"] = "42"
 
-    # Use 10 minutes subprocess timeout - sufficient for benchmarking suite
-    subprocess_timeout = 600
+    # Per-Jest-invocation timeout (not total timeout)
+    subprocess_timeout = max(60, timeout or 60)
 
-    logger.debug(f"Running Jest benchmarking tests: {' '.join(jest_cmd)}")
+    logger.debug(f"Running Jest benchmarking tests with session-level looping: {' '.join(jest_cmd)}")
     logger.debug(
-        f"Jest benchmarking config: {num_test_cases} estimated test cases, "
-        f"{per_test_duration_ms}ms per test, min_loops={min_loops}, {subprocess_timeout}s subprocess timeout"
+        f"Jest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
+        f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
     )
 
-    start_time_ns = time.perf_counter_ns()
-    try:
-        run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
-        )
-        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
-        # Jest sends console.log output to stderr by default - move it to stdout
-        # so our timing markers (printed via console.log) are in the expected place
-        if result.stderr and not result.stdout:
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stderr, stderr=""
-            )
-        elif result.stderr:
-            # Combine stderr into stdout if both have content
-            result = subprocess.CompletedProcess(
-                args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
-            )
-        logger.debug(f"Jest benchmarking result: returncode={result.returncode}")
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Jest benchmarking tests timed out after {subprocess_timeout}s")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking tests timed out"
-        )
-    except FileNotFoundError:
-        logger.error("Jest not found for benchmarking")
-        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
-    finally:
-        wall_clock_ns = time.perf_counter_ns() - start_time_ns
-        logger.debug(f"Jest benchmarking tests completed in {wall_clock_ns / 1e9:.2f}s")
+    # Session-level looping (like Python's pytest_plugin)
+    runtime_data_by_test: dict[str, list[int]] = {}
+    aggregate_runtimes: list[int] = []
+    all_stdout: list[str] = []
+    final_result: subprocess.CompletedProcess | None = None
+    total_start_time = time.time()
+    loop_count = 0
 
-    return result_file_path, result
+    while loop_count < max_loops:
+        loop_count += 1
+
+        # Set loop index for this Jest run
+        jest_env["CODEFLASH_LOOP_INDEX"] = str(loop_count)
+
+        logger.debug(f"Jest benchmarking loop {loop_count}/{max_loops}")
+
+        try:
+            run_args = get_cross_platform_subprocess_run_args(
+                cwd=effective_cwd, env=jest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
+            )
+            result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+
+            # Combine stderr into stdout for timing markers
+            stdout = result.stdout or ""
+            if result.stderr:
+                stdout = stdout + "\n" + result.stderr if stdout else result.stderr
+
+            all_stdout.append(stdout)
+            final_result = result
+
+            # Parse timing data from this Jest run
+            timing_data = _parse_timing_from_jest_output(stdout)
+            for test_id, duration_ns in timing_data.items():
+                runtime_data_by_test.setdefault(test_id, []).append(duration_ns)
+
+            # Check for test failures - stop looping if tests fail
+            if result.returncode != 0:
+                logger.debug(f"Jest run {loop_count} failed with returncode {result.returncode}, stopping loops")
+                break
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Jest run {loop_count} timed out after {subprocess_timeout}s")
+            break
+        except FileNotFoundError:
+            logger.error("Jest not found for benchmarking")
+            final_result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
+            break
+
+        # Check stopping conditions
+        elapsed_seconds = time.time() - total_start_time
+        elapsed_ms = elapsed_seconds * 1000
+
+        # Stop if we've reached min loops AND exceeded time limit
+        if loop_count >= min_loops and elapsed_ms >= target_duration_ms:
+            logger.debug(
+                f"Stopping: reached min_loops={min_loops} and elapsed={elapsed_ms:.0f}ms >= target={target_duration_ms}ms"
+            )
+            break
+
+        # Stability check (matches Python's pytest_plugin logic exactly)
+        if stability_check and runtime_data_by_test:
+            # Calculate best runtime (sum of min per test case) - matches Python
+            best_runtime = sum(min(data) for data in runtime_data_by_test.values() if data)
+            if best_runtime > 0:
+                aggregate_runtimes.append(best_runtime)
+
+                # Estimate window size based on loop rate (matches Python's pytest_plugin)
+                # window_size = int(STABILITY_WINDOW_SIZE * estimated_total_loops + 0.5)
+                elapsed_ns = elapsed_seconds * 1e9
+                if elapsed_ns > 0:
+                    rate = loop_count / elapsed_ns
+                    total_time_ns = target_duration_ms * 1e6  # Convert ms to ns
+                    estimated_total_loops = int(rate * total_time_ns)
+                    window_size = int(STABILITY_WINDOW_SIZE * estimated_total_loops + 0.5)
+
+                    if _should_stop_stability(aggregate_runtimes, window_size, min_loops):
+                        logger.debug(f"Stopping: stability reached at loop {loop_count}")
+                        break
+
+    # Combine all stdout from all Jest runs
+    combined_stdout = "\n".join(all_stdout)
+
+    wall_clock_seconds = time.time() - total_start_time
+    logger.debug(
+        f"Jest benchmarking completed: {loop_count} loops in {wall_clock_seconds:.2f}s, "
+        f"{len(runtime_data_by_test)} test cases tracked"
+    )
+
+    # Return combined result
+    if final_result is None:
+        final_result = subprocess.CompletedProcess(
+            args=jest_cmd, returncode=-1, stdout="", stderr="No Jest runs completed"
+        )
+
+    # Create result with combined stdout from all runs
+    combined_result = subprocess.CompletedProcess(
+        args=final_result.args, returncode=final_result.returncode, stdout=combined_stdout, stderr=""
+    )
+
+    return result_file_path, combined_result
 
 
 def run_jest_line_profile_tests(

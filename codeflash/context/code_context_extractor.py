@@ -268,7 +268,7 @@ def get_code_optimization_context_for_language(
             )
         )
 
-    # Build read-writable code (target file + same-file helpers)
+    # Build read-writable code (target file + same-file helpers + global variables)
     read_writable_code_strings = []
 
     # Combine target code with same-file helpers
@@ -277,6 +277,11 @@ def get_code_optimization_context_for_language(
     if same_file_helpers:
         helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
         target_file_code = target_file_code + "\n\n" + helper_code
+
+    # Add global variables (module-level declarations) referenced by the function and helpers
+    # These should be included in read-writable context so AI can modify them if needed
+    if code_context.read_only_context:
+        target_file_code = code_context.read_only_context + "\n\n" + target_file_code
 
     # Add imports to target file code
     if imports_code:
@@ -329,7 +334,8 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        read_only_context_code=code_context.read_only_context,
+        # Global variables are now included in read-writable code, so don't duplicate in read-only
+        read_only_context_code="",
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,

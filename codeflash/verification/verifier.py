@@ -56,6 +56,21 @@ def generate_tests(
         instrumented_perf_test_source = instrumented_perf_test_source.replace(
             "{codeflash_run_tmp_dir_client_side}", temp_run_dir
         )
+
+        # For JavaScript/TypeScript, validate and fix import styles to match source exports
+        if function_to_optimize.language in ("javascript", "typescript"):
+            from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+
+            source_file = Path(function_to_optimize.file_path)
+            func_name = function_to_optimize.function_name
+
+            generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
+            instrumented_behavior_test_source = validate_and_fix_import_style(
+                instrumented_behavior_test_source, source_file, func_name
+            )
+            instrumented_perf_test_source = validate_and_fix_import_style(
+                instrumented_perf_test_source, source_file, func_name
+            )
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")
         return None

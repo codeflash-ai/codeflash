@@ -95,6 +95,18 @@ class ExportInfo:
     end_line: int
 
 
+@dataclass
+class ModuleLevelDeclaration:
+    """Represents a module-level (global) variable or constant declaration."""
+
+    name: str  # Variable/constant name
+    declaration_type: str  # "const", "let", "var", "class", "enum", "type", "interface"
+    source_code: str  # Full declaration source code
+    start_line: int
+    end_line: int
+    is_exported: bool  # Whether the declaration is exported
+
+
 class TreeSitterAnalyzer:
     """Cross-language code analysis using tree-sitter.
 
@@ -886,6 +898,222 @@ class TreeSitterAnalyzer:
 
         for child in node.children:
             self._walk_tree_for_calls(child, source_bytes, calls)
+
+    def find_module_level_declarations(self, source: str) -> list[ModuleLevelDeclaration]:
+        """Find all module-level variable/constant declarations.
+
+        This finds global variables, constants, classes, enums, type aliases,
+        and interfaces defined at the top level of the module (not inside functions).
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            List of ModuleLevelDeclaration objects.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        declarations: list[ModuleLevelDeclaration] = []
+
+        # Only look at direct children of the program/module node (top-level)
+        for child in tree.root_node.children:
+            self._extract_module_level_declaration(child, source_bytes, declarations)
+
+        return declarations
+
+    def _extract_module_level_declaration(
+        self, node: Node, source_bytes: bytes, declarations: list[ModuleLevelDeclaration]
+    ) -> None:
+        """Extract module-level declarations from a node."""
+        is_exported = False
+
+        # Handle export statements - unwrap to get the actual declaration
+        if node.type == "export_statement":
+            is_exported = True
+            # Find the actual declaration inside the export
+            for child in node.children:
+                if child.type in (
+                    "lexical_declaration",
+                    "variable_declaration",
+                    "class_declaration",
+                    "type_alias_declaration",
+                    "interface_declaration",
+                    "enum_declaration",
+                ):
+                    self._extract_declaration(child, source_bytes, declarations, is_exported, node)
+                    return
+            return
+
+        # Handle non-exported declarations
+        if node.type in (
+            "lexical_declaration",  # const/let
+            "variable_declaration",  # var
+        ):
+            self._extract_declaration(node, source_bytes, declarations, is_exported, node)
+        elif node.type == "class_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                declarations.append(
+                    ModuleLevelDeclaration(
+                        name=self.get_node_text(name_node, source_bytes),
+                        declaration_type="class",
+                        source_code=self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
+        elif node.type in ("type_alias_declaration", "interface_declaration", "enum_declaration"):
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                decl_type = node.type.replace("_declaration", "").replace("_alias", "")
+                declarations.append(
+                    ModuleLevelDeclaration(
+                        name=self.get_node_text(name_node, source_bytes),
+                        declaration_type=decl_type,
+                        source_code=self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
+
+    def _extract_declaration(
+        self,
+        node: Node,
+        source_bytes: bytes,
+        declarations: list[ModuleLevelDeclaration],
+        is_exported: bool,
+        source_node: Node,
+    ) -> None:
+        """Extract variable declarations (const/let/var)."""
+        # Determine declaration type (const, let, var)
+        decl_type = "var"
+        for child in node.children:
+            if child.type in ("const", "let", "var"):
+                decl_type = child.type
+                break
+
+        # Find variable declarators
+        for child in node.children:
+            if child.type == "variable_declarator":
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    # Handle destructuring patterns
+                    if name_node.type == "identifier":
+                        declarations.append(
+                            ModuleLevelDeclaration(
+                                name=self.get_node_text(name_node, source_bytes),
+                                declaration_type=decl_type,
+                                source_code=self.get_node_text(source_node, source_bytes),
+                                start_line=source_node.start_point[0] + 1,
+                                end_line=source_node.end_point[0] + 1,
+                                is_exported=is_exported,
+                            )
+                        )
+                    elif name_node.type in ("object_pattern", "array_pattern"):
+                        # For destructuring, extract all bound identifiers
+                        identifiers = self._extract_pattern_identifiers(name_node, source_bytes)
+                        for ident in identifiers:
+                            declarations.append(
+                                ModuleLevelDeclaration(
+                                    name=ident,
+                                    declaration_type=decl_type,
+                                    source_code=self.get_node_text(source_node, source_bytes),
+                                    start_line=source_node.start_point[0] + 1,
+                                    end_line=source_node.end_point[0] + 1,
+                                    is_exported=is_exported,
+                                )
+                            )
+
+    def _extract_pattern_identifiers(self, pattern_node: Node, source_bytes: bytes) -> list[str]:
+        """Extract all identifier names from a destructuring pattern."""
+        identifiers: list[str] = []
+
+        def walk(n: Node) -> None:
+            if n.type == "identifier" or n.type == "shorthand_property_identifier_pattern":
+                identifiers.append(self.get_node_text(n, source_bytes))
+            for child in n.children:
+                walk(child)
+
+        walk(pattern_node)
+        return identifiers
+
+    def find_referenced_identifiers(self, source: str) -> set[str]:
+        """Find all identifiers referenced in the source code.
+
+        This finds all identifier references, excluding:
+        - Declaration names (left side of assignments)
+        - Property names in object literals
+        - Function/class names at definition site
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            Set of referenced identifier names.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        references: set[str] = set()
+
+        self._walk_tree_for_references(tree.root_node, source_bytes, references)
+
+        return references
+
+    def _walk_tree_for_references(self, node: Node, source_bytes: bytes, references: set[str]) -> None:
+        """Walk tree to collect identifier references."""
+        if node.type == "identifier":
+            # Check if this identifier is a reference (not a declaration)
+            parent = node.parent
+            if parent is None:
+                return
+
+            # Skip function/class/method names at definition
+            if parent.type in ("function_declaration", "class_declaration", "method_definition", "function_expression"):
+                if parent.child_by_field_name("name") == node:
+                    # Don't recurse into parent's children - the parent will be visited separately
+                    return
+
+            # Skip variable declarator names (left side of declaration)
+            if parent.type == "variable_declarator":
+                if parent.child_by_field_name("name") == node:
+                    # Don't recurse - the value will be visited when we visit the declarator
+                    return
+
+            # Skip property names in object literals (keys)
+            if parent.type == "pair":
+                if parent.child_by_field_name("key") == node:
+                    # Don't recurse - the value will be visited when we visit the pair
+                    return
+
+            # Skip property access property names (obj.property - skip 'property')
+            if parent.type == "member_expression":
+                if parent.child_by_field_name("property") == node:
+                    # Don't recurse - the object will be visited when we visit the member_expression
+                    return
+
+            # Skip import specifier names
+            if parent.type in ("import_specifier", "import_clause", "namespace_import"):
+                return
+
+            # Skip export specifier names
+            if parent.type == "export_specifier":
+                return
+
+            # Skip parameter names in function definitions
+            if parent.type == "formal_parameters" or parent.type == "required_parameter":
+                return
+
+            # This is a reference
+            references.add(self.get_node_text(node, source_bytes))
+            return
+
+        # Recurse into children
+        for child in node.children:
+            self._walk_tree_for_references(child, source_bytes, references)
 
     def has_return_statement(self, function_node: FunctionNode, source: str) -> bool:
         """Check if a function has a return statement.
