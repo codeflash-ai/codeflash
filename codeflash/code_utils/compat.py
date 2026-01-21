@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -12,11 +13,49 @@ if TYPE_CHECKING:
     codeflash_cache_db: Path
 
 
+def is_compiled_or_bundled_binary() -> bool:
+    """Check if running from a compiled binary (Nuitka or PyInstaller)."""
+    return (
+        hasattr(sys, "__compiled__")
+        or "onefile_" in sys.executable
+        or getattr(sys, "frozen", False)
+        or hasattr(sys, "_MEIPASS")
+    )
+
+
+def get_python_executable() -> str:
+    """Get the Python executable path, handling Nuitka and PyInstaller compiled binaries."""
+    if is_compiled_or_bundled_binary():
+        # When running as a compiled binary, sys.executable points to the binary,
+        # not a Python interpreter. We need to find a Python with access to dependencies.
+
+        # 1. Check VIRTUAL_ENV environment variable (most reliable for active venv)
+        venv_path = os.environ.get("VIRTUAL_ENV")
+        if venv_path:
+            venv_python = Path(venv_path) / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python3")
+            if venv_python.exists():
+                return venv_python.as_posix()
+
+        # 2. Look for .venv in current working directory or parent directories
+        cwd = Path.cwd()
+        for directory in [cwd, *cwd.parents]:
+            venv_python = directory / ".venv" / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python3")
+            if venv_python.exists():
+                return venv_python.as_posix()
+
+        # 3. Fall back to system Python (may not have dependencies - this is a limitation)
+        python_exe = shutil.which("python3") or shutil.which("python")
+        if python_exe:
+            return Path(python_exe).as_posix()
+
+    return Path(sys.executable).as_posix()
+
+
 class Compat:
     # os-independent newline
     LF: str = os.linesep
 
-    SAFE_SYS_EXECUTABLE: str = Path(sys.executable).as_posix()
+    SAFE_SYS_EXECUTABLE: str = get_python_executable()
 
     IS_POSIX: bool = os.name != "nt"
 
