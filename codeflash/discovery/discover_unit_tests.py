@@ -9,6 +9,8 @@ import pickle
 import re
 import sqlite3
 import subprocess
+import sys
+import tempfile
 import unittest
 from collections import defaultdict
 from pathlib import Path
@@ -27,7 +29,8 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db, get_python_executable, is_compiled_or_bundled_binary
+from codeflash.code_utils.jedi_compat import safe_jedi_executable
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -575,6 +578,91 @@ def discover_unit_tests(
     return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 
+# Embedded discovery script for use when running as compiled binary
+_DISCOVERY_SCRIPT_CONTENT = '''# ruff: noqa
+import sys
+from pathlib import Path
+from typing import Any
+import pickle
+
+
+# This script should not have any relation to the codeflash package, be careful with imports
+cwd = sys.argv[1]
+tests_root = sys.argv[2]
+pickle_path = sys.argv[3]
+collected_tests = []
+pytest_rootdir = None
+sys.path.insert(1, str(cwd))
+
+
+def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
+    test_results = []
+    for test in pytest_tests:
+        test_class = None
+        if test.cls:
+            test_class = test.parent.name
+        test_results.append({"test_file": str(test.path), "test_class": test_class, "test_function": test.name})
+    return test_results
+
+
+class PytestCollectionPlugin:
+    def pytest_collection_finish(self, session) -> None:
+        global pytest_rootdir, collected_tests
+
+        collected_tests.extend(session.items)
+        pytest_rootdir = session.config.rootdir
+
+        # Write results immediately since pytest.main() will exit after this callback, not always with a success code
+        tests = parse_pytest_collection_results(collected_tests)
+        exit_code = getattr(session.config, "exitstatus", 0)
+        with Path(pickle_path).open("wb") as f:
+            pickle.dump((exit_code, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def pytest_collection_modifyitems(self, items) -> None:
+        skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
+        for item in items:
+            if "benchmark" in item.fixturenames:
+                item.add_marker(skip_benchmark)
+
+
+if __name__ == "__main__":
+    import pytest
+
+    try:
+        pytest.main(
+            [tests_root, "-p", "no:logging", "--collect-only", "-m", "not skip", "-p", "no:codeflash-benchmark"],
+            plugins=[PytestCollectionPlugin()],
+        )
+    except Exception as e:
+        print(f"Failed to collect tests: {e!s}")
+        try:
+            with Path(pickle_path).open("wb") as f:
+                pickle.dump((-1, [], None), f, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as pickle_error:
+            print(f"Failed to write failure pickle: {pickle_error!s}", file=sys.stderr)
+'''
+
+
+def _get_discovery_script_path() -> Path:
+    """Get path to pytest_new_process_discovery.py, creating it from embedded source if needed."""
+    discovery_script_name = "pytest_new_process_discovery.py"
+
+    if is_compiled_or_bundled_binary():
+        # Write embedded script to a temporary file
+        temp_dir = Path(tempfile.gettempdir()) / "codeflash_scripts"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_script_path = temp_dir / discovery_script_name
+
+        # Write the script content
+        with open(temp_script_path, "w") as f:
+            f.write(_DISCOVERY_SCRIPT_CONTENT)
+
+        return temp_script_path
+
+    # When not compiled, use the original file
+    return Path(__file__).parent / discovery_script_name
+
+
 def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
@@ -584,6 +672,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    discovery_script_path = _get_discovery_script_path()
     with custom_addopts():
         run_kwargs = get_cross_platform_subprocess_run_args(
             cwd=project_root, check=False, text=True, capture_output=True
@@ -591,7 +680,7 @@ def discover_tests_pytest(
         result = subprocess.run(  # noqa: PLW1510
             [
                 SAFE_SYS_EXECUTABLE,
-                Path(__file__).parent / "pytest_new_process_discovery.py",
+                str(discovery_script_path),
                 str(project_root),
                 str(tests_root),
                 str(tmp_pickle_path),
@@ -604,6 +693,9 @@ def discover_tests_pytest(
     except Exception as e:
         tests, pytest_rootdir = [], None
         logger.exception(f"Failed to discover tests: {e}")
+        logger.error(f"Subprocess exit code: {result.returncode}")
+        logger.error(f"Subprocess stdout: {result.stdout}")
+        logger.error(f"Subprocess stderr: {result.stderr}")
         exitcode = -1
     finally:
         tmp_pickle_path.unlink(missing_ok=True)
@@ -747,12 +839,17 @@ def process_test_files(
     if str(parent_path) not in jedi_sys_path:
         jedi_sys_path.insert(0, str(parent_path))
 
-    jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path)
+    # When compiled, don't specify environment_path to avoid subprocess issues
+    if is_compiled_or_bundled_binary():
+        jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path, smart_sys_path=False)
+    else:
+        python_executable = get_python_executable()
+        jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path, environment_path=python_executable)
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
     console.rule()
-    with test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
+    with safe_jedi_executable(), test_files_progress_bar(total=len(file_to_test_map), description="Processing test files") as (
         progress,
         task_id,
     ):
