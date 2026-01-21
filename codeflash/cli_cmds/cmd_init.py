@@ -771,9 +771,23 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Generate workflow content AFTER user confirmation
         logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
-        optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
-        )
+
+        # Try to read the workflow YAML file
+        try:
+            # Try importlib.resources first (works in most cases)
+            optimize_yml_content = (
+                files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
+            )
+        except Exception as e:
+            # Fallback for compiled binaries or when importlib.resources fails
+            logger.debug(f"[cmd_init.py:install_github_actions] importlib.resources failed: {e}, trying filesystem fallback")
+            workflow_file_path = Path(__file__).parent / "workflows" / "codeflash-optimize.yaml"
+            try:
+                optimize_yml_content = workflow_file_path.read_text(encoding="utf-8")
+            except Exception as e2:
+                logger.error(f"[cmd_init.py:install_github_actions] Failed to read workflow file: {e2}")
+                console.print("[bold red]Error: Could not load workflow template file[/bold red]")
+                return
         materialized_optimize_yml_content = generate_dynamic_workflow_content(
             optimize_yml_content, config, git_root, benchmark_mode
         )
