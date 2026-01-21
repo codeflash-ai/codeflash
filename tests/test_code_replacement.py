@@ -4330,6 +4330,76 @@ def standardize_quotes(text: str) -> str:
     assert func_pos < second_forloop_pos, "Function must come before second for-loop"
 
 
+def test_add_global_assignments_variable_depends_on_existing_global() -> None:
+    """Test that new global assignments depending on existing globals are inserted after them.
+
+    This tests the fix for a bug where LLM-generated optimizations that add module-level
+    cache variables like `_TRANSLATION_CACHE: dict = {None: tbl}` would fail because the
+    assignment was inserted after imports but BEFORE the `tbl` variable it depends on.
+
+    Real-world example from unstructured/cleaners/core.py optimization:
+    - Original has: `tbl = dict.fromkeys(...)`
+    - Optimized adds: `_TRANSLATION_CACHE: dict = {None: tbl}` (depends on tbl)
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original file with imports and module-level variable
+    original_code = '''from __future__ import annotations
+import sys
+import unicodedata
+
+tbl = dict.fromkeys(
+    i for i in range(sys.maxunicode) if unicodedata.category(chr(i)).startswith("P")
+)
+
+def remove_sentence_punctuation(s: str) -> str:
+    tbl_new = tbl.copy()
+    return s.translate(tbl_new)
+'''
+
+    # Optimized code adds a cache that depends on `tbl`
+    optimized_code = '''from __future__ import annotations
+import sys
+import unicodedata
+
+tbl = dict.fromkeys(
+    i for i in range(sys.maxunicode) if unicodedata.category(chr(i)).startswith("P")
+)
+
+# Cache for translation tables
+_TRANSLATION_CACHE: dict = {None: tbl}
+
+def remove_sentence_punctuation(s: str) -> str:
+    tbl_new = tbl.copy()
+    return s.translate(tbl_new)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify `_TRANSLATION_CACHE` is in the result
+    assert "_TRANSLATION_CACHE" in result, "_TRANSLATION_CACHE should be in the result"
+
+    # Verify correct ordering: `tbl` must come before `_TRANSLATION_CACHE`
+    tbl_pos = result.index("tbl = dict.fromkeys")
+    cache_pos = result.index("_TRANSLATION_CACHE")
+
+    assert cache_pos > tbl_pos, (
+        f"_TRANSLATION_CACHE (pos {cache_pos}) should be after "
+        f"tbl (pos {tbl_pos}) because it depends on it"
+    )
+
+
 # =============================================================================
 # Real-world standardize_quotes optimization tests
 # These tests verify the fixes work for the actual optimization scenarios

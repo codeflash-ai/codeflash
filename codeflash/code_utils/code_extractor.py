@@ -563,10 +563,51 @@ class FunctionDefInserter(cst.CSTTransformer):
         return updated_node.with_changes(body=updated_body)
 
 
+def get_statement_dependencies(stmt: cst.BaseStatement) -> set[str]:
+    """Extract all names that a statement depends on (names used on the RHS)."""
+    deps: set[str] = set()
+    if isinstance(stmt, cst.SimpleStatementLine):
+        for body_item in stmt.body:
+            if isinstance(body_item, cst.Assign):
+                # Get names used in the value (RHS)
+                deps.update(get_names_in_expression(body_item.value))
+            elif isinstance(body_item, cst.AnnAssign) and body_item.value is not None:
+                # Get names used in the value and annotation
+                deps.update(get_names_in_expression(body_item.value))
+                deps.update(get_names_in_expression(body_item.annotation.annotation))
+    return deps
+
+
+def get_statement_defined_name(stmt: cst.BaseStatement) -> str | None:
+    """Get the name defined by a statement (LHS of assignment)."""
+    if isinstance(stmt, cst.SimpleStatementLine) and len(stmt.body) == 1:
+        body_item = stmt.body[0]
+        if isinstance(body_item, cst.Assign) and len(body_item.targets) == 1:
+            target = body_item.targets[0].target
+            if isinstance(target, cst.Name):
+                return target.value
+        elif isinstance(body_item, cst.AnnAssign):
+            target = body_item.target
+            if isinstance(target, cst.Name):
+                return target.value
+    return None
+
+
+def find_last_definition_index(name: str, body: list[cst.BaseStatement]) -> int:
+    """Find the index of the last statement that defines a given name."""
+    last_idx = -1
+    for i, stmt in enumerate(body):
+        defined_name = get_statement_defined_name(stmt)
+        if defined_name == name:
+            last_idx = i
+    return last_idx
+
+
 class ImportInserter(cst.CSTTransformer):
     """Transformer that inserts global statements into a module.
 
-    - Simple statements (assignments, etc.) are inserted after imports
+    - Simple statements (assignments, etc.) are inserted after the globals they depend on
+    - If no dependencies, they are inserted after imports
     - Compound statements (for, while, with, try) are inserted at the END of the module
       because they may call functions that are defined later in the file
     """
@@ -592,21 +633,29 @@ class ImportInserter(cst.CSTTransformer):
 
         updated_body = list(updated_node.body)
 
-        # Insert simple statements after imports (or at beginning if no imports)
+        # For simple statements, insert after their dependencies or after imports
         if simple_statements:
-            if self.last_import_line == 0:
-                # No imports, insert at the beginning
-                for j, stmt in enumerate(simple_statements):
-                    updated_body.insert(j, stmt)
-            else:
-                # Find insertion point after last import
-                insertion_index = 0
+            # Find the base insertion point (after imports)
+            base_insertion_index = 0
+            if self.last_import_line > 0:
                 for i in range(len(updated_body)):
                     if i + 1 == self.last_import_line:
-                        insertion_index = i + 1
+                        base_insertion_index = i + 1
                         break
-                for j, stmt in enumerate(simple_statements):
-                    updated_body.insert(insertion_index + j, stmt)
+
+            # Insert each statement at the correct position based on its dependencies
+            for stmt in simple_statements:
+                deps = get_statement_dependencies(stmt)
+
+                # Find the position after the last dependency definition
+                insertion_index = base_insertion_index
+                for dep_name in deps:
+                    dep_idx = find_last_definition_index(dep_name, updated_body)
+                    if dep_idx >= 0:
+                        # Insert after this dependency
+                        insertion_index = max(insertion_index, dep_idx + 1)
+
+                updated_body.insert(insertion_index, stmt)
 
         # Append compound statements at the END of the module
         # This ensures they run after all function definitions
