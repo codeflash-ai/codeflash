@@ -30,18 +30,148 @@ class NameCollector(cst.CSTVisitor):
     """Collects all Name nodes referenced in a CST expression.
 
     Used to find what names an assignment depends on (e.g., function calls in the RHS).
+    Properly scopes comprehension variables and lambda parameters so they are not
+    treated as external dependencies.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.names: set[str] = set()
+        # Stack of sets tracking locally bound names (comprehension vars, lambda params)
+        self._local_names_stack: list[set[str]] = []
+
+    def _is_local_name(self, name: str) -> bool:
+        """Check if a name is bound in any enclosing local scope."""
+        return any(name in scope for scope in self._local_names_stack)
 
     def visit_Name(self, node: cst.Name) -> None:
-        self.names.add(node.value)
+        if not self._is_local_name(node.value):
+            self.names.add(node.value)
+
+    # --- Comprehension handling ---
+    def visit_ListComp(self, node: cst.ListComp) -> bool:
+        """Handle list comprehensions: [expr for x in iterable if cond]."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False  # Don't visit children - we handle them manually
+
+    def visit_SetComp(self, node: cst.SetComp) -> bool:
+        """Handle set comprehensions: {expr for x in iterable if cond}."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False
+
+    def visit_DictComp(self, node: cst.DictComp) -> bool:
+        """Handle dict comprehensions: {key: value for x in iterable if cond}."""
+        # For dict comps, we need to visit both key and value
+        self._visit_dict_comprehension(node.for_in, node.key, node.value)
+        return False
+
+    def visit_GeneratorExp(self, node: cst.GeneratorExp) -> bool:
+        """Handle generator expressions: (expr for x in iterable if cond)."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False
+
+    def _extract_comp_target_names(self, target: cst.BaseExpression) -> set[str]:
+        """Extract names bound by a comprehension target (e.g., x in 'for x in items')."""
+        return _extract_names_from_target(target)
+
+    def _visit_comprehension(self, for_in: cst.CompFor, elt: cst.BaseExpression) -> None:
+        """Visit a comprehension, properly scoping the loop variables."""
+        # Create a new scope for this comprehension
+        local_scope: set[str] = set()
+        self._local_names_stack.append(local_scope)
+
+        # Process all for..in clauses, collecting bound names as we go
+        self._visit_comp_for(for_in, local_scope)
+
+        # Visit the element expression (all bound names are now in scope)
+        elt.visit(self)
+
+        # Pop the scope
+        self._local_names_stack.pop()
+
+    def _visit_dict_comprehension(
+        self, for_in: cst.CompFor, key: cst.BaseExpression, value: cst.BaseExpression
+    ) -> None:
+        """Visit a dict comprehension, properly scoping the loop variables."""
+        local_scope: set[str] = set()
+        self._local_names_stack.append(local_scope)
+
+        self._visit_comp_for(for_in, local_scope)
+
+        # Visit both key and value expressions
+        key.visit(self)
+        value.visit(self)
+
+        self._local_names_stack.pop()
+
+    def _visit_comp_for(self, comp_for: cst.CompFor, local_scope: set[str]) -> None:
+        """Recursively visit CompFor nodes, adding bound names to scope."""
+        # First, visit the iterable (before adding target names to scope!)
+        # This is important: `x` in `[x for x in x]` - the RHS `x` is external
+        comp_for.iter.visit(self)
+
+        # Add the target names to the local scope
+        target_names = self._extract_comp_target_names(comp_for.target)
+        local_scope.update(target_names)
+
+        # Visit any conditions (ifs)
+        for if_clause in comp_for.ifs:
+            if_clause.test.visit(self)
+
+        # Visit nested for..in if present
+        if comp_for.inner_for_in is not None:
+            self._visit_comp_for(comp_for.inner_for_in, local_scope)
+
+    # --- Lambda handling ---
+    def visit_Lambda(self, node: cst.Lambda) -> bool:
+        """Handle lambda expressions: lambda x, y: x + y + z."""
+        # Collect parameter names
+        param_names = self._extract_lambda_param_names(node.params)
+
+        # Push a new scope with these parameters
+        self._local_names_stack.append(param_names)
+
+        # Visit the lambda body
+        node.body.visit(self)
+
+        # Pop the scope
+        self._local_names_stack.pop()
+
+        return False  # Don't visit children - we handle them manually
+
+    def _extract_lambda_param_names(self, params: cst.Parameters) -> set[str]:
+        """Extract all parameter names from a lambda's parameters."""
+        names: set[str] = set()
+
+        # Regular positional/keyword params
+        for param in params.params:
+            names.add(param.name.value)
+
+        # *args
+        if params.star_arg and isinstance(params.star_arg, cst.Param):
+            names.add(params.star_arg.name.value)
+
+        # Keyword-only params
+        for param in params.kwonly_params:
+            names.add(param.name.value)
+
+        # **kwargs
+        if params.star_kwarg:
+            names.add(params.star_kwarg.name.value)
+
+        # Positional-only params (Python 3.8+)
+        for param in params.posonly_params:
+            names.add(param.name.value)
+
+        return names
 
 
 def get_names_in_expression(node: cst.BaseExpression) -> set[str]:
-    """Extract all names referenced in a CST expression."""
+    """Extract all names referenced in a CST expression.
+
+    Comprehension variables and lambda parameters are properly scoped and
+    are NOT included as external dependencies.
+    """
     collector = NameCollector()
     node.visit(collector)
     return collector.names
@@ -118,6 +248,13 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         return True
 
     def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Match(self, node: cst.Match) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_Match(self, original_node: cst.Match) -> None:  # noqa: ARG002
         self.compound_depth -= 1
 
     def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
@@ -230,6 +367,13 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.compound_depth -= 1
         return updated_node
 
+    def visit_Match(self, node: cst.Match) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_Match(self, original_node: cst.Match, updated_node: cst.Match) -> cst.Match:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
         if self.scope_depth > 0 or self.if_else_depth > 0 or self.compound_depth > 0:
             return updated_node
@@ -264,18 +408,10 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         for i, stmt in enumerate(new_statements):
             if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
                 definition_positions[stmt.name.value] = i + 1
-            elif isinstance(stmt, cst.SimpleStatementLine):
-                # Check for assignments (including tuple unpacking and chained assignments)
-                for child in stmt.body:
-                    if isinstance(child, cst.Assign):
-                        for target in child.targets:
-                            # Handle all target types (Name, Tuple, etc.)
-                            for name in _extract_names_from_target(target.target):
-                                definition_positions[name] = i + 1
-                    elif isinstance(child, cst.AnnAssign):
-                        # Handle annotated assignments
-                        for name in _extract_names_from_target(child.target):
-                            definition_positions[name] = i + 1
+            # Get all names defined by this statement (handles simple assignments,
+            # compound statements like for/while/with/try, etc.)
+            for name in get_statement_defined_names(stmt):
+                definition_positions[name] = i + 1
 
         # Find the default insertion index (after imports)
         default_insert_index = find_insertion_index_after_imports(updated_node)
@@ -432,6 +568,15 @@ class GlobalStatementCollector(cst.CSTVisitor):
         return False  # Don't visit children - we collect the whole node
 
     def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Match(self, node: cst.Match) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_Match(self, original_node: cst.Match) -> None:  # noqa: ARG002
         self.compound_depth -= 1
 
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
@@ -610,8 +755,87 @@ def _extract_names_from_target(target: cst.BaseExpression) -> set[str]:
     return names
 
 
+def _extract_names_from_pattern(pattern: cst.MatchPattern) -> set[str]:
+    """Extract all names bound by a match pattern (Python 3.10+).
+
+    Match patterns can bind names in several ways:
+    - MatchAs: `case x:` or `case _ as x:`
+    - MatchStar: `case [*rest]:`
+    - MatchMapping: `case {"key": value}:`
+    - MatchSequence/MatchList/MatchTuple: `case [x, y]:`
+    - MatchClass: `case Point(x=px, y=py):`
+    - MatchOr: `case x | y:` (names must be same in all alternatives)
+    """
+    names: set[str] = set()
+
+    if isinstance(pattern, cst.MatchAs):
+        # `case x:` or `case _ as x:` - the name is bound
+        if pattern.name is not None:
+            names.add(pattern.name.value)
+        # Also check nested pattern (e.g., `case [a, b] as both:`)
+        if pattern.pattern is not None:
+            names.update(_extract_names_from_pattern(pattern.pattern))
+
+    elif isinstance(pattern, cst.MatchStar):
+        # `case [first, *rest]:` - rest is bound
+        if pattern.name is not None:
+            names.add(pattern.name.value)
+
+    elif isinstance(pattern, (cst.MatchSequence, cst.MatchList, cst.MatchTuple)):
+        # `case [x, y]:` or `case (x, y):`
+        for element in pattern.patterns:
+            if isinstance(element, cst.MatchSequenceElement):
+                names.update(_extract_names_from_pattern(element.value))
+            elif isinstance(element, cst.MatchStar) and element.name is not None:
+                names.add(element.name.value)
+
+    elif isinstance(pattern, cst.MatchMapping):
+        # `case {"key": value}:`
+        for element in pattern.elements:
+            if isinstance(element, cst.MatchMappingElement):
+                names.update(_extract_names_from_pattern(element.pattern))
+        # Also handle `case {**rest}:`
+        if pattern.rest is not None:
+            names.add(pattern.rest.value)
+
+    elif isinstance(pattern, cst.MatchClass):
+        # `case Point(x, y):` or `case Point(x=px, y=py):`
+        for arg in pattern.patterns:
+            if isinstance(arg, cst.MatchSequenceElement):
+                names.update(_extract_names_from_pattern(arg.value))
+        for kwarg in pattern.keywords:
+            if isinstance(kwarg, cst.MatchKeywordElement):
+                names.update(_extract_names_from_pattern(kwarg.pattern))
+
+    elif isinstance(pattern, cst.MatchOr):
+        # `case x | y:` - all alternatives must bind same names
+        for element in pattern.patterns:
+            if isinstance(element, cst.MatchOrElement):
+                names.update(_extract_names_from_pattern(element.pattern))
+
+    # MatchValue and MatchSingleton don't bind names
+
+    return names
+
+
+def _collect_defined_names_from_body(body: cst.BaseSuite) -> set[str]:
+    """Recursively collect all names defined by assignments inside a code block.
+
+    This is used to find names defined inside compound statements (for, while, with, try).
+    """
+    names: set[str] = set()
+    if isinstance(body, cst.IndentedBlock):
+        for stmt in body.body:
+            names.update(get_statement_defined_names(stmt))
+    return names
+
+
 def get_statement_defined_names(stmt: cst.BaseStatement) -> set[str]:
-    """Get all names defined by a statement (LHS of assignment)."""
+    """Get all names defined by a statement (LHS of assignment).
+
+    For compound statements (for, while, with, try, if), this also collects
+    names defined inside their bodies.
+    """
     names: set[str] = set()
     if isinstance(stmt, cst.SimpleStatementLine):
         for body_item in stmt.body:
@@ -621,6 +845,52 @@ def get_statement_defined_names(stmt: cst.BaseStatement) -> set[str]:
                     names.update(_extract_names_from_target(target_node.target))
             elif isinstance(body_item, cst.AnnAssign):
                 names.update(_extract_names_from_target(body_item.target))
+    elif isinstance(stmt, cst.For):
+        # For loop target variable
+        names.update(_extract_names_from_target(stmt.target))
+        # Names defined inside the for loop body
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+    elif isinstance(stmt, cst.While):
+        # Names defined inside the while loop body
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+    elif isinstance(stmt, cst.With):
+        # With statement can bind names via 'as' clause
+        for item in stmt.items:
+            if item.asname:
+                names.update(_extract_names_from_target(item.asname.name))
+        # Names defined inside the with body
+        names.update(_collect_defined_names_from_body(stmt.body))
+    elif isinstance(stmt, cst.Try):
+        # Names defined in try/except/else/finally bodies
+        names.update(_collect_defined_names_from_body(stmt.body))
+        for handler in stmt.handlers:
+            if handler.name:
+                names.add(handler.name.value)
+            names.update(_collect_defined_names_from_body(handler.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+        if stmt.finalbody:
+            names.update(_collect_defined_names_from_body(stmt.finalbody.body))
+    elif isinstance(stmt, cst.If):
+        # Names defined inside if/elif/else bodies
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            if isinstance(stmt.orelse, cst.Else):
+                names.update(_collect_defined_names_from_body(stmt.orelse.body))
+            elif isinstance(stmt.orelse, cst.If):
+                # elif branch
+                names.update(get_statement_defined_names(stmt.orelse))
+    elif isinstance(stmt, cst.Match):
+        # Match statement (Python 3.10+) can bind names through patterns
+        for case in stmt.cases:
+            # Extract names bound by the pattern
+            names.update(_extract_names_from_pattern(case.pattern))
+            # Names defined inside the case body
+            names.update(_collect_defined_names_from_body(case.body))
     return names
 
 
@@ -678,6 +948,17 @@ def _sort_statements_by_dependencies(statements: list[cst.BaseStatement]) -> lis
 
     # If we couldn't sort all (cycle), return original order
     if len(result) != len(statements):
+        # Find the statements involved in the cycle for a more helpful warning
+        unsorted_indices = [i for i in range(len(statements)) if in_degree[i] > 0]
+        cycle_names = []
+        for idx in unsorted_indices:
+            names = get_statement_defined_names(statements[idx])
+            if names:
+                cycle_names.extend(names)
+        logger.warning(
+            f"Circular dependency detected among statements defining: {', '.join(cycle_names) or 'unknown'}. "
+            "Using original statement order. This may cause NameError at runtime."
+        )
         return statements
 
     return result

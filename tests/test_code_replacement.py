@@ -5204,3 +5204,275 @@ def test_standardize_quotes_failing():
     # Count remaining test functions
     test_count = final_source.count("def test_")
     assert test_count == 4, f"Should have 4 tests after removing failed one, got {test_count}"
+
+
+def test_match_statement_pattern_names():
+    """Test that match statement patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    # Test basic match with MatchAs
+    code = """
+match value:
+    case [x, y]:
+        result = x + y
+    case {"name": name}:
+        other = name
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    # Should find x, y from first case, name from second case, result, other from bodies
+    assert "x" in defined_names, "Pattern variable 'x' should be defined"
+    assert "y" in defined_names, "Pattern variable 'y' should be defined"
+    assert "name" in defined_names, "Pattern variable 'name' should be defined"
+    assert "result" in defined_names, "Body variable 'result' should be defined"
+    assert "other" in defined_names, "Body variable 'other' should be defined"
+
+
+def test_match_statement_star_pattern():
+    """Test that match statement star patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match items:
+    case [first, *rest]:
+        total = sum(rest)
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "first" in defined_names, "Pattern variable 'first' should be defined"
+    assert "rest" in defined_names, "Star pattern variable 'rest' should be defined"
+    assert "total" in defined_names, "Body variable 'total' should be defined"
+
+
+def test_match_statement_as_pattern():
+    """Test that match statement 'as' patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match obj:
+    case [a, b] as both:
+        use = both
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "a" in defined_names, "Pattern variable 'a' should be defined"
+    assert "b" in defined_names, "Pattern variable 'b' should be defined"
+    assert "both" in defined_names, "'as' capture variable 'both' should be defined"
+
+
+def test_match_statement_mapping_rest():
+    """Test that match statement mapping rest patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match config:
+    case {"known": val, **rest}:
+        extra = rest
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "val" in defined_names, "Mapping value 'val' should be defined"
+    assert "rest" in defined_names, "Mapping rest '**rest' should be defined"
+
+
+def test_comprehension_variable_not_dependency():
+    """Test that comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "result = [x * 2 for x in items]"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Comprehension variable 'x' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_nested_comprehension_variables_not_dependencies():
+    """Test that nested comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "matrix = [[row[col] for col in range(n)] for row in data]"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "row" not in deps, "Outer comprehension variable 'row' should not be a dependency"
+    assert "col" not in deps, "Inner comprehension variable 'col' should not be a dependency"
+    assert "data" in deps, "Outer iterable 'data' should be a dependency"
+    assert "n" in deps, "Inner range argument 'n' should be a dependency"
+    assert "range" in deps, "Built-in 'range' should be a dependency"
+
+
+def test_dict_comprehension_variables_not_dependencies():
+    """Test that dict comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "mapping = {k: v * 2 for k, v in items.items()}"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "k" not in deps, "Dict comprehension key variable 'k' should not be a dependency"
+    assert "v" not in deps, "Dict comprehension value variable 'v' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_generator_expression_variable_not_dependency():
+    """Test that generator expression variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "gen = (x for x in items if x > 0)"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Generator expression variable 'x' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_lambda_parameter_not_dependency():
+    """Test that lambda parameters aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "handler = lambda x, y: x + y + z"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Lambda parameter 'x' should not be a dependency"
+    assert "y" not in deps, "Lambda parameter 'y' should not be a dependency"
+    assert "z" in deps, "Free variable 'z' should be a dependency"
+
+
+def test_lambda_star_args_not_dependency():
+    """Test that lambda *args and **kwargs aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "handler = lambda *args, **kwargs: process(args, kwargs, config)"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "args" not in deps, "Lambda *args should not be a dependency"
+    assert "kwargs" not in deps, "Lambda **kwargs should not be a dependency"
+    assert "process" in deps, "Free variable 'process' should be a dependency"
+    assert "config" in deps, "Free variable 'config' should be a dependency"
+
+
+def test_circular_dependency_warning(caplog):
+    """Test that circular dependencies produce a warning."""
+    import logging
+
+    from codeflash.code_utils.code_extractor import _sort_statements_by_dependencies
+
+    code = """
+x = y + 1
+y = x + 1
+"""
+    module = cst.parse_module(code)
+
+    with caplog.at_level(logging.WARNING):
+        result = _sort_statements_by_dependencies(list(module.body))
+
+    # Should emit a warning about circular dependency
+    assert any("Circular dependency detected" in record.message for record in caplog.records), (
+        "Should log a warning about circular dependencies"
+    )
+    # Should return original order when cycle is detected
+    assert len(result) == 2, "Should return all statements"
+
+
+def test_add_global_assignments_with_match_statement():
+    """Test that match statements in optimized code are handled correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+match config:
+    case {"type": t}:
+        result = t
+    case _:
+        result = "default"
+
+use_result = result
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code contains the match statement
+    assert "match config" in result, "Match statement should be in result"
+    assert "use_result = result" in result, "Variable using match result should be in result"
+
+    # The code should be syntactically valid (but may have runtime NameErrors
+    # due to undefined 'config')
+    compiled = compile(result, "<test>", "exec")
+    assert compiled is not None
+
+
+def test_comprehension_in_global_assignment():
+    """Test that global assignments with comprehensions work correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+items = [1, 2, 3, 4, 5]
+doubled = [x * 2 for x in items]
+filtered = [x for x in doubled if x > 4]
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+        assert namespace["doubled"] == [2, 4, 6, 8, 10]
+        assert namespace["filtered"] == [6, 8, 10]
+    except NameError as e:
+        msg = f"Comprehension test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+
+def test_lambda_in_global_assignment():
+    """Test that global assignments with lambdas work correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+multiplier = 2
+scale = lambda x: x * multiplier
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+        assert namespace["scale"](5) == 10
+    except NameError as e:
+        msg = f"Lambda test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
