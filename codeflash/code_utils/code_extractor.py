@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 import time
 from dataclasses import dataclass
 from importlib.util import find_spec
@@ -15,7 +16,9 @@ from libcst.codemod.visitors import AddImportsVisitor, GatherImportsVisitor, Rem
 from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.compat import get_python_executable, is_compiled_or_bundled_binary
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_REVIEW
+from codeflash.code_utils.jedi_compat import safe_jedi_executable
 from codeflash.models.models import CodePosition, FunctionParent
 
 if TYPE_CHECKING:
@@ -1129,20 +1132,21 @@ def find_specific_function_in_file(
         Tuple of (line_number, column_offset) if found, None otherwise
 
     """
-    script = jedi.Script(code=source_code, path=filepath)
-    names = script.get_names(all_scopes=True, definitions=True)
-    for name in names:
-        if name.type == "function" and name.name == target_function:
-            # If class name specified, check parent
-            if target_class:
-                parent = name.parent()
-                if parent and parent.name == target_class and parent.type == "class":
+    with safe_jedi_executable():
+        script = jedi.Script(code=source_code, path=filepath)
+        names = script.get_names(all_scopes=True, definitions=True)
+        for name in names:
+            if name.type == "function" and name.name == target_function:
+                # If class name specified, check parent
+                if target_class:
+                    parent = name.parent()
+                    if parent and parent.name == target_class and parent.type == "class":
+                        return CodePosition(line_no=name.line, col_no=name.column)
+                else:
+                    # Top-level function match
                     return CodePosition(line_no=name.line, col_no=name.column)
-            else:
-                # Top-level function match
-                return CodePosition(line_no=name.line, col_no=name.column)
 
-    return None  # Function not found
+        return None  # Function not found
 
 
 def get_fn_references_jedi(
@@ -1153,24 +1157,51 @@ def get_fn_references_jedi(
         source_code, file_path, target_function, target_class
     )
     try:
-        script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
-        # Get references to the function
-        references = script.get_references(line=function_position.line_no, column=function_position.col_no)
-        # Collect unique file paths where references are found
-        end_time = time.perf_counter()
-        logger.debug(f"Jedi for function references ran in {end_time - start_time:.2f} seconds")
-        reference_files = set()
-        for ref in references:
-            if ref.module_path:
-                # Convert to string and normalize path
-                ref_path = str(ref.module_path)
-                # Skip the definition itself
-                if not (ref_path == file_path and ref.line == function_position.line_no):
-                    reference_files.add(ref_path)
-        return sorted(reference_files)
+        with safe_jedi_executable():
+            # When compiled, don't specify environment_path and disable smart detection to avoid subprocess issues
+            if is_compiled_or_bundled_binary():
+                script = jedi.Script(
+                    code=source_code,
+                    path=file_path,
+                    project=jedi.Project(
+                        path=project_root,
+                        sys_path=list(sys.path),
+                        smart_sys_path=False
+                    )
+                )
+            else:
+                python_executable = get_python_executable()
+                script = jedi.Script(
+                    code=source_code,
+                    path=file_path,
+                    project=jedi.Project(
+                        path=project_root,
+                        environment_path=python_executable,
+                        sys_path=list(sys.path)
+                    )
+                )
+            # Get references to the function
+            references = script.get_references(line=function_position.line_no, column=function_position.col_no)
+            # Collect unique file paths where references are found
+            end_time = time.perf_counter()
+            logger.debug(f"Jedi for function references ran in {end_time - start_time:.2f} seconds")
+            reference_files = set()
+            for ref in references:
+                if ref.module_path:
+                    # Convert to string and normalize path
+                    ref_path = str(ref.module_path)
+                    # Skip the definition itself
+                    if not (ref_path == file_path and ref.line == function_position.line_no):
+                        reference_files.add(ref_path)
+            return sorted(reference_files)
     except Exception as e:
-        print(f"Error during Jedi analysis: {e}")
-        return []
+        # Add graceful handling for jedi failures
+        if is_compiled_or_bundled_binary():
+            logger.warning(f"Jedi reference finding failed in compiled mode: {e}")
+            return []  # Return empty results
+        else:
+            print(f"Error during Jedi analysis: {e}")
+            return []
 
 
 has_numba = find_spec("numba") is not None
