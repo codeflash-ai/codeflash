@@ -12,7 +12,19 @@ export function fibonacci(n: number): number {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    // Preserve original recursive semantics for non-integer inputs
+    if (!Number.isInteger(n)) {
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+    // Iterative Fibonacci for integer n > 1 — O(n) time, O(1) memory
+    let a = 0;
+    let b = 1;
+    for (let i = 2, len = n; i <= len; i++) {
+        const c = a + b;
+        a = b;
+        b = c;
+    }
+    return b;
 }
 
 /**
