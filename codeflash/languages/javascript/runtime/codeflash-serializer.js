@@ -23,6 +23,8 @@
  *   const restored = deserialize(buffer);
  */
 
+//TODO:{claude} Merge Serializer and comparator and compare results into a single script
+
 'use strict';
 
 // ============================================================================

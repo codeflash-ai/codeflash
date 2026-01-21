@@ -10,7 +10,7 @@ from codeflash.code_utils.normalizers.base import CodeNormalizer
 if TYPE_CHECKING:
     from tree_sitter import Node
 
-
+# TODO:{claude} move to language support directory to keep the directory structure clean 
 class JavaScriptVariableNormalizer:
     """Normalizes JavaScript/TypeScript code for duplicate detection using tree-sitter.
 

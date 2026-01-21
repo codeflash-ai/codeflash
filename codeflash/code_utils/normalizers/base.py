@@ -4,7 +4,7 @@ Code normalizers transform source code into a canonical form for duplicate detec
 They normalize variable names, remove comments/docstrings, and produce consistent output
 that can be compared across different implementations of the same algorithm.
 """
-
+# TODO:{claude} move to base.py in language folder
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
-
-class CodeNormalizer(ABC):
     """Abstract base class for language-specific code normalizers.
 
     Subclasses must implement the normalize() method for their specific language.

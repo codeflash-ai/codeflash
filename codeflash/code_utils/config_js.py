@@ -39,7 +39,7 @@ def find_package_json(config_file: Path | None = None) -> Path | None:
 
     return None
 
-
+# TODO:{claude} We do not need language as it looks redundant to add and also testsRoot, pytestCmd, gitRemote, disableImportsSorting. Lets keep the once which are only highly required at this point in time as the necessary ones. 
 def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], Path] | None:
     """Parse codeflash config from package.json.
 

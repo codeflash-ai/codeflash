@@ -22,6 +22,7 @@
  *   const buffer = serialize(value);
  *   const restored = deserialize(buffer);
  */
+//TODO:{claude} Cleanup required as we are planning to shift to npm package to load these as dependencies in node_modules.
 
 'use strict';
 

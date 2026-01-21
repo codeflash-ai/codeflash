@@ -113,6 +113,7 @@ def init_codeflash() -> None:
         console.print(welcome_panel)
         console.print()
 
+        # TODO:{claude}  move the init_javascript to the support folder. Move any other language related specific implementation (other than python) to its support.
         # Detect project language
         project_language = detect_project_language()
 
@@ -1502,7 +1503,7 @@ def _customize_python_workflow_content(
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
-
+# TODO:{claude} Refactor and move to support for language specific 
 def _customize_js_workflow_content(
     optimize_yml_content: str,
     git_root: Path,

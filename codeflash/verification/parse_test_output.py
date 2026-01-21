@@ -504,7 +504,7 @@ def _extract_jest_console_output(suite_elem) -> str:
 
     return raw_content
 
-
+# ToDO: {Claude} we need to move to the support directory.
 def parse_jest_test_xml(
     test_xml_file_path: Path,
     test_files: TestFiles,

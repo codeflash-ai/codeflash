@@ -25,6 +25,7 @@
  *   CODEFLASH_TEST_ITERATION - Test iteration number (default: 0)
  *   CODEFLASH_TEST_MODULE - Test module path
  */
+//TODO:{claude} CleanUp and build a npm package as a seperate project which pushes to the codeflash npm as codeflash-utils https://www.npmjs.com/package/codeflash 
 
 const fs = require('fs');
 const path = require('path');

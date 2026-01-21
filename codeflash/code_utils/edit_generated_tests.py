@@ -154,7 +154,7 @@ def _is_python_file(file_path: Path) -> bool:
     """Check if a file is a Python file."""
     return file_path.suffix == ".py"
 
-
+# TODO:{self} Needs cleanup for jest logic in else block
 def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
     logger.debug(f"[unique_inv_id] Processing {len(inv_id_runtimes)} invocation IDs")

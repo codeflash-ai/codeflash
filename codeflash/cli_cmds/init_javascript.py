@@ -1,5 +1,5 @@
 """JavaScript/TypeScript project initialization for Codeflash."""
-
+# TODO:{claude} move to language support directory
 from __future__ import annotations
 
 import json
