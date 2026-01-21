@@ -152,17 +152,6 @@ if (RANDOM_SEED !== 0) {
     }
 }
 
-// Looping configuration for performance benchmarking
-const MIN_LOOPS = parseInt(process.env.CODEFLASH_MIN_LOOPS || '5', 10);
-const MAX_LOOPS = parseInt(process.env.CODEFLASH_MAX_LOOPS || '100000', 10);
-const TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_TARGET_DURATION_MS || '10000', 10);
-const STABILITY_CHECK = process.env.CODEFLASH_STABILITY_CHECK !== 'false';
-
-// Stability checking constants (matching Python's pytest_plugin.py)
-const STABILITY_WINDOW_SIZE = 0.35;        // 35% of estimated total loops
-const STABILITY_CENTER_TOLERANCE = 0.0025;  // ±0.25% around median
-const STABILITY_SPREAD_TOLERANCE = 0.0025;  // 0.25% window spread
-
 // Current test context (set by Jest hooks)
 let currentTestName = null;
 let currentTestPath = null;  // Test file path from Jest
@@ -594,151 +583,6 @@ function capturePerf(funcName, lineId, fn, ...args) {
 }
 
 /**
- * Check if performance measurements have stabilized.
- * Implements the same stability criteria as Python's pytest_plugin.py.
- *
- * @param {number[]} runtimes - Array of runtime measurements
- * @param {number} windowSize - Size of the window to check
- * @returns {boolean} - True if performance has stabilized
- */
-function checkStability(runtimes, windowSize) {
-    if (runtimes.length < windowSize || windowSize < 3) {
-        return false;
-    }
-
-    // Get recent window
-    const window = runtimes.slice(-windowSize);
-
-    // Check center tolerance (all values within ±0.25% of median)
-    const sorted = [...window].sort((a, b) => a - b);
-    const medianIndex = Math.floor(sorted.length / 2);
-    const median = sorted[medianIndex];
-    const centerTolerance = median * STABILITY_CENTER_TOLERANCE;
-
-    const withinCenter = window.every(v => Math.abs(v - median) <= centerTolerance);
-    if (!withinCenter) return false;
-
-    // Check spread tolerance (max-min ≤ 0.25% of min)
-    const minVal = Math.min(...window);
-    const maxVal = Math.max(...window);
-    const spreadTolerance = minVal * STABILITY_SPREAD_TOLERANCE;
-
-    return (maxVal - minVal) <= spreadTolerance;
-}
-
-/**
- * Capture a function call for performance measurement (single execution per Jest run).
- *
- * This function executes the target function ONCE and outputs timing data.
- * Session-level looping is controlled by Python, which runs Jest multiple times
- * with incrementing CODEFLASH_LOOP_INDEX - matching Python's pytest_plugin behavior.
- *
- * The looping architecture matches Python:
- * - Python runs Jest N times (like pytest loops the session N times)
- * - Each Jest run executes each test once
- * - Timing data is collected per Jest run
- * - Python aggregates and checks stability across all Jest runs
- *
- * Environment Variables:
- *   CODEFLASH_LOOP_INDEX - Current loop iteration (set by Python, default: 1)
- *
- * @param {string} funcName - Name of the function being tested (static)
- * @param {string} lineId - Line number identifier in test file (static)
- * @param {Function} fn - The function to call
- * @param {...any} args - Arguments to pass to the function
- * @returns {any} - The function's return value
- * @throws {Error} - Re-throws any error from the function
- */
-function capturePerfLooped(funcName, lineId, fn, ...args) {
-    // Validate that fn is actually a function
-    if (typeof fn !== 'function') {
-        const fnType = fn === null ? 'null' : (fn === undefined ? 'undefined' : typeof fn);
-        throw new TypeError(
-            `codeflash.capturePerfLooped: Expected function '${funcName}' but got ${fnType}. ` +
-            `This usually means the function was not imported correctly. ` +
-            `Check that the import statement matches how the module exports the function ` +
-            `(e.g., default export vs named export, CommonJS vs ES modules).`
-        );
-    }
-
-    // Get test context
-    // Use TEST_MODULE env var if set, otherwise derive from test file path
-    let testModulePath;
-    if (TEST_MODULE) {
-        testModulePath = TEST_MODULE;
-    } else if (currentTestPath) {
-        // Get relative path from cwd and convert to module-style path
-        const path = require('path');
-        const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
-        testModulePath = relativePath
-            .replace(/\\/g, '/')
-            .replace(/\.js$/, '')
-            .replace(/\.test$/, '.test')
-            .replace(/\//g, '.');
-    } else {
-        testModulePath = currentTestName || 'unknown';
-    }
-    const testClassName = null;  // Jest doesn't use classes like Python
-    const testFunctionName = currentTestName || 'unknown';
-
-    // Sanitized versions for stdout tags (avoid regex conflicts)
-    const safeModulePath = sanitizeTestId(testModulePath);
-    const safeTestFunctionName = sanitizeTestId(testFunctionName);
-
-    // Create base testId for invocation tracking
-    const baseTestId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}`;
-
-    // Get invocation index (same call site called multiple times within same test)
-    const invocationIndex = getInvocationIndex(baseTestId + ':perf');
-    const invocationId = `${lineId}_${invocationIndex}`;
-
-    // Create stdout tag - LOOP_INDEX comes from env (set by Python for session-level looping)
-    const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
-
-    // Print start tag
-    console.log(`!$######${testStdoutTag}######$!`);
-
-    // Execute function ONCE and measure timing
-    let returnValue;
-    let durationNs;
-
-    try {
-        const startTime = getTimeNs();
-        returnValue = fn(...args);
-        const endTime = getTimeNs();
-        durationNs = getDurationNs(startTime, endTime);
-
-        // Handle promises (async functions)
-        if (returnValue instanceof Promise) {
-            return returnValue.then(
-                (resolved) => {
-                    const asyncEndTime = getTimeNs();
-                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                    return resolved;
-                },
-                (err) => {
-                    const asyncEndTime = getTimeNs();
-                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                    throw err;
-                }
-            );
-        }
-    } catch (e) {
-        // Print end tag even on error
-        console.log(`!######${testStdoutTag}:0######!`);
-        throw e;
-    }
-
-    // Print end tag with timing
-    console.log(`!######${testStdoutTag}:${durationNs}######!`);
-
-    return returnValue;
-}
-
-/**
  * Capture multiple invocations for benchmarking.
  *
  * @param {string} funcName - Name of the function being tested
@@ -842,8 +686,7 @@ if (typeof afterAll !== 'undefined') {
 // Export public API
 module.exports = {
     capture,           // Behavior verification (writes to SQLite)
-    capturePerf,       // Performance benchmarking (prints to stdout only, single run)
-    capturePerfLooped, // Performance benchmarking with internal looping
+    capturePerf,       // Performance benchmarking (prints to stdout only)
     captureMultiple,
     writeResults,
     clearResults,
@@ -854,16 +697,11 @@ module.exports = {
     initDatabase,
     resetInvocationCounters,
     getInvocationIndex,
-    checkStability,
     sanitizeTestId,    // Sanitize test names for stdout tags
     // Serializer info
     getSerializerType: serializer.getSerializerType,
     // Constants
     LOOP_INDEX,
     OUTPUT_FILE,
-    TEST_ITERATION,
-    MIN_LOOPS,
-    MAX_LOOPS,
-    TARGET_DURATION_MS,
-    STABILITY_CHECK
+    TEST_ITERATION
 };

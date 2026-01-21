@@ -1,5 +1,9 @@
 /**
- * Test for internal looping performance measurement.
+ * Test for session-level looping performance measurement.
+ *
+ * Note: Looping is now done at the session level by Python (test_runner.py)
+ * which runs Jest multiple times. Each Jest run executes the test once,
+ * and timing data is aggregated across runs for stability checking.
  */
 
 const path = require('path');
@@ -19,15 +23,15 @@ function fibonacci(n) {
     return b;
 }
 
-describe('Looped Performance Test', () => {
-    test('fibonacci(20) with internal looping', () => {
-        // This will loop internally based on CODEFLASH_* env vars
-        const result = codeflash.capturePerfLooped('fibonacci', '10', fibonacci, 20);
+describe('Session-Level Looping Performance Test', () => {
+    test('fibonacci(20) with session-level looping', () => {
+        // Looping is controlled by Python via CODEFLASH_LOOP_INDEX env var
+        const result = codeflash.capturePerf('fibonacci', '10', fibonacci, 20);
         expect(result).toBe(6765);
     });
 
-    test('fibonacci(30) with internal looping', () => {
-        const result = codeflash.capturePerfLooped('fibonacci', '16', fibonacci, 30);
+    test('fibonacci(30) with session-level looping', () => {
+        const result = codeflash.capturePerf('fibonacci', '16', fibonacci, 30);
         expect(result).toBe(832040);
     });
 });

@@ -76,12 +76,12 @@ def instrument_javascript_test(
 
     This transforms un-instrumented Jest tests by:
     1. Adding the codeflash-jest-helper import
-    2. Wrapping function calls with capture/capturePerf/capturePerfLooped
+    2. Wrapping function calls with capture/capturePerf
 
     Args:
         test_source: The un-instrumented test source code.
         function_name: The name of the function to instrument.
-        mode: The instrumentation mode - 'behavior', 'performance', or 'looped'.
+        mode: The instrumentation mode - 'behavior' or 'performance'.
 
     Returns:
         The instrumented test source code.
@@ -107,10 +107,8 @@ def instrument_javascript_test(
     # Choose the capture function based on mode
     if mode == "behavior":
         capture_fn = "codeflash.capture"
-    elif mode == "performance":
+    else:  # performance
         capture_fn = "codeflash.capturePerf"
-    else:  # looped
-        capture_fn = "codeflash.capturePerfLooped"
 
     # Find function calls and wrap them with capture
     # This is a simplified transformer - in production, you'd use a proper AST parser
@@ -599,8 +597,8 @@ describe('reverseString performance', () => {
         for timing in timing_matches:
             assert int(timing) > 0, f"Expected timing > 0, got {timing}"
 
-    def test_performance_mode_looped(self, js_test_setup: Path) -> None:
-        """Test performance mode with capturePerfLooped for multiple iterations."""
+    def test_performance_mode_session_looping(self, js_test_setup: Path) -> None:
+        """Test performance mode with session-level looping (Python runs Jest multiple times)."""
         project_dir = js_test_setup
         tests_dir = project_dir / "tests"
 
@@ -608,13 +606,13 @@ describe('reverseString performance', () => {
         uninstrumented_source = """
 const { reverseString } = require('../string_utils');
 
-describe('reverseString looped perf', () => {
-    test('looped benchmark', () => {
+describe('reverseString session perf', () => {
+    test('session benchmark', () => {
         const result = reverseString('test');
     });
 });
 """
-        instrumented_source = instrument_javascript_test(uninstrumented_source, "reverseString", mode="looped")
+        instrumented_source = instrument_javascript_test(uninstrumented_source, "reverseString", mode="performance")
         test_file = tests_dir / "test_perf_looped.test.js"
         test_file.write_text(instrumented_source)
 

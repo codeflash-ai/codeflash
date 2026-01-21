@@ -24,7 +24,7 @@ RUNTIME_DIR = _get_runtime_dir()
 def get_jest_helper_path() -> Path:
     """Get the path to the Jest helper file.
 
-    This file provides capture/capturePerf/capturePerfLooped functions
+    This file provides capture/capturePerf functions
     for instrumenting Jest tests to record function inputs, outputs, and timing.
     """
     return RUNTIME_DIR / "codeflash-jest-helper.js"

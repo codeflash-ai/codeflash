@@ -903,10 +903,7 @@ class JavaScriptSupport:
     # === Test Result Comparison ===
 
     def compare_test_results(
-        self,
-        original_results_path: Path,
-        candidate_results_path: Path,
-        project_root: Path | None = None,
+        self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
     ) -> tuple[bool, list]:
         """Compare test results between original and candidate code.
 
@@ -1002,7 +999,7 @@ class JavaScriptSupport:
     ) -> tuple[bool, str | None]:
         """Inject profiling code into an existing JavaScript test file.
 
-        Wraps function calls with codeflash.capture() or codeflash.capturePerfLooped()
+        Wraps function calls with codeflash.capture() or codeflash.capturePerf()
         for behavioral verification and performance benchmarking.
 
         Args:

@@ -33,7 +33,7 @@ def inject_profiling_into_existing_js_test(
 ) -> tuple[bool, str | None]:
     """Inject profiling code into an existing JavaScript test file.
 
-    This function wraps function calls with codeflash.capture() or codeflash.capturePerfLooped()
+    This function wraps function calls with codeflash.capture() or codeflash.capturePerf()
     to enable behavioral verification and performance benchmarking.
 
     Args:
@@ -134,7 +134,7 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
             code = "const codeflash = require('./codeflash-jest-helper');\n\n" + code
 
     # Choose capture function based on mode
-    capture_func = "capturePerfLooped" if mode == TestingMode.PERFORMANCE else "capture"
+    capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"
 
     # Track invocations for unique IDs
     invocation_counter = [0]

@@ -283,7 +283,7 @@ def run_jest_benchmarking_tests(
     project_root: Path | None = None,
     min_loops: int = 5,
     max_loops: int = 100,
-    target_duration_ms: int = 10_000,
+    target_duration_ms: int = 10_000,  # 10 seconds for benchmarking tests
     stability_check: bool = True,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     """Run Jest benchmarking tests with session-level looping for stable measurements.
