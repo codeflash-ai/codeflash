@@ -43,26 +43,34 @@ if TYPE_CHECKING:
 
 def _get_jedi_environment():
     """Get the appropriate jedi environment based on execution mode."""
-    is_compiled = is_compiled_or_bundled_binary()
-    logger.warning(f"[_get_jedi_environment] is_compiled_or_bundled_binary()={is_compiled}, sys.executable={sys.executable}")
-
-    if is_compiled:
+    if is_compiled_or_bundled_binary():
         # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
         from jedi.api.environment import InterpreterEnvironment
+        from pathlib import Path
 
         # Create InterpreterEnvironment which uses current process info
         env = InterpreterEnvironment()
 
-        # Patch the executable to point to real Python instead of compiled binary
+        # Patch the executable and path to point to real Python instead of compiled binary
         # This allows jedi to find typeshed and other resources
         real_python_executable = get_python_executable()
+        real_python_path = Path(real_python_executable)
+
+        # Get the real sys.prefix (venv root or Python installation)
+        if '.venv' in real_python_executable:
+            # For venv: /path/to/.venv/bin/python3 -> /path/to/.venv
+            real_sys_prefix = str(real_python_path.parent.parent)
+        else:
+            # For system Python: /usr/bin/python3 -> /usr
+            real_sys_prefix = str(real_python_path.parent.parent)
+
         env.executable = real_python_executable
         env._start_executable = real_python_executable
+        env.path = real_sys_prefix
 
-        logger.warning(f"[_get_jedi_environment] Created InterpreterEnvironment with patched executable: {env.executable}")
+        logger.debug(f"InterpreterEnvironment: executable={env.executable}, path={env.path}")
         return env
 
-    logger.warning("[_get_jedi_environment] Not in compiled mode, returning None")
     return None  # Let jedi auto-detect in normal mode
 
 
@@ -521,13 +529,11 @@ def get_function_sources_from_jedi(
     # IMPORTANT: Get jedi environment BEFORE entering safe_jedi_executable context
     # because safe_jedi_executable patches sys.executable which affects is_compiled_or_bundled_binary()
     jedi_env = _get_jedi_environment()
-    logger.warning(f"[get_function_sources_from_jedi] Created environment BEFORE context: {jedi_env}")
 
     with safe_jedi_executable():
         for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
             try:
                 # Pass environment directly to Script to avoid subprocess spawning in compiled mode
-                logger.warning(f"[get_function_sources_from_jedi] About to create Script with environment={jedi_env}")
                 script = jedi.Script(
                     path=file_path,
                     project=_create_jedi_project(project_root_path),
