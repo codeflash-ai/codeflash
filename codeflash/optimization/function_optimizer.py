@@ -2096,6 +2096,7 @@ class FunctionOptimizer:
             test_cfg=self.test_cfg,
             original_runtimes_all=original_runtime_by_test,
             optimized_runtimes_all=optimized_runtime_by_test,
+            test_files_registry=self.test_files,
         )
         original_throughput_str = None
         optimized_throughput_str = None
@@ -2536,8 +2537,10 @@ class FunctionOptimizer:
 
                 if original_sqlite.exists() and candidate_sqlite.exists():
                     # Full comparison using captured return values via language support
+                    # Use js_project_root where node_modules is located
+                    js_root = self.test_cfg.js_project_root or self.args.project_root
                     match, diffs = self.language_support.compare_test_results(
-                        original_sqlite, candidate_sqlite, project_root=self.args.project_root
+                        original_sqlite, candidate_sqlite, project_root=js_root
                     )
                     # Cleanup SQLite files after comparison
                     candidate_sqlite.unlink(missing_ok=True)

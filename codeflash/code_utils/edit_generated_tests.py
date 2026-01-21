@@ -172,8 +172,33 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             # Already a file path - use directly
             abs_path = tests_project_rootdir / Path(test_module_path)
         else:
-            # Python module name - convert dots to path separators and add .py
-            abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
+            # Check for Jest test file extensions (e.g., tests.fibonacci.test.ts)
+            # These need special handling to avoid converting .test.ts -> /test/ts
+            jest_test_extensions = (".test.ts", ".test.js", ".test.tsx", ".test.jsx",
+                                    ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
+                                    ".ts", ".js", ".tsx", ".jsx", ".mjs", ".mts")
+            matched_ext = None
+            for ext in jest_test_extensions:
+                if test_module_path.endswith(ext):
+                    matched_ext = ext
+                    break
+
+            if matched_ext:
+                # JavaScript/TypeScript: convert module-style path to file path
+                # "tests.fibonacci__perfonlyinstrumented.test.ts" -> "tests/fibonacci__perfonlyinstrumented.test.ts"
+                base_path = test_module_path[:-len(matched_ext)]
+                file_path = base_path.replace(".", os.sep) + matched_ext
+                # Check if the module path includes the tests directory name
+                tests_dir_name = tests_project_rootdir.name
+                if file_path.startswith(tests_dir_name + os.sep) or file_path.startswith(tests_dir_name + "/"):
+                    # Module path includes "tests." - use parent directory
+                    abs_path = tests_project_rootdir.parent / Path(file_path)
+                else:
+                    # Module path doesn't include tests dir - use tests root directly
+                    abs_path = tests_project_rootdir / Path(file_path)
+            else:
+                # Python module name - convert dots to path separators and add .py
+                abs_path = tests_project_rootdir / Path(test_module_path.replace(".", os.sep)).with_suffix(".py")
 
         abs_path_str = str(abs_path.resolve().with_suffix(""))
         # Include both unit test and perf test paths for runtime annotations

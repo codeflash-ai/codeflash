@@ -167,32 +167,61 @@ def parse_jest_json_results(
 
         results = data.get("results", [])
         for result in results:
-            test_name = result.get("testName", "")
+            test_name = result.get("testName", "") or result.get("testFunctionName", "")
             func_name = result.get("funcName", "")
             duration_ns = result.get("durationNs", 0)
             loop_index = result.get("loopIndex", 1)
             invocation_id = result.get("invocationId", 0)
             error = result.get("error")
+            result_module_path = result.get("testModulePath", "")
 
-            # Try to find the test file from test_files
-            # Check both behavior and benchmarking paths since the same parser is used for both
+            # Try to find the test file from test_files by matching testModulePath
             test_file_path = None
             test_type = TestType.GENERATED_REGRESSION  # Default for Jest generated tests
 
-            for test_file in test_files.test_files:
-                # Check benchmarking path first (used for performance tests)
-                if test_file.benchmarking_file_path and test_file.benchmarking_file_path.exists():
-                    test_file_path = test_file.benchmarking_file_path
-                    test_type = test_file.test_type
-                    break
-                # Fall back to behavior path (used for behavior tests)
-                if test_file.instrumented_behavior_file_path and test_file.instrumented_behavior_file_path.exists():
-                    test_file_path = test_file.instrumented_behavior_file_path
-                    test_type = test_file.test_type
-                    break
+            # If we have testModulePath from the result, use it to find the matching test file
+            if result_module_path:
+                # Convert module path to file path (e.g., "tests.test_foo.test" -> "tests/test_foo.test.js")
+                expected_path = result_module_path.replace(".", "/")
+                if not expected_path.endswith(".js"):
+                    expected_path += ".js"
+
+                for test_file in test_files.test_files:
+                    # Check behavior path
+                    if test_file.instrumented_behavior_file_path:
+                        try:
+                            rel_path = str(test_file.instrumented_behavior_file_path.relative_to(test_config.tests_project_rootdir))
+                        except ValueError:
+                            rel_path = test_file.instrumented_behavior_file_path.name
+                        if rel_path == expected_path or rel_path.replace("/", ".").replace(".js", "") == result_module_path:
+                            test_file_path = test_file.instrumented_behavior_file_path
+                            test_type = test_file.test_type
+                            break
+                    # Check benchmarking path
+                    if test_file.benchmarking_file_path:
+                        try:
+                            rel_path = str(test_file.benchmarking_file_path.relative_to(test_config.tests_project_rootdir))
+                        except ValueError:
+                            rel_path = test_file.benchmarking_file_path.name
+                        if rel_path == expected_path or rel_path.replace("/", ".").replace(".js", "") == result_module_path:
+                            test_file_path = test_file.benchmarking_file_path
+                            test_type = test_file.test_type
+                            break
+
+            # Fallback: find the first test file that exists (legacy behavior)
+            if test_file_path is None:
+                for test_file in test_files.test_files:
+                    if test_file.benchmarking_file_path and test_file.benchmarking_file_path.exists():
+                        test_file_path = test_file.benchmarking_file_path
+                        test_type = test_file.test_type
+                        break
+                    if test_file.instrumented_behavior_file_path and test_file.instrumented_behavior_file_path.exists():
+                        test_file_path = test_file.instrumented_behavior_file_path
+                        test_type = test_file.test_type
+                        break
 
             if test_file_path is None:
-                logger.debug(f"Could not find test file for Jest result: {test_name}")
+                logger.debug(f"Could not find test file for Jest result: {test_name} (module: {result_module_path})")
                 continue
 
             # Create invocation ID - use funcName from result or passed function_name
@@ -325,11 +354,42 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             test_function_name = val[2] if val[2] else None
             function_getting_tested = val[3]
 
-            # For Jest tests, test_module_path is already a file path (e.g., "tests/foo.test.js")
+            # For Jest tests, test_module_path could be:
+            # - A module-style path: "tests.fibonacci.test.ts" (dots as separators)
+            # - A file path: "tests/fibonacci.test.ts" (slashes as separators)
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
             if is_jest:
-                # Jest: test_module_path is a relative file path
-                test_file_path = test_config.tests_project_rootdir / test_module_path
+                # Jest test file extensions (including .test.ts, .spec.ts patterns)
+                jest_test_extensions = (".test.ts", ".test.js", ".test.tsx", ".test.jsx",
+                                        ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
+                                        ".ts", ".js", ".tsx", ".jsx", ".mjs", ".mts")
+                # Check if it's a module-style path (no slashes, has dots beyond extension)
+                if "/" not in test_module_path and "\\" not in test_module_path:
+                    # Find the appropriate extension to preserve
+                    extension = ""
+                    for ext in jest_test_extensions:
+                        if test_module_path.endswith(ext):
+                            extension = ext
+                            break
+                    if extension:
+                        # Convert module-style path to file path
+                        # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
+                        base_path = test_module_path[:-len(extension)]
+                        file_path = base_path.replace(".", os.sep) + extension
+                        # Check if the module path includes the tests directory name
+                        tests_dir_name = test_config.tests_project_rootdir.name
+                        if file_path.startswith(tests_dir_name + os.sep) or file_path.startswith(tests_dir_name + "/"):
+                            # Module path includes "tests." - use project root parent
+                            test_file_path = test_config.tests_project_rootdir.parent / file_path
+                        else:
+                            # Module path doesn't include tests dir - use tests root directly
+                            test_file_path = test_config.tests_project_rootdir / file_path
+                    else:
+                        # No recognized extension, treat as-is
+                        test_file_path = test_config.tests_project_rootdir / test_module_path
+                else:
+                    # Already a file path
+                    test_file_path = test_config.tests_project_rootdir / test_module_path
             else:
                 # Python: convert module path to file path
                 test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
@@ -341,15 +401,23 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             if verification_type in {VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER}:
                 test_type = TestType.INIT_STATE_TEST
             else:
-                # TODO : this is because sqlite writes original file module path. Should make it consistent
+                # Try original_file_path first (for existing tests that were instrumented)
                 test_type = test_files.get_test_type_by_original_file_path(test_file_path)
+                logger.debug(f"[PARSE-DEBUG] test_module={test_module_path}, test_file_path={test_file_path}")
+                logger.debug(f"[PARSE-DEBUG]   by_original_file_path: {test_type}")
+                # If not found, try instrumented_behavior_file_path (for generated tests)
+                if test_type is None:
+                    test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
+                    logger.debug(f"[PARSE-DEBUG]   by_instrumented_file_path: {test_type}")
                 # Default to GENERATED_REGRESSION for Jest tests when test type can't be determined
                 if test_type is None and is_jest:
                     test_type = TestType.GENERATED_REGRESSION
+                    logger.debug(f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION (Jest)")
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
                     continue
+                logger.debug(f"[PARSE-DEBUG]   FINAL test_type={test_type}")
 
             # Deserialize return value
             # For Jest: Skip deserialization - comparison happens via language-specific comparator

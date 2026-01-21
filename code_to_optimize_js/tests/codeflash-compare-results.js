@@ -37,12 +37,14 @@ let Database;
 try {
     Database = require('better-sqlite3');
 } catch (e) {
-    console.error(JSON.stringify({
+    // Use console.log (stdout) for JSON output, not console.error (stderr)
+    // Exit code 2 indicates a setup error (distinct from 1 = "not equivalent")
+    console.log(JSON.stringify({
         equivalent: false,
         diffs: [],
-        error: 'better-sqlite3 not installed'
+        error: 'better-sqlite3 not installed. Run: npm install better-sqlite3'
     }));
-    process.exit(1);
+    process.exit(2);
 }
 
 /**
@@ -188,7 +190,7 @@ function compareResults(originalResults, candidateResults) {
  * @param {any} value - Value to summarize
  * @returns {string} String representation
  */
-function summarizeValue(value, maxLength = 500) {
+function summarizeValue(value, maxLength = 200) {
     try {
         let str;
         if (value === undefined) {
@@ -287,7 +289,16 @@ function main() {
 
         const comparison = compareResults(originalResults, candidateResults);
 
-        console.log(JSON.stringify(comparison, null, 2));
+        // Limit the number of diffs to avoid huge output
+        const MAX_DIFFS = 50;
+        if (comparison.diffs.length > MAX_DIFFS) {
+            const truncatedCount = comparison.diffs.length - MAX_DIFFS;
+            comparison.diffs = comparison.diffs.slice(0, MAX_DIFFS);
+            comparison.diffs_truncated = truncatedCount;
+        }
+
+        // Use compact JSON (no pretty-printing) to reduce output size
+        console.log(JSON.stringify(comparison));
         process.exit(comparison.equivalent ? 0 : 1);
     } catch (e) {
         console.log(JSON.stringify({
