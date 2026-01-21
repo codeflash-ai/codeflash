@@ -49,8 +49,17 @@ def _get_jedi_environment():
     if is_compiled:
         # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
         from jedi.api.environment import InterpreterEnvironment
+
+        # Create InterpreterEnvironment which uses current process info
         env = InterpreterEnvironment()
-        logger.warning(f"[_get_jedi_environment] Created InterpreterEnvironment: executable={env.executable}")
+
+        # Patch the executable to point to real Python instead of compiled binary
+        # This allows jedi to find typeshed and other resources
+        real_python_executable = get_python_executable()
+        env.executable = real_python_executable
+        env._start_executable = real_python_executable
+
+        logger.warning(f"[_get_jedi_environment] Created InterpreterEnvironment with patched executable: {env.executable}")
         return env
 
     logger.warning("[_get_jedi_environment] Not in compiled mode, returning None")
