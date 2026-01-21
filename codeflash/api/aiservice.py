@@ -442,6 +442,38 @@ class AiServiceClient:
         console.rule()
         return None
 
+    def call_agent(
+        self, trace_id: str, context_vars: dict[str, str], available_tools: list[str], messages: list[dict[str, str]]
+    ) -> dict[str, str]:
+        try:
+            payload = {
+                "trace_id": trace_id,
+                "context_vars": context_vars,
+                "available_tools": available_tools,
+                "messages": messages,
+            }
+            response = self.make_ai_service_request("/agent", payload=payload, timeout=self.timeout)
+        except (requests.exceptions.RequestException, TypeError) as e:
+            logger.exception(f"Error calling codeflash agent: {e}")
+            return None
+
+        if response.status_code == 200:
+            res = response.json()
+            console.rule()
+
+            if res["status"] == "success":
+                return {"messages": res["messages"]}
+
+            return None
+
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating optimized candidates: {response.status_code} - {error}")
+        ph("cli-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        return None
+
     def get_new_explanation(  # noqa: D417
         self,
         source_code: str,
