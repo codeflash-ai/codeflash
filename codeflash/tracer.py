@@ -16,6 +16,7 @@ import os
 import pickle
 import subprocess
 import sys
+import tempfile
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,13 +24,50 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, is_compiled_or_bundled_binary
 from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.pytest_parallelization import pytest_split
 
 if TYPE_CHECKING:
     from argparse import Namespace
+
+
+# Embedded tracing script for use when running as compiled binary
+# Read the script content at module load time to embed it
+_TRACING_SCRIPT_PATH = Path(__file__).parent / "tracing" / "tracing_new_process.py"
+
+# Read and store the script content as a constant at module import time
+try:
+    with open(_TRACING_SCRIPT_PATH, encoding="utf-8") as _f:
+        _TRACING_SCRIPT_CONTENT = _f.read()
+except Exception:
+    # If we can't read it, set to None and we'll try the file path directly
+    _TRACING_SCRIPT_CONTENT = None
+
+
+def _get_tracing_script_path() -> Path:
+    """Get path to tracing_new_process.py, creating it from embedded source if needed."""
+    script_name = "tracing_new_process.py"
+
+    if is_compiled_or_bundled_binary():
+        if _TRACING_SCRIPT_CONTENT is None:
+            console.print("[bold red]Error: Tracing script content not embedded in compiled binary[/bold red]")
+            raise RuntimeError("Tracing script content not available in compiled mode")
+
+        # Write embedded script to a temporary file
+        temp_dir = Path(tempfile.gettempdir()) / "codeflash_scripts"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_script_path = temp_dir / script_name
+
+        # Write the embedded script content
+        with open(temp_script_path, "w", encoding="utf-8") as f:
+            f.write(_TRACING_SCRIPT_CONTENT)
+
+        return temp_script_path
+
+    # When not compiled, use the original file
+    return _TRACING_SCRIPT_PATH
 
 
 def main(args: Namespace | None = None) -> ArgumentParser:
@@ -142,7 +180,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                         subprocess.Popen(
                             [
                                 SAFE_SYS_EXECUTABLE,
-                                Path(__file__).parent / "tracing" / "tracing_new_process.py",
+                                _get_tracing_script_path(),
                                 *updated_sys_argv,
                                 json.dumps(args_dict),
                             ],
@@ -179,7 +217,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 subprocess.run(
                     [
                         SAFE_SYS_EXECUTABLE,
-                        Path(__file__).parent / "tracing" / "tracing_new_process.py",
+                        _get_tracing_script_path(),
                         *sys.argv,
                         json.dumps(args_dict),
                     ],
