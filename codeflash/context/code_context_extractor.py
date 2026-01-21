@@ -43,12 +43,17 @@ if TYPE_CHECKING:
 
 def _get_jedi_environment():
     """Get the appropriate jedi environment based on execution mode."""
-    if is_compiled_or_bundled_binary():
+    is_compiled = is_compiled_or_bundled_binary()
+    logger.warning(f"[_get_jedi_environment] is_compiled_or_bundled_binary()={is_compiled}, sys.executable={sys.executable}")
+
+    if is_compiled:
         # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
         from jedi.api.environment import InterpreterEnvironment
         env = InterpreterEnvironment()
-        logger.info(f"Using InterpreterEnvironment for jedi in compiled mode: executable={env.executable}")
+        logger.warning(f"[_get_jedi_environment] Created InterpreterEnvironment: executable={env.executable}")
         return env
+
+    logger.warning("[_get_jedi_environment] Not in compiled mode, returning None")
     return None  # Let jedi auto-detect in normal mode
 
 
@@ -447,13 +452,17 @@ def get_function_to_optimize_as_function_source(
     import jedi
 
     try:
+        # IMPORTANT: Get jedi environment BEFORE entering safe_jedi_executable context
+        # because safe_jedi_executable patches sys.executable which affects is_compiled_or_bundled_binary()
+        jedi_env = _get_jedi_environment()
+
         with safe_jedi_executable():
             # Use jedi to find function to optimize
             # Pass environment directly to Script to avoid subprocess spawning in compiled mode
             script = jedi.Script(
                 path=function_to_optimize.file_path,
                 project=_create_jedi_project(project_root_path),
-                environment=_get_jedi_environment()
+                environment=jedi_env
             )
 
             # Get all names in the file
@@ -500,14 +509,20 @@ def get_function_sources_from_jedi(
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
 
+    # IMPORTANT: Get jedi environment BEFORE entering safe_jedi_executable context
+    # because safe_jedi_executable patches sys.executable which affects is_compiled_or_bundled_binary()
+    jedi_env = _get_jedi_environment()
+    logger.warning(f"[get_function_sources_from_jedi] Created environment BEFORE context: {jedi_env}")
+
     with safe_jedi_executable():
         for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
             try:
                 # Pass environment directly to Script to avoid subprocess spawning in compiled mode
+                logger.warning(f"[get_function_sources_from_jedi] About to create Script with environment={jedi_env}")
                 script = jedi.Script(
                     path=file_path,
                     project=_create_jedi_project(project_root_path),
-                    environment=_get_jedi_environment()
+                    environment=jedi_env
                 )
                 file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
             except Exception as e:
@@ -630,6 +645,10 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
 
     class_code_strings: list[CodeString] = []
 
+    # IMPORTANT: Get jedi environment BEFORE entering safe_jedi_executable context
+    # because safe_jedi_executable patches sys.executable which affects is_compiled_or_bundled_binary()
+    jedi_env = _get_jedi_environment()
+
     with safe_jedi_executable():
         for name, module_name in imported_names.items():
             # Skip if already defined in context
@@ -644,7 +663,7 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
                 script = jedi.Script(
                     test_code,
                     project=_create_jedi_project(project_root_path),
-                    environment=_get_jedi_environment()
+                    environment=jedi_env
                 )
                 completions = script.goto(1, len(test_code))
 
