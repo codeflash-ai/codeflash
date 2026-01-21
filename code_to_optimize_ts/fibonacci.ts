@@ -12,7 +12,19 @@ export function fibonacci(n: number): number {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Iterative computation to avoid exponential recursion and function-call overhead.
+    let a: number = 0;
+    let b: number = 1;
+
+    // Use a simple for-loop; caching n into target avoids repeated property access.
+    const target: number = n;
+    for (let i = 2; i <= target; i++) {
+        const next: number = a + b;
+        a = b;
+        b = next;
+    }
+    return b;
 }
 
 /**
