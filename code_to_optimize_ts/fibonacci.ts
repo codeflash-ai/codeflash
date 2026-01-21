@@ -1,3 +1,5 @@
+const fibCache = new Map<number, number>();
+
 /**
  * Fibonacci implementations - intentionally inefficient for optimization testing.
  */
@@ -12,7 +14,17 @@ export function fibonacci(n: number): number {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    
+    let prev = 0;
+    let curr = 1;
+    
+    for (let i = 2; i <= n; i++) {
+        const next = prev + curr;
+        prev = curr;
+        curr = next;
+    }
+    
+    return curr;
 }
 
 /**
