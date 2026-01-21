@@ -265,12 +265,17 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
             if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
                 definition_positions[stmt.name.value] = i + 1
             elif isinstance(stmt, cst.SimpleStatementLine):
-                # Check for assignments
+                # Check for assignments (including tuple unpacking and chained assignments)
                 for child in stmt.body:
                     if isinstance(child, cst.Assign):
                         for target in child.targets:
-                            if isinstance(target.target, cst.Name):
-                                definition_positions[target.target.value] = i + 1
+                            # Handle all target types (Name, Tuple, etc.)
+                            for name in _extract_names_from_target(target.target):
+                                definition_positions[name] = i + 1
+                    elif isinstance(child, cst.AnnAssign):
+                        # Handle annotated assignments
+                        for name in _extract_names_from_target(child.target):
+                            definition_positions[name] = i + 1
 
         # Find the default insertion index (after imports)
         default_insert_index = find_insertion_index_after_imports(updated_node)
@@ -433,9 +438,20 @@ class GlobalStatementCollector(cst.CSTVisitor):
         if not self.in_function_or_class and self.compound_depth == 0:
             for statement in node.body:
                 # Skip imports
-                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign)):
+                if isinstance(statement, (cst.Import, cst.ImportFrom)):
+                    continue
+                # Skip simple name assignments (handled by GlobalAssignmentCollector)
+                # But include tuple unpacking and chained assignments
+                if isinstance(statement, cst.Assign):
+                    # Check if it's a simple single-name assignment
+                    if len(statement.targets) == 1 and isinstance(statement.targets[0].target, cst.Name):
+                        continue
+                    # Tuple unpacking, chained assignment, etc. - include it
                     self.global_statements.append(node)
                     break
+                # Include other statement types (AnnAssign, Expr, etc.)
+                self.global_statements.append(node)
+                break
 
 
 class LastImportFinder(cst.CSTVisitor):
@@ -564,7 +580,11 @@ class FunctionDefInserter(cst.CSTTransformer):
 
 
 def get_statement_dependencies(stmt: cst.BaseStatement) -> set[str]:
-    """Extract all names that a statement depends on (names used on the RHS)."""
+    """Extract all names that a statement depends on (names used on the RHS).
+
+    Note: Type annotations are NOT included as dependencies since they only affect
+    static type checking and don't cause runtime NameErrors.
+    """
     deps: set[str] = set()
     if isinstance(stmt, cst.SimpleStatementLine):
         for body_item in stmt.body:
@@ -572,35 +592,95 @@ def get_statement_dependencies(stmt: cst.BaseStatement) -> set[str]:
                 # Get names used in the value (RHS)
                 deps.update(get_names_in_expression(body_item.value))
             elif isinstance(body_item, cst.AnnAssign) and body_item.value is not None:
-                # Get names used in the value and annotation
+                # Only get names from the value, NOT from the annotation
+                # Type annotations don't create runtime dependencies
                 deps.update(get_names_in_expression(body_item.value))
-                deps.update(get_names_in_expression(body_item.annotation.annotation))
     return deps
 
 
-def get_statement_defined_name(stmt: cst.BaseStatement) -> str | None:
-    """Get the name defined by a statement (LHS of assignment)."""
-    if isinstance(stmt, cst.SimpleStatementLine) and len(stmt.body) == 1:
-        body_item = stmt.body[0]
-        if isinstance(body_item, cst.Assign) and len(body_item.targets) == 1:
-            target = body_item.targets[0].target
-            if isinstance(target, cst.Name):
-                return target.value
-        elif isinstance(body_item, cst.AnnAssign):
-            target = body_item.target
-            if isinstance(target, cst.Name):
-                return target.value
-    return None
+def _extract_names_from_target(target: cst.BaseExpression) -> set[str]:
+    """Extract all names from an assignment target (handles tuples, names, etc.)."""
+    names: set[str] = set()
+    if isinstance(target, cst.Name):
+        names.add(target.value)
+    elif isinstance(target, (cst.Tuple, cst.List)):
+        for element in target.elements:
+            if isinstance(element, (cst.Element, cst.StarredElement)):
+                names.update(_extract_names_from_target(element.value))
+    return names
+
+
+def get_statement_defined_names(stmt: cst.BaseStatement) -> set[str]:
+    """Get all names defined by a statement (LHS of assignment)."""
+    names: set[str] = set()
+    if isinstance(stmt, cst.SimpleStatementLine):
+        for body_item in stmt.body:
+            if isinstance(body_item, cst.Assign):
+                # Handle chained assignments: a = b = c = 5
+                for target_node in body_item.targets:
+                    names.update(_extract_names_from_target(target_node.target))
+            elif isinstance(body_item, cst.AnnAssign):
+                names.update(_extract_names_from_target(body_item.target))
+    return names
 
 
 def find_last_definition_index(name: str, body: list[cst.BaseStatement]) -> int:
     """Find the index of the last statement that defines a given name."""
     last_idx = -1
     for i, stmt in enumerate(body):
-        defined_name = get_statement_defined_name(stmt)
-        if defined_name == name:
+        defined_names = get_statement_defined_names(stmt)
+        if name in defined_names:
             last_idx = i
     return last_idx
+
+
+def _sort_statements_by_dependencies(statements: list[cst.BaseStatement]) -> list[cst.BaseStatement]:
+    """Sort statements so that definitions come before their dependents.
+
+    Uses a stable topological sort - statements without dependencies on each other
+    maintain their original relative order.
+    """
+    if len(statements) <= 1:
+        return statements
+
+    # Build a map of defined names to statement index
+    name_to_idx: dict[str, int] = {}
+    for i, stmt in enumerate(statements):
+        for name in get_statement_defined_names(stmt):
+            name_to_idx[name] = i
+
+    # Build dependency graph: idx -> set of indices it depends on
+    deps_graph: dict[int, set[int]] = {i: set() for i in range(len(statements))}
+    for i, stmt in enumerate(statements):
+        for dep_name in get_statement_dependencies(stmt):
+            if dep_name in name_to_idx:
+                dep_idx = name_to_idx[dep_name]
+                if dep_idx != i:  # Don't add self-dependency
+                    deps_graph[i].add(dep_idx)
+
+    # Kahn's algorithm for topological sort with stable ordering
+    in_degree = {i: len(deps) for i, deps in deps_graph.items()}
+    # Start with nodes that have no dependencies, in original order
+    queue = [i for i in range(len(statements)) if in_degree[i] == 0]
+    result: list[cst.BaseStatement] = []
+
+    while queue:
+        # Take from front (maintains original order for independent items)
+        idx = queue.pop(0)
+        result.append(statements[idx])
+
+        # Find nodes that depend on this one and reduce their in-degree
+        for other_idx in range(len(statements)):
+            if idx in deps_graph[other_idx]:
+                in_degree[other_idx] -= 1
+                if in_degree[other_idx] == 0:
+                    queue.append(other_idx)
+
+    # If we couldn't sort all (cycle), return original order
+    if len(result) != len(statements):
+        return statements
+
+    return result
 
 
 class ImportInserter(cst.CSTTransformer):
@@ -635,6 +715,9 @@ class ImportInserter(cst.CSTTransformer):
 
         # For simple statements, insert after their dependencies or after imports
         if simple_statements:
+            # Sort statements by their interdependencies first
+            simple_statements = _sort_statements_by_dependencies(simple_statements)
+
             # Find the base insertion point (after imports)
             base_insertion_index = 0
             if self.last_import_line > 0:
@@ -644,11 +727,13 @@ class ImportInserter(cst.CSTTransformer):
                         break
 
             # Insert each statement at the correct position based on its dependencies
-            for stmt in simple_statements:
+            # Track how many statements have been inserted to maintain relative order
+            for inserted_count, stmt in enumerate(simple_statements):
                 deps = get_statement_dependencies(stmt)
 
                 # Find the position after the last dependency definition
-                insertion_index = base_insertion_index
+                # Account for already-inserted statements to maintain order
+                insertion_index = base_insertion_index + inserted_count
                 for dep_name in deps:
                     dep_idx = find_last_definition_index(dep_name, updated_body)
                     if dep_idx >= 0:

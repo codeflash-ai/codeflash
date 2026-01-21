@@ -4400,6 +4400,177 @@ def remove_sentence_punctuation(s: str) -> str:
     )
 
 
+def test_add_global_assignments_tuple_unpacking() -> None:
+    """Test that tuple unpacking assignments are properly tracked.
+
+    Verifies the fix for: a, b = 1, 2 where the target is a Tuple, not a Name.
+    Without the fix, neither 'a' nor 'b' would be tracked as defined.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with tuple unpacking that a later variable depends on
+    optimized_code = '''import sys
+
+a, b = 1, 2
+c = a + b
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Tuple unpacking test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: a, b = 1, 2 must come before c = a + b
+    unpack_pos = result.index("a, b = 1, 2")
+    c_pos = result.index("c = a + b")
+    assert unpack_pos < c_pos, "Tuple unpacking must come before dependent assignment"
+
+
+def test_add_global_assignments_chained_assignment() -> None:
+    """Test that chained assignments are properly tracked.
+
+    Verifies the fix for: a = b = c = 5 which has multiple targets.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with chained assignment that a later variable depends on
+    optimized_code = '''import sys
+
+a = b = c = 5
+d = a + b + c
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Chained assignment test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: a = b = c = 5 must come before d = a + b + c
+    chain_pos = result.index("a = b = c = 5")
+    d_pos = result.index("d = a + b + c")
+    assert chain_pos < d_pos, "Chained assignment must come before dependent assignment"
+
+
+def test_add_global_assignments_multiple_new_statements() -> None:
+    """Test that multiple new statements maintain correct order.
+
+    When inserting multiple statements with no dependencies, they should
+    maintain their relative order from the optimized code.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with multiple independent global assignments
+    optimized_code = '''import sys
+
+FIRST = 1
+SECOND = 2
+THIRD = 3
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except (NameError, SyntaxError) as e:
+        msg = f"Multiple statements test failed: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: FIRST, SECOND, THIRD in order
+    first_pos = result.index("FIRST = 1")
+    second_pos = result.index("SECOND = 2")
+    third_pos = result.index("THIRD = 3")
+    assert first_pos < second_pos < third_pos, (
+        f"Statements should maintain order: FIRST ({first_pos}) < SECOND ({second_pos}) < THIRD ({third_pos})"
+    )
+
+
+def test_add_global_assignments_annotated_no_spurious_deps() -> None:
+    """Test that type annotations don't create spurious dependencies.
+
+    Verifies the fix for: x: Tuple[int, int] = value
+    Without the fix, Tuple and int would be added as spurious dependencies.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+val = (1, 2)
+
+def foo():
+    pass
+'''
+
+    # Optimized code with type annotation - the annotation uses Tuple[int, int]
+    # but the actual value only depends on 'val'
+    optimized_code = '''import sys
+
+val = (1, 2)
+x: tuple[int, int] = val
+y = x
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Annotated assignment test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify x assignment is in the result
+    assert "x: tuple[int, int] = val" in result, "Annotated assignment should be present"
+
+    # Verify correct ordering: val must come before x, x must come before y
+    val_pos = result.index("val = (1, 2)")
+    x_pos = result.index("x: tuple[int, int] = val")
+    y_pos = result.index("y = x")
+    assert val_pos < x_pos < y_pos, "Variables should be in dependency order"
+
+
 # =============================================================================
 # Real-world standardize_quotes optimization tests
 # These tests verify the fixes work for the actual optimization scenarios
