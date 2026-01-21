@@ -2536,7 +2536,9 @@ class FunctionOptimizer:
 
                 if original_sqlite.exists() and candidate_sqlite.exists():
                     # Full comparison using captured return values via language support
-                    match, diffs = self.language_support.compare_test_results(original_sqlite, candidate_sqlite)
+                    match, diffs = self.language_support.compare_test_results(
+                        original_sqlite, candidate_sqlite, project_root=self.args.project_root
+                    )
                     # Cleanup SQLite files after comparison
                     candidate_sqlite.unlink(missing_ok=True)
                 else:

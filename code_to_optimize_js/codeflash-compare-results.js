@@ -37,12 +37,14 @@ let Database;
 try {
     Database = require('better-sqlite3');
 } catch (e) {
-    console.error(JSON.stringify({
+    // Use console.log (stdout) for JSON output, not console.error (stderr)
+    // Exit code 2 indicates a setup error (distinct from 1 = "not equivalent")
+    console.log(JSON.stringify({
         equivalent: false,
         diffs: [],
-        error: 'better-sqlite3 not installed'
+        error: 'better-sqlite3 not installed. Run: npm install better-sqlite3'
     }));
-    process.exit(1);
+    process.exit(2);
 }
 
 /**

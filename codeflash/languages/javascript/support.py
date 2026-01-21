@@ -902,12 +902,18 @@ class JavaScriptSupport:
 
     # === Test Result Comparison ===
 
-    def compare_test_results(self, original_results_path: Path, candidate_results_path: Path) -> tuple[bool, list]:
+    def compare_test_results(
+        self,
+        original_results_path: Path,
+        candidate_results_path: Path,
+        project_root: Path | None = None,
+    ) -> tuple[bool, list]:
         """Compare test results between original and candidate code.
 
         Args:
             original_results_path: Path to original test results SQLite DB.
             candidate_results_path: Path to candidate test results SQLite DB.
+            project_root: Project root directory where node_modules is installed.
 
         Returns:
             Tuple of (are_equivalent, list of TestDiff objects).
@@ -915,7 +921,7 @@ class JavaScriptSupport:
         """
         from codeflash.languages.javascript.comparator import compare_test_results
 
-        return compare_test_results(original_results_path, candidate_results_path)
+        return compare_test_results(original_results_path, candidate_results_path, project_root=project_root)
 
     # === Configuration ===
 

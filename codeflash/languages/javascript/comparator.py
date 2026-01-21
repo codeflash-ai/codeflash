@@ -7,6 +7,7 @@ original and optimized JavaScript code using a Node.js comparison script.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,7 @@ def compare_test_results(
     original_sqlite_path: Path,
     candidate_sqlite_path: Path,
     comparator_script: Path | None = None,
+    project_root: Path | None = None,
 ) -> tuple[bool, list[TestDiff]]:
     """Compare JavaScript test results using the Node.js comparator.
 
@@ -32,6 +34,7 @@ def compare_test_results(
         original_sqlite_path: Path to SQLite database with original code results.
         candidate_sqlite_path: Path to SQLite database with candidate code results.
         comparator_script: Optional path to the comparison script.
+        project_root: Project root directory where node_modules is installed.
 
     Returns:
         Tuple of (all_equivalent, list of TestDiff objects).
@@ -50,6 +53,22 @@ def compare_test_results(
         logger.error(f"Candidate SQLite database not found: {candidate_sqlite_path}")
         return False, []
 
+    # Determine working directory - should be where node_modules is installed
+    # The script needs better-sqlite3 which is installed in the project's node_modules
+    cwd = project_root or Path.cwd()
+
+    # Set NODE_PATH to include the project's node_modules
+    # This is needed because the script runs from the codeflash package directory,
+    # but needs to resolve modules from the project's node_modules
+    env = os.environ.copy()
+    node_modules_path = cwd / "node_modules"
+    if node_modules_path.exists():
+        existing_node_path = env.get("NODE_PATH", "")
+        if existing_node_path:
+            env["NODE_PATH"] = f"{node_modules_path}:{existing_node_path}"
+        else:
+            env["NODE_PATH"] = str(node_modules_path)
+
     try:
         result = subprocess.run(
             ["node", str(script_path), str(original_sqlite_path), str(candidate_sqlite_path)],
@@ -57,20 +76,36 @@ def compare_test_results(
             capture_output=True,
             text=True,
             timeout=60,
+            cwd=str(cwd),
+            env=env,
         )
 
-        # Parse the JSON output
+        # Parse the JSON output first - errors are reported in JSON too
         try:
+            if not result.stdout or not result.stdout.strip():
+                logger.error("JavaScript comparator returned empty output")
+                if result.stderr:
+                    logger.error(f"stderr: {result.stderr}")
+                return False, []
             comparison = json.loads(result.stdout)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JavaScript comparator output: {e}")
-            logger.debug(f"stdout: {result.stdout}")
-            logger.debug(f"stderr: {result.stderr}")
+            logger.error(f"stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+            if result.stderr:
+                logger.error(f"stderr: {result.stderr[:500]}")
             return False, []
 
-        # Check for errors
+        # Check for errors in the JSON response
+        # Exit code 0 = equivalent, 1 = not equivalent, 2 = setup error
         if comparison.get("error"):
             logger.error(f"JavaScript comparator error: {comparison['error']}")
+            return False, []
+
+        # Check for unexpected exit codes (not 0 or 1)
+        if result.returncode != 0 and result.returncode != 1:
+            logger.error(f"JavaScript comparator failed with exit code {result.returncode}")
+            if result.stderr:
+                logger.error(f"stderr: {result.stderr}")
             return False, []
 
         # Convert diffs to TestDiff objects

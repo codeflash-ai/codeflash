@@ -7,6 +7,12 @@
     "test": "jest",
     "test:coverage": "jest --coverage"
   },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests",
+    "language": "javascript",
+    "formatterCmds": ["npx prettier --write $file"]
+  },
   "keywords": [
     "codeflash",
     "optimization",
