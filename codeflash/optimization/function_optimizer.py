@@ -603,6 +603,7 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
+            jit_compiled_opt_candidate = None
             if self.is_numerical_code:  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
                 jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
                     code_context.read_writable_code.markdown, self.function_trace_id
@@ -658,6 +659,10 @@ class FunctionOptimizer:
         ) = test_setup_result.unwrap()
 
         optimizations_set, function_references = optimization_result.unwrap()
+
+        # Add JIT compiled candidate to the candidate set if it exists
+        if jit_compiled_opt_candidate:
+            optimizations_set.control.extend(jit_compiled_opt_candidate)
 
         baseline_setup_result = self.setup_and_establish_baseline(
             code_context=code_context,

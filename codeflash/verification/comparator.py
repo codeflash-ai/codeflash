@@ -68,6 +68,7 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     # Try to extract wrapped exception type from the message (library-agnostic)
     return _extract_exception_from_message(str(exc))
 
+
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
 PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # noqa: S108
