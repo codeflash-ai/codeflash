@@ -4,10 +4,13 @@ import datetime
 import decimal
 import enum
 import math
+import os
 import re
+import tempfile
 import types
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
+from pathlib import Path
 from typing import Any
 
 import sentry_sdk
@@ -25,6 +28,19 @@ HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 
+# Get the system temp directory for temp path detection
+_TEMP_DIR = tempfile.gettempdir()
+
+
+def _is_temp_path(path_str: str) -> bool:
+    """Check if a string looks like a path in a temp directory."""
+    return path_str.startswith(_TEMP_DIR + os.sep)
+
+
+def _get_path_basename(path_str: str) -> str:
+    """Extract the basename (filename) from a path string."""
+    return os.path.basename(path_str)  # noqa: PTH119
+
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
@@ -40,10 +56,15 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
+        if isinstance(orig, str):
+            # Special handling for temp directory paths - compare only basenames
+            if _is_temp_path(orig) and _is_temp_path(new):
+                return _get_path_basename(orig) == _get_path_basename(new)
+            return orig == new
+
         if isinstance(
             orig,
             (
-                str,
                 int,
                 bool,
                 complex,
@@ -342,6 +363,14 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         if isinstance(
             orig, (datetime.datetime, datetime.date, datetime.timedelta, datetime.time, datetime.timezone, re.Pattern)
         ):
+            return orig == new
+
+        # Handle Path objects - compare only basenames for temp directory paths
+        if isinstance(orig, Path):
+            orig_str = str(orig)
+            new_str = str(new)
+            if _is_temp_path(orig_str) and _is_temp_path(new_str):
+                return _get_path_basename(orig_str) == _get_path_basename(new_str)
             return orig == new
 
         # If the object passed has a user defined __eq__ method, use that

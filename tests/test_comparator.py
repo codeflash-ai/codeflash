@@ -2602,3 +2602,123 @@ def test_numpy_dtypes() -> None:
     # Test that DType and np.dtype of different types are not equal
     assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
+
+
+def test_temp_directory_paths_strings() -> None:
+    """Test that temp directory paths are compared by basename only."""
+    # Same filename in different temp directories should be equal
+    assert comparator("/tmp/abc123/image.png", "/tmp/xyz789/image.png")
+    assert comparator("/tmp/shdlkfhlwk/image.png", "/tmp/oewhrlwkehr/image.png")
+
+    # Different filenames should not be equal
+    assert not comparator("/tmp/abc123/file1.txt", "/tmp/xyz789/file2.txt")
+    assert not comparator("/tmp/abc/image.png", "/tmp/xyz/image.jpg")
+
+    # Same path should be equal
+    assert comparator("/tmp/abc123/file.txt", "/tmp/abc123/file.txt")
+
+    # Nested paths in temp directories - compare only basename
+    assert comparator("/tmp/abc/nested/deep/image.png", "/tmp/xyz/other/path/image.png")
+    assert not comparator("/tmp/abc/nested/file1.txt", "/tmp/xyz/other/file2.txt")
+
+
+def test_temp_directory_paths_path_objects() -> None:
+    """Test that Path objects in temp directories are compared by basename only."""
+    # Same filename in different temp directories should be equal
+    assert comparator(Path("/tmp/abc123/image.png"), Path("/tmp/xyz789/image.png"))
+    assert comparator(Path("/tmp/shdlkfhlwk/data.json"), Path("/tmp/oewhrlwkehr/data.json"))
+
+    # Different filenames should not be equal
+    assert not comparator(Path("/tmp/abc123/file1.txt"), Path("/tmp/xyz789/file2.txt"))
+
+    # Same path should be equal
+    assert comparator(Path("/tmp/abc123/file.txt"), Path("/tmp/abc123/file.txt"))
+
+    # Nested paths in temp directories
+    assert comparator(Path("/tmp/a/b/c/output.csv"), Path("/tmp/x/y/z/output.csv"))
+
+
+def test_non_temp_paths_compared_exactly() -> None:
+    """Test that non-temp directory paths are still compared exactly."""
+    # Non-temp paths with same filename but different directories should not be equal
+    assert not comparator("/home/user/image.png", "/home/other/image.png")
+    assert not comparator("/var/data/file.txt", "/var/other/file.txt")
+    assert not comparator("/usr/local/bin/script.sh", "/usr/bin/script.sh")
+
+    # Same non-temp paths should be equal
+    assert comparator("/home/user/file.txt", "/home/user/file.txt")
+
+    # Path objects - non-temp paths
+    assert not comparator(Path("/home/user/image.png"), Path("/home/other/image.png"))
+    assert comparator(Path("/home/user/file.txt"), Path("/home/user/file.txt"))
+
+
+def test_mixed_temp_and_non_temp_paths() -> None:
+    """Test comparison between temp and non-temp paths."""
+    # One temp path and one non-temp path should not be equal (even with same basename)
+    assert not comparator("/tmp/abc/image.png", "/home/user/image.png")
+    assert not comparator("/home/user/image.png", "/tmp/abc/image.png")
+
+    # Path objects
+    assert not comparator(Path("/tmp/abc/file.txt"), Path("/home/user/file.txt"))
+
+
+def test_temp_paths_in_collections() -> None:
+    """Test that temp path comparison works within collections."""
+    # Lists containing temp paths
+    list1 = ["/tmp/abc/file1.txt", "/tmp/def/file2.txt"]
+    list2 = ["/tmp/xyz/file1.txt", "/tmp/uvw/file2.txt"]
+    assert comparator(list1, list2)
+
+    # Lists with different filenames should not match
+    list3 = ["/tmp/abc/file1.txt", "/tmp/def/file3.txt"]
+    assert not comparator(list1, list3)
+
+    # Tuples containing temp paths
+    tuple1 = ("/tmp/a/output.png", "/tmp/b/result.json")
+    tuple2 = ("/tmp/x/output.png", "/tmp/y/result.json")
+    assert comparator(tuple1, tuple2)
+
+    # Dicts with temp path values
+    dict1 = {"output": "/tmp/abc/result.txt", "log": "/tmp/def/log.txt"}
+    dict2 = {"output": "/tmp/xyz/result.txt", "log": "/tmp/uvw/log.txt"}
+    assert comparator(dict1, dict2)
+
+    # Mixed collection with Path objects
+    list4 = [Path("/tmp/a/file.txt"), "/tmp/b/other.txt"]
+    list5 = [Path("/tmp/x/file.txt"), "/tmp/y/other.txt"]
+    assert comparator(list4, list5)
+
+
+def test_temp_paths_edge_cases() -> None:
+    """Test edge cases for temp path comparison."""
+    # Empty filename (just directory)
+    assert comparator("/tmp/abc/", "/tmp/xyz/")
+
+    # Hidden files
+    assert comparator("/tmp/abc/.hidden", "/tmp/xyz/.hidden")
+    assert not comparator("/tmp/abc/.hidden1", "/tmp/xyz/.hidden2")
+
+    # Files with multiple extensions
+    assert comparator("/tmp/abc/file.tar.gz", "/tmp/xyz/file.tar.gz")
+    assert not comparator("/tmp/abc/file.tar.gz", "/tmp/xyz/file.tar.bz2")
+
+    # Unicode filenames
+    assert comparator("/tmp/abc/文件.txt", "/tmp/xyz/文件.txt")
+    assert not comparator("/tmp/abc/文件.txt", "/tmp/xyz/档案.txt")
+
+    # Filenames with spaces
+    assert comparator("/tmp/abc/my file.txt", "/tmp/xyz/my file.txt")
+
+
+@pytest.mark.parametrize("path1,path2,expected", [
+    ("/tmp/a/file.txt", "/tmp/b/file.txt", True),
+    ("/tmp/abc123/image.png", "/tmp/xyz789/image.png", True),
+    ("/tmp/a/b/c/deep.txt", "/tmp/x/y/z/deep.txt", True),
+    ("/tmp/a/file1.txt", "/tmp/b/file2.txt", False),
+    ("/home/a/file.txt", "/home/b/file.txt", False),
+    ("/tmp/a/file.txt", "/home/b/file.txt", False),
+])
+def test_temp_paths_parametrized(path1: str, path2: str, expected: bool) -> None:
+    """Parametrized tests for temp path comparison."""
+    assert comparator(path1, path2) == expected
