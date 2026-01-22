@@ -23,10 +23,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
-          version: "0.5.30"
+          version: "latest"
 
       - name: sync uv
         run: |
+          uv venv --seed
           uv sync
 
 
