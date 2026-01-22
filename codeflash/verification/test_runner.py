@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import shlex
 import subprocess
 import sys
@@ -9,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
-from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE, is_compiled_or_bundled_binary
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
@@ -20,6 +21,41 @@ if TYPE_CHECKING:
 
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+_plugin_package_path: Path | None = None
+
+
+def _setup_pytest_plugin_for_subprocess() -> tuple[Path, str] | None:
+    """Set up pytest plugin for PyInstaller subprocess access.
+
+    Creates a standalone plugin module with a unique name to avoid conflicts
+    with any installed codeflash packages in the target venv.
+
+    Returns tuple of (path to add to PYTHONPATH, module name) or None if not in PyInstaller mode.
+    """
+    global _plugin_package_path  # noqa: PLW0603
+
+    if not is_compiled_or_bundled_binary():
+        return None
+
+    # Use a unique module name to avoid conflicts with installed codeflash packages
+    plugin_module_name = "_codeflash_embedded_pytest_plugin"
+
+    if _plugin_package_path is not None and _plugin_package_path.exists():
+        return _plugin_package_path, plugin_module_name
+
+    from codeflash.verification.pytest_plugin import get_embedded_plugin_source
+
+    tmp_dir = get_run_tmp_file(Path("pytest_plugin_pkg"))
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a standalone module file (not a package to avoid namespace conflicts)
+    plugin_file = tmp_dir / f"{plugin_module_name}.py"
+    plugin_file.write_text(get_embedded_plugin_source(), encoding="utf-8")
+
+    _plugin_package_path = tmp_dir
+    logger.info(f"Created pytest plugin at: {plugin_file}")
+    return _plugin_package_path, plugin_module_name
 
 
 def execute_test_subprocess(
@@ -83,7 +119,15 @@ def run_behavioral_tests(
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
 
         pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        plugin_setup = _setup_pytest_plugin_for_subprocess()
+        if plugin_setup:
+            plugin_path, plugin_module_name = plugin_setup
+            pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
+            existing = pytest_test_env.get("PYTHONPATH", "")
+            pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
+            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+        else:
+            pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
         if enable_coverage:
             coverage_database_file, coverage_config_file = prepare_coverage_files()
@@ -127,10 +171,10 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,
             )
-            logger.debug(
-                f"Result return code: {results.returncode}, "
-                f"{'Result stderr:' + str(results.stderr) if results.stderr else ''}"
-            )
+            logger.info(f"Result return code: {results.returncode}")
+            if results.returncode != 0:
+                logger.info(f"Subprocess stdout: {results.stdout}")
+                logger.info(f"Subprocess stderr: {results.stderr}")
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
 
@@ -140,9 +184,10 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
             )
-            logger.debug(
-                f"""Result return code: {results.returncode}, {"Result stderr:" + str(results.stderr) if results.stderr else ""}"""
-            )
+            logger.info(f"Result return code: {results.returncode}")
+            if results.returncode != 0:
+                logger.info(f"Subprocess stdout: {results.stdout}")
+                logger.info(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -190,7 +235,15 @@ def run_line_profile_tests(
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        plugin_setup = _setup_pytest_plugin_for_subprocess()
+        if plugin_setup:
+            plugin_path, plugin_module_name = plugin_setup
+            pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
+            existing = pytest_test_env.get("PYTHONPATH", "")
+            pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
+            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+        else:
+            pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         pytest_test_env["LINE_PROFILE"] = "1"
         results = execute_test_subprocess(
@@ -199,6 +252,10 @@ def run_line_profile_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
+        logger.info(f"Result return code: {results.returncode}")
+        if results.returncode != 0:
+            logger.info(f"Subprocess stdout: {results.stdout}")
+            logger.info(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -242,7 +299,15 @@ def run_benchmarking_tests(
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
-        pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
+        plugin_setup = _setup_pytest_plugin_for_subprocess()
+        if plugin_setup:
+            plugin_path, plugin_module_name = plugin_setup
+            pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
+            existing = pytest_test_env.get("PYTHONPATH", "")
+            pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
+            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+        else:
+            pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
         results = execute_test_subprocess(
             pytest_cmd_list + pytest_args + blocklist_args + result_args + test_files,
@@ -250,6 +315,10 @@ def run_benchmarking_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
+        logger.info(f"Result return code: {results.returncode}")
+        if results.returncode != 0:
+            logger.info(f"Subprocess stdout: {results.stdout}")
+            logger.info(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
