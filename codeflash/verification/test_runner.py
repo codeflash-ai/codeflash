@@ -54,7 +54,7 @@ def _setup_pytest_plugin_for_subprocess() -> tuple[Path, str] | None:
     plugin_file.write_text(get_embedded_plugin_source(), encoding="utf-8")
 
     _plugin_package_path = tmp_dir
-    logger.info(f"Created pytest plugin at: {plugin_file}")
+    logger.debug(f"Created pytest plugin at: {plugin_file}")
     return _plugin_package_path, plugin_module_name
 
 
@@ -125,7 +125,7 @@ def run_behavioral_tests(
             pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
             existing = pytest_test_env.get("PYTHONPATH", "")
             pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
-            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+            logger.debug(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
         else:
             pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
 
@@ -174,10 +174,10 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,
             )
-            logger.info(f"Result return code: {results.returncode}")
+            logger.debug(f"Result return code: {results.returncode}")
             if results.returncode != 0:
-                logger.info(f"Subprocess stdout: {results.stdout}")
-                logger.info(f"Subprocess stderr: {results.stderr}")
+                logger.debug(f"Subprocess stdout: {results.stdout}")
+                logger.debug(f"Subprocess stderr: {results.stderr}")
         else:
             blocklist_args = [f"-p no:{plugin}" for plugin in BEHAVIORAL_BLOCKLISTED_PLUGINS]
 
@@ -187,10 +187,10 @@ def run_behavioral_tests(
                 env=pytest_test_env,
                 timeout=600,  # TODO: Make this dynamic
             )
-            logger.info(f"Result return code: {results.returncode}")
+            logger.debug(f"Result return code: {results.returncode}")
             if results.returncode != 0:
-                logger.info(f"Subprocess stdout: {results.stdout}")
-                logger.info(f"Subprocess stderr: {results.stderr}")
+                logger.debug(f"Subprocess stdout: {results.stdout}")
+                logger.debug(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -244,7 +244,7 @@ def run_line_profile_tests(
             pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
             existing = pytest_test_env.get("PYTHONPATH", "")
             pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
-            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+            logger.debug(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
         else:
             pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
@@ -255,10 +255,10 @@ def run_line_profile_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-        logger.info(f"Result return code: {results.returncode}")
+        logger.debug(f"Result return code: {results.returncode}")
         if results.returncode != 0:
-            logger.info(f"Subprocess stdout: {results.stdout}")
-            logger.info(f"Subprocess stderr: {results.stderr}")
+            logger.debug(f"Subprocess stdout: {results.stdout}")
+            logger.debug(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)
@@ -308,7 +308,7 @@ def run_benchmarking_tests(
             pytest_test_env["PYTEST_PLUGINS"] = plugin_module_name
             existing = pytest_test_env.get("PYTHONPATH", "")
             pytest_test_env["PYTHONPATH"] = f"{plugin_path}{os.pathsep}{existing}" if existing else str(plugin_path)
-            logger.info(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
+            logger.debug(f"Set PYTHONPATH for PyInstaller mode: {pytest_test_env['PYTHONPATH']}")
         else:
             pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in BENCHMARKING_BLOCKLISTED_PLUGINS]
@@ -318,10 +318,10 @@ def run_benchmarking_tests(
             env=pytest_test_env,
             timeout=600,  # TODO: Make this dynamic
         )
-        logger.info(f"Result return code: {results.returncode}")
+        logger.debug(f"Result return code: {results.returncode}")
         if results.returncode != 0:
-            logger.info(f"Subprocess stdout: {results.stdout}")
-            logger.info(f"Subprocess stderr: {results.stderr}")
+            logger.debug(f"Subprocess stdout: {results.stdout}")
+            logger.debug(f"Subprocess stderr: {results.stderr}")
     else:
         msg = f"Unsupported test framework: {test_framework}"
         raise ValueError(msg)

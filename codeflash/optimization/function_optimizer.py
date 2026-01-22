@@ -2434,7 +2434,7 @@ class FunctionOptimizer:
                 if testing_type == TestingMode.BEHAVIOR
                 else [str(f.benchmarking_file_path) for f in test_files.test_files]
             )
-            logger.warning(
+            logger.debug(
                 f"Nonzero return code {run_result.returncode} running {testing_type.value} tests in "
                 f"{', '.join(test_file_paths)}"
             )

@@ -419,7 +419,7 @@ def get_function_to_optimize_as_function_source(
     try:
         # Use jedi to find function to optimize
         jedi_env = get_jedi_environment()
-        logger.warning(f"Using Jedi environment: {jedi_env}")
+        logger.debug(f"Using Jedi environment: {jedi_env}")
 
         script = jedi.Script(
             path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path), environment=jedi_env
@@ -427,7 +427,7 @@ def get_function_to_optimize_as_function_source(
 
         # Get all names in the file
         names = script.get_names(all_scopes=True, definitions=True, references=False)
-        logger.warning(f"Jedi found {len(names)} names in {function_to_optimize.file_path}")
+        logger.debug(f"Jedi found {len(names)} names in {function_to_optimize.file_path}")
 
         # Find the name that matches our function
         for name in names:
@@ -470,7 +470,7 @@ def get_function_sources_from_jedi(
     function_source_list: list[FunctionSource] = []
 
     jedi_env = get_jedi_environment()
-    logger.warning(f"get_function_sources_from_jedi using Jedi environment: {jedi_env}")
+    logger.debug(f"get_function_sources_from_jedi using Jedi environment: {jedi_env}")
 
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         try:
