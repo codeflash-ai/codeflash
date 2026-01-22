@@ -259,4 +259,8 @@ WARP.MD
 .mcp.json
 .tessl/
 tessl.json
+
+# Nuitka build artifacts
 main.bin
+main.dist/
+main.build/
