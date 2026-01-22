@@ -16,45 +16,6 @@ if TYPE_CHECKING:
     codeflash_cache_db: Path
 
 
-class Compat:
-    # os-independent newline
-    LF: str = os.linesep
-
-    IS_POSIX: bool = os.name != "nt"
-
-    @property
-    def SAFE_SYS_EXECUTABLE(self) -> str:
-        return Path(_find_python_executable()).as_posix()
-
-    @property
-    def codeflash_cache_dir(self) -> Path:
-        return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
-
-    @property
-    def codeflash_temp_dir(self) -> Path:
-        temp_dir = Path(tempfile.gettempdir()) / "codeflash"
-        if not temp_dir.exists():
-            temp_dir.mkdir(parents=True, exist_ok=True)
-        return temp_dir
-
-    @property
-    def codeflash_cache_db(self) -> Path:
-        return self.codeflash_cache_dir / "codeflash_cache.db"
-
-
-_compat = Compat()
-
-
-codeflash_temp_dir = _compat.codeflash_temp_dir
-codeflash_cache_dir = _compat.codeflash_cache_dir
-codeflash_cache_db = _compat.codeflash_cache_db
-LF = _compat.LF
-SAFE_SYS_EXECUTABLE = _compat.SAFE_SYS_EXECUTABLE
-IS_POSIX = _compat.IS_POSIX
-
-
-
-
 def is_compiled_or_bundled_binary() -> bool:
     """Check if running in a compiled/bundled binary."""
     if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
@@ -97,6 +58,43 @@ def _find_python_executable() -> str:
 
     # Last resort: return sys.executable (even though it may not work)
     return sys.executable
+
+
+class Compat:
+    # os-independent newline
+    LF: str = os.linesep
+
+    IS_POSIX: bool = os.name != "nt"
+
+    @property
+    def SAFE_SYS_EXECUTABLE(self) -> str:
+        return Path(_find_python_executable()).as_posix()
+
+    @property
+    def codeflash_cache_dir(self) -> Path:
+        return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
+
+    @property
+    def codeflash_temp_dir(self) -> Path:
+        temp_dir = Path(tempfile.gettempdir()) / "codeflash"
+        if not temp_dir.exists():
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        return temp_dir
+
+    @property
+    def codeflash_cache_db(self) -> Path:
+        return self.codeflash_cache_dir / "codeflash_cache.db"
+
+
+_compat = Compat()
+
+
+codeflash_temp_dir = _compat.codeflash_temp_dir
+codeflash_cache_dir = _compat.codeflash_cache_dir
+codeflash_cache_db = _compat.codeflash_cache_db
+LF = _compat.LF
+SAFE_SYS_EXECUTABLE = _compat.SAFE_SYS_EXECUTABLE
+IS_POSIX = _compat.IS_POSIX
 
 
 @lru_cache(maxsize=1)
