@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts, get_run_tmp_file
-from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE, is_compiled_or_bundled_binary
+from codeflash.code_utils.compat import IS_POSIX, get_safe_sys_executable, is_compiled_or_bundled_binary
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
@@ -98,9 +98,9 @@ def run_behavioral_tests(
                 test_files.append(str(file.instrumented_behavior_file_path))
 
         pytest_cmd_list = (
-            shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+            shlex.split(f"{get_safe_sys_executable()} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
-            else [SAFE_SYS_EXECUTABLE, "-m", *shlex.split(pytest_cmd, posix=IS_POSIX)]
+            else [get_safe_sys_executable(), "-m", *shlex.split(pytest_cmd, posix=IS_POSIX)]
         )
         test_files = list(set(test_files))  # remove multiple calls in the same test function
 
@@ -147,11 +147,14 @@ def run_behavioral_tests(
                         coverage_database_file.unlink()
             else:
                 cov_erase = execute_test_subprocess(
-                    shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
+                    shlex.split(f"{get_safe_sys_executable()} -m coverage erase"),
+                    cwd=cwd,
+                    env=pytest_test_env,
+                    timeout=30,
                 )  # this cleanup is necessary to avoid coverage data from previous runs, if there are any, then the current run will be appended to the previous data, which skews the results
                 logger.debug(cov_erase)
             coverage_cmd = [
-                SAFE_SYS_EXECUTABLE,
+                get_safe_sys_executable(),
                 "-m",
                 "coverage",
                 "run",
@@ -214,7 +217,7 @@ def run_line_profile_tests(
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
-            shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+            shlex.split(f"{get_safe_sys_executable()} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )
@@ -276,7 +279,7 @@ def run_benchmarking_tests(
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
-            shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
+            shlex.split(f"{get_safe_sys_executable()} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
             else shlex.split(pytest_cmd)
         )

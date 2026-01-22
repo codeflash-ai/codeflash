@@ -12,7 +12,6 @@ from codeflash.discovery.functions_to_optimize import (
     get_all_files_and_functions
 )
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.compat import codeflash_temp_dir
 
 
 def test_function_eligible_for_optimization() -> None:

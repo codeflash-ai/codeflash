@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import get_safe_sys_executable
 from codeflash.code_utils.config_consts import EffortLevel
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.pytest_parallelization import pytest_split
@@ -141,7 +141,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     processes.append(
                         subprocess.Popen(
                             [
-                                SAFE_SYS_EXECUTABLE,
+                                get_safe_sys_executable(),
                                 Path(__file__).parent / "tracing" / "tracing_new_process.py",
                                 *updated_sys_argv,
                                 json.dumps(args_dict),
@@ -178,7 +178,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
                 subprocess.run(
                     [
-                        SAFE_SYS_EXECUTABLE,
+                        get_safe_sys_executable(),
                         Path(__file__).parent / "tracing" / "tracing_new_process.py",
                         *sys.argv,
                         json.dumps(args_dict),

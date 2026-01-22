@@ -12,11 +12,11 @@ from typing import Any, Callable, Optional
 import git
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.compat import codeflash_cache_dir
+from codeflash.code_utils.compat import get_codeflash_cache_dir
 from codeflash.code_utils.git_utils import check_running_in_git_repo, git_root_dir
 
-worktree_dirs = codeflash_cache_dir / "worktrees"
-patches_dir = codeflash_cache_dir / "patches"
+worktree_dirs = get_codeflash_cache_dir() / "worktrees"
+patches_dir = get_codeflash_cache_dir() / "patches"
 
 
 def create_worktree_snapshot_commit(worktree_dir: Path, commit_message: str) -> None:

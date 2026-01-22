@@ -28,7 +28,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db, is_compiled_or_bundled_binary
+from codeflash.code_utils.compat import get_codeflash_cache_db, get_safe_sys_executable, is_compiled_or_bundled_binary
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -137,7 +137,7 @@ class TestsCache:
 
     def __init__(self, project_root_path: str | Path) -> None:
         self.project_root_path = Path(project_root_path).resolve().as_posix()
-        self.connection = sqlite3.connect(codeflash_cache_db)
+        self.connection = sqlite3.connect(get_codeflash_cache_db())
         self.cur = self.connection.cursor()
 
         self.cur.execute(
@@ -675,7 +675,13 @@ def discover_tests_pytest(
             cwd=project_root, check=False, text=True, capture_output=True
         )
         result = subprocess.run(  # noqa: PLW1510
-            [SAFE_SYS_EXECUTABLE, str(discovery_script_path), str(project_root), str(tests_root), str(tmp_pickle_path)],
+            [
+                get_safe_sys_executable(),
+                str(discovery_script_path),
+                str(project_root),
+                str(tests_root),
+                str(tmp_pickle_path),
+            ],
             **run_kwargs,
         )
     try:

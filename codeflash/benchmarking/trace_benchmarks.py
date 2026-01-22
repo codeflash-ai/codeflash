@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import get_safe_sys_executable
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
 
@@ -23,7 +23,7 @@ def trace_benchmarks_pytest(
     )
     result = subprocess.run(  # noqa: PLW1510
         [
-            SAFE_SYS_EXECUTABLE,
+            get_safe_sys_executable(),
             Path(__file__).parent / "pytest_new_process_trace_benchmarks.py",
             benchmarks_root,
             tests_root,

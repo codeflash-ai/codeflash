@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import get_safe_sys_executable
 from codeflash.code_utils.concolic_utils import clean_concolic_tests, is_valid_concolic_test
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
@@ -44,7 +44,7 @@ def generate_concolic_tests(
         try:
             cover_result = subprocess.run(
                 [
-                    SAFE_SYS_EXECUTABLE,
+                    get_safe_sys_executable(),
                     "-m",
                     "crosshair",
                     "cover",

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
+from codeflash.code_utils.compat import get_safe_sys_executable
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestFile, TestFiles, TestingMode, TestType, VerificationType
 from codeflash.optimization.function_optimizer import FunctionOptimizer
@@ -54,7 +54,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -129,7 +129,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -194,7 +194,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -279,7 +279,7 @@ class MyClass:
 
         # Run pytest as a subprocess
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
         )
 
         # Check for errors
@@ -356,7 +356,7 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -1231,7 +1231,7 @@ class MyClass:
         test_env.pop("CODEFLASH_TEST_CLASS", None)
 
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=test_env
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=test_env
         )
         assert result.returncode == 0
         pattern = r"TEST_INFO_START\|\((.*?)\)\|TEST_INFO_END"
@@ -1292,7 +1292,7 @@ class MyClass:
 
         test_env = os.environ.copy()
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=test_env
+            cwd=test_dir, cmd_list=[f"{get_safe_sys_executable()}", "-m", "pytest", test_file_name, "-s"], env=test_env
         )
         assert result.returncode == 0
         pattern = r"TEST_INFO_START\|\((.*?)\)\|TEST_INFO_END"

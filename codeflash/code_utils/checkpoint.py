@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.prompt import Confirm
 
 from codeflash.cli_cmds.console import console
-from codeflash.code_utils.compat import codeflash_temp_dir
+from codeflash.code_utils.compat import get_codeflash_temp_dir
 
 if TYPE_CHECKING:
     import argparse
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class CodeflashRunCheckpoint:
     def __init__(self, module_root: Path, checkpoint_dir: Path | None = None) -> None:
         if checkpoint_dir is None:
-            checkpoint_dir = codeflash_temp_dir
+            checkpoint_dir = get_codeflash_temp_dir()
         self.module_root = module_root
         self.checkpoint_dir = Path(checkpoint_dir)
         # Create a unique checkpoint file name
@@ -141,8 +141,8 @@ def get_all_historical_functions(module_root: Path, checkpoint_dir: Path) -> dic
 
 def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optional[dict[str, dict[str, str]]]:
     previous_checkpoint_functions = None
-    if args.all and codeflash_temp_dir.is_dir():
-        previous_checkpoint_functions = get_all_historical_functions(args.module_root, codeflash_temp_dir)
+    if args.all and get_codeflash_temp_dir().is_dir():
+        previous_checkpoint_functions = get_all_historical_functions(args.module_root, get_codeflash_temp_dir())
         if previous_checkpoint_functions and Confirm.ask(
             "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
             default=True,

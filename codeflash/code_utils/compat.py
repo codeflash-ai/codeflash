@@ -13,10 +13,6 @@ from platformdirs import user_config_dir
 if TYPE_CHECKING:
     from jedi.api.environment import InterpreterEnvironment
 
-    codeflash_temp_dir: Path
-    codeflash_cache_dir: Path
-    codeflash_cache_db: Path
-
 
 def is_compiled_or_bundled_binary() -> bool:
     """Check if running in a compiled/bundled binary."""
@@ -85,41 +81,34 @@ def _find_python_executable() -> str:
     return sys.executable
 
 
-class Compat:
-    # os-independent newline
-    LF: str = os.linesep
-
-    IS_POSIX: bool = os.name != "nt"
-
-    @property
-    def SAFE_SYS_EXECUTABLE(self) -> str:
-        return Path(_find_python_executable()).as_posix()
-
-    @property
-    def codeflash_cache_dir(self) -> Path:
-        return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
-
-    @property
-    def codeflash_temp_dir(self) -> Path:
-        temp_dir = Path(tempfile.gettempdir()) / "codeflash"
-        if not temp_dir.exists():
-            temp_dir.mkdir(parents=True, exist_ok=True)
-        return temp_dir
-
-    @property
-    def codeflash_cache_db(self) -> Path:
-        return self.codeflash_cache_dir / "codeflash_cache.db"
+LF: str = os.linesep
+IS_POSIX: bool = os.name != "nt"
 
 
-_compat = Compat()
+@lru_cache(maxsize=1)
+def get_safe_sys_executable() -> str:
+    """Get a safe Python executable path with forward slashes."""
+    return Path(_find_python_executable()).as_posix()
 
 
-codeflash_temp_dir = _compat.codeflash_temp_dir
-codeflash_cache_dir = _compat.codeflash_cache_dir
-codeflash_cache_db = _compat.codeflash_cache_db
-LF = _compat.LF
-SAFE_SYS_EXECUTABLE = _compat.SAFE_SYS_EXECUTABLE
-IS_POSIX = _compat.IS_POSIX
+@lru_cache(maxsize=1)
+def get_codeflash_cache_dir() -> Path:
+    """Get the codeflash cache directory, creating it if necessary."""
+    return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
+
+
+@lru_cache(maxsize=1)
+def get_codeflash_temp_dir() -> Path:
+    """Get the codeflash temp directory, creating it if necessary."""
+    temp_dir = Path(tempfile.gettempdir()) / "codeflash"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
+
+
+@lru_cache(maxsize=1)
+def get_codeflash_cache_db() -> Path:
+    """Get the path to the codeflash cache database."""
+    return get_codeflash_cache_dir() / "codeflash_cache.db"
 
 
 @lru_cache(maxsize=1)
