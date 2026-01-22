@@ -1,0 +1,41 @@
+name: Build PyInstaller Executable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'codeflash/**'
+      - '.github/workflows/build-exe.yml'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv add pyinstaller
+
+      - name: Build executable
+        run: uv run -m PyInstaller --onefile --name codeflash --copy-metadata readchar --collect-all=line_profiler codeflash/main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeflash-macos
+          path: dist/codeflash
+          retention-days: 30
