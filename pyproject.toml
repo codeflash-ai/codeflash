@@ -43,8 +43,6 @@ dependencies = [
     "codeflash-benchmark",
     "filelock",
     "pytest-asyncio>=1.2.0",
-    "nuitka",
-    "pyinstaller>=6.18.0",
 ]
 
 [project.urls]
@@ -287,7 +285,6 @@ workspace = { members = ["codeflash-benchmark"] }
 
 [tool.uv.sources]
 codeflash-benchmark = { workspace = true }
-nuitka = { path = "../Nuitka", editable = true }
 
 [tool.uv-dynamic-versioning]
 enable = true
