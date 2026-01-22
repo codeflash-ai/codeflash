@@ -29,7 +29,6 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
     exe_name = cmd_tokens[0]
     command_str = " ".join(formatter_cmds).replace(" $file", "")
 
-    # For compiled binaries, check venv first
     formatter_path = find_executable_in_venv([exe_name])
     if formatter_path is None:
         formatter_path = shutil.which(exe_name)

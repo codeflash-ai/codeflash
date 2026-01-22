@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
-# Embedded discovery script content for compiled binaries
+# Embedded discovery script content for compiled / bundled binaries
 _DISCOVERY_SCRIPT_CONTENT = """# ruff: noqa
 import sys
 from pathlib import Path
@@ -656,7 +656,7 @@ def _get_discovery_script_path() -> Path:
 
         return temp_script_path
 
-    # When not compiled, use the original file
+    # When not compiled / bundled, use the original file
     return Path(__file__).parent / discovery_script_name
 
 

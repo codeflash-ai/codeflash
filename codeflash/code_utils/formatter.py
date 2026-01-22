@@ -63,7 +63,6 @@ def apply_formatter_cmds(
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [file_path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
 
-        # For compiled binaries, check venv for formatter executable
         if formatter_cmd_list:
             exe_name = formatter_cmd_list[0]
             venv_formatter = find_executable_in_venv([exe_name])
