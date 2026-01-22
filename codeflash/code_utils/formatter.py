@@ -13,6 +13,7 @@ from typing import Any, Optional, Union
 import isort
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.code_utils.compat import find_executable_in_venv
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
@@ -61,6 +62,14 @@ def apply_formatter_cmds(
     for command in cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [file_path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
+
+        # For compiled binaries, check venv for formatter executable
+        if formatter_cmd_list:
+            exe_name = formatter_cmd_list[0]
+            venv_formatter = find_executable_in_venv([exe_name])
+            if venv_formatter:
+                formatter_cmd_list[0] = venv_formatter
+
         try:
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:

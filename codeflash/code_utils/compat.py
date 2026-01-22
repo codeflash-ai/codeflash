@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 import sys
@@ -24,6 +26,39 @@ def is_compiled_or_bundled_binary() -> bool:
     return "__compiled__" in globals()
 
 
+def find_executable_in_venv(exe_names: list[str]) -> str | None:
+    """Find an executable in venv directories.
+
+    Searches for venv in current directory and parent directories.
+    Returns the first matching executable found, or None if not found.
+
+    Args:
+        exe_names: List of possible executable names (e.g., ["python3", "python"])
+
+    Returns:
+        Path to executable if found, None otherwise
+
+    """
+    if not is_compiled_or_bundled_binary():
+        return None
+
+    current_dir = Path.cwd()
+    venv_names = [".venv", "venv"]
+
+    # Walk up directory tree looking for venv
+    for parent in [current_dir, *current_dir.parents]:
+        for venv_name in venv_names:
+            venv_dir = parent / venv_name
+            if venv_dir.is_dir():
+                bin_dir = venv_dir / ("bin" if os.name != "nt" else "Scripts")
+                for exe_name in exe_names:
+                    exe_path = bin_dir / exe_name
+                    if exe_path.is_file():
+                        return str(exe_path)
+
+    return None
+
+
 def _find_python_executable() -> str:
     """Find the appropriate Python executable.
 
@@ -33,22 +68,12 @@ def _find_python_executable() -> str:
     if not is_compiled_or_bundled_binary():
         return sys.executable
 
-    # Search for venv in current directory and parent directories
-    current_dir = Path.cwd()
-    venv_names = [".venv", "venv"]
     python_names = ["python3", "python"] if os.name != "nt" else ["python.exe"]
 
-    # Walk up directory tree looking for venv
-    for parent in [current_dir, *current_dir.parents]:
-        for venv_name in venv_names:
-            venv_dir = parent / venv_name
-            if venv_dir.is_dir():
-                # Check for Python executable in venv
-                bin_dir = venv_dir / ("bin" if os.name != "nt" else "Scripts")
-                for python_name in python_names:
-                    python_path = bin_dir / python_name
-                    if python_path.is_file():
-                        return str(python_path)
+    # Try venv first
+    venv_python = find_executable_in_venv(python_names)
+    if venv_python:
+        return venv_python
 
     # Fall back to system Python
     for python_name in python_names:
@@ -98,7 +123,7 @@ IS_POSIX = _compat.IS_POSIX
 
 
 @lru_cache(maxsize=1)
-def get_jedi_environment() -> "InterpreterEnvironment | None":
+def get_jedi_environment() -> InterpreterEnvironment | None:
     """Get the appropriate Jedi environment based on execution context.
 
     Returns InterpreterEnvironment for compiled/bundled binaries to avoid

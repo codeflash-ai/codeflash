@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
+from codeflash.code_utils.compat import find_executable_in_venv
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -28,7 +29,12 @@ def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool =
     exe_name = cmd_tokens[0]
     command_str = " ".join(formatter_cmds).replace(" $file", "")
 
-    if shutil.which(exe_name) is None:
+    # For compiled binaries, check venv first
+    formatter_path = find_executable_in_venv([exe_name])
+    if formatter_path is None:
+        formatter_path = shutil.which(exe_name)
+
+    if formatter_path is None:
         logger.error(
             f"Could not find formatter: {command_str}\n"
             f"Please install it or update 'formatter-cmds' in your codeflash configuration"
