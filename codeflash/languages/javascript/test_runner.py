@@ -52,15 +52,41 @@ def _find_node_project_root(file_path: Path) -> Path | None:
 
 
 def _ensure_runtime_files(project_root: Path) -> None:
-    """Ensure JavaScript runtime files are present in the project root.
+    """Ensure JavaScript runtime package is installed in the project.
 
-    Copies codeflash-jest-helper.js and related files to the project root
-    if they don't already exist or are outdated.
+    Installs @codeflash/jest-runtime package if not already present.
+    Falls back to copying local files if npm install fails.
 
     Args:
         project_root: The project root directory.
 
     """
+    # Check if package is already installed
+    node_modules_pkg = project_root / "node_modules" / "@codeflash" / "jest-runtime"
+    if node_modules_pkg.exists():
+        logger.debug("@codeflash/jest-runtime already installed")
+        return
+
+    # Try to install from local package first (for development)
+    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "jest-runtime"
+    if local_package_path.exists():
+        try:
+            result = subprocess.run(
+                ["npm", "install", "--save-dev", str(local_package_path)],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed @codeflash/jest-runtime from local package")
+                return
+            logger.warning(f"Failed to install local package: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error installing local package: {e}")
+
+    # Fall back to copying files directly (legacy behavior)
+    logger.debug("Falling back to copying runtime files directly")
     from codeflash.languages.javascript.runtime import get_all_runtime_files
 
     for runtime_file in get_all_runtime_files():

@@ -259,5 +259,5 @@ WARP.MD
 .mcp.json
 .tessl/
 tessl.json
-*/node_modules/*
+**/node_modules/**
 /dist-nuitka/main.dist/*

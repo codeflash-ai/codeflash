@@ -565,6 +565,22 @@ class LanguageSupport(Protocol):
         """
         ...
 
+    def ensure_runtime_environment(self, project_root: Path) -> bool:
+        """Ensure the runtime environment is set up for the project.
+
+        This method handles language-specific runtime setup, such as installing
+        npm packages for JavaScript or pip packages for Python.
+
+        Args:
+            project_root: The project root directory.
+
+        Returns:
+            True if runtime environment is ready, False otherwise.
+
+        """
+        # Default implementation: just copy runtime files
+        return False
+
     def instrument_existing_test(
         self,
         test_path: Path,

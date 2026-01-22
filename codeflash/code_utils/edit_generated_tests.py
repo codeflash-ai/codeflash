@@ -315,3 +315,69 @@ def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.P
         )
         for func in test_functions_to_remove
     ]
+
+
+# Patterns for normalizing codeflash imports (legacy -> npm package)
+_CODEFLASH_REQUIRE_PATTERN = re.compile(
+    r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]\.?/?codeflash-jest-helper['\"]\s*\)"
+)
+_CODEFLASH_IMPORT_PATTERN = re.compile(
+    r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]"
+)
+
+
+def normalize_codeflash_imports(source: str) -> str:
+    """Normalize codeflash imports to use the npm package.
+
+    Replaces legacy local file imports:
+        const codeflash = require('./codeflash-jest-helper')
+        import codeflash from './codeflash-jest-helper'
+
+    With npm package imports:
+        const codeflash = require('@codeflash/jest-runtime')
+
+    Args:
+        source: JavaScript/TypeScript source code.
+
+    Returns:
+        Source code with normalized imports.
+
+    """
+    # Replace CommonJS require
+    source = _CODEFLASH_REQUIRE_PATTERN.sub(
+        r"\1 \2 = require('@codeflash/jest-runtime')",
+        source,
+    )
+    # Replace ES module import
+    source = _CODEFLASH_IMPORT_PATTERN.sub(
+        r"import \1 from '@codeflash/jest-runtime'",
+        source,
+    )
+    return source
+
+
+def normalize_generated_tests_imports(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+    """Normalize codeflash imports in all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+
+    Returns:
+        Generated tests with normalized imports.
+
+    """
+    normalized_tests = []
+    for test in generated_tests.generated_tests:
+        # Only normalize JS/TS files
+        if test.behavior_file_path.suffix in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".mts"):
+            normalized_test = GeneratedTests(
+                generated_original_test_source=normalize_codeflash_imports(test.generated_original_test_source),
+                instrumented_behavior_test_source=normalize_codeflash_imports(test.instrumented_behavior_test_source),
+                instrumented_perf_test_source=normalize_codeflash_imports(test.instrumented_perf_test_source),
+                behavior_file_path=test.behavior_file_path,
+                perf_file_path=test.perf_file_path,
+            )
+            normalized_tests.append(normalized_test)
+        else:
+            normalized_tests.append(test)
+    return GeneratedTestsList(generated_tests=normalized_tests)

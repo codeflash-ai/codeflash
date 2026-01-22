@@ -71,10 +71,10 @@ def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: 
 
 
 def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> None:
-    """Ensure runtime files are present in the project root.
+    """Ensure runtime environment is set up for the project.
 
-    Copies language-specific runtime helper files to the project root
-    if they don't already exist or are outdated.
+    For JavaScript/TypeScript: Installs @codeflash/jest-runtime npm package.
+    Falls back to copying runtime files if package installation fails.
 
     Args:
         project_root: The project root directory.
@@ -82,11 +82,16 @@ def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> N
     """
     try:
         language_support = get_language_support(language)
-        runtime_files = language_support.get_runtime_files()
     except (KeyError, ValueError):
         logger.debug(f"No language support found for {language}, skipping runtime file setup")
         return
 
+    # Try to install npm package (for JS/TS) or other language-specific setup
+    if language_support.ensure_runtime_environment(project_root):
+        return  # Package installed successfully
+
+    # Fall back to copying runtime files directly
+    runtime_files = language_support.get_runtime_files()
     for runtime_file in runtime_files:
         dest_path = project_root / runtime_file.name
         # Always copy to ensure we have the latest version

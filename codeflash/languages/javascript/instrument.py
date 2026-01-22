@@ -118,20 +118,23 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
 
     """
     # Add codeflash helper require if not already present
-    if "codeflash-jest-helper" not in code:
+    # Support both npm package (@codeflash/jest-runtime) and legacy local file (codeflash-jest-helper)
+    has_codeflash_import = "@codeflash/jest-runtime" in code or "codeflash-jest-helper" in code
+    if not has_codeflash_import:
         # Find the first require/import statement to add after
         import_match = re.search(
             r"^((?:const|let|var|import)\s+.+?(?:require\([^)]+\)|from\s+['\"][^'\"]+['\"]).*;?\s*\n)",
             code,
             re.MULTILINE,
         )
+        # Prefer npm package, fall back to local file if needed
+        helper_require = "const codeflash = require('@codeflash/jest-runtime');\n"
         if import_match:
             insert_pos = import_match.end()
-            helper_require = "const codeflash = require('./codeflash-jest-helper');\n"
             code = code[:insert_pos] + helper_require + code[insert_pos:]
         else:
             # Add at the beginning if no imports found
-            code = "const codeflash = require('./codeflash-jest-helper');\n\n" + code
+            code = helper_require + "\n" + code
 
     # Choose capture function based on mode
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"

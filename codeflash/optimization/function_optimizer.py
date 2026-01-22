@@ -61,6 +61,7 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
+    normalize_generated_tests_imports,
     remove_functions_from_generated_tests,
 )
 from codeflash.code_utils.env_utils import get_pr_number
@@ -613,6 +614,10 @@ class FunctionOptimizer:
             return Failure(test_results.failure())
 
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
+
+        # Normalize codeflash imports in JS/TS tests to use npm package
+        if not self._is_python:
+            generated_tests = normalize_generated_tests_imports(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):

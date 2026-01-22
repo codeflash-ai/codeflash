@@ -1,0 +1,14 @@
+{
+  "name": "code-to-optimize-js-esm",
+  "version": "1.0.0",
+  "description": "ES Module JavaScript test project for Codeflash E2E testing",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0"
+  }
+}
