@@ -1,19 +1,20 @@
+const cache = new Map();
+
 /**
  * Fibonacci implementations - CommonJS module
  * Intentionally inefficient for optimization testing.
  */
 
-/**
- * Calculate the nth Fibonacci number using naive recursion.
- * This is intentionally slow to demonstrate optimization potential.
- * @param {number} n - The index of the Fibonacci number to calculate
- * @returns {number} The nth Fibonacci number
- */
 function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    if (cache.has(n)) {
+        return cache.get(n);
+    }
+    const result = fibonacci(n - 1) + fibonacci(n - 2);
+    cache.set(n, result);
+    return result;
 }
 
 /**
