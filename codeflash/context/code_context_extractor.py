@@ -41,26 +41,89 @@ if TYPE_CHECKING:
     from codeflash.context.unused_definition_remover import UsageInfo
 
 
+def _clean_sys_modules_for_jedi() -> None:
+    """Clean sys.modules of problematic entries that break jedi in compiled binaries.
+
+    In Nuitka-compiled onefile mode, sys.modules can contain empty string keys or
+    other corrupted entries that cause importlib to fail when jedi tries to load
+    type stubs. This function removes those problematic entries.
+    """
+    import sys
+
+    # Remove empty string key if it exists
+    if "" in sys.modules:
+        logger.debug("[_clean_sys_modules_for_jedi] Removing empty string from sys.modules")
+        del sys.modules[""]
+
+    # Remove any None keys if they exist
+    none_keys = [k for k in sys.modules if k is None]
+    for key in none_keys:
+        logger.debug("[_clean_sys_modules_for_jedi] Removing None key from sys.modules")
+        del sys.modules[key]
+
+    # Remove any keys that are not strings (shouldn't happen, but be defensive)
+    invalid_keys = [k for k in sys.modules if not isinstance(k, str)]
+    for key in invalid_keys:
+        logger.debug(f"[_clean_sys_modules_for_jedi] Removing invalid key type {type(key)} from sys.modules")
+        del sys.modules[key]
+
+
 def _get_jedi_environment():
     """Get the appropriate jedi environment based on execution mode."""
     if is_compiled_or_bundled_binary():
         try:
             # In compiled mode, use InterpreterEnvironment to avoid subprocess spawning
-            from jedi.api.environment import InterpreterEnvironment
             from pathlib import Path
 
-            logger.info("[_get_jedi_environment] Creating InterpreterEnvironment for compiled binary")
+            from jedi.api.environment import InterpreterEnvironment
+
+            logger.debug("[_get_jedi_environment] Creating InterpreterEnvironment for compiled binary")
+
+            # CRITICAL FIX: Patch TYPESHED_PATH to point to real jedi installation
+            # Nuitka bundles jedi but only includes LICENSE file, not the full typeshed/stdlib directory.
+            # The TYPESHED_PATH is computed from __file__ which points to the temp extraction directory
+            # with incomplete typeshed data. We need to redirect it to the actual jedi installation in the venv.
+            try:
+                import jedi.inference.gradual.typeshed as typeshed_module
+
+                # Find the real jedi installation path
+                real_python_executable = get_python_executable()
+                real_python_path = Path(real_python_executable)
+
+                if ".venv" in real_python_executable:
+                    # For venv: /path/.venv/bin/python3 -> /path/.venv/lib/pythonX.Y/site-packages/jedi
+                    venv_root = real_python_path.parent.parent
+                    python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+                    real_jedi_path = venv_root / "lib" / python_version / "site-packages" / "jedi"
+                else:
+                    # For system Python: try to find jedi in site-packages
+                    import site
+
+                    site_packages = Path(site.getsitepackages()[0])
+                    real_jedi_path = site_packages / "jedi"
+
+                real_typeshed_path = real_jedi_path / "third_party" / "typeshed"
+
+                # Check if the real typeshed path exists
+                if real_typeshed_path.exists():
+                    # Monkey-patch the TYPESHED_PATH module constant
+                    typeshed_module.TYPESHED_PATH = real_typeshed_path
+                    logger.debug(f"[_get_jedi_environment] Patched TYPESHED_PATH to: {real_typeshed_path}")
+                else:
+                    logger.warning(f"[_get_jedi_environment] Real typeshed path doesn't exist: {real_typeshed_path}")
+            except Exception as e:
+                logger.warning(f"[_get_jedi_environment] Failed to patch TYPESHED_PATH: {e}")
+                # Non-fatal - continue without typeshed
 
             # Create InterpreterEnvironment which uses current process info
             env = InterpreterEnvironment()
 
             # Patch the executable and path to point to real Python instead of compiled binary
-            # This allows jedi to find typeshed and other resources
             real_python_executable = get_python_executable()
             real_python_path = Path(real_python_executable)
 
             # Get the real sys.prefix (venv root or Python installation)
-            if '.venv' in real_python_executable:
+            if ".venv" in real_python_executable:
                 # For venv: /path/to/.venv/bin/python3 -> /path/to/.venv
                 real_sys_prefix = str(real_python_path.parent.parent)
             else:
@@ -71,7 +134,7 @@ def _get_jedi_environment():
             env._start_executable = real_python_executable
             env.path = real_sys_prefix
 
-            logger.info(f"[_get_jedi_environment] Created: executable={env.executable}, path={env.path}")
+            logger.debug(f"[_get_jedi_environment] Created: executable={env.executable}, path={env.path}")
             return env
         except Exception as e:
             logger.error(f"[_get_jedi_environment] Failed to create InterpreterEnvironment: {e}", exc_info=True)
@@ -85,16 +148,16 @@ def _create_jedi_project(path: Path, **kwargs) -> jedi.Project:
     """Create a jedi.Project with the correct Python environment."""
     if is_compiled_or_bundled_binary():
         # In compiled mode: provide sys_path but avoid environment detection
-        if 'sys_path' not in kwargs:
-            kwargs['sys_path'] = list(sys.path)
-        kwargs['smart_sys_path'] = False
+        if "sys_path" not in kwargs:
+            kwargs["sys_path"] = list(sys.path)
+        kwargs["smart_sys_path"] = False
         # Don't set environment_path - we'll pass environment directly to Script
         return jedi.Project(path=path, **kwargs)
 
     # When not compiled, use the detected Python executable normally
     python_executable = get_python_executable()
-    if 'sys_path' not in kwargs:
-        kwargs['sys_path'] = list(sys.path)
+    if "sys_path" not in kwargs:
+        kwargs["sys_path"] = list(sys.path)
     return jedi.Project(path=path, environment_path=python_executable, **kwargs)
 
 
@@ -486,7 +549,7 @@ def get_function_to_optimize_as_function_source(
             script = jedi.Script(
                 path=function_to_optimize.file_path,
                 project=_create_jedi_project(project_root_path),
-                environment=jedi_env
+                environment=jedi_env,
             )
 
             # Get all names in the file
@@ -537,24 +600,34 @@ def get_function_sources_from_jedi(
     # because safe_jedi_executable patches sys.executable which affects is_compiled_or_bundled_binary()
     jedi_env = _get_jedi_environment()
 
+    # CRITICAL: Clean sys.modules before jedi operations in compiled binary mode
+    # This prevents KeyError: '' from importlib when jedi loads type stubs
+    if is_compiled_or_bundled_binary():
+        _clean_sys_modules_for_jedi()
+
     with safe_jedi_executable():
         for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
             try:
+                # Clean sys.modules again right before jedi operations (it may get re-polluted)
+                if is_compiled_or_bundled_binary():
+                    _clean_sys_modules_for_jedi()
+
                 # Pass environment directly to Script to avoid subprocess spawning in compiled mode
                 script = jedi.Script(
-                    path=file_path,
-                    project=_create_jedi_project(project_root_path),
-                    environment=jedi_env
+                    path=file_path, project=_create_jedi_project(project_root_path), environment=jedi_env
                 )
                 file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
             except Exception as e:
-                # Jedi can fail in compiled binaries despite mitigation
+                # Jedi can fail in compiled binaries despite mitigation efforts
                 if is_compiled_or_bundled_binary():
-                    logger.warning(f"Jedi analysis failed in compiled mode for {file_path}, skipping: {e}")
+                    error_type = type(e).__name__
+                    logger.warning(
+                        f"Jedi analysis failed in compiled mode for {file_path} ({error_type}: {e}). "
+                        f"Continuing without jedi analysis for this file."
+                    )
                     continue
-                else:
-                    # In normal mode, re-raise to surface the real issue
-                    raise
+                # In normal mode, re-raise to surface the real issue
+                raise
 
             for qualified_function_name in qualified_function_names:
                 names = [
@@ -682,11 +755,7 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
                 # Create a script that imports the module to resolve it
                 test_code = f"import {module_name}"
                 # Pass environment directly to Script to avoid subprocess spawning in compiled mode
-                script = jedi.Script(
-                    test_code,
-                    project=_create_jedi_project(project_root_path),
-                    environment=jedi_env
-                )
+                script = jedi.Script(test_code, project=_create_jedi_project(project_root_path), environment=jedi_env)
                 completions = script.goto(1, len(test_code))
 
                 if not completions:

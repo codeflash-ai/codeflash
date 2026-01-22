@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from rich.prompt import Confirm
 
 from codeflash.cli_cmds.console import console
-from codeflash.code_utils.compat import codeflash_temp_dir
+from codeflash.code_utils.compat import codeflash_temp_dir, is_compiled_or_bundled_binary
 
 if TYPE_CHECKING:
     import argparse
@@ -143,14 +144,21 @@ def ask_should_use_checkpoint_get_functions(args: argparse.Namespace) -> Optiona
     previous_checkpoint_functions = None
     if args.all and codeflash_temp_dir.is_dir():
         previous_checkpoint_functions = get_all_historical_functions(args.module_root, codeflash_temp_dir)
-        if previous_checkpoint_functions and Confirm.ask(
-            "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
-            default=True,
-            console=console,
-        ):
-            console.rule()
-        else:
-            previous_checkpoint_functions = None
+
+        if previous_checkpoint_functions:
+            # Check if running in compiled binary or non-interactive mode
+            if is_compiled_or_bundled_binary() or not sys.stdin.isatty():
+                # Auto-accept in non-interactive environments
+                console.print("[dim]Previous checkpoint detected, automatically continuing...[/dim]")
+                console.rule()
+            elif Confirm.ask(
+                "Previous Checkpoint detected from an incomplete optimization run, shall I continue the optimization from that point?",
+                default=True,
+                console=console,
+            ):
+                console.rule()
+            else:
+                previous_checkpoint_functions = None
 
     console.rule()
     return previous_checkpoint_functions
