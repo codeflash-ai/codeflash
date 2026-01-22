@@ -44,6 +44,7 @@ dependencies = [
     "filelock",
     "pytest-asyncio>=1.2.0",
     "nuitka",
+    "pyinstaller>=6.18.0",
 ]
 
 [project.urls]
