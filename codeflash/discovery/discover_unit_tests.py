@@ -773,7 +773,8 @@ def process_test_files(
                 progress.advance(task_id)
                 continue
             try:
-                script = jedi.Script(path=test_file, project=jedi_project)
+                from codeflash.code_utils.compat import get_jedi_environment
+                script = jedi.Script(path=test_file, project=jedi_project, environment=get_jedi_environment())
                 test_functions = set()
 
                 all_names = script.get_names(all_scopes=True, references=True)

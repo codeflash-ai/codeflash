@@ -1129,7 +1129,8 @@ def find_specific_function_in_file(
         Tuple of (line_number, column_offset) if found, None otherwise
 
     """
-    script = jedi.Script(code=source_code, path=filepath)
+    from codeflash.code_utils.compat import get_jedi_environment
+    script = jedi.Script(code=source_code, path=filepath, environment=get_jedi_environment())
     names = script.get_names(all_scopes=True, definitions=True)
     for name in names:
         if name.type == "function" and name.name == target_function:
@@ -1153,7 +1154,13 @@ def get_fn_references_jedi(
         source_code, file_path, target_function, target_class
     )
     try:
-        script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
+        from codeflash.code_utils.compat import get_jedi_environment
+        script = jedi.Script(
+            code=source_code,
+            path=file_path,
+            project=jedi.Project(path=project_root),
+            environment=get_jedi_environment()
+        )
         # Get references to the function
         references = script.get_references(line=function_position.line_no, column=function_position.col_no)
         # Collect unique file paths where references are found

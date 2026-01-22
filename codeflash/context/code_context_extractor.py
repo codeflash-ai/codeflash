@@ -414,8 +414,14 @@ def get_function_to_optimize_as_function_source(
 ) -> FunctionSource:
     import jedi
 
+    from codeflash.code_utils.compat import get_jedi_environment
+
     # Use jedi to find function to optimize
-    script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
+    script = jedi.Script(
+        path=function_to_optimize.file_path,
+        project=jedi.Project(path=project_root_path),
+        environment=get_jedi_environment()
+    )
 
     # Get all names in the file
     names = script.get_names(all_scopes=True, definitions=True, references=False)
@@ -451,10 +457,16 @@ def get_function_sources_from_jedi(
 ) -> tuple[dict[Path, set[FunctionSource]], list[FunctionSource]]:
     import jedi
 
+    from codeflash.code_utils.compat import get_jedi_environment
+
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
+        script = jedi.Script(
+            path=file_path,
+            project=jedi.Project(path=project_root_path),
+            environment=get_jedi_environment()
+        )
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
         for qualified_function_name in qualified_function_names:

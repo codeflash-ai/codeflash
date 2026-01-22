@@ -1,12 +1,15 @@
 import os
 import sys
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from platformdirs import user_config_dir
 
 if TYPE_CHECKING:
+    from jedi.api.environment import InterpreterEnvironment
+
     codeflash_temp_dir: Path
     codeflash_cache_dir: Path
     codeflash_cache_db: Path
@@ -55,3 +58,25 @@ def is_compiled_or_bundled_binary() -> bool:
         return True
 
     return "__compiled__" in globals()
+
+
+@lru_cache(maxsize=1)
+def get_jedi_environment() -> "InterpreterEnvironment | None":
+    """Get the appropriate Jedi environment based on execution context.
+
+    Returns InterpreterEnvironment for compiled/bundled binaries to avoid
+    subprocess spawning issues. Returns None for normal Python execution.
+    """
+    if not is_compiled_or_bundled_binary():
+        return None
+
+    try:
+        from jedi.api.environment import InterpreterEnvironment
+
+        from codeflash.cli_cmds.console import logger
+        logger.debug("Using Jedi InterpreterEnvironment for compiled/bundled binary")
+        return InterpreterEnvironment()
+    except (ImportError, AttributeError) as e:
+        from codeflash.cli_cmds.console import logger
+        logger.warning(f"Could not import InterpreterEnvironment, falling back to default: {e}")
+        return None
