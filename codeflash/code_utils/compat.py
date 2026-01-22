@@ -45,3 +45,13 @@ codeflash_cache_db = _compat.codeflash_cache_db
 LF = _compat.LF
 SAFE_SYS_EXECUTABLE = _compat.SAFE_SYS_EXECUTABLE
 IS_POSIX = _compat.IS_POSIX
+
+
+
+
+def is_compiled_or_bundled_binary() -> bool:
+    """Check if running in a compiled/bundled binary."""
+    if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
+        return True
+
+    return "__compiled__" in globals()
