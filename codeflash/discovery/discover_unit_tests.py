@@ -12,7 +12,6 @@ import subprocess
 import tempfile
 import unittest
 from collections import defaultdict
-from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, final
 
@@ -35,6 +34,71 @@ from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInF
 
 if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
+
+
+# Embedded discovery script content for compiled binaries
+_DISCOVERY_SCRIPT_CONTENT = """# ruff: noqa
+import sys
+from pathlib import Path
+from typing import Any
+import pickle
+
+
+# This script should not have any relation to the codeflash package, be careful with imports
+cwd = sys.argv[1]
+tests_root = sys.argv[2]
+pickle_path = sys.argv[3]
+collected_tests = []
+pytest_rootdir = None
+sys.path.insert(1, str(cwd))
+
+
+def parse_pytest_collection_results(pytest_tests: list[Any]) -> list[dict[str, str]]:
+    test_results = []
+    for test in pytest_tests:
+        test_class = None
+        if test.cls:
+            test_class = test.parent.name
+        test_results.append({"test_file": str(test.path), "test_class": test_class, "test_function": test.name})
+    return test_results
+
+
+class PytestCollectionPlugin:
+    def pytest_collection_finish(self, session) -> None:
+        global pytest_rootdir, collected_tests
+
+        collected_tests.extend(session.items)
+        pytest_rootdir = session.config.rootdir
+
+        # Write results immediately since pytest.main() will exit after this callback, not always with a success code
+        tests = parse_pytest_collection_results(collected_tests)
+        exit_code = getattr(session.config, "exitstatus", 0)
+        with Path(pickle_path).open("wb") as f:
+            pickle.dump((exit_code, tests, pytest_rootdir), f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def pytest_collection_modifyitems(self, items) -> None:
+        skip_benchmark = pytest.mark.skip(reason="Skipping benchmark tests")
+        for item in items:
+            if "benchmark" in item.fixturenames:
+                item.add_marker(skip_benchmark)
+
+
+if __name__ == "__main__":
+    import pytest
+
+    try:
+        pytest.main(
+            [tests_root, "-p", "no:logging", "--collect-only", "-m", "not skip", "-p", "no:codeflash-benchmark"],
+            plugins=[PytestCollectionPlugin()],
+        )
+    except Exception as e:
+        print(f"Failed to collect tests: {e!s}")
+        try:
+            with Path(pickle_path).open("wb") as f:
+                pickle.dump((-1, [], None), f, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as pickle_error:
+            print(f"Failed to write failure pickle: {pickle_error!s}", file=sys.stderr)
+"""
 
 
 @final
@@ -578,21 +642,17 @@ def discover_unit_tests(
 
 
 def _get_discovery_script_path() -> Path:
-    """Get path to pytest_new_process_discovery.py, creating it from package resources if needed."""
+    """Get path to pytest_new_process_discovery.py, creating it from embedded content if needed."""
     discovery_script_name = "pytest_new_process_discovery.py"
 
     if is_compiled_or_bundled_binary():
-        # Read script from package resources and write to temp file
+        # Write embedded script content to temp file
         temp_dir = Path(tempfile.gettempdir()) / "codeflash_scripts"
         temp_dir.mkdir(parents=True, exist_ok=True)
         temp_script_path = temp_dir / discovery_script_name
 
-        # Use importlib.resources to read the script content
-        discovery_files = files("codeflash.discovery")
-        script_content = (discovery_files / discovery_script_name).read_text(encoding="utf-8")
-
-        # Write the script content to temp file
-        temp_script_path.write_text(script_content, encoding="utf-8")
+        # Write the script content (read at module import time)
+        temp_script_path.write_text(_DISCOVERY_SCRIPT_CONTENT, encoding="utf-8")
 
         return temp_script_path
 
