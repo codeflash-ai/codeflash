@@ -14,6 +14,61 @@ if TYPE_CHECKING:
     from jedi.api.environment import InterpreterEnvironment
 
 
+LF: str = os.linesep
+IS_POSIX: bool = os.name != "nt"
+
+
+@lru_cache(maxsize=1)
+def get_safe_sys_executable() -> str:
+    """Get a safe Python executable path with forward slashes."""
+    return Path(_find_python_executable()).as_posix()
+
+
+@lru_cache(maxsize=1)
+def get_codeflash_cache_dir() -> Path:
+    """Get the codeflash cache directory, creating it if necessary."""
+    return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
+
+
+@lru_cache(maxsize=1)
+def get_codeflash_temp_dir() -> Path:
+    """Get the codeflash temp directory, creating it if necessary."""
+    temp_dir = Path(tempfile.gettempdir()) / "codeflash"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
+
+
+@lru_cache(maxsize=1)
+def get_codeflash_cache_db() -> Path:
+    """Get the path to the codeflash cache database."""
+    return get_codeflash_cache_dir() / "codeflash_cache.db"
+
+
+@lru_cache(maxsize=1)
+def get_jedi_environment() -> InterpreterEnvironment | None:
+    """Get the appropriate Jedi environment based on execution context.
+
+    Returns InterpreterEnvironment for compiled/bundled binaries to avoid
+    subprocess spawning issues. Returns None for normal Python execution.
+    """
+    if not is_compiled_or_bundled_binary():
+        return None
+
+    try:
+        from jedi.api.environment import InterpreterEnvironment
+
+        from codeflash.cli_cmds.console import logger
+
+        logger.debug("Using Jedi InterpreterEnvironment for compiled/bundled binary")
+        return InterpreterEnvironment()
+    except Exception as e:
+        from codeflash.cli_cmds.console import logger
+
+        logger.warning(f"Could not create InterpreterEnvironment: {e}")
+        return None
+
+
+@lru_cache(maxsize=1)
 def is_compiled_or_bundled_binary() -> bool:
     """Check if running in a compiled/bundled binary."""
     if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
@@ -79,57 +134,3 @@ def _find_python_executable() -> str:
 
     # Last resort: return sys.executable (even though it may not work)
     return sys.executable
-
-
-LF: str = os.linesep
-IS_POSIX: bool = os.name != "nt"
-
-
-@lru_cache(maxsize=1)
-def get_safe_sys_executable() -> str:
-    """Get a safe Python executable path with forward slashes."""
-    return Path(_find_python_executable()).as_posix()
-
-
-@lru_cache(maxsize=1)
-def get_codeflash_cache_dir() -> Path:
-    """Get the codeflash cache directory, creating it if necessary."""
-    return Path(user_config_dir(appname="codeflash", appauthor="codeflash-ai", ensure_exists=True))
-
-
-@lru_cache(maxsize=1)
-def get_codeflash_temp_dir() -> Path:
-    """Get the codeflash temp directory, creating it if necessary."""
-    temp_dir = Path(tempfile.gettempdir()) / "codeflash"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    return temp_dir
-
-
-@lru_cache(maxsize=1)
-def get_codeflash_cache_db() -> Path:
-    """Get the path to the codeflash cache database."""
-    return get_codeflash_cache_dir() / "codeflash_cache.db"
-
-
-@lru_cache(maxsize=1)
-def get_jedi_environment() -> InterpreterEnvironment | None:
-    """Get the appropriate Jedi environment based on execution context.
-
-    Returns InterpreterEnvironment for compiled/bundled binaries to avoid
-    subprocess spawning issues. Returns None for normal Python execution.
-    """
-    if not is_compiled_or_bundled_binary():
-        return None
-
-    try:
-        from jedi.api.environment import InterpreterEnvironment
-
-        from codeflash.cli_cmds.console import logger
-
-        logger.debug("Using Jedi InterpreterEnvironment for compiled/bundled binary")
-        return InterpreterEnvironment()
-    except Exception as e:
-        from codeflash.cli_cmds.console import logger
-
-        logger.warning(f"Could not create InterpreterEnvironment: {e}")
-        return None
