@@ -9,8 +9,10 @@ import pickle
 import re
 import sqlite3
 import subprocess
+import tempfile
 import unittest
 from collections import defaultdict
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, final
 
@@ -27,7 +29,7 @@ from codeflash.code_utils.code_utils import (
     get_run_tmp_file,
     module_name_from_file_path,
 )
-from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db, is_compiled_or_bundled_binary
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -575,6 +577,29 @@ def discover_unit_tests(
     return function_to_tests, num_discovered_tests, num_discovered_replay_tests
 
 
+def _get_discovery_script_path() -> Path:
+    """Get path to pytest_new_process_discovery.py, creating it from package resources if needed."""
+    discovery_script_name = "pytest_new_process_discovery.py"
+
+    if is_compiled_or_bundled_binary():
+        # Read script from package resources and write to temp file
+        temp_dir = Path(tempfile.gettempdir()) / "codeflash_scripts"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_script_path = temp_dir / discovery_script_name
+
+        # Use importlib.resources to read the script content
+        discovery_files = files("codeflash.discovery")
+        script_content = (discovery_files / discovery_script_name).read_text(encoding="utf-8")
+
+        # Write the script content to temp file
+        temp_script_path.write_text(script_content, encoding="utf-8")
+
+        return temp_script_path
+
+    # When not compiled, use the original file
+    return Path(__file__).parent / discovery_script_name
+
+
 def discover_tests_pytest(
     cfg: TestConfig,
     discover_only_these_tests: list[Path] | None = None,
@@ -584,6 +609,7 @@ def discover_tests_pytest(
     project_root = cfg.project_root_path
 
     tmp_pickle_path = get_run_tmp_file("collected_tests.pkl")
+    discovery_script_path = _get_discovery_script_path()
     with custom_addopts():
         run_kwargs = get_cross_platform_subprocess_run_args(
             cwd=project_root, check=False, text=True, capture_output=True
@@ -591,7 +617,7 @@ def discover_tests_pytest(
         result = subprocess.run(  # noqa: PLW1510
             [
                 SAFE_SYS_EXECUTABLE,
-                Path(__file__).parent / "pytest_new_process_discovery.py",
+                str(discovery_script_path),
                 str(project_root),
                 str(tests_root),
                 str(tmp_pickle_path),
@@ -604,6 +630,9 @@ def discover_tests_pytest(
     except Exception as e:
         tests, pytest_rootdir = [], None
         logger.exception(f"Failed to discover tests: {e}")
+        logger.error(f"Subprocess exit code: {result.returncode}")
+        logger.error(f"Subprocess stdout: {result.stdout}")
+        logger.error(f"Subprocess stderr: {result.stderr}")
         exitcode = -1
     finally:
         tmp_pickle_path.unlink(missing_ok=True)
