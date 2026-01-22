@@ -260,3 +260,4 @@ WARP.MD
 .tessl/
 tessl.json
 */node_modules/*
+/dist-nuitka/main.dist/*
