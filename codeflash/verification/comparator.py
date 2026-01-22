@@ -156,6 +156,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 range,
                 slice,
                 OrderedDict,
+                types.GenericAlias,
             ),
         ):
             return orig == new
