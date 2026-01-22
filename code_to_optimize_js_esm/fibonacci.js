@@ -13,6 +13,18 @@ export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
+    
+    if (Number.isInteger(n)) {
+        let a = 0;
+        let b = 1;
+        for (let i = 2; i <= n; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
+    }
+    
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
