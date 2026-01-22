@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import tempfile
 from functools import lru_cache
@@ -19,9 +20,11 @@ class Compat:
     # os-independent newline
     LF: str = os.linesep
 
-    SAFE_SYS_EXECUTABLE: str = Path(sys.executable).as_posix()
-
     IS_POSIX: bool = os.name != "nt"
+
+    @property
+    def SAFE_SYS_EXECUTABLE(self) -> str:
+        return Path(_find_python_executable()).as_posix()
 
     @property
     def codeflash_cache_dir(self) -> Path:
@@ -58,6 +61,42 @@ def is_compiled_or_bundled_binary() -> bool:
         return True
 
     return "__compiled__" in globals()
+
+
+def _find_python_executable() -> str:
+    """Find the appropriate Python executable.
+
+    For compiled binaries, searches for venv in cwd/parent dirs, then falls back to system Python.
+    For normal execution, returns sys.executable.
+    """
+    if not is_compiled_or_bundled_binary():
+        return sys.executable
+
+    # Search for venv in current directory and parent directories
+    current_dir = Path.cwd()
+    venv_names = [".venv", "venv"]
+    python_names = ["python3", "python"] if os.name != "nt" else ["python.exe"]
+
+    # Walk up directory tree looking for venv
+    for parent in [current_dir, *current_dir.parents]:
+        for venv_name in venv_names:
+            venv_dir = parent / venv_name
+            if venv_dir.is_dir():
+                # Check for Python executable in venv
+                bin_dir = venv_dir / ("bin" if os.name != "nt" else "Scripts")
+                for python_name in python_names:
+                    python_path = bin_dir / python_name
+                    if python_path.is_file():
+                        return str(python_path)
+
+    # Fall back to system Python
+    for python_name in python_names:
+        system_python = shutil.which(python_name)
+        if system_python:
+            return system_python
+
+    # Last resort: return sys.executable (even though it may not work)
+    return sys.executable
 
 
 @lru_cache(maxsize=1)
