@@ -422,9 +422,7 @@ def get_function_to_optimize_as_function_source(
         logger.warning(f"Using Jedi environment: {jedi_env}")
 
         script = jedi.Script(
-            path=function_to_optimize.file_path,
-            project=jedi.Project(path=project_root_path),
-            environment=jedi_env
+            path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path), environment=jedi_env
         )
 
         # Get all names in the file
@@ -476,11 +474,7 @@ def get_function_sources_from_jedi(
 
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
         try:
-            script = jedi.Script(
-                path=file_path,
-                project=jedi.Project(path=project_root_path),
-                environment=jedi_env
-            )
+            script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path), environment=jedi_env)
             file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
             for qualified_function_name in qualified_function_names:

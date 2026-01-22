@@ -141,5 +141,6 @@ def get_jedi_environment() -> InterpreterEnvironment | None:
         return InterpreterEnvironment()
     except Exception as e:
         from codeflash.cli_cmds.console import logger
+
         logger.warning(f"Could not create InterpreterEnvironment: {e}")
         return None

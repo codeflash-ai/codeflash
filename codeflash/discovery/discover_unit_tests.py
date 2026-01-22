@@ -675,13 +675,7 @@ def discover_tests_pytest(
             cwd=project_root, check=False, text=True, capture_output=True
         )
         result = subprocess.run(  # noqa: PLW1510
-            [
-                SAFE_SYS_EXECUTABLE,
-                str(discovery_script_path),
-                str(project_root),
-                str(tests_root),
-                str(tmp_pickle_path),
-            ],
+            [SAFE_SYS_EXECUTABLE, str(discovery_script_path), str(project_root), str(tests_root), str(tmp_pickle_path)],
             **run_kwargs,
         )
     try:
@@ -863,6 +857,7 @@ def process_test_files(
                 continue
             try:
                 from codeflash.code_utils.compat import get_jedi_environment
+
                 jedi_env = get_jedi_environment()
                 logger.debug(f"process_test_files using Jedi environment: {jedi_env}")
 
@@ -931,7 +926,9 @@ def process_test_files(
                                 and f".{matched_name}." in def_name.full_name
                             ):
                                 for function in functions_to_search:
-                                    (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
+                                    (is_parameterized, new_function, parameters) = discover_parameters_unittest(
+                                        function
+                                    )
 
                                     if is_parameterized and new_function == def_name.name:
                                         test_functions.add(

@@ -1131,6 +1131,7 @@ def find_specific_function_in_file(
     """
     try:
         from codeflash.code_utils.compat import get_jedi_environment
+
         jedi_env = get_jedi_environment()
         logger.debug(f"find_specific_function_in_file using Jedi environment: {jedi_env}")
 
@@ -1165,14 +1166,12 @@ def get_fn_references_jedi(
     )
     try:
         from codeflash.code_utils.compat import get_jedi_environment
+
         jedi_env = get_jedi_environment()
         logger.debug(f"get_fn_references_jedi using Jedi environment: {jedi_env}")
 
         script = jedi.Script(
-            code=source_code,
-            path=file_path,
-            project=jedi.Project(path=project_root),
-            environment=jedi_env
+            code=source_code, path=file_path, project=jedi.Project(path=project_root), environment=jedi_env
         )
         # Get references to the function
         references = script.get_references(line=function_position.line_no, column=function_position.col_no)
