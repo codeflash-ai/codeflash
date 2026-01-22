@@ -2428,13 +2428,20 @@ class FunctionOptimizer:
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
             )
             return TestResults(), None
-        if run_result.returncode != 0 and testing_type == TestingMode.BEHAVIOR:
-            logger.debug(
-                f"!lsp|Nonzero return code {run_result.returncode} when running tests in "
-                f"{', '.join([str(f.instrumented_behavior_file_path) for f in test_files.test_files])}.\n"
-                f"stdout: {run_result.stdout}\n"
-                f"stderr: {run_result.stderr}\n"
+        if run_result.returncode != 0 and testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
+            test_file_paths = (
+                [str(f.instrumented_behavior_file_path) for f in test_files.test_files]
+                if testing_type == TestingMode.BEHAVIOR
+                else [str(f.benchmarking_file_path) for f in test_files.test_files]
             )
+            logger.warning(
+                f"Nonzero return code {run_result.returncode} running {testing_type.value} tests in "
+                f"{', '.join(test_file_paths)}"
+            )
+            if run_result.stdout:
+                logger.debug(f"Subprocess stdout: {run_result.stdout}")
+            if run_result.stderr:
+                logger.debug(f"Subprocess stderr: {run_result.stderr}")
 
             unique_errors = extract_unique_errors(run_result.stdout)
 
