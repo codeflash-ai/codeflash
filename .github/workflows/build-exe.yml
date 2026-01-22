@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - compile
     paths:
       - 'codeflash/**'
       - '.github/workflows/build-exe.yml'
