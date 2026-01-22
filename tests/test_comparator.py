@@ -17,7 +17,7 @@ import pytest
 
 from codeflash.either import Failure, Success
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
-from codeflash.verification.comparator import comparator
+from codeflash.verification.comparator import comparator, _extract_exception_from_message, _get_wrapped_exception
 from codeflash.verification.equivalence import compare_test_results
 
 
@@ -1679,6 +1679,313 @@ def test_exceptions_comparator():
     module2 = ast.parse(code2)
 
     assert not comparator(module7, module2)
+
+
+def test_torch_runtime_error_wrapping():
+    """Test that TorchRuntimeError wrapping is handled correctly.
+
+    When torch.compile is used, exceptions are wrapped in TorchRuntimeError.
+    The comparator should consider an IndexError equivalent to a TorchRuntimeError
+    that wraps an IndexError.
+    """
+    # Create a mock TorchRuntimeError class that mimics torch._dynamo.exc.TorchRuntimeError
+    class TorchRuntimeError(Exception):
+        """Mock TorchRuntimeError for testing."""
+
+        pass
+
+    # Monkey-patch the __module__ to match torch._dynamo.exc
+    TorchRuntimeError.__module__ = "torch._dynamo.exc"
+
+    # Test 1: TorchRuntimeError with __cause__ set to the same exception type
+    index_error = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    torch_error = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    torch_error.__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+
+    # These should be considered equivalent since TorchRuntimeError wraps IndexError
+    assert comparator(index_error, torch_error)
+    assert comparator(torch_error, index_error)
+
+    # Test 2: TorchRuntimeError without __cause__ but with matching error type in message
+    torch_error_no_cause = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    assert comparator(index_error, torch_error_no_cause)
+    assert comparator(torch_error_no_cause, index_error)
+
+    # Test 3: Different exception types should not be equivalent
+    value_error = ValueError("some value error")
+    torch_error_index = TorchRuntimeError("got IndexError('some error')")
+    torch_error_index.__cause__ = IndexError("some error")
+    assert not comparator(value_error, torch_error_index)
+    assert not comparator(torch_error_index, value_error)
+
+    # Test 4: TorchRuntimeError wrapping a different type should not match
+    type_error = TypeError("some type error")
+    torch_error_with_index = TorchRuntimeError("got IndexError('index error')")
+    torch_error_with_index.__cause__ = IndexError("index error")
+    assert not comparator(type_error, torch_error_with_index)
+
+    # Test 5: Two TorchRuntimeErrors wrapping the same exception type
+    torch_error1 = TorchRuntimeError("got IndexError('error 1')")
+    torch_error1.__cause__ = IndexError("error 1")
+    torch_error2 = TorchRuntimeError("got IndexError('error 2')")
+    torch_error2.__cause__ = IndexError("error 2")
+    assert comparator(torch_error1, torch_error2)
+
+    # Test 6: Regular exception comparison still works
+    error1 = IndexError("same error")
+    error2 = IndexError("same error")
+    assert comparator(error1, error2)
+
+    # Test 7: Exception wrapped in tuple (return value scenario from debug output)
+    orig_return = (
+        ("tensor1", "tensor2"),
+        {},
+        IndexError("index 0 is out of bounds for dimension 0 with size 0"),
+    )
+    torch_wrapped_return = (
+        ("tensor1", "tensor2"),
+        {},
+        TorchRuntimeError("Dynamo failed: got IndexError('index 0 is out of bounds for dimension 0 with size 0')"),
+    )
+    torch_wrapped_return[2].__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    assert comparator(orig_return, torch_wrapped_return)
+
+
+def test_extract_exception_from_message():
+    """Test the _extract_exception_from_message helper function."""
+    # Test with single-quoted message
+    result = _extract_exception_from_message("got IndexError('some error message')")
+    assert result is not None
+    assert isinstance(result, IndexError)
+
+    # Test with double-quoted message
+    result = _extract_exception_from_message('got ValueError("another error")')
+    assert result is not None
+    assert isinstance(result, ValueError)
+
+    # Test with various builtin exception types
+    for exc_name, exc_class in [
+        ("TypeError", TypeError),
+        ("KeyError", KeyError),
+        ("RuntimeError", RuntimeError),
+        ("AttributeError", AttributeError),
+        ("ZeroDivisionError", ZeroDivisionError),
+    ]:
+        result = _extract_exception_from_message(f"got {exc_name}('test')")
+        assert result is not None
+        assert isinstance(result, exc_class)
+
+    # Test with no matching pattern
+    result = _extract_exception_from_message("This is a normal error message")
+    assert result is None
+
+    # Test with non-exception class name
+    result = _extract_exception_from_message("got SomeRandomClass('not an exception')")
+    assert result is None
+
+    # Test with partial match (no opening quote)
+    result = _extract_exception_from_message("got IndexError without quotes")
+    assert result is None
+
+    # Test with empty string
+    result = _extract_exception_from_message("")
+    assert result is None
+
+    # Test with torch-like error message format
+    result = _extract_exception_from_message(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds for dimension 0 with size 0')"
+    )
+    assert result is not None
+    assert isinstance(result, IndexError)
+
+
+def test_get_wrapped_exception():
+    """Test the _get_wrapped_exception helper function."""
+    # Test with __cause__ (explicit chaining)
+    inner_error = ValueError("inner error")
+    outer_error = RuntimeError("outer error")
+    outer_error.__cause__ = inner_error
+    result = _get_wrapped_exception(outer_error)
+    assert result is inner_error
+
+    # Test with no wrapping
+    plain_error = ValueError("plain error")
+    result = _get_wrapped_exception(plain_error)
+    assert result is None
+
+    # Test with message pattern
+    error_with_pattern = RuntimeError("got TypeError('some type error')")
+    result = _get_wrapped_exception(error_with_pattern)
+    assert result is not None
+    assert isinstance(result, TypeError)
+
+    # Test that __cause__ takes precedence over message pattern
+    actual_cause = IndexError("actual cause")
+    error_with_both = RuntimeError("got TypeError('different error in message')")
+    error_with_both.__cause__ = actual_cause
+    result = _get_wrapped_exception(error_with_both)
+    assert result is actual_cause
+    assert isinstance(result, IndexError)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_get_wrapped_exception_exception_group():
+    """Test _get_wrapped_exception with ExceptionGroup (Python 3.11+)."""
+    # ExceptionGroup with single exception
+    inner_error = ValueError("single inner error")
+    group = ExceptionGroup("group", [inner_error])
+    result = _get_wrapped_exception(group)
+    assert result is inner_error
+
+    # ExceptionGroup with multiple exceptions - should return None
+    error1 = ValueError("error 1")
+    error2 = TypeError("error 2")
+    multi_group = ExceptionGroup("multi group", [error1, error2])
+    result = _get_wrapped_exception(multi_group)
+    assert result is None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_comparator_with_exception_group():
+    """Test comparator with ExceptionGroup wrapping (Python 3.11+)."""
+    # ExceptionGroup wrapping a single ValueError should match a plain ValueError
+    inner_value_error = ValueError("some value error")
+    group = ExceptionGroup("group", [inner_value_error])
+
+    plain_value_error = ValueError("different message but same type")
+    assert comparator(group, plain_value_error)
+    assert comparator(plain_value_error, group)
+
+    # ExceptionGroup with different exception type should not match
+    inner_type_error = TypeError("type error")
+    type_group = ExceptionGroup("group", [inner_type_error])
+    assert not comparator(type_group, plain_value_error)
+
+    # Two ExceptionGroups with same wrapped type should match
+    group1 = ExceptionGroup("group1", [ValueError("error 1")])
+    group2 = ExceptionGroup("group2", [ValueError("error 2")])
+    assert comparator(group1, group2)
+
+
+def test_comparator_with_cause_chaining():
+    """Test comparator with __cause__ exception chaining."""
+    # Create an exception chain using 'raise from'
+    inner = IndexError("inner index error")
+    outer = RuntimeError("outer runtime error")
+    outer.__cause__ = inner
+
+    # Outer exception should match the inner exception type
+    plain_index_error = IndexError("different index error")
+    assert comparator(outer, plain_index_error)
+    assert comparator(plain_index_error, outer)
+
+    # Should not match a different type
+    plain_type_error = TypeError("type error")
+    assert not comparator(outer, plain_type_error)
+
+    # Two chained exceptions with same wrapper type match (regardless of inner type)
+    # because same-type exceptions compare non-private attributes only (__cause__ is ignored)
+    outer1 = RuntimeError("outer 1")
+    outer1.__cause__ = ValueError("inner 1")
+    outer2 = RuntimeError("outer 2")
+    outer2.__cause__ = ValueError("inner 2")
+    assert comparator(outer1, outer2)
+
+    # Different wrapper types with same inner type - unwrapping makes them match
+    class WrapperA(Exception):
+        pass
+
+    class WrapperB(Exception):
+        pass
+
+    wrapper_a = WrapperA("wrapper a")
+    wrapper_a.__cause__ = KeyError("same inner type")
+    wrapper_b = WrapperB("wrapper b")
+    wrapper_b.__cause__ = KeyError("same inner type")
+    # Both unwrap to KeyError, so they should match
+    assert comparator(wrapper_a, wrapper_b)
+
+    # Different wrapper types with different inner types should not match
+    wrapper_c = WrapperA("wrapper c")
+    wrapper_c.__cause__ = ValueError("value error")
+    wrapper_d = WrapperB("wrapper d")
+    wrapper_d.__cause__ = TypeError("type error")
+    assert not comparator(wrapper_c, wrapper_d)
+
+
+def test_comparator_with_message_pattern():
+    """Test comparator with exception type extracted from message pattern."""
+    # Exception with wrapped type in message (no __cause__)
+    wrapper = RuntimeError("Operation failed: got IndexError('list index out of range')")
+
+    plain_index = IndexError("some index error")
+    assert comparator(wrapper, plain_index)
+    assert comparator(plain_index, wrapper)
+
+    # Should not match different types
+    plain_key = KeyError("some key error")
+    assert not comparator(wrapper, plain_key)
+
+
+def test_comparator_wrapped_exceptions_bidirectional():
+    """Test that wrapped exception comparison works in both directions."""
+
+    class CustomWrapper(Exception):
+        pass
+
+    # Create wrapper with __cause__
+    inner = AttributeError("attr error")
+    wrapper = CustomWrapper("wrapper message")
+    wrapper.__cause__ = inner
+
+    plain_attr = AttributeError("plain attr error")
+
+    # Test both directions
+    assert comparator(wrapper, plain_attr)
+    assert comparator(plain_attr, wrapper)
+
+    # Test with superset_obj flag
+    assert comparator(wrapper, plain_attr, superset_obj=True)
+    assert comparator(plain_attr, wrapper, superset_obj=True)
+
+
+def test_comparator_same_type_exceptions_still_work():
+    """Ensure that same-type exception comparison still works correctly."""
+    exc1 = ValueError("message 1")
+    exc2 = ValueError("message 2")
+    assert comparator(exc1, exc2)
+
+    # With custom attributes
+    class CustomError(Exception):
+        def __init__(self, msg, code):
+            super().__init__(msg)
+            self.code = code
+
+    custom1 = CustomError("msg1", 100)
+    custom2 = CustomError("msg2", 100)
+    assert comparator(custom1, custom2)
+
+    custom3 = CustomError("msg3", 200)
+    assert not comparator(custom1, custom3)
+
+
+def test_comparator_no_false_positives_for_wrapped_exceptions():
+    """Test that unrelated exception types don't match due to wrapping logic."""
+    # Two completely different exception types should never match
+    val_err = ValueError("value error")
+    type_err = TypeError("type error")
+    assert not comparator(val_err, type_err)
+
+    # Wrapper with different inner type should not match
+    wrapper = RuntimeError("some error")
+    wrapper.__cause__ = KeyError("key error")
+    assert not comparator(wrapper, val_err)
+    assert not comparator(val_err, wrapper)
+
 
 def test_collections() -> None:
     # Deque
