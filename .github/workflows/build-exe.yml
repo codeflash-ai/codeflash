@@ -1,4 +1,4 @@
-name: Build PyInstaller Executable
+name: Build Executable
 
 on:
   workflow_dispatch:
