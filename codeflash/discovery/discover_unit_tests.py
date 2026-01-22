@@ -863,18 +863,32 @@ def process_test_files(
                 continue
             try:
                 from codeflash.code_utils.compat import get_jedi_environment
-                script = jedi.Script(path=test_file, project=jedi_project, environment=get_jedi_environment())
+                jedi_env = get_jedi_environment()
+                logger.debug(f"process_test_files using Jedi environment: {jedi_env}")
+
+                script = jedi.Script(path=test_file, project=jedi_project, environment=jedi_env)
                 test_functions = set()
 
                 all_names = script.get_names(all_scopes=True, references=True)
                 all_defs = script.get_names(all_scopes=True, definitions=True)
                 all_names_top = script.get_names(all_scopes=True)
 
-                top_level_functions = {name.name: name for name in all_names_top if name.type == "function"}
-                top_level_classes = {name.name: name for name in all_names_top if name.type == "class"}
+                logger.debug(f"Processing {len(all_names_top)} top-level names in {test_file}")
+
+                top_level_functions = {}
+                top_level_classes = {}
+                for name in all_names_top:
+                    try:
+                        if name.type == "function":
+                            top_level_functions[name.name] = name
+                        elif name.type == "class":
+                            top_level_classes[name.name] = name
+                    except Exception as e:
+                        logger.warning(f"Error accessing name.type for {name.name} in {test_file}: {e}")
+                        continue
 
             except Exception as e:
-                logger.debug(f"Failed to get jedi script for {test_file}: {e}")
+                logger.warning(f"Failed to get jedi script for {test_file}: {e}", exc_info=True)
                 progress.advance(task_id)
                 continue
 
@@ -910,32 +924,36 @@ def process_test_files(
                 matching_names = test_suites & top_level_classes.keys()
                 for matched_name in matching_names:
                     for def_name in all_defs:
-                        if (
-                            def_name.type == "function"
-                            and def_name.full_name is not None
-                            and f".{matched_name}." in def_name.full_name
-                        ):
-                            for function in functions_to_search:
-                                (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
+                        try:
+                            if (
+                                def_name.type == "function"
+                                and def_name.full_name is not None
+                                and f".{matched_name}." in def_name.full_name
+                            ):
+                                for function in functions_to_search:
+                                    (is_parameterized, new_function, parameters) = discover_parameters_unittest(function)
 
-                                if is_parameterized and new_function == def_name.name:
-                                    test_functions.add(
-                                        TestFunction(
-                                            function_name=def_name.name,
-                                            test_class=matched_name,
-                                            parameters=parameters,
-                                            test_type=functions[0].test_type,
+                                    if is_parameterized and new_function == def_name.name:
+                                        test_functions.add(
+                                            TestFunction(
+                                                function_name=def_name.name,
+                                                test_class=matched_name,
+                                                parameters=parameters,
+                                                test_type=functions[0].test_type,
+                                            )
                                         )
-                                    )
-                                elif function == def_name.name:
-                                    test_functions.add(
-                                        TestFunction(
-                                            function_name=def_name.name,
-                                            test_class=matched_name,
-                                            parameters=None,
-                                            test_type=functions[0].test_type,
+                                    elif function == def_name.name:
+                                        test_functions.add(
+                                            TestFunction(
+                                                function_name=def_name.name,
+                                                test_class=matched_name,
+                                                parameters=None,
+                                                test_type=functions[0].test_type,
+                                            )
                                         )
-                                    )
+                        except Exception as e:
+                            logger.warning(f"Error accessing def_name.type in unittest discovery: {e}")
+                            continue
 
             test_functions_by_name = defaultdict(list)
             for func in test_functions:

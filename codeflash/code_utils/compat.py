@@ -111,9 +111,36 @@ def get_jedi_environment() -> "InterpreterEnvironment | None":
         from jedi.api.environment import InterpreterEnvironment
 
         from codeflash.cli_cmds.console import logger
-        logger.debug("Using Jedi InterpreterEnvironment for compiled/bundled binary")
-        return InterpreterEnvironment()
+
+        logger.warning("Creating Jedi InterpreterEnvironment for compiled/bundled binary")
+        logger.warning(f"sys.executable: {sys.executable}")
+        logger.warning(f"sys.prefix: {sys.prefix}")
+
+        # Check if jedi typeshed exists
+        try:
+            import jedi
+            jedi_path = Path(jedi.__file__).parent
+            typeshed_path = jedi_path / "third_party" / "typeshed"
+            logger.warning(f"Jedi package location: {jedi_path}")
+            logger.warning(f"Typeshed path exists: {typeshed_path.exists()}")
+            if typeshed_path.exists():
+                stdlib_path = typeshed_path / "stdlib"
+                logger.warning(f"Typeshed stdlib exists: {stdlib_path.exists()}")
+                if stdlib_path.exists():
+                    # List first few items to verify
+                    items = list(stdlib_path.iterdir())[:5]
+                    logger.warning(f"First few stdlib items: {[str(p.name) for p in items]}")
+        except Exception as e:
+            logger.warning(f"Error checking typeshed location: {e}")
+
+        env = InterpreterEnvironment()
+        logger.warning(f"InterpreterEnvironment created with sys_path: {env.get_sys_path()[:3]}...")
+        return env
     except (ImportError, AttributeError) as e:
         from codeflash.cli_cmds.console import logger
         logger.warning(f"Could not import InterpreterEnvironment, falling back to default: {e}")
+        return None
+    except Exception as e:
+        from codeflash.cli_cmds.console import logger
+        logger.warning(f"Error creating InterpreterEnvironment: {e}", exc_info=True)
         return None

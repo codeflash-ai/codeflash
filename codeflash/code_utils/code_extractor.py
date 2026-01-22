@@ -1129,19 +1129,29 @@ def find_specific_function_in_file(
         Tuple of (line_number, column_offset) if found, None otherwise
 
     """
-    from codeflash.code_utils.compat import get_jedi_environment
-    script = jedi.Script(code=source_code, path=filepath, environment=get_jedi_environment())
-    names = script.get_names(all_scopes=True, definitions=True)
-    for name in names:
-        if name.type == "function" and name.name == target_function:
-            # If class name specified, check parent
-            if target_class:
-                parent = name.parent()
-                if parent and parent.name == target_class and parent.type == "class":
-                    return CodePosition(line_no=name.line, col_no=name.column)
-            else:
-                # Top-level function match
-                return CodePosition(line_no=name.line, col_no=name.column)
+    try:
+        from codeflash.code_utils.compat import get_jedi_environment
+        jedi_env = get_jedi_environment()
+        logger.debug(f"find_specific_function_in_file using Jedi environment: {jedi_env}")
+
+        script = jedi.Script(code=source_code, path=filepath, environment=jedi_env)
+        names = script.get_names(all_scopes=True, definitions=True)
+        for name in names:
+            try:
+                if name.type == "function" and name.name == target_function:
+                    # If class name specified, check parent
+                    if target_class:
+                        parent = name.parent()
+                        if parent and parent.name == target_class and parent.type == "class":
+                            return CodePosition(line_no=name.line, col_no=name.column)
+                    else:
+                        # Top-level function match
+                        return CodePosition(line_no=name.line, col_no=name.column)
+            except Exception as e:
+                logger.warning(f"Error accessing name.type in find_specific_function_in_file: {e}")
+                continue
+    except Exception as e:
+        logger.warning(f"Jedi operation failed in find_specific_function_in_file: {e}", exc_info=True)
 
     return None  # Function not found
 
@@ -1155,11 +1165,14 @@ def get_fn_references_jedi(
     )
     try:
         from codeflash.code_utils.compat import get_jedi_environment
+        jedi_env = get_jedi_environment()
+        logger.debug(f"get_fn_references_jedi using Jedi environment: {jedi_env}")
+
         script = jedi.Script(
             code=source_code,
             path=file_path,
             project=jedi.Project(path=project_root),
-            environment=get_jedi_environment()
+            environment=jedi_env
         )
         # Get references to the function
         references = script.get_references(line=function_position.line_no, column=function_position.col_no)
@@ -1176,7 +1189,7 @@ def get_fn_references_jedi(
                     reference_files.add(ref_path)
         return sorted(reference_files)
     except Exception as e:
-        print(f"Error during Jedi analysis: {e}")
+        logger.warning(f"Error during Jedi analysis in get_fn_references_jedi: {e}", exc_info=True)
         return []
 
 

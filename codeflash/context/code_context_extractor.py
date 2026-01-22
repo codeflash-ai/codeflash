@@ -416,37 +416,46 @@ def get_function_to_optimize_as_function_source(
 
     from codeflash.code_utils.compat import get_jedi_environment
 
-    # Use jedi to find function to optimize
-    script = jedi.Script(
-        path=function_to_optimize.file_path,
-        project=jedi.Project(path=project_root_path),
-        environment=get_jedi_environment()
-    )
+    try:
+        # Use jedi to find function to optimize
+        jedi_env = get_jedi_environment()
+        logger.warning(f"Using Jedi environment: {jedi_env}")
 
-    # Get all names in the file
-    names = script.get_names(all_scopes=True, definitions=True, references=False)
+        script = jedi.Script(
+            path=function_to_optimize.file_path,
+            project=jedi.Project(path=project_root_path),
+            environment=jedi_env
+        )
 
-    # Find the name that matches our function
-    for name in names:
-        try:
-            if (
-                name.type == "function"
-                and name.full_name
-                and name.name == function_to_optimize.function_name
-                and name.full_name.startswith(name.module_name)
-                and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
-            ):
-                return FunctionSource(
-                    file_path=function_to_optimize.file_path,
-                    qualified_name=function_to_optimize.qualified_name,
-                    fully_qualified_name=name.full_name,
-                    only_function_name=name.name,
-                    source_code=name.get_line_code(),
-                    jedi_definition=name,
-                )
-        except Exception as e:
-            logger.exception(f"Error while getting function source: {e}")
-            continue
+        # Get all names in the file
+        names = script.get_names(all_scopes=True, definitions=True, references=False)
+        logger.warning(f"Jedi found {len(names)} names in {function_to_optimize.file_path}")
+
+        # Find the name that matches our function
+        for name in names:
+            try:
+                if (
+                    name.type == "function"
+                    and name.full_name
+                    and name.name == function_to_optimize.function_name
+                    and name.full_name.startswith(name.module_name)
+                    and get_qualified_name(name.module_name, name.full_name) == function_to_optimize.qualified_name
+                ):
+                    return FunctionSource(
+                        file_path=function_to_optimize.file_path,
+                        qualified_name=function_to_optimize.qualified_name,
+                        fully_qualified_name=name.full_name,
+                        only_function_name=name.name,
+                        source_code=name.get_line_code(),
+                        jedi_definition=name,
+                    )
+            except Exception as e:
+                logger.warning(f"Error checking name.type for {name.name}: {e}")
+                continue
+    except Exception as e:
+        logger.warning(f"Jedi operation failed in get_function_to_optimize_as_function_source: {e}", exc_info=True)
+        # Fall through to raise ValueError
+
     raise ValueError(
         f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"  # noqa: EM102
     )
@@ -461,71 +470,83 @@ def get_function_sources_from_jedi(
 
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
+
+    jedi_env = get_jedi_environment()
+    logger.warning(f"get_function_sources_from_jedi using Jedi environment: {jedi_env}")
+
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(
-            path=file_path,
-            project=jedi.Project(path=project_root_path),
-            environment=get_jedi_environment()
-        )
-        file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
+        try:
+            script = jedi.Script(
+                path=file_path,
+                project=jedi.Project(path=project_root_path),
+                environment=jedi_env
+            )
+            file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
-        for qualified_function_name in qualified_function_names:
-            names = [
-                ref
-                for ref in file_refs
-                if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
-            ]
-            for name in names:
-                try:
-                    definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
-                except Exception:
-                    logger.debug(f"Error while getting definitions for {qualified_function_name}")
-                    definitions = []
-                if definitions:
-                    # TODO: there can be multiple definitions, see how to handle such cases
-                    definition = definitions[0]
-                    definition_path = definition.module_path
+            for qualified_function_name in qualified_function_names:
+                names = [
+                    ref
+                    for ref in file_refs
+                    if ref.full_name and belongs_to_function_qualified(ref, qualified_function_name)
+                ]
+                for name in names:
+                    try:
+                        definitions: list[Name] = name.goto(follow_imports=True, follow_builtin_imports=False)
+                    except Exception:
+                        logger.debug(f"Error while getting definitions for {qualified_function_name}")
+                        definitions = []
+                    if definitions:
+                        try:
+                            # TODO: there can be multiple definitions, see how to handle such cases
+                            definition = definitions[0]
+                            definition_path = definition.module_path
 
-                    # The definition is part of this project and not defined within the original function
-                    is_valid_definition = (
-                        str(definition_path).startswith(str(project_root_path) + os.sep)
-                        and not path_belongs_to_site_packages(definition_path)
-                        and definition.full_name
-                        and not belongs_to_function_qualified(definition, qualified_function_name)
-                        and definition.full_name.startswith(definition.module_name)
-                    )
-                    if is_valid_definition and definition.type == "function":
-                        qualified_name = get_qualified_name(definition.module_name, definition.full_name)
-                        # Avoid nested functions or classes. Only class.function is allowed
-                        if len(qualified_name.split(".")) <= 2:
-                            function_source = FunctionSource(
-                                file_path=definition_path,
-                                qualified_name=qualified_name,
-                                fully_qualified_name=definition.full_name,
-                                only_function_name=definition.name,
-                                source_code=definition.get_line_code(),
-                                jedi_definition=definition,
+                            # The definition is part of this project and not defined within the original function
+                            is_valid_definition = (
+                                str(definition_path).startswith(str(project_root_path) + os.sep)
+                                and not path_belongs_to_site_packages(definition_path)
+                                and definition.full_name
+                                and not belongs_to_function_qualified(definition, qualified_function_name)
+                                and definition.full_name.startswith(definition.module_name)
                             )
-                            file_path_to_function_source[definition_path].add(function_source)
-                            function_source_list.append(function_source)
-                    # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
-                    # This ensures the class definition with constructor is included in testgen context
-                    elif is_valid_definition and definition.type == "class":
-                        init_qualified_name = get_qualified_name(
-                            definition.module_name, f"{definition.full_name}.__init__"
-                        )
-                        # Only include if it's a top-level class (not nested)
-                        if len(init_qualified_name.split(".")) <= 2:
-                            function_source = FunctionSource(
-                                file_path=definition_path,
-                                qualified_name=init_qualified_name,
-                                fully_qualified_name=f"{definition.full_name}.__init__",
-                                only_function_name="__init__",
-                                source_code=definition.get_line_code(),
-                                jedi_definition=definition,
-                            )
-                            file_path_to_function_source[definition_path].add(function_source)
-                            function_source_list.append(function_source)
+                            if is_valid_definition and definition.type == "function":
+                                qualified_name = get_qualified_name(definition.module_name, definition.full_name)
+                                # Avoid nested functions or classes. Only class.function is allowed
+                                if len(qualified_name.split(".")) <= 2:
+                                    function_source = FunctionSource(
+                                        file_path=definition_path,
+                                        qualified_name=qualified_name,
+                                        fully_qualified_name=definition.full_name,
+                                        only_function_name=definition.name,
+                                        source_code=definition.get_line_code(),
+                                        jedi_definition=definition,
+                                    )
+                                    file_path_to_function_source[definition_path].add(function_source)
+                                    function_source_list.append(function_source)
+                            # When a class is instantiated (e.g., MyClass()), track its __init__ as a helper
+                            # This ensures the class definition with constructor is included in testgen context
+                            elif is_valid_definition and definition.type == "class":
+                                init_qualified_name = get_qualified_name(
+                                    definition.module_name, f"{definition.full_name}.__init__"
+                                )
+                                # Only include if it's a top-level class (not nested)
+                                if len(init_qualified_name.split(".")) <= 2:
+                                    function_source = FunctionSource(
+                                        file_path=definition_path,
+                                        qualified_name=init_qualified_name,
+                                        fully_qualified_name=f"{definition.full_name}.__init__",
+                                        only_function_name="__init__",
+                                        source_code=definition.get_line_code(),
+                                        jedi_definition=definition,
+                                    )
+                                    file_path_to_function_source[definition_path].add(function_source)
+                                    function_source_list.append(function_source)
+                        except Exception as e:
+                            logger.warning(f"Error accessing definition.type for {qualified_function_name}: {e}")
+                            continue
+        except Exception as e:
+            logger.warning(f"Jedi operation failed for {file_path}: {e}", exc_info=True)
+            continue
 
     return file_path_to_function_source, function_source_list
 
