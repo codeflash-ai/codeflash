@@ -603,12 +603,16 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
 
             for node in ast.walk(module_tree):
                 if isinstance(node, ast.ClassDef) and node.name == name:
-                    # Extract the class source code
+                    # Extract the class source code, including decorators
                     lines = module_source.split("\n")
-                    class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+                    # Decorators start before the class line, use first decorator line if present
+                    start_line = node.lineno
+                    if node.decorator_list:
+                        start_line = min(d.lineno for d in node.decorator_list)
+                    class_source = "\n".join(lines[start_line - 1 : node.end_lineno])
 
                     # Also extract any necessary imports for the class (base classes, type hints)
-                    class_imports = _extract_imports_for_class(module_tree, node, module_source)
+                    class_imports = extract_imports_for_class(module_tree, node, module_source)
 
                     full_source = class_imports + "\n\n" + class_source if class_imports else class_source
 
@@ -623,10 +627,10 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
     return CodeStringsMarkdown(code_strings=class_code_strings)
 
 
-def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
+def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
     """Extract import statements needed for a class definition.
 
-    This extracts imports for base classes and commonly used type annotations.
+    This extracts imports for base classes, decorators, and type annotations.
     """
     needed_names: set[str] = set()
 
@@ -638,25 +642,63 @@ def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef
             # For things like abc.ABC, we need the module name
             needed_names.add(base.value.id)
 
+    # Get decorator names (e.g., dataclass, field)
+    for decorator in class_node.decorator_list:
+        if isinstance(decorator, ast.Name):
+            needed_names.add(decorator.id)
+        elif isinstance(decorator, ast.Call):
+            if isinstance(decorator.func, ast.Name):
+                needed_names.add(decorator.func.id)
+            elif isinstance(decorator.func, ast.Attribute) and isinstance(decorator.func.value, ast.Name):
+                needed_names.add(decorator.func.value.id)
+
+    # Get type annotation names from class body (for dataclass fields)
+    for item in ast.walk(class_node):
+        if isinstance(item, ast.AnnAssign) and item.annotation:
+            collect_names_from_annotation(item.annotation, needed_names)
+        # Also check for field() calls which are common in dataclasses
+        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
+            needed_names.add(item.func.id)
+
     # Find imports that provide these names
     import_lines: list[str] = []
     source_lines = module_source.split("\n")
+    added_imports: set[int] = set()  # Track line numbers to avoid duplicates
 
     for node in module_tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 name = alias.asname if alias.asname else alias.name.split(".")[0]
-                if name in needed_names:
+                if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
                     break
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
                 name = alias.asname if alias.asname else alias.name
-                if name in needed_names:
+                if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
                     break
 
     return "\n".join(import_lines)
+
+
+def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
+    """Recursively collect type annotation names from an AST node."""
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    elif isinstance(node, ast.Subscript):
+        collect_names_from_annotation(node.value, names)
+        collect_names_from_annotation(node.slice, names)
+    elif isinstance(node, ast.Tuple):
+        for elt in node.elts:
+            collect_names_from_annotation(elt, names)
+    elif isinstance(node, ast.BinOp):  # For Union types with | syntax
+        collect_names_from_annotation(node.left, names)
+        collect_names_from_annotation(node.right, names)
+    elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        names.add(node.value.id)
 
 
 def is_dunder_method(name: str) -> bool:
