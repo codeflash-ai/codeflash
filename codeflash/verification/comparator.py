@@ -269,6 +269,9 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         if type_name == "dict_items":
             # Convert to dict for order-insensitive comparison (handles unhashable values)
             return comparator(dict(orig), dict(new), superset_obj)
+        if type_name == "bytearray_iterator":
+            # bytearray_iterator needs element-wise comparison (order matters)
+            return comparator(list(orig), list(new))
 
         if HAS_NUMPY:
             import numpy as np  # type: ignore  # noqa: PGH003
