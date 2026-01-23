@@ -117,24 +117,45 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
         Instrumented code.
 
     """
-    # Add codeflash helper require if not already present
+    # Add codeflash helper import if not already present
     # Support both npm package (@codeflash/jest-runtime) and legacy local file (codeflash-jest-helper)
     has_codeflash_import = "@codeflash/jest-runtime" in code or "codeflash-jest-helper" in code
     if not has_codeflash_import:
-        # Find the first require/import statement to add after
-        import_match = re.search(
-            r"^((?:const|let|var|import)\s+.+?(?:require\([^)]+\)|from\s+['\"][^'\"]+['\"]).*;?\s*\n)",
-            code,
-            re.MULTILINE,
-        )
-        # Prefer npm package, fall back to local file if needed
-        helper_require = "const codeflash = require('@codeflash/jest-runtime');\n"
-        if import_match:
-            insert_pos = import_match.end()
-            code = code[:insert_pos] + helper_require + code[insert_pos:]
+        # Detect module system: ESM uses "import ... from", CommonJS uses "require()"
+        is_esm = bool(re.search(r"^\s*import\s+.+\s+from\s+['\"]", code, re.MULTILINE))
+
+        if is_esm:
+            # ESM: Use import statement at the top of the file (after any other imports)
+            helper_import = "import codeflash from '@codeflash/jest-runtime';\n"
+            # Find the last import statement to add after
+            import_matches = list(re.finditer(
+                r"^import\s+.+\s+from\s+['\"][^'\"]+['\"]\s*;?\s*\n",
+                code,
+                re.MULTILINE,
+            ))
+            if import_matches:
+                # Add after the last import
+                last_import = import_matches[-1]
+                insert_pos = last_import.end()
+                code = code[:insert_pos] + helper_import + code[insert_pos:]
+            else:
+                # No imports found, add at beginning
+                code = helper_import + "\n" + code
         else:
-            # Add at the beginning if no imports found
-            code = helper_require + "\n" + code
+            # CommonJS: Use require statement
+            helper_require = "const codeflash = require('@codeflash/jest-runtime');\n"
+            # Find the first require statement to add after
+            import_match = re.search(
+                r"^((?:const|let|var)\s+.+?require\([^)]+\).*;?\s*\n)",
+                code,
+                re.MULTILINE,
+            )
+            if import_match:
+                insert_pos = import_match.end()
+                code = code[:insert_pos] + helper_require + code[insert_pos:]
+            else:
+                # Add at the beginning if no requires found
+                code = helper_require + "\n" + code
 
     # Choose capture function based on mode
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"

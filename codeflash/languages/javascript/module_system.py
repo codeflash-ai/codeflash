@@ -164,3 +164,152 @@ def _get_relative_import_path(target_path: Path, source_path: Path) -> str:
         rel_path_str = "./" + rel_path_str
 
     return rel_path_str
+
+
+def convert_commonjs_to_esm(code: str) -> str:
+    """Convert CommonJS require statements to ES Module imports.
+
+    Converts:
+        const { foo, bar } = require('./module');  ->  import { foo, bar } from './module';
+        const foo = require('./module');           ->  import foo from './module';
+        const foo = require('./module').default;   ->  import foo from './module';
+
+    Special handling:
+        - Local codeflash helper (./codeflash-jest-helper) is converted to npm package @codeflash/jest-runtime
+          because the local helper uses CommonJS exports which don't work in ESM projects
+
+    Args:
+        code: JavaScript code with CommonJS require statements.
+
+    Returns:
+        Code with ES Module import statements.
+
+    """
+    import re
+
+    # Pattern for destructured require: const { a, b } = require('...')
+    destructured_require = re.compile(
+        r"(const|let|var)\s+\{\s*([^}]+)\s*\}\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*;?"
+    )
+
+    # Pattern for simple require: const foo = require('...')
+    simple_require = re.compile(
+        r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)(?:\.default)?\s*;?"
+    )
+
+    def normalize_module_path(module_path: str) -> str:
+        """Normalize module path, converting local codeflash helper to npm package."""
+        # Convert local codeflash helper to npm package for ESM compatibility
+        # The local helper uses CommonJS exports which don't work in ESM projects
+        if "codeflash-jest-helper" in module_path:
+            logger.debug(f"Converting local codeflash helper '{module_path}' to npm package '@codeflash/jest-runtime'")
+            return "@codeflash/jest-runtime"
+        return module_path
+
+    # Replace destructured requires with named imports
+    def replace_destructured(match):
+        names = match.group(2).strip()
+        module_path = normalize_module_path(match.group(3))
+        # ESM needs .js extension for relative imports in Node.js
+        if module_path.startswith("./") or module_path.startswith("../"):
+            if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
+                module_path = module_path + ".js"
+        return f"import {{ {names} }} from '{module_path}';"
+
+    # Replace simple requires with default imports
+    def replace_simple(match):
+        name = match.group(2)
+        module_path = normalize_module_path(match.group(3))
+        # ESM needs .js extension for relative imports in Node.js
+        if module_path.startswith("./") or module_path.startswith("../"):
+            if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
+                module_path = module_path + ".js"
+        return f"import {name} from '{module_path}';"
+
+    # Apply conversions (destructured first as it's more specific)
+    code = destructured_require.sub(replace_destructured, code)
+    code = simple_require.sub(replace_simple, code)
+
+    return code
+
+
+def convert_esm_to_commonjs(code: str) -> str:
+    """Convert ES Module imports to CommonJS require statements.
+
+    Converts:
+        import { foo, bar } from './module';  ->  const { foo, bar } = require('./module');
+        import foo from './module';           ->  const foo = require('./module');
+
+    Args:
+        code: JavaScript code with ES Module import statements.
+
+    Returns:
+        Code with CommonJS require statements.
+
+    """
+    import re
+
+    # Pattern for named import: import { a, b } from '...'
+    named_import = re.compile(
+        r"import\s+\{\s*([^}]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"]"
+    )
+
+    # Pattern for default import: import foo from '...'
+    default_import = re.compile(
+        r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]"
+    )
+
+    # Replace named imports with destructured requires
+    def replace_named(match):
+        names = match.group(1).strip()
+        module_path = match.group(2)
+        # Remove .js extension for CommonJS (optional but cleaner)
+        module_path = module_path.removesuffix(".js")
+        return f"const {{ {names} }} = require('{module_path}');"
+
+    # Replace default imports with simple requires
+    def replace_default(match):
+        name = match.group(1)
+        module_path = match.group(2)
+        # Remove .js extension for CommonJS
+        module_path = module_path.removesuffix(".js")
+        return f"const {name} = require('{module_path}');"
+
+    # Apply conversions (named first as it's more specific)
+    code = named_import.sub(replace_named, code)
+    code = default_import.sub(replace_default, code)
+
+    return code
+
+
+def ensure_module_system_compatibility(code: str, target_module_system: str) -> str:
+    """Ensure code uses the correct module system syntax.
+
+    Detects the current module system in the code and converts if needed.
+    Handles mixed-style code (e.g., ESM imports with CommonJS require for npm packages).
+
+    Args:
+        code: JavaScript code to check and potentially convert.
+        target_module_system: Target ModuleSystem (COMMONJS or ES_MODULE).
+
+    Returns:
+        Code with correct module system syntax.
+
+    """
+    # Detect current module system in code
+    has_require = "require(" in code
+    has_import = "import " in code and "from " in code
+
+    if target_module_system == ModuleSystem.ES_MODULE:
+        # Convert any require() statements to imports for ESM projects
+        # This handles mixed code (ESM imports + CommonJS requires for npm packages)
+        if has_require:
+            logger.debug("Converting CommonJS requires to ESM imports")
+            return convert_commonjs_to_esm(code)
+    elif target_module_system == ModuleSystem.COMMONJS:
+        # Convert any import statements to requires for CommonJS projects
+        if has_import:
+            logger.debug("Converting ESM imports to CommonJS requires")
+            return convert_esm_to_commonjs(code)
+
+    return code

@@ -33,6 +33,16 @@ def generate_tests(
     #  class import. Remove the recreation of the class definition
     start_time = time.perf_counter()
     test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
+
+    # Detect module system for JavaScript/TypeScript before calling aiservice
+    project_module_system = None
+    if function_to_optimize.language in ("javascript", "typescript"):
+        from codeflash.languages.javascript.module_system import detect_module_system
+
+        source_file = Path(function_to_optimize.file_path)
+        project_module_system = detect_module_system(test_cfg.tests_project_rootdir, source_file)
+        logger.debug(f"Detected module system: {project_module_system}")
+
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
         function_to_optimize=function_to_optimize,
@@ -44,6 +54,7 @@ def generate_tests(
         trace_id=function_trace_id,
         test_index=test_index,
         language=function_to_optimize.language,
+        module_system=project_module_system,
         is_numerical_code=is_numerical_code,
     )
     if response and isinstance(response, tuple) and len(response) == 3:
@@ -60,9 +71,12 @@ def generate_tests(
         # For JavaScript/TypeScript, validate and fix import styles to match source exports
         if function_to_optimize.language in ("javascript", "typescript"):
             from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+            from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
 
             source_file = Path(function_to_optimize.file_path)
             func_name = function_to_optimize.function_name
+
+            # project_module_system already detected above before calling aiservice
 
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
             instrumented_behavior_test_source = validate_and_fix_import_style(
@@ -70,6 +84,17 @@ def generate_tests(
             )
             instrumented_perf_test_source = validate_and_fix_import_style(
                 instrumented_perf_test_source, source_file, func_name
+            )
+
+            # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
+            generated_test_source = ensure_module_system_compatibility(
+                generated_test_source, project_module_system
+            )
+            instrumented_behavior_test_source = ensure_module_system_compatibility(
+                instrumented_behavior_test_source, project_module_system
+            )
+            instrumented_perf_test_source = ensure_module_system_compatibility(
+                instrumented_perf_test_source, project_module_system
             )
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")

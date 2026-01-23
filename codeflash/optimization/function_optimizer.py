@@ -594,21 +594,9 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
-        # For non-Python languages, copy all runtime files to tests directory
-        if self.language_support is not None:
-            import shutil
-
-            # Copy all runtime files via language support
-            for runtime_file_source in self.language_support.get_runtime_files():
-                runtime_file_dest = self.test_cfg.tests_root / runtime_file_source.name
-
-                # Copy file if it doesn't exist or is outdated
-                if (
-                    not runtime_file_dest.exists()
-                    or runtime_file_source.stat().st_mtime > runtime_file_dest.stat().st_mtime
-                ):
-                    shutil.copy2(runtime_file_source, runtime_file_dest)
-                    logger.debug(f"Copied {runtime_file_source.name} to {runtime_file_dest}")
+        # Note: JavaScript/TypeScript runtime is provided by @codeflash/jest-runtime npm package
+        # which is installed automatically by test_runner.py._ensure_runtime_files()
+        # No manual file copying is needed here.
 
         test_results = self.generate_tests(
             testgen_context=code_context.testgen_context,

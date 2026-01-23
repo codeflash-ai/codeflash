@@ -6,7 +6,7 @@ verification and performance benchmarking.
 
 from __future__ import annotations
 
-import shutil
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -51,11 +51,53 @@ def _find_node_project_root(file_path: Path) -> Path | None:
     return None
 
 
+def _is_esm_project(project_root: Path) -> bool:
+    """Check if the project uses ES Modules.
+
+    Detects ESM by checking package.json for "type": "module".
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if the project uses ES Modules, False otherwise.
+
+    """
+    package_json = project_root / "package.json"
+    if package_json.exists():
+        try:
+            with package_json.open("r") as f:
+                pkg = json.load(f)
+                return pkg.get("type") == "module"
+        except Exception as e:
+            logger.debug(f"Failed to read package.json: {e}")
+    return False
+
+
+def _configure_esm_environment(jest_env: dict[str, str], project_root: Path) -> None:
+    """Configure environment variables for ES Module support in Jest.
+
+    Jest requires --experimental-vm-modules flag for ESM support.
+    This is passed via NODE_OPTIONS environment variable.
+
+    Args:
+        jest_env: Environment variables dictionary to modify.
+        project_root: The project root directory.
+
+    """
+    if _is_esm_project(project_root):
+        logger.debug("Configuring Jest for ES Module support")
+        existing_node_options = jest_env.get("NODE_OPTIONS", "")
+        esm_flag = "--experimental-vm-modules"
+        if esm_flag not in existing_node_options:
+            jest_env["NODE_OPTIONS"] = f"{existing_node_options} {esm_flag}".strip()
+
+
 def _ensure_runtime_files(project_root: Path) -> None:
     """Ensure JavaScript runtime package is installed in the project.
 
     Installs @codeflash/jest-runtime package if not already present.
-    Falls back to copying local files if npm install fails.
+    The package provides all runtime files needed for test instrumentation.
 
     Args:
         project_root: The project root directory.
@@ -85,16 +127,26 @@ def _ensure_runtime_files(project_root: Path) -> None:
         except Exception as e:
             logger.warning(f"Error installing local package: {e}")
 
-    # Fall back to copying files directly (legacy behavior)
-    logger.debug("Falling back to copying runtime files directly")
-    from codeflash.languages.javascript.runtime import get_all_runtime_files
+    # Try to install from npm registry
+    try:
+        result = subprocess.run(
+            ["npm", "install", "--save-dev", "@codeflash/jest-runtime"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            logger.debug("Installed @codeflash/jest-runtime from npm registry")
+            return
+        logger.warning(f"Failed to install from npm: {result.stderr}")
+    except Exception as e:
+        logger.warning(f"Error installing from npm: {e}")
 
-    for runtime_file in get_all_runtime_files():
-        dest_path = project_root / runtime_file.name
-        # Always copy to ensure we have the latest version
-        if not dest_path.exists() or dest_path.stat().st_mtime < runtime_file.stat().st_mtime:
-            shutil.copy2(runtime_file, dest_path)
-            logger.debug(f"Copied {runtime_file.name} to {project_root}")
+    logger.error(
+        "Could not install @codeflash/jest-runtime. "
+        "Please install it manually: npm install --save-dev @codeflash/jest-runtime"
+    )
 
 
 def run_jest_behavioral_tests(
@@ -184,6 +236,9 @@ def run_jest_behavioral_tests(
     jest_env["CODEFLASH_MODE"] = "behavior"
     # Seed random number generator for reproducible test runs across original and optimized code
     jest_env["CODEFLASH_RANDOM_SEED"] = "42"
+
+    # Configure ESM support if project uses ES Modules
+    _configure_esm_environment(jest_env, effective_cwd)
 
     logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
 
@@ -375,6 +430,9 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_TEST_ITERATION"] = "0"
     jest_env["CODEFLASH_MODE"] = "performance"
     jest_env["CODEFLASH_RANDOM_SEED"] = "42"
+
+    # Configure ESM support if project uses ES Modules
+    _configure_esm_environment(jest_env, effective_cwd)
 
     # Per-Jest-invocation timeout (not total timeout)
     subprocess_timeout = max(60, timeout or 60)
@@ -571,6 +629,9 @@ def run_jest_line_profile_tests(
     # Pass the line profile output file path to the instrumented code
     if line_profile_output_file:
         jest_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
+
+    # Configure ESM support if project uses ES Modules
+    _configure_esm_environment(jest_env, effective_cwd)
 
     subprocess_timeout = timeout or 600
 

@@ -129,6 +129,7 @@ class AiServiceClient:
         *,
         language: str = "python",
         language_version: str | None = None, # TODO:{claude} add language version to the language support and it should be cached
+        module_system: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
         is_numerical_code: bool | None = None,
@@ -143,6 +144,7 @@ class AiServiceClient:
         - experiment_metadata (Optional[ExperimentalMetadata, None]): Any available experiment metadata for this optimization
         - language (str): Programming language ("python", "javascript", "typescript")
         - language_version (str | None): Language version (e.g., "3.11.0" for Python, "ES2022" for JS)
+        - module_system (str | None): JS/TS module system ("esm", "commonjs", or None for Python)
         - is_async (bool): Whether the function being optimized is async
         - n_candidates (int): Number of candidates to generate
 
@@ -180,6 +182,9 @@ class AiServiceClient:
             pass  # python_version already set
         else:
             payload["language_version"] = language_version or "ES2022"
+            # Add module system for JavaScript/TypeScript (esm or commonjs)
+            if module_system:
+                payload["module_system"] = module_system
 
         # DEBUG: Print payload language field
         logger.debug(
@@ -720,6 +725,7 @@ class AiServiceClient:
         *,
         language: str = "python",
         language_version: str | None = None,
+        module_system: str | None = None,
         is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
@@ -736,6 +742,7 @@ class AiServiceClient:
         - test_index (int): The index from 0-(n-1) if n tests are generated for a single trace_id
         - language (str): Programming language ("python", "javascript", "typescript")
         - language_version (str | None): Language version (e.g., "3.11.0" for Python, "ES2022" for JS)
+        - module_system (str | None): JS/TS module system ("esm", "commonjs", or None for Python)
 
         Returns
         -------
@@ -778,6 +785,9 @@ class AiServiceClient:
             pass  # python_version already set
         else:
             payload["language_version"] = language_version or "ES2022"
+            # Add module system for JavaScript/TypeScript (esm or commonjs)
+            if module_system:
+                payload["module_system"] = module_system
 
         # DEBUG: Print payload language field
         logger.debug(f"Sending testgen request with language='{payload['language']}', framework='{test_framework}'")
