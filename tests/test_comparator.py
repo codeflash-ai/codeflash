@@ -17,7 +17,14 @@ import pytest
 
 from codeflash.either import Failure, Success
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
-from codeflash.verification.comparator import comparator, _extract_exception_from_message, _get_wrapped_exception
+from codeflash.verification.comparator import (
+    PYTEST_TEMP_PATH_PATTERN,
+    _extract_exception_from_message,
+    _get_wrapped_exception,
+    _is_temp_path,
+    _normalize_temp_path,
+    comparator,
+)
 from codeflash.verification.equivalence import compare_test_results
 
 
@@ -2911,15 +2918,377 @@ def test_numpy_dtypes() -> None:
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
 
 
+def test_numpy_extended_precision_types() -> None:
+    """Test comparator for numpy extended precision types like clongdouble."""
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip("numpy not available")
+
+    # Test np.clongdouble (extended precision complex)
+    c1 = np.clongdouble(1 + 2j)
+    c2 = np.clongdouble(1 + 2j)
+    c3 = np.clongdouble(1 + 3j)
+    assert comparator(c1, c2)
+    assert not comparator(c1, c3)
+
+    # Test np.longdouble (extended precision float)
+    l1 = np.longdouble(1.5)
+    l2 = np.longdouble(1.5)
+    l3 = np.longdouble(2.5)
+    assert comparator(l1, l2)
+    assert not comparator(l1, l3)
+
+    # Test NaN handling for extended precision complex
+    nan_c1 = np.clongdouble(complex(np.nan, 2))
+    nan_c2 = np.clongdouble(complex(np.nan, 2))
+    assert comparator(nan_c1, nan_c2)
+
+    # Test NaN handling for extended precision float
+    nan_l1 = np.longdouble(np.nan)
+    nan_l2 = np.longdouble(np.nan)
+    assert comparator(nan_l1, nan_l2)
+
+
+def test_numpy_typing_types() -> None:
+    """Test comparator for numpy.typing types like NDArray type aliases."""
+    try:
+        import numpy as np
+        import numpy.typing as npt
+    except ImportError:
+        pytest.skip("numpy or numpy.typing not available")
+
+    # Test NDArray type alias comparisons
+    arr_type1 = npt.NDArray[np.float64]
+    arr_type2 = npt.NDArray[np.float64]
+    arr_type3 = npt.NDArray[np.int64]
+    assert comparator(arr_type1, arr_type2)
+    assert not comparator(arr_type1, arr_type3)
+
+    # Test NBitBase (if it can be instantiated)
+    try:
+        nbit1 = npt.NBitBase()
+        nbit2 = npt.NBitBase()
+        # NBitBase instances with empty __dict__ should compare as equal
+        assert comparator(nbit1, nbit2)
+        # Also test with superset_obj=True
+        assert comparator(nbit1, nbit2, superset_obj=True)
+    except TypeError:
+        # NBitBase may not be instantiable in all numpy versions
+        pass
+
+
+def test_numpy_typing_superset_obj() -> None:
+    """Test comparator with superset_obj=True for numpy types."""
+    try:
+        import numpy as np
+        import numpy.typing as npt
+    except ImportError:
+        pytest.skip("numpy or numpy.typing not available")
+
+    # Test numpy arrays with object dtype containing dicts (superset scenario)
+    a1 = np.array([{'a': 1}], dtype=object)
+    a2 = np.array([{'a': 1, 'b': 2}], dtype=object)  # superset
+    assert comparator(a1, a2, superset_obj=True)
+    assert not comparator(a1, a2, superset_obj=False)
+
+    # Test extended precision types with superset_obj=True
+    c1 = np.clongdouble(1 + 2j)
+    c2 = np.clongdouble(1 + 2j)
+    assert comparator(c1, c2, superset_obj=True)
+
+    l1 = np.longdouble(1.5)
+    l2 = np.longdouble(1.5)
+    assert comparator(l1, l2, superset_obj=True)
+
+    # Test NDArray type alias with superset_obj=True
+    arr_type1 = npt.NDArray[np.float64]
+    arr_type2 = npt.NDArray[np.float64]
+    assert comparator(arr_type1, arr_type2, superset_obj=True)
+
+    # Test numpy structured arrays (np.void) with superset_obj=True
+    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
+    a_struct = np.array([('Alice', 25)], dtype=dt)
+    b_struct = np.array([('Alice', 25)], dtype=dt)
+    assert comparator(a_struct[0], b_struct[0], superset_obj=True)
+
+    # Test numpy random generators with superset_obj=True
+    rng1 = np.random.default_rng(seed=42)
+    rng2 = np.random.default_rng(seed=42)
+    assert comparator(rng1, rng2, superset_obj=True)
+
+    rs1 = np.random.RandomState(seed=42)
+    rs2 = np.random.RandomState(seed=42)
+    assert comparator(rs1, rs2, superset_obj=True)
+def test_numba_typed_list() -> None:
+    """Test comparator for numba.typed.List."""
+    try:
+        import numba
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal lists
+    a = NumbaList([1, 2, 3])
+    b = NumbaList([1, 2, 3])
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaList([1, 2, 4])
+    assert not comparator(a, c)
+
+    # Test different lengths
+    d = NumbaList([1, 2, 3, 4])
+    assert not comparator(a, d)
+
+    # Test empty lists
+    e = NumbaList.empty_list(item_type=numba.int64)
+    f = NumbaList.empty_list(item_type=numba.int64)
+    assert comparator(e, f)
+
+    # Test nested values (floats)
+    g = NumbaList([1.0, 2.0, 3.0])
+    h = NumbaList([1.0, 2.0, 3.0])
+    assert comparator(g, h)
+
+    i = NumbaList([1.0, 2.0, 4.0])
+    assert not comparator(g, i)
+
+
+def test_numba_typed_dict() -> None:
+    """Test comparator for numba.typed.Dict."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal dicts
+    a = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    a["x"] = 1
+    a["y"] = 2
+
+    b = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    b["x"] = 1
+    b["y"] = 2
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    c["x"] = 1
+    c["y"] = 3
+    assert not comparator(a, c)
+
+    # Test different keys
+    d = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    d["x"] = 1
+    d["z"] = 2
+    assert not comparator(a, d)
+
+    # Test different lengths
+    e = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    e["x"] = 1
+    assert not comparator(a, e)
+
+    # Test empty dicts
+    f = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    g = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    assert comparator(f, g)
+
+
+def test_numba_types() -> None:
+    """Test comparator for numba type objects."""
+    try:
+        import numba
+        from numba import types
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test basic numeric types from numba module
+    assert comparator(numba.int64, numba.int64)
+    assert comparator(numba.float64, numba.float64)
+    assert comparator(numba.int32, numba.int32)
+    assert comparator(numba.float32, numba.float32)
+
+    # Test basic numeric types from numba.types module
+    assert comparator(types.int64, types.int64)
+    assert comparator(types.float64, types.float64)
+    assert comparator(types.int8, types.int8)
+    assert comparator(types.int16, types.int16)
+    assert comparator(types.uint8, types.uint8)
+    assert comparator(types.uint16, types.uint16)
+    assert comparator(types.uint32, types.uint32)
+    assert comparator(types.uint64, types.uint64)
+    assert comparator(types.complex64, types.complex64)
+    assert comparator(types.complex128, types.complex128)
+
+    # Test different types
+    assert not comparator(numba.int64, numba.float64)
+    assert not comparator(numba.int32, numba.int64)
+    assert not comparator(numba.float32, numba.float64)
+    assert not comparator(types.int8, types.int16)
+    assert not comparator(types.uint32, types.int32)
+    assert not comparator(types.complex64, types.complex128)
+
+    # Test boolean type
+    assert comparator(numba.boolean, numba.boolean)
+    assert comparator(types.boolean, types.boolean)
+    assert not comparator(numba.boolean, numba.int64)
+
+    # Test special types
+    assert comparator(types.none, types.none)
+    assert comparator(types.void, types.void)
+    assert comparator(types.pyobject, types.pyobject)
+    assert comparator(types.unicode_type, types.unicode_type)
+    # Note: types.none and types.void are the same object in numba
+    assert comparator(types.none, types.void)
+    assert not comparator(types.unicode_type, types.pyobject)
+    assert not comparator(types.none, types.int64)
+
+    # Test array types
+    arr_type1 = types.Array(numba.float64, 1, 'C')
+    arr_type2 = types.Array(numba.float64, 1, 'C')
+    arr_type3 = types.Array(numba.float64, 2, 'C')
+    arr_type4 = types.Array(numba.int64, 1, 'C')
+    arr_type5 = types.Array(numba.float64, 1, 'F')  # Fortran order
+
+    assert comparator(arr_type1, arr_type2)
+    assert not comparator(arr_type1, arr_type3)  # different ndim
+    assert not comparator(arr_type1, arr_type4)  # different dtype
+    assert not comparator(arr_type1, arr_type5)  # different layout
+
+    # Test tuple types
+    tuple_type1 = types.UniTuple(types.int64, 3)
+    tuple_type2 = types.UniTuple(types.int64, 3)
+    tuple_type3 = types.UniTuple(types.int64, 4)
+    tuple_type4 = types.UniTuple(types.float64, 3)
+
+    assert comparator(tuple_type1, tuple_type2)
+    assert not comparator(tuple_type1, tuple_type3)  # different count
+    assert not comparator(tuple_type1, tuple_type4)  # different dtype
+
+    # Test heterogeneous tuple types
+    hetero_tuple1 = types.Tuple([types.int64, types.float64])
+    hetero_tuple2 = types.Tuple([types.int64, types.float64])
+    hetero_tuple3 = types.Tuple([types.int64, types.int64])
+
+    assert comparator(hetero_tuple1, hetero_tuple2)
+    assert not comparator(hetero_tuple1, hetero_tuple3)
+
+    # Test ListType and DictType
+    list_type1 = types.ListType(types.int64)
+    list_type2 = types.ListType(types.int64)
+    list_type3 = types.ListType(types.float64)
+
+    assert comparator(list_type1, list_type2)
+    assert not comparator(list_type1, list_type3)
+
+    dict_type1 = types.DictType(types.unicode_type, types.int64)
+    dict_type2 = types.DictType(types.unicode_type, types.int64)
+    dict_type3 = types.DictType(types.unicode_type, types.float64)
+    dict_type4 = types.DictType(types.int64, types.int64)
+
+    assert comparator(dict_type1, dict_type2)
+    assert not comparator(dict_type1, dict_type3)  # different value type
+    assert not comparator(dict_type1, dict_type4)  # different key type
+
+
+def test_numba_jit_functions() -> None:
+    """Test comparator for numba JIT-compiled functions."""
+    try:
+        from numba import jit
+    except ImportError:
+        pytest.skip("numba not available")
+
+    @jit(nopython=True)
+    def add(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def add2(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def multiply(x, y):
+        return x * y
+
+    # Compile the functions by calling them
+    add(1, 2)
+    add2(1, 2)
+    multiply(1, 2)
+
+    # Same function should compare equal to itself
+    assert comparator(add, add)
+
+    # Different functions (even with same code) should not compare equal
+    # since they are distinct function objects
+    assert not comparator(add, add2)
+
+    # Different functions with different code should not compare equal
+    assert not comparator(add, multiply)
+
+
+def test_numba_superset_obj() -> None:
+    """Test comparator for numba types with superset_obj=True."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test NumbaDict with superset_obj=True
+    orig_dict = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    orig_dict["x"] = 1
+    orig_dict["y"] = 2
+
+    # New dict with same keys - should pass
+    new_dict_same = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_same["x"] = 1
+    new_dict_same["y"] = 2
+    assert comparator(orig_dict, new_dict_same, superset_obj=True)
+
+    # New dict with extra keys - should pass with superset_obj=True
+    new_dict_superset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_superset["x"] = 1
+    new_dict_superset["y"] = 2
+    new_dict_superset["z"] = 3
+    assert comparator(orig_dict, new_dict_superset, superset_obj=True)
+    # But should fail with superset_obj=False
+    assert not comparator(orig_dict, new_dict_superset, superset_obj=False)
+
+    # New dict missing keys - should fail even with superset_obj=True
+    new_dict_subset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_subset["x"] = 1
+    assert not comparator(orig_dict, new_dict_subset, superset_obj=True)
+
+    # New dict with different values - should fail
+    new_dict_diff = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_diff["x"] = 1
+    new_dict_diff["y"] = 99
+    assert not comparator(orig_dict, new_dict_diff, superset_obj=True)
+
+    # Test NumbaList with superset_obj=True (lists don't support superset semantics)
+    orig_list = NumbaList([1, 2, 3])
+    new_list_same = NumbaList([1, 2, 3])
+    new_list_longer = NumbaList([1, 2, 3, 4])
+
+    assert comparator(orig_list, new_list_same, superset_obj=True)
+    # Lists must have same length regardless of superset_obj
+    assert not comparator(orig_list, new_list_longer, superset_obj=True)
+
+    # Test empty dict with superset_obj=True
+    empty_orig = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new["a"] = 1
+    # Empty orig should match any superset
+    assert comparator(empty_orig, non_empty_new, superset_obj=True)
+    assert not comparator(empty_orig, non_empty_new, superset_obj=False)
+
+
 # =============================================================================
 # Tests for pytest temp path normalization (lines 28-69 in comparator.py)
 # =============================================================================
-
-from codeflash.verification.comparator import (
-    PYTEST_TEMP_PATH_PATTERN,
-    _is_temp_path,
-    _normalize_temp_path,
-)
 
 
 class TestIsTempPath:
