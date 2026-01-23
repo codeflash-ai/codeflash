@@ -148,12 +148,23 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
             print(f"!######{test_stdout_tag}######!")
 
             # Capture instance state after initialization
-            if hasattr(args[0], "__dict__"):
-                instance_state = args[
-                    0
-                ].__dict__  # self is always the first argument, this is ensured during instrumentation
+            # self is always the first argument, this is ensured during instrumentation
+            instance = args[0]
+            if hasattr(instance, "__dict__"):
+                instance_state = instance.__dict__
+            elif hasattr(instance, "__slots__"):
+                # For classes using __slots__, capture slot values
+                instance_state = {
+                    slot: getattr(instance, slot, None) for slot in instance.__slots__ if hasattr(instance, slot)
+                }
             else:
-                raise ValueError("Instance state could not be captured.")
+                # For C extension types or other special classes (e.g., Playwright's Page),
+                # capture all non-private, non-callable attributes
+                instance_state = {
+                    attr: getattr(instance, attr)
+                    for attr in dir(instance)
+                    if not attr.startswith("_") and not callable(getattr(instance, attr, None))
+                }
             codeflash_cur.execute(
                 "CREATE TABLE IF NOT EXISTS test_results (test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, runtime INTEGER, return_value BLOB, verification_type TEXT)"
             )
