@@ -467,6 +467,8 @@ class FunctionOptimizer:
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
         self.is_numerical_code: bool | None = None
+        self.args.no_gen_tests = True
+        self.args.verbose = True
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None

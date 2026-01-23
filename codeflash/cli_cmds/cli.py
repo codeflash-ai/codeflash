@@ -135,10 +135,11 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         os.environ["CODEFLASH_AIS_SERVER"] = args.server
 
     is_init: bool = args.command.startswith("init") if args.command else False
-    if args.verbose:
-        logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
-    else:
-        logging_config.set_level(logging.INFO, echo_setting=not is_init)
+    logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
+    # if args.verbose:
+    #     logging_config.set_level(logging.DEBUG, echo_setting=not is_init)
+    # else:
+    #     logging_config.set_level(logging.INFO, echo_setting=not is_init)
 
     if args.version:
         logger.info(f"Codeflash version {version}")
