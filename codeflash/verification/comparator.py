@@ -24,6 +24,7 @@ HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
+HAS_NUMBA = find_spec("numba") is not None
 
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
@@ -156,6 +157,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 range,
                 slice,
                 OrderedDict,
+                types.GenericAlias,
             ),
         ):
             return orig == new
@@ -300,8 +302,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     # fails at "ufunc 'isfinite' not supported for the input types"
                     return np.all([comparator(x, y, superset_obj) for x, y in zip(orig, new)])
 
-            if isinstance(orig, (np.floating, np.complex64, np.complex128)):
-                return np.isclose(orig, new)
+            if isinstance(orig, (np.floating, np.complexfloating)):
+                return np.isclose(orig, new, equal_nan=True)
 
             if isinstance(orig, (np.integer, np.bool_, np.byte)):
                 return orig == new
@@ -386,6 +388,42 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             if isinstance(orig, torch.device):
                 return orig == new
+
+        if HAS_NUMBA:
+            import numba  # type: ignore  # noqa: PGH003
+            from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
+            from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
+            from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+
+            # Handle numba typed List
+            if isinstance(orig, NumbaList):
+                if len(orig) != len(new):
+                    return False
+                return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+
+            # Handle numba typed Dict
+            if isinstance(orig, NumbaDict):
+                if superset_obj:
+                    # Allow new dict to have more keys, but all orig keys must exist with equal values
+                    return all(key in new and comparator(orig[key], new[key], superset_obj) for key in orig)
+                if len(orig) != len(new):
+                    return False
+                for key in orig:
+                    if key not in new:
+                        return False
+                    if not comparator(orig[key], new[key], superset_obj):
+                        return False
+                return True
+
+            # Handle numba type objects (e.g., numba.int64, numba.float64, numba.Array, etc.)
+            if isinstance(orig, numba.core.types.Type):
+                return orig == new
+
+            # Handle numba JIT-compiled functions (CPUDispatcher, etc.)
+            if isinstance(orig, Dispatcher):
+                # Compare by identity of the underlying Python function
+                # Two JIT functions are equal if they wrap the same Python function
+                return orig.py_func is new.py_func
 
         if HAS_PYRSISTENT:
             import pyrsistent  # type: ignore  # noqa: PGH003
