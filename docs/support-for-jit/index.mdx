@@ -18,9 +18,8 @@ Each framework uses different compilation strategies to accelerate Python code:
 
 Numba compiles Python functions to optimized machine code using the LLVM compiler infrastructure. Codeflash can suggest Numba optimizations that use:
 
-- **`@jit`** - General-purpose JIT compilation with optional flags.
+- **`@jit`** - General-purpose JIT compilation with optional flags. Here is a non-exhaustive options which codeflash would apply on the function to optimize it via numba jit compilation.
   - **`noython=True`** - Compiles to machine code without falling back to the python interpreter.
-  - **`parallel=True`** - Enables automatic thread-level parallelization of the function across multiple CPU cores (no GIL!).
   - **`fastmath=True`** - Uses aggressive floating-point optimizations via LLVM's fastmath flag
   - **`cache=True`** - Numba writes the result of function compilation to disk which significantly reduces future compilation times.
 
