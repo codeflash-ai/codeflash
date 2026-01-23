@@ -255,6 +255,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     return False
             return True
 
+        # Handle mappingproxy (read-only dict view, commonly seen as class.__dict__)
+        if isinstance(orig, types.MappingProxyType):
+            return comparator(dict(orig), dict(new), superset_obj)
+
         # Handle dict view types (dict_keys, dict_values, dict_items)
         # Use type name checking since these are not directly importable types
         type_name = type(orig).__name__

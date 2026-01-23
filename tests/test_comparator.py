@@ -2309,6 +2309,77 @@ def test_dict_views() -> None:
     assert not comparator(d.items(), [("a", 1), ("b", 2)])
 
 
+def test_mappingproxy() -> None:
+    """Test comparator support for types.MappingProxyType (read-only dict view)."""
+    import types
+
+    # Basic equality
+    mp1 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+    mp2 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+    assert comparator(mp1, mp2)
+
+    # Different values
+    mp3 = types.MappingProxyType({"a": 1, "b": 2, "c": 4})
+    assert not comparator(mp1, mp3)
+
+    # Different keys
+    mp4 = types.MappingProxyType({"a": 1, "b": 2, "d": 3})
+    assert not comparator(mp1, mp4)
+
+    # Different length
+    mp5 = types.MappingProxyType({"a": 1, "b": 2})
+    assert not comparator(mp1, mp5)
+
+    # Order doesn't matter (like dict)
+    mp6 = types.MappingProxyType({"c": 3, "a": 1, "b": 2})
+    assert comparator(mp1, mp6)
+
+    # Empty mappingproxy
+    empty1 = types.MappingProxyType({})
+    empty2 = types.MappingProxyType({})
+    assert comparator(empty1, empty2)
+
+    # Nested values
+    nested1 = types.MappingProxyType({"a": [1, 2, 3], "b": {"x": 1}})
+    nested2 = types.MappingProxyType({"a": [1, 2, 3], "b": {"x": 1}})
+    nested3 = types.MappingProxyType({"a": [1, 2, 4], "b": {"x": 1}})
+    assert comparator(nested1, nested2)
+    assert not comparator(nested1, nested3)
+
+    # mappingproxy is not equal to dict (different types)
+    d = {"a": 1, "b": 2}
+    mp = types.MappingProxyType({"a": 1, "b": 2})
+    assert not comparator(mp, d)
+    assert not comparator(d, mp)
+
+    # Verify class __dict__ is indeed a mappingproxy
+    class MyClass:
+        x = 1
+        y = 2
+
+    assert isinstance(MyClass.__dict__, types.MappingProxyType)
+
+
+def test_mappingproxy_superset() -> None:
+    """Test comparator superset_obj support for mappingproxy."""
+    import types
+
+    mp1 = types.MappingProxyType({"a": 1, "b": 2})
+    mp2 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+
+    # mp2 is a superset of mp1
+    assert comparator(mp1, mp2, superset_obj=True)
+    # mp1 is not a superset of mp2
+    assert not comparator(mp2, mp1, superset_obj=True)
+
+    # Same mappingproxy with superset_obj=True
+    assert comparator(mp1, mp1, superset_obj=True)
+
+    # Different values even with superset
+    mp3 = types.MappingProxyType({"a": 1, "b": 99, "c": 3})
+    assert not comparator(mp1, mp3, superset_obj=True)
+
+
 def test_tensorflow_tensor() -> None:
     """Test comparator support for TensorFlow Tensor objects."""
     try:
