@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class UnoptimizedNeuralNet(nn.Module):
@@ -20,63 +20,20 @@ class UnoptimizedNeuralNet(nn.Module):
         batch_size = x.shape[0]
         x = x.view(batch_size, -1)
 
-        hidden = []
-        for b in range(batch_size):
-            sample_output = []
-            for i in range(self.hidden_size):
-                neuron_sum = 0.0
-                for j in range(self.input_size):
-                    neuron_sum += x[b, j].item() * self.fc1_weight[i, j].item()
-                neuron_sum += self.fc1_bias[i].item()
-                sample_output.append(neuron_sum)
-            hidden.append(sample_output)
+        x_det = x.detach()
+        fc1_w = self.fc1_weight.detach().to(x.device, dtype=x.dtype)
+        fc1_b = self.fc1_bias.detach().to(x.device, dtype=x.dtype)
+        fc2_w = self.fc2_weight.detach().to(x.device, dtype=x.dtype)
+        fc2_b = self.fc2_bias.detach().to(x.device, dtype=x.dtype)
 
-        hidden = torch.tensor(hidden, dtype=x.dtype, device=x.device)
+        hidden = x_det.matmul(fc1_w.t()) + fc1_b
 
-        activated = torch.zeros_like(hidden)
-        for b in range(batch_size):
-            for i in range(self.hidden_size):
-                val = hidden[b, i].item()
-                if val > 0:
-                    activated[b, i] = val
-                else:
-                    activated[b, i] = 0.0
+        activated = torch.clamp_min(hidden, 0.0)
 
-        output = []
-        for b in range(batch_size):
-            sample_output = []
-            for i in range(self.num_classes):
-                neuron_sum = 0.0
-                temp_values = []
-                for j in range(self.hidden_size):
-                    temp_values.append(activated[b, j].item())
+        output = activated.matmul(fc2_w.t()) + fc2_b
 
-                for j in range(len(temp_values)):
-                    neuron_sum += temp_values[j] * self.fc2_weight[i, j].item()
-
-                bias_value = self.fc2_bias[i].item()
-                neuron_sum += bias_value
-
-                sample_output.append(neuron_sum)
-            output.append(sample_output)
-
-        output = torch.tensor(output, dtype=x.dtype, device=x.device)
-
-        softmax_output = torch.zeros_like(output)
-        for b in range(batch_size):
-            max_val = output[b, 0].item()
-            for i in range(1, self.num_classes):
-                if output[b, i].item() > max_val:
-                    max_val = output[b, i].item()
-
-            exp_values = []
-            for i in range(self.num_classes):
-                exp_val = torch.exp(output[b, i] - max_val).item()
-                exp_values.append(exp_val)
-
-            sum_exp = sum(exp_values)
-
-            for i in range(self.num_classes):
-                softmax_output[b, i] = exp_values[i] / sum_exp
+        max_val, _ = output.max(dim=1, keepdim=True)
+        exp_values = torch.exp(output - max_val)
+        softmax_output = exp_values / exp_values.sum(dim=1, keepdim=True)
 
         return softmax_output
