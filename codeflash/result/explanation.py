@@ -33,6 +33,15 @@ class Explanation:
 
     @property
     def perf_improvement_line(self) -> str:
+        improvement_type = {
+            AcceptanceReason.RUNTIME: "runtime",
+            AcceptanceReason.THROUGHPUT: "throughput",
+            AcceptanceReason.CONCURRENCY: "concurrency",
+            AcceptanceReason.NONE: "",
+        }.get(self.acceptance_reason, "")
+
+        if improvement_type:
+            return f"{self.speedup_pct} {improvement_type} improvement ({self.speedup_x} faster)."
         return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
 
     @property

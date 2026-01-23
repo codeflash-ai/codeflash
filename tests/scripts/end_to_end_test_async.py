@@ -8,6 +8,7 @@ def run_test(expected_improvement_pct: int) -> bool:
     config = TestConfig(
         file_path="main.py",
         min_improvement_x=0.1,
+        expected_acceptance_reason="concurrency",
         coverage_expectations=[
             CoverageExpectation(
                 function_name="retry_with_backoff",
