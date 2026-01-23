@@ -66,7 +66,8 @@
             "group": "🧠 Core Concepts",
             "pages": [
               "codeflash-concepts/how-codeflash-works",
-              "codeflash-concepts/benchmarking"
+              "codeflash-concepts/benchmarking",
+              "support-for-jit/index"
             ]
           },
           {
