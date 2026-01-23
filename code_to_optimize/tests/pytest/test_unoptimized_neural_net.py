@@ -29,16 +29,16 @@ def get_dtype(device):
     return torch.float32
 
 
-FIXED_INPUT_SIZE = 784
-FIXED_HIDDEN_SIZE = 128
-FIXED_NUM_CLASSES = 10
-FIXED_BATCH_SIZE = 4
+FIXED_INPUT_SIZE = 32
+FIXED_HIDDEN_SIZE = 16
+FIXED_NUM_CLASSES = 5
+FIXED_BATCH_SIZE = 2
 
 
 class TestUnoptimizedNeuralNet:
     """Tests for the UnoptimizedNeuralNet class.
 
-    All tests use a single fixed shape: (4, 784)
+    All tests use a single fixed shape: (2, 32)
     """
 
     @pytest.mark.parametrize("device", DEVICES)
