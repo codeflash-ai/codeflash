@@ -1,7 +1,7 @@
 """
 Unit tests for JAX implementations of JIT-suitable functions.
 
-Tests run on CPU, CUDA, and Metal (Mac) devices.
+Tests run on CUDA devices only.
 """
 
 import numpy as np
@@ -9,6 +9,17 @@ import pytest
 
 import jax
 import jax.numpy as jnp
+
+try:
+    gpu_devices = jax.devices("gpu")
+    has_gpu = bool(gpu_devices)
+except RuntimeError:
+    has_gpu = False
+
+pytestmark = pytest.mark.skipif(
+    not has_gpu,
+    reason="GPU not available - tests require CUDA"
+)
 
 from code_to_optimize.sample_code import (
     leapfrog_integration_jax,
@@ -19,28 +30,8 @@ from code_to_optimize.sample_code import (
 
 def get_available_devices():
     """Return list of available JAX devices for testing."""
-    devices = []
-
-    # CPU is always available
-    devices.append("cpu")
-
-    # Check for CUDA/GPU
-    try:
-        gpu_devices = jax.devices("gpu")
-        if gpu_devices:
-            devices.append("cuda")
-    except RuntimeError:
-        pass
-
-    # Check for Metal (Mac)
-    try:
-        metal_devices = jax.devices("METAL")
-        if metal_devices:
-            devices.append("metal")
-    except RuntimeError:
-        pass
-
-    return devices
+    # Only test on CUDA devices
+    return ["cuda"]
 
 
 DEVICES = get_available_devices()

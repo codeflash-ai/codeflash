@@ -747,7 +747,7 @@ def process_test_files(
     if str(parent_path) not in jedi_sys_path:
         jedi_sys_path.insert(0, str(parent_path))
 
-    jedi_project = jedi.Project(path=project_root_path, sys_path=jedi_sys_path)
+    jedi_project = jedi.Project(path=str(project_root_path), sys_path=jedi_sys_path)
 
     tests_cache = TestsCache(project_root_path)
     logger.info("!lsp|Discovering tests and processing unit tests")
@@ -773,7 +773,7 @@ def process_test_files(
                 progress.advance(task_id)
                 continue
             try:
-                script = jedi.Script(path=test_file, project=jedi_project)
+                script = jedi.Script(path=str(test_file), project=jedi_project)
                 test_functions = set()
 
                 all_names = script.get_names(all_scopes=True, references=True)

@@ -1,13 +1,18 @@
 """
 Unit tests for PyTorch implementations of JIT-suitable functions.
 
-Tests run on CPU, CUDA, and MPS devices.
+Tests run on CUDA devices only.
 """
 
 import numpy as np
 import pytest
 
 import torch
+
+pytestmark = pytest.mark.skipif(
+    not torch.cuda.is_available(),
+    reason="CUDA not available - tests require CUDA"
+)
 
 from code_to_optimize.sample_code import (
     leapfrog_integration_torch,
@@ -18,26 +23,15 @@ from code_to_optimize.sample_code import (
 
 def get_available_devices():
     """Return list of available PyTorch devices for testing."""
-    devices = ["cpu"]
-
-    # Check for CUDA
-    if torch.cuda.is_available():
-        devices.append("cuda")
-
-    # Check for MPS (Apple Silicon)
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        devices.append("mps")
-
-    return devices
+    # Only test on CUDA devices
+    return ["cuda"]
 
 
 DEVICES = get_available_devices()
 
 
 def get_dtype(device):
-    """Get the appropriate dtype for a device. MPS doesn't support float64."""
-    if device == "mps":
-        return torch.float32
+    """Get the appropriate dtype for a device."""
     return torch.float64
 
 

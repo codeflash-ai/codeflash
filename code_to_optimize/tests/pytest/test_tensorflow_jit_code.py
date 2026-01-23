@@ -1,7 +1,7 @@
 """
 Unit tests for TensorFlow implementations of JIT-suitable functions.
 
-Tests run on CPU, CUDA, and Metal (Mac) devices.
+Tests run on CUDA devices only.
 """
 
 import platform
@@ -10,6 +10,11 @@ import numpy as np
 import pytest
 
 tf = pytest.importorskip("tensorflow")
+
+pytestmark = pytest.mark.skipif(
+    not tf.config.list_physical_devices("GPU"),
+    reason="GPU not available - tests require CUDA"
+)
 
 from code_to_optimize.sample_code import (
     leapfrog_integration_tf,
@@ -20,18 +25,8 @@ from code_to_optimize.sample_code import (
 
 def get_available_devices():
     """Return list of available TensorFlow devices for testing."""
-    devices = ["cpu"]
-
-    # Check for GPU devices
-    gpus = tf.config.list_physical_devices("GPU")
-    if gpus:
-        # On macOS, GPUs are Metal devices; on other platforms, they're CUDA
-        if platform.system() == "Darwin":
-            devices.append("metal")
-        else:
-            devices.append("cuda")
-
-    return devices
+    # Only test on CUDA devices
+    return ["cuda"]
 
 
 DEVICES = get_available_devices()

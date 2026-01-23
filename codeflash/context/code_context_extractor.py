@@ -228,7 +228,7 @@ def extract_code_string_context_from_files(
         try:
             original_code = file_path.read_text("utf8")
         except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
+            logger.debug(f"Error while parsing {file_path}: {e}")
             continue
         try:
             qualified_function_names = {func.qualified_name for func in function_sources}
@@ -265,7 +265,7 @@ def extract_code_string_context_from_files(
         try:
             original_code = file_path.read_text("utf8")
         except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
+            logger.debug(f"Error while parsing {file_path}: {e}")
             continue
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
@@ -336,7 +336,7 @@ def extract_code_markdown_context_from_files(
         try:
             original_code = file_path.read_text("utf8")
         except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
+            logger.debug(f"Error while parsing {file_path}: {e}")
             continue
         try:
             qualified_function_names = {func.qualified_name for func in function_sources}
@@ -378,7 +378,7 @@ def extract_code_markdown_context_from_files(
         try:
             original_code = file_path.read_text("utf8")
         except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
+            logger.debug(f"Error while parsing {file_path}: {e}")
             continue
         try:
             qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
@@ -415,7 +415,7 @@ def get_function_to_optimize_as_function_source(
     import jedi
 
     # Use jedi to find function to optimize
-    script = jedi.Script(path=function_to_optimize.file_path, project=jedi.Project(path=project_root_path))
+    script = jedi.Script(path=str(function_to_optimize.file_path), project=jedi.Project(path=str(project_root_path)))
 
     # Get all names in the file
     names = script.get_names(all_scopes=True, definitions=True, references=False)
@@ -439,7 +439,8 @@ def get_function_to_optimize_as_function_source(
                     jedi_definition=name,
                 )
         except Exception as e:
-            logger.exception(f"Error while getting function source: {e}")
+            # Jedi errors (like KeyError from parser cache) are not critical - log at debug level
+            logger.debug(f"Error while getting function source: {e}")
             continue
     raise ValueError(
         f"Could not find function {function_to_optimize.function_name} in {function_to_optimize.file_path}"  # noqa: EM102
@@ -454,7 +455,7 @@ def get_function_sources_from_jedi(
     file_path_to_function_source = defaultdict(set)
     function_source_list: list[FunctionSource] = []
     for file_path, qualified_function_names in file_path_to_qualified_function_names.items():
-        script = jedi.Script(path=file_path, project=jedi.Project(path=project_root_path))
+        script = jedi.Script(path=str(file_path), project=jedi.Project(path=str(project_root_path)))
         file_refs = script.get_names(all_scopes=True, definitions=False, references=True)
 
         for qualified_function_name in qualified_function_names:
@@ -577,7 +578,7 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
         try:
             # Create a script that imports the module to resolve it
             test_code = f"import {module_name}"
-            script = jedi.Script(test_code, project=jedi.Project(path=project_root_path))
+            script = jedi.Script(test_code, project=jedi.Project(path=str(project_root_path)))
             completions = script.goto(1, len(test_code))
 
             if not completions:
