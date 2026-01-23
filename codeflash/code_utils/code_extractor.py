@@ -30,7 +30,7 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
 
     def __init__(self) -> None:
         super().__init__()
-        self.assignments: dict[str, cst.Assign] = {}
+        self.assignments: dict[str, cst.Assign | cst.AnnAssign] = {}
         self.assignment_order: list[str] = []
         # Track scope depth to identify global assignments
         self.scope_depth = 0
@@ -72,6 +72,21 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
                         self.assignment_order.append(name)
         return True
 
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> Optional[bool]:
+        # Handle annotated assignments like: _CACHE: Dict[str, int] = {}
+        # Only process module-level annotated assignments with a value
+        if (
+            self.scope_depth == 0
+            and self.if_else_depth == 0
+            and isinstance(node.target, cst.Name)
+            and node.value is not None
+        ):
+            name = node.target.value
+            self.assignments[name] = node
+            if name not in self.assignment_order:
+                self.assignment_order.append(name)
+        return True
+
 
 def find_insertion_index_after_imports(node: cst.Module) -> int:
     """Find the position of the last import statement in the top-level of the module."""
@@ -103,7 +118,7 @@ def find_insertion_index_after_imports(node: cst.Module) -> int:
 class GlobalAssignmentTransformer(cst.CSTTransformer):
     """Transforms global assignments in the original file with those from the new file."""
 
-    def __init__(self, new_assignments: dict[str, cst.Assign], new_assignment_order: list[str]) -> None:
+    def __init__(self, new_assignments: dict[str, cst.Assign | cst.AnnAssign], new_assignment_order: list[str]) -> None:
         super().__init__()
         self.new_assignments = new_assignments
         self.new_assignment_order = new_assignment_order
@@ -147,6 +162,19 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
                 if name in self.new_assignments:
                     self.processed_assignments.add(name)
                     return self.new_assignments[name]
+
+        return updated_node
+
+    def leave_AnnAssign(self, original_node: cst.AnnAssign, updated_node: cst.AnnAssign) -> cst.CSTNode:
+        if self.scope_depth > 0 or self.if_else_depth > 0:
+            return updated_node
+
+        # Check if this is a global annotated assignment we need to replace
+        if isinstance(original_node.target, cst.Name):
+            name = original_node.target.value
+            if name in self.new_assignments:
+                self.processed_assignments.add(name)
+                return self.new_assignments[name]
 
         return updated_node
 
