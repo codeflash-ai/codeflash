@@ -2,7 +2,48 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import uuid
 from typing import Optional
+
+import sentry_sdk
+
+from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_temp_dir
+
+# Known CrossHair limitations that produce invalid Python syntax in generated tests:
+# - "<locals>" - higher-order functions returning nested functions
+# - " object at 0x" - objects with default __repr__
+# - "<list_iterator" - iterator objects
+CROSSHAIR_KNOWN_LIMITATION_PATTERNS = ("<locals>", " object at 0x", "<list_iterator")
+
+
+def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
+    try:
+        ast.parse(test_code)
+    except SyntaxError:
+        is_known_limitation = any(pattern in test_code for pattern in CROSSHAIR_KNOWN_LIMITATION_PATTERNS)
+        if not is_known_limitation:
+            sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
+        return False
+
+    temp_path = (codeflash_temp_dir / f"concolic_test_{uuid.uuid4().hex}.py").resolve()
+    temp_path.write_text(test_code, encoding="utf-8")
+
+    try:
+        result = subprocess.run(
+            [SAFE_SYS_EXECUTABLE, "-m", "pytest", "--collect-only", "-q", temp_path.as_posix()],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, Exception):
+        return False
+    else:
+        return result.returncode == 0
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 class AssertCleanup:
@@ -33,39 +74,27 @@ class AssertCleanup:
             indent, assert_method, args = unittest_match.groups()
 
             if args:
-                arg_parts = self._split_top_level_args(args)
-                if arg_parts and arg_parts[0]:
-                    return f"{indent}{arg_parts[0]}"
+                arg_parts = self._first_top_level_arg(args)
+                if arg_parts:
+                    return f"{indent}{arg_parts}"
 
         return None
-
-    def _split_top_level_args(self, args_str: str) -> list[str]:
-        result = []
-        current = []
-        depth = 0
-
-        for char in args_str:
-            if char in "([{":
-                depth += 1
-                current.append(char)
-            elif char in ")]}":
-                depth -= 1
-                current.append(char)
-            elif char == "," and depth == 0:
-                result.append("".join(current).strip())
-                current = []
-            else:
-                current.append(char)
-
-        if current:
-            result.append("".join(current).strip())
-
-        return result
 
     def __init__(self) -> None:
         # Pre-compiling regular expressions for faster execution
         self.assert_re = re.compile(r"\s*assert\s+(.*?)(?:\s*==\s*.*)?$")
         self.unittest_re = re.compile(r"(\s*)self\.assert([A-Za-z]+)\((.*)\)$")
+
+    def _first_top_level_arg(self, args: str) -> str:
+        depth = 0
+        for i, ch in enumerate(args):
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                return args[:i].strip()
+        return args.strip()
 
 
 def clean_concolic_tests(test_suite_code: str) -> str:

@@ -8,7 +8,7 @@ import re
 import types
 from collections import ChainMap, OrderedDict, deque
 from importlib.util import find_spec
-from typing import Any
+from typing import Any, Optional
 
 import sentry_sdk
 
@@ -24,11 +24,100 @@ HAS_TORCH = find_spec("torch") is not None
 HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
+HAS_NUMBA = find_spec("numba") is not None
+
+# Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
+# These paths vary between test runs but are logically equivalent
+PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # noqa: S108
+
+
+def _normalize_temp_path(path: str) -> str:
+    """Normalize temporary file paths by replacing session-specific components.
+
+    Pytest creates temp directories like /tmp/pytest-of-<user>/pytest-<N>/
+    where N is a session number that increments. When comparing return values
+    from different test runs, these paths should be considered equivalent.
+    """
+    return PYTEST_TEMP_PATH_PATTERN.sub("/tmp/pytest-temp/", path)  # noqa: S108
+
+
+def _is_temp_path(s: str) -> bool:
+    """Check if a string looks like a pytest temp path."""
+    return PYTEST_TEMP_PATH_PATTERN.search(s) is not None
+
+
+def _extract_exception_from_message(msg: str) -> Optional[BaseException]:  # noqa: FA100
+    """Try to extract a wrapped exception type from an error message.
+
+    Looks for patterns like "got ExceptionType('..." that indicate a wrapped exception.
+    Returns a synthetic exception of that type if found in builtins, None otherwise.
+    """
+    # Pattern: "got ExceptionType('message')" or "got ExceptionType("message")"
+    # This pattern is used by torch._dynamo and potentially other libraries
+    match = re.search(r"got (\w+)\(['\"]", msg)
+    if match:
+        exc_name = match.group(1)
+        # Try to find this exception type in builtins
+        import builtins
+
+        exc_class = getattr(builtins, exc_name, None)
+        if exc_class is not None and isinstance(exc_class, type) and issubclass(exc_class, BaseException):
+            return exc_class()
+    return None
+
+
+def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # noqa: FA100
+    """Get the wrapped exception if this is a simple wrapper.
+
+    Returns the inner exception if:
+    - exc is an ExceptionGroup with exactly one exception
+    - exc has a __cause__ (explicit chaining via 'raise X from Y')
+    - exc message contains a wrapped exception type pattern (e.g., "got IndexError('...")")
+
+    Returns None if exc is not a wrapper or wraps multiple exceptions.
+    """
+    # Check for ExceptionGroup with single exception (Python 3.11+)
+    if hasattr(exc, "exceptions"):
+        exceptions = exc.exceptions
+        if len(exceptions) == 1:
+            return exceptions[0]
+    # Check for explicit exception chaining (__cause__)
+    if exc.__cause__ is not None:
+        return exc.__cause__
+    # Try to extract wrapped exception type from the message (library-agnostic)
+    return _extract_exception_from_message(str(exc))
 
 
 def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
+        # Handle exceptions specially - before type check to allow wrapper comparison
+        if isinstance(orig, BaseException) and isinstance(new, BaseException):
+            if isinstance(orig, PicklePlaceholderAccessError) or isinstance(new, PicklePlaceholderAccessError):
+                # If this error was raised, there was an attempt to access the PicklePlaceholder, which represents an unpickleable object.
+                # The test results should be rejected as the behavior of the unpickleable object is unknown.
+                logger.debug("Unable to verify behavior of unpickleable object in replay test")
+                return False
+
+            # If types match exactly, compare attributes
+            if type(orig) is type(new):
+                orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
+                new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
+                return comparator(orig_dict, new_dict, superset_obj)
+
+            # Types differ - check if one is a wrapper over the other
+            # Check if orig wraps something that matches new
+            wrapped_orig = _get_wrapped_exception(orig)
+            if wrapped_orig is not None and comparator(wrapped_orig, new, superset_obj):
+                return True
+
+            # Check if new wraps something that matches orig
+            wrapped_new = _get_wrapped_exception(new)
+            if wrapped_new is not None and comparator(orig, wrapped_new, superset_obj):  # noqa: SIM103
+                return True
+
+            return False
+
         if type(orig) is not type(new):
             type_obj = type(orig)
             new_type_obj = type(new)
@@ -40,10 +129,18 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 return False
             return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
 
+        # Handle strings separately to normalize temp paths
+        if isinstance(orig, str):
+            if orig == new:
+                return True
+            # If strings differ, check if they're temp paths that differ only in session number
+            if _is_temp_path(orig) and _is_temp_path(new):
+                return _normalize_temp_path(orig) == _normalize_temp_path(new)
+            return False
+
         if isinstance(
             orig,
             (
-                str,
                 int,
                 bool,
                 complex,
@@ -67,18 +164,6 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
-        if isinstance(orig, BaseException):
-            if isinstance(orig, PicklePlaceholderAccessError) or isinstance(new, PicklePlaceholderAccessError):
-                # If this error was raised, there was an attempt to access the PicklePlaceholder, which represents an unpickleable object.
-                # The test results should be rejected as the behavior of the unpickleable object is unknown.
-                logger.debug("Unable to verify behavior of unpickleable object in replay test")
-                return False
-            # if str(orig) != str(new):
-            #     return False
-            # compare the attributes of the two exception objects to determine if they are equivalent.
-            orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
-            new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
-            return comparator(orig_dict, new_dict, superset_obj)
 
         if HAS_JAX:
             import jax  # type: ignore  # noqa: PGH003
@@ -295,6 +380,45 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             if isinstance(orig, torch.dtype):
                 return orig == new
+
+            if isinstance(orig, torch.device):
+                return orig == new
+
+        if HAS_NUMBA:
+            import numba  # type: ignore  # noqa: PGH003
+            from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
+            from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
+            from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+
+            # Handle numba typed List
+            if isinstance(orig, NumbaList):
+                if len(orig) != len(new):
+                    return False
+                return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+
+            # Handle numba typed Dict
+            if isinstance(orig, NumbaDict):
+                if superset_obj:
+                    # Allow new dict to have more keys, but all orig keys must exist with equal values
+                    return all(key in new and comparator(orig[key], new[key], superset_obj) for key in orig)
+                if len(orig) != len(new):
+                    return False
+                for key in orig:
+                    if key not in new:
+                        return False
+                    if not comparator(orig[key], new[key], superset_obj):
+                        return False
+                return True
+
+            # Handle numba type objects (e.g., numba.int64, numba.float64, numba.Array, etc.)
+            if isinstance(orig, numba.core.types.Type):
+                return orig == new
+
+            # Handle numba JIT-compiled functions (CPUDispatcher, etc.)
+            if isinstance(orig, Dispatcher):
+                # Compare by identity of the underlying Python function
+                # Two JIT functions are equal if they wrap the same Python function
+                return orig.py_func is new.py_func
 
         if HAS_PYRSISTENT:
             import pyrsistent  # type: ignore  # noqa: PGH003

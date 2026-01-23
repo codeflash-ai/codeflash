@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import logging
 import os
 import queue
 import random
@@ -12,9 +13,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import libcst as cst
+import sentry_sdk
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
 from rich.tree import Tree
 
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
@@ -22,7 +25,7 @@ from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
-from codeflash.code_utils.code_extractor import get_opt_review_metrics
+from codeflash.code_utils.code_extractor import get_opt_review_metrics, is_numerical_code
 from codeflash.code_utils.code_replacer import (
     add_custom_marker_to_all_tests,
     modify_autouse_fixture,
@@ -34,6 +37,7 @@ from codeflash.code_utils.code_utils import (
     create_rank_dictionary_compact,
     create_score_dictionary_from_metrics,
     diff_length,
+    encoded_tokens_len,
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
@@ -46,6 +50,7 @@ from codeflash.code_utils.config_consts import (
     COVERAGE_THRESHOLD,
     INDIVIDUAL_TESTCASE_TIMEOUT,
     MIN_CORRECT_CANDIDATES,
+    OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     REFINED_CANDIDATE_RANKING_WEIGHTS,
     REPEAT_OPTIMIZATION_PROBABILITY,
     TOTAL_LOOPING_TIME_EFFECTIVE,
@@ -133,6 +138,69 @@ if TYPE_CHECKING:
         TestDiff,
     )
     from codeflash.verification.verification_utils import TestConfig
+
+
+def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
+    """Log optimization context details when in verbose mode using Rich formatting."""
+    if logger.getEffectiveLevel() > logging.DEBUG:
+        return
+
+    console.rule()
+    read_writable_tokens = encoded_tokens_len(code_context.read_writable_code.markdown)
+    read_only_tokens = (
+        encoded_tokens_len(code_context.read_only_context_code) if code_context.read_only_context_code else 0
+    )
+    total_tokens = read_writable_tokens + read_only_tokens
+    token_pct = min(total_tokens / OPTIMIZATION_CONTEXT_TOKEN_LIMIT, 1.0)
+
+    # Token bar color based on usage
+    bar_color = "green" if token_pct < 0.7 else "yellow" if token_pct < 0.9 else "red"
+
+    # Build compact info line
+    helper_names = [hf.qualified_name for hf in code_context.helper_functions]
+    helpers_str = f"[magenta]{', '.join(helper_names)}[/]" if helper_names else "[dim]none[/]"
+    read_writable_files = [str(cs.file_path) for cs in code_context.read_writable_code.code_strings]
+
+    # Create a tree view for the context
+    tree = Tree(f"[bold cyan]Context for {function_name}[/]")
+    tree.add(
+        Text.assemble(
+            ("Tokens: ", "dim"),
+            (f"{total_tokens:,}", "bold " + bar_color),
+            (f"/{OPTIMIZATION_CONTEXT_TOKEN_LIMIT:,} ", "dim"),
+            (f"({token_pct:.0%})", bar_color),
+            ("  [", "dim"),
+            (f"{read_writable_tokens:,}", "green"),
+            (" rw", "dim green"),
+            (" + ", "dim"),
+            (f"{read_only_tokens:,}", "yellow"),
+            (" ro", "dim yellow"),
+            ("]", "dim"),
+        )
+    )
+    tree.add(f"[dim]Helpers:[/] {helpers_str}")
+    files_branch = tree.add("[dim]Files:[/]")
+    for f in read_writable_files:
+        files_branch.add(f"[blue]{f}[/]")
+
+    console.print(tree)
+
+    console.print(
+        Panel(
+            Syntax(code_context.read_writable_code.markdown, "markdown", theme="monokai", word_wrap=True),
+            title="[green]Read-Writable Code[/]",
+            border_style="green",
+        )
+    )
+
+    if code_context.read_only_context_code:
+        console.print(
+            Panel(
+                Syntax(code_context.read_only_context_code, "markdown", theme="monokai", word_wrap=True),
+                title="[yellow]Read-Only Dependencies[/]",
+                border_style="yellow",
+            )
+        )
 
 
 class CandidateNode:
@@ -405,6 +473,7 @@ class FunctionOptimizer:
         self.future_adaptive_optimizations: list[concurrent.futures.Future] = []
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
+        self.is_numerical_code: bool | None = None
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -416,6 +485,7 @@ class FunctionOptimizer:
         if not is_successful(ctx_result):
             return Failure(ctx_result.failure())
         code_context: CodeOptimizationContext = ctx_result.unwrap()
+        log_optimization_context(self.function_to_optimize.function_name, code_context)
         original_helper_code: dict[Path, str] = {}
         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
         for helper_function_path in helper_function_paths:
@@ -526,7 +596,7 @@ class FunctionOptimizer:
         if not is_successful(initialization_result):
             return Failure(initialization_result.failure())
         should_run_experiment, code_context, original_helper_code = initialization_result.unwrap()
-
+        self.is_numerical_code = is_numerical_code(code_string=code_context.read_writable_code.flat)
         code_print(
             code_context.read_writable_code.flat,
             file_name=self.function_to_optimize.file_path,
@@ -539,13 +609,37 @@ class FunctionOptimizer:
             revert_to_print=bool(get_pr_number()),
         ):
             console.rule()
+            new_code_context = code_context
+            if self.is_numerical_code:  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
+                jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
+                    code_context.read_writable_code.markdown, self.function_trace_id
+                )
+                if jit_compiled_opt_candidate:  # jit rewrite was successful
+                    # write files
+                    # Try to replace function with optimized code
+                    self.replace_function_and_helpers_with_optimized_code(
+                        code_context=code_context,
+                        optimized_code=jit_compiled_opt_candidate[0].source_code,
+                        original_helper_code=original_helper_code,
+                    )
+                    # get code context
+                    try:
+                        new_code_context = self.get_code_optimization_context().unwrap()
+                    except Exception as e:
+                        sentry_sdk.capture_exception(e)
+                        logger.debug("!lsp|Getting new code context failed, revert to original one")
+                    # unwrite files
+                    self.write_code_and_helpers(
+                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+                    )
             # Generate tests and optimizations in parallel
-            future_tests = self.executor.submit(self.generate_and_instrument_tests, code_context)
+            future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(
                 self.generate_optimizations,
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 run_experiment=should_run_experiment,
+                is_numerical_code=self.is_numerical_code,
             )
 
             concurrent.futures.wait([future_tests, future_optimizations])
@@ -1064,6 +1158,7 @@ class FunctionOptimizer:
             )
             if self.experiment_id
             else None,
+            is_numerical_code=self.is_numerical_code,
         )
 
         processor = CandidateProcessor(
@@ -1531,6 +1626,7 @@ class FunctionOptimizer:
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
         run_experiment: bool = False,  # noqa: FBT001, FBT002
+        is_numerical_code: bool | None = None,  # noqa: FBT001
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
@@ -1542,6 +1638,7 @@ class FunctionOptimizer:
             ExperimentMetadata(id=self.experiment_id, group="control") if run_experiment else None,
             is_async=self.function_to_optimize.is_async,
             n_candidates=n_candidates,
+            is_numerical_code=is_numerical_code,
         )
 
         future_references = self.executor.submit(
@@ -2471,6 +2568,7 @@ class FunctionOptimizer:
                 test_index,
                 test_path,
                 test_perf_path,
+                self.is_numerical_code,
             )
             for test_index, (test_path, test_perf_path) in enumerate(
                 zip(generated_test_paths, generated_perf_test_paths)

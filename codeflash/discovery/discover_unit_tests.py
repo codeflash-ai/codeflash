@@ -508,7 +508,7 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         return True
 
     if analyzer.found_any_target_function:
-        logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
+        # logger.debug(f"Test file {test_file_path} imports target function: {analyzer.found_qualified_name}")
         return True
 
     # Be conservative with dynamic imports - if __import__ is used and a target function
@@ -517,10 +517,10 @@ def analyze_imports_in_test_file(test_file_path: Path | str, target_functions: s
         # Check if any target function name appears as a string literal or direct usage
         for target_func in target_functions:
             if target_func in source_code:
-                logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
+                # logger.debug(f"Test file {test_file_path} has dynamic imports and references {target_func}")
                 return True
 
-    logger.debug(f"Test file {test_file_path} does not import any target functions.")
+    # logger.debug(f"Test file {test_file_path} does not import any target functions.")
     return False
 
 
@@ -540,7 +540,7 @@ def filter_test_files_by_imports(
     if not target_functions:
         return file_to_test_map
 
-    logger.debug(f"Target functions for import filtering: {target_functions}")
+    # logger.debug(f"Target functions for import filtering: {target_functions}")
 
     filtered_map = {}
     for test_file, test_functions in file_to_test_map.items():

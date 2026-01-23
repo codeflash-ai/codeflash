@@ -17,7 +17,14 @@ import pytest
 
 from codeflash.either import Failure, Success
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
-from codeflash.verification.comparator import comparator
+from codeflash.verification.comparator import (
+    PYTEST_TEMP_PATH_PATTERN,
+    _extract_exception_from_message,
+    _get_wrapped_exception,
+    _is_temp_path,
+    _normalize_temp_path,
+    comparator,
+)
 from codeflash.verification.equivalence import compare_test_results
 
 
@@ -822,6 +829,50 @@ def test_torch():
     ii = torch.tensor([True, True, True])
     assert comparator(gg, hh)
     assert not comparator(gg, ii)
+
+
+def test_torch_device():
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    # Test torch.device comparisons - same device type
+    a = torch.device("cpu")
+    b = torch.device("cpu")
+    assert comparator(a, b)
+
+    # Test different device types
+    c = torch.device("cpu")
+    d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if torch.cuda.is_available():
+        assert not comparator(c, d)
+
+    # Test device with index
+    e = torch.device("cpu")
+    f = torch.device("cpu")
+    assert comparator(e, f)
+
+    # Test cuda devices with different indices (if multiple GPUs available)
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        g = torch.device("cuda:0")
+        h = torch.device("cuda:0")
+        i = torch.device("cuda:1")
+        assert comparator(g, h)
+        assert not comparator(g, i)
+
+    # Test cuda device with and without explicit index
+    if torch.cuda.is_available():
+        j = torch.device("cuda:0")
+        k = torch.device("cuda", 0)
+        assert comparator(j, k)
+
+    # Test meta device
+    l = torch.device("meta")
+    m = torch.device("meta")
+    n = torch.device("cpu")
+    assert comparator(l, m)
+    assert not comparator(l, n)
 
 
 def test_jax():
@@ -1635,6 +1686,313 @@ def test_exceptions_comparator():
     module2 = ast.parse(code2)
 
     assert not comparator(module7, module2)
+
+
+def test_torch_runtime_error_wrapping():
+    """Test that TorchRuntimeError wrapping is handled correctly.
+
+    When torch.compile is used, exceptions are wrapped in TorchRuntimeError.
+    The comparator should consider an IndexError equivalent to a TorchRuntimeError
+    that wraps an IndexError.
+    """
+    # Create a mock TorchRuntimeError class that mimics torch._dynamo.exc.TorchRuntimeError
+    class TorchRuntimeError(Exception):
+        """Mock TorchRuntimeError for testing."""
+
+        pass
+
+    # Monkey-patch the __module__ to match torch._dynamo.exc
+    TorchRuntimeError.__module__ = "torch._dynamo.exc"
+
+    # Test 1: TorchRuntimeError with __cause__ set to the same exception type
+    index_error = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    torch_error = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    torch_error.__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+
+    # These should be considered equivalent since TorchRuntimeError wraps IndexError
+    assert comparator(index_error, torch_error)
+    assert comparator(torch_error, index_error)
+
+    # Test 2: TorchRuntimeError without __cause__ but with matching error type in message
+    torch_error_no_cause = TorchRuntimeError(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds')"
+    )
+    assert comparator(index_error, torch_error_no_cause)
+    assert comparator(torch_error_no_cause, index_error)
+
+    # Test 3: Different exception types should not be equivalent
+    value_error = ValueError("some value error")
+    torch_error_index = TorchRuntimeError("got IndexError('some error')")
+    torch_error_index.__cause__ = IndexError("some error")
+    assert not comparator(value_error, torch_error_index)
+    assert not comparator(torch_error_index, value_error)
+
+    # Test 4: TorchRuntimeError wrapping a different type should not match
+    type_error = TypeError("some type error")
+    torch_error_with_index = TorchRuntimeError("got IndexError('index error')")
+    torch_error_with_index.__cause__ = IndexError("index error")
+    assert not comparator(type_error, torch_error_with_index)
+
+    # Test 5: Two TorchRuntimeErrors wrapping the same exception type
+    torch_error1 = TorchRuntimeError("got IndexError('error 1')")
+    torch_error1.__cause__ = IndexError("error 1")
+    torch_error2 = TorchRuntimeError("got IndexError('error 2')")
+    torch_error2.__cause__ = IndexError("error 2")
+    assert comparator(torch_error1, torch_error2)
+
+    # Test 6: Regular exception comparison still works
+    error1 = IndexError("same error")
+    error2 = IndexError("same error")
+    assert comparator(error1, error2)
+
+    # Test 7: Exception wrapped in tuple (return value scenario from debug output)
+    orig_return = (
+        ("tensor1", "tensor2"),
+        {},
+        IndexError("index 0 is out of bounds for dimension 0 with size 0"),
+    )
+    torch_wrapped_return = (
+        ("tensor1", "tensor2"),
+        {},
+        TorchRuntimeError("Dynamo failed: got IndexError('index 0 is out of bounds for dimension 0 with size 0')"),
+    )
+    torch_wrapped_return[2].__cause__ = IndexError("index 0 is out of bounds for dimension 0 with size 0")
+    assert comparator(orig_return, torch_wrapped_return)
+
+
+def test_extract_exception_from_message():
+    """Test the _extract_exception_from_message helper function."""
+    # Test with single-quoted message
+    result = _extract_exception_from_message("got IndexError('some error message')")
+    assert result is not None
+    assert isinstance(result, IndexError)
+
+    # Test with double-quoted message
+    result = _extract_exception_from_message('got ValueError("another error")')
+    assert result is not None
+    assert isinstance(result, ValueError)
+
+    # Test with various builtin exception types
+    for exc_name, exc_class in [
+        ("TypeError", TypeError),
+        ("KeyError", KeyError),
+        ("RuntimeError", RuntimeError),
+        ("AttributeError", AttributeError),
+        ("ZeroDivisionError", ZeroDivisionError),
+    ]:
+        result = _extract_exception_from_message(f"got {exc_name}('test')")
+        assert result is not None
+        assert isinstance(result, exc_class)
+
+    # Test with no matching pattern
+    result = _extract_exception_from_message("This is a normal error message")
+    assert result is None
+
+    # Test with non-exception class name
+    result = _extract_exception_from_message("got SomeRandomClass('not an exception')")
+    assert result is None
+
+    # Test with partial match (no opening quote)
+    result = _extract_exception_from_message("got IndexError without quotes")
+    assert result is None
+
+    # Test with empty string
+    result = _extract_exception_from_message("")
+    assert result is None
+
+    # Test with torch-like error message format
+    result = _extract_exception_from_message(
+        "Dynamo failed to run FX node with fake tensors: got IndexError('index 0 is out of bounds for dimension 0 with size 0')"
+    )
+    assert result is not None
+    assert isinstance(result, IndexError)
+
+
+def test_get_wrapped_exception():
+    """Test the _get_wrapped_exception helper function."""
+    # Test with __cause__ (explicit chaining)
+    inner_error = ValueError("inner error")
+    outer_error = RuntimeError("outer error")
+    outer_error.__cause__ = inner_error
+    result = _get_wrapped_exception(outer_error)
+    assert result is inner_error
+
+    # Test with no wrapping
+    plain_error = ValueError("plain error")
+    result = _get_wrapped_exception(plain_error)
+    assert result is None
+
+    # Test with message pattern
+    error_with_pattern = RuntimeError("got TypeError('some type error')")
+    result = _get_wrapped_exception(error_with_pattern)
+    assert result is not None
+    assert isinstance(result, TypeError)
+
+    # Test that __cause__ takes precedence over message pattern
+    actual_cause = IndexError("actual cause")
+    error_with_both = RuntimeError("got TypeError('different error in message')")
+    error_with_both.__cause__ = actual_cause
+    result = _get_wrapped_exception(error_with_both)
+    assert result is actual_cause
+    assert isinstance(result, IndexError)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_get_wrapped_exception_exception_group():
+    """Test _get_wrapped_exception with ExceptionGroup (Python 3.11+)."""
+    # ExceptionGroup with single exception
+    inner_error = ValueError("single inner error")
+    group = ExceptionGroup("group", [inner_error])
+    result = _get_wrapped_exception(group)
+    assert result is inner_error
+
+    # ExceptionGroup with multiple exceptions - should return None
+    error1 = ValueError("error 1")
+    error2 = TypeError("error 2")
+    multi_group = ExceptionGroup("multi group", [error1, error2])
+    result = _get_wrapped_exception(multi_group)
+    assert result is None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+def test_comparator_with_exception_group():
+    """Test comparator with ExceptionGroup wrapping (Python 3.11+)."""
+    # ExceptionGroup wrapping a single ValueError should match a plain ValueError
+    inner_value_error = ValueError("some value error")
+    group = ExceptionGroup("group", [inner_value_error])
+
+    plain_value_error = ValueError("different message but same type")
+    assert comparator(group, plain_value_error)
+    assert comparator(plain_value_error, group)
+
+    # ExceptionGroup with different exception type should not match
+    inner_type_error = TypeError("type error")
+    type_group = ExceptionGroup("group", [inner_type_error])
+    assert not comparator(type_group, plain_value_error)
+
+    # Two ExceptionGroups with same wrapped type should match
+    group1 = ExceptionGroup("group1", [ValueError("error 1")])
+    group2 = ExceptionGroup("group2", [ValueError("error 2")])
+    assert comparator(group1, group2)
+
+
+def test_comparator_with_cause_chaining():
+    """Test comparator with __cause__ exception chaining."""
+    # Create an exception chain using 'raise from'
+    inner = IndexError("inner index error")
+    outer = RuntimeError("outer runtime error")
+    outer.__cause__ = inner
+
+    # Outer exception should match the inner exception type
+    plain_index_error = IndexError("different index error")
+    assert comparator(outer, plain_index_error)
+    assert comparator(plain_index_error, outer)
+
+    # Should not match a different type
+    plain_type_error = TypeError("type error")
+    assert not comparator(outer, plain_type_error)
+
+    # Two chained exceptions with same wrapper type match (regardless of inner type)
+    # because same-type exceptions compare non-private attributes only (__cause__ is ignored)
+    outer1 = RuntimeError("outer 1")
+    outer1.__cause__ = ValueError("inner 1")
+    outer2 = RuntimeError("outer 2")
+    outer2.__cause__ = ValueError("inner 2")
+    assert comparator(outer1, outer2)
+
+    # Different wrapper types with same inner type - unwrapping makes them match
+    class WrapperA(Exception):
+        pass
+
+    class WrapperB(Exception):
+        pass
+
+    wrapper_a = WrapperA("wrapper a")
+    wrapper_a.__cause__ = KeyError("same inner type")
+    wrapper_b = WrapperB("wrapper b")
+    wrapper_b.__cause__ = KeyError("same inner type")
+    # Both unwrap to KeyError, so they should match
+    assert comparator(wrapper_a, wrapper_b)
+
+    # Different wrapper types with different inner types should not match
+    wrapper_c = WrapperA("wrapper c")
+    wrapper_c.__cause__ = ValueError("value error")
+    wrapper_d = WrapperB("wrapper d")
+    wrapper_d.__cause__ = TypeError("type error")
+    assert not comparator(wrapper_c, wrapper_d)
+
+
+def test_comparator_with_message_pattern():
+    """Test comparator with exception type extracted from message pattern."""
+    # Exception with wrapped type in message (no __cause__)
+    wrapper = RuntimeError("Operation failed: got IndexError('list index out of range')")
+
+    plain_index = IndexError("some index error")
+    assert comparator(wrapper, plain_index)
+    assert comparator(plain_index, wrapper)
+
+    # Should not match different types
+    plain_key = KeyError("some key error")
+    assert not comparator(wrapper, plain_key)
+
+
+def test_comparator_wrapped_exceptions_bidirectional():
+    """Test that wrapped exception comparison works in both directions."""
+
+    class CustomWrapper(Exception):
+        pass
+
+    # Create wrapper with __cause__
+    inner = AttributeError("attr error")
+    wrapper = CustomWrapper("wrapper message")
+    wrapper.__cause__ = inner
+
+    plain_attr = AttributeError("plain attr error")
+
+    # Test both directions
+    assert comparator(wrapper, plain_attr)
+    assert comparator(plain_attr, wrapper)
+
+    # Test with superset_obj flag
+    assert comparator(wrapper, plain_attr, superset_obj=True)
+    assert comparator(plain_attr, wrapper, superset_obj=True)
+
+
+def test_comparator_same_type_exceptions_still_work():
+    """Ensure that same-type exception comparison still works correctly."""
+    exc1 = ValueError("message 1")
+    exc2 = ValueError("message 2")
+    assert comparator(exc1, exc2)
+
+    # With custom attributes
+    class CustomError(Exception):
+        def __init__(self, msg, code):
+            super().__init__(msg)
+            self.code = code
+
+    custom1 = CustomError("msg1", 100)
+    custom2 = CustomError("msg2", 100)
+    assert comparator(custom1, custom2)
+
+    custom3 = CustomError("msg3", 200)
+    assert not comparator(custom1, custom3)
+
+
+def test_comparator_no_false_positives_for_wrapped_exceptions():
+    """Test that unrelated exception types don't match due to wrapping logic."""
+    # Two completely different exception types should never match
+    val_err = ValueError("value error")
+    type_err = TypeError("type error")
+    assert not comparator(val_err, type_err)
+
+    # Wrapper with different inner type should not match
+    wrapper = RuntimeError("some error")
+    wrapper.__cause__ = KeyError("key error")
+    assert not comparator(wrapper, val_err)
+    assert not comparator(val_err, wrapper)
+
 
 def test_collections() -> None:
     # Deque
@@ -2558,3 +2916,891 @@ def test_numpy_dtypes() -> None:
     # Test that DType and np.dtype of different types are not equal
     assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
+
+
+def test_numba_typed_list() -> None:
+    """Test comparator for numba.typed.List."""
+    try:
+        import numba
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal lists
+    a = NumbaList([1, 2, 3])
+    b = NumbaList([1, 2, 3])
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaList([1, 2, 4])
+    assert not comparator(a, c)
+
+    # Test different lengths
+    d = NumbaList([1, 2, 3, 4])
+    assert not comparator(a, d)
+
+    # Test empty lists
+    e = NumbaList.empty_list(item_type=numba.int64)
+    f = NumbaList.empty_list(item_type=numba.int64)
+    assert comparator(e, f)
+
+    # Test nested values (floats)
+    g = NumbaList([1.0, 2.0, 3.0])
+    h = NumbaList([1.0, 2.0, 3.0])
+    assert comparator(g, h)
+
+    i = NumbaList([1.0, 2.0, 4.0])
+    assert not comparator(g, i)
+
+
+def test_numba_typed_dict() -> None:
+    """Test comparator for numba.typed.Dict."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test equal dicts
+    a = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    a["x"] = 1
+    a["y"] = 2
+
+    b = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    b["x"] = 1
+    b["y"] = 2
+    assert comparator(a, b)
+
+    # Test different values
+    c = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    c["x"] = 1
+    c["y"] = 3
+    assert not comparator(a, c)
+
+    # Test different keys
+    d = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    d["x"] = 1
+    d["z"] = 2
+    assert not comparator(a, d)
+
+    # Test different lengths
+    e = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    e["x"] = 1
+    assert not comparator(a, e)
+
+    # Test empty dicts
+    f = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    g = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    assert comparator(f, g)
+
+
+def test_numba_types() -> None:
+    """Test comparator for numba type objects."""
+    try:
+        import numba
+        from numba import types
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test basic numeric types from numba module
+    assert comparator(numba.int64, numba.int64)
+    assert comparator(numba.float64, numba.float64)
+    assert comparator(numba.int32, numba.int32)
+    assert comparator(numba.float32, numba.float32)
+
+    # Test basic numeric types from numba.types module
+    assert comparator(types.int64, types.int64)
+    assert comparator(types.float64, types.float64)
+    assert comparator(types.int8, types.int8)
+    assert comparator(types.int16, types.int16)
+    assert comparator(types.uint8, types.uint8)
+    assert comparator(types.uint16, types.uint16)
+    assert comparator(types.uint32, types.uint32)
+    assert comparator(types.uint64, types.uint64)
+    assert comparator(types.complex64, types.complex64)
+    assert comparator(types.complex128, types.complex128)
+
+    # Test different types
+    assert not comparator(numba.int64, numba.float64)
+    assert not comparator(numba.int32, numba.int64)
+    assert not comparator(numba.float32, numba.float64)
+    assert not comparator(types.int8, types.int16)
+    assert not comparator(types.uint32, types.int32)
+    assert not comparator(types.complex64, types.complex128)
+
+    # Test boolean type
+    assert comparator(numba.boolean, numba.boolean)
+    assert comparator(types.boolean, types.boolean)
+    assert not comparator(numba.boolean, numba.int64)
+
+    # Test special types
+    assert comparator(types.none, types.none)
+    assert comparator(types.void, types.void)
+    assert comparator(types.pyobject, types.pyobject)
+    assert comparator(types.unicode_type, types.unicode_type)
+    # Note: types.none and types.void are the same object in numba
+    assert comparator(types.none, types.void)
+    assert not comparator(types.unicode_type, types.pyobject)
+    assert not comparator(types.none, types.int64)
+
+    # Test array types
+    arr_type1 = types.Array(numba.float64, 1, 'C')
+    arr_type2 = types.Array(numba.float64, 1, 'C')
+    arr_type3 = types.Array(numba.float64, 2, 'C')
+    arr_type4 = types.Array(numba.int64, 1, 'C')
+    arr_type5 = types.Array(numba.float64, 1, 'F')  # Fortran order
+
+    assert comparator(arr_type1, arr_type2)
+    assert not comparator(arr_type1, arr_type3)  # different ndim
+    assert not comparator(arr_type1, arr_type4)  # different dtype
+    assert not comparator(arr_type1, arr_type5)  # different layout
+
+    # Test tuple types
+    tuple_type1 = types.UniTuple(types.int64, 3)
+    tuple_type2 = types.UniTuple(types.int64, 3)
+    tuple_type3 = types.UniTuple(types.int64, 4)
+    tuple_type4 = types.UniTuple(types.float64, 3)
+
+    assert comparator(tuple_type1, tuple_type2)
+    assert not comparator(tuple_type1, tuple_type3)  # different count
+    assert not comparator(tuple_type1, tuple_type4)  # different dtype
+
+    # Test heterogeneous tuple types
+    hetero_tuple1 = types.Tuple([types.int64, types.float64])
+    hetero_tuple2 = types.Tuple([types.int64, types.float64])
+    hetero_tuple3 = types.Tuple([types.int64, types.int64])
+
+    assert comparator(hetero_tuple1, hetero_tuple2)
+    assert not comparator(hetero_tuple1, hetero_tuple3)
+
+    # Test ListType and DictType
+    list_type1 = types.ListType(types.int64)
+    list_type2 = types.ListType(types.int64)
+    list_type3 = types.ListType(types.float64)
+
+    assert comparator(list_type1, list_type2)
+    assert not comparator(list_type1, list_type3)
+
+    dict_type1 = types.DictType(types.unicode_type, types.int64)
+    dict_type2 = types.DictType(types.unicode_type, types.int64)
+    dict_type3 = types.DictType(types.unicode_type, types.float64)
+    dict_type4 = types.DictType(types.int64, types.int64)
+
+    assert comparator(dict_type1, dict_type2)
+    assert not comparator(dict_type1, dict_type3)  # different value type
+    assert not comparator(dict_type1, dict_type4)  # different key type
+
+
+def test_numba_jit_functions() -> None:
+    """Test comparator for numba JIT-compiled functions."""
+    try:
+        from numba import jit
+    except ImportError:
+        pytest.skip("numba not available")
+
+    @jit(nopython=True)
+    def add(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def add2(x, y):
+        return x + y
+
+    @jit(nopython=True)
+    def multiply(x, y):
+        return x * y
+
+    # Compile the functions by calling them
+    add(1, 2)
+    add2(1, 2)
+    multiply(1, 2)
+
+    # Same function should compare equal to itself
+    assert comparator(add, add)
+
+    # Different functions (even with same code) should not compare equal
+    # since they are distinct function objects
+    assert not comparator(add, add2)
+
+    # Different functions with different code should not compare equal
+    assert not comparator(add, multiply)
+
+
+def test_numba_superset_obj() -> None:
+    """Test comparator for numba types with superset_obj=True."""
+    try:
+        import numba
+        from numba.typed import Dict as NumbaDict
+        from numba.typed import List as NumbaList
+    except ImportError:
+        pytest.skip("numba not available")
+
+    # Test NumbaDict with superset_obj=True
+    orig_dict = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    orig_dict["x"] = 1
+    orig_dict["y"] = 2
+
+    # New dict with same keys - should pass
+    new_dict_same = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_same["x"] = 1
+    new_dict_same["y"] = 2
+    assert comparator(orig_dict, new_dict_same, superset_obj=True)
+
+    # New dict with extra keys - should pass with superset_obj=True
+    new_dict_superset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_superset["x"] = 1
+    new_dict_superset["y"] = 2
+    new_dict_superset["z"] = 3
+    assert comparator(orig_dict, new_dict_superset, superset_obj=True)
+    # But should fail with superset_obj=False
+    assert not comparator(orig_dict, new_dict_superset, superset_obj=False)
+
+    # New dict missing keys - should fail even with superset_obj=True
+    new_dict_subset = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_subset["x"] = 1
+    assert not comparator(orig_dict, new_dict_subset, superset_obj=True)
+
+    # New dict with different values - should fail
+    new_dict_diff = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    new_dict_diff["x"] = 1
+    new_dict_diff["y"] = 99
+    assert not comparator(orig_dict, new_dict_diff, superset_obj=True)
+
+    # Test NumbaList with superset_obj=True (lists don't support superset semantics)
+    orig_list = NumbaList([1, 2, 3])
+    new_list_same = NumbaList([1, 2, 3])
+    new_list_longer = NumbaList([1, 2, 3, 4])
+
+    assert comparator(orig_list, new_list_same, superset_obj=True)
+    # Lists must have same length regardless of superset_obj
+    assert not comparator(orig_list, new_list_longer, superset_obj=True)
+
+    # Test empty dict with superset_obj=True
+    empty_orig = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new = NumbaDict.empty(key_type=numba.types.unicode_type, value_type=numba.int64)
+    non_empty_new["a"] = 1
+    # Empty orig should match any superset
+    assert comparator(empty_orig, non_empty_new, superset_obj=True)
+    assert not comparator(empty_orig, non_empty_new, superset_obj=False)
+
+
+# =============================================================================
+# Tests for pytest temp path normalization (lines 28-69 in comparator.py)
+# =============================================================================
+
+
+class TestIsTempPath:
+    """Tests for the _is_temp_path() function."""
+
+    def test_standard_pytest_temp_path(self):
+        """Test detection of standard pytest temp paths."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_something")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-123/")
+        assert _is_temp_path("/tmp/pytest-of-admin/pytest-999/subdir/file.txt")
+
+    def test_different_usernames(self):
+        """Test temp paths with various usernames."""
+        assert _is_temp_path("/tmp/pytest-of-root/pytest-1/")
+        assert _is_temp_path("/tmp/pytest-of-john_doe/pytest-42/")
+        assert _is_temp_path("/tmp/pytest-of-user123/pytest-0/test")
+        assert _is_temp_path("/tmp/pytest-of-test-user/pytest-5/data")
+
+    def test_different_session_numbers(self):
+        """Test temp paths with various session numbers."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-1/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-99/")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-12345/")
+
+    def test_paths_with_subdirectories(self):
+        """Test temp paths with nested subdirectories."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_func/subdir")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/a/b/c/d/file.txt")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test_module0/test_file.py")
+
+    def test_paths_with_filenames(self):
+        """Test temp paths ending with filenames."""
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/output.json")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test.log")
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/data.csv")
+
+    def test_non_temp_paths(self):
+        """Test that non-temp paths are correctly identified."""
+        assert not _is_temp_path("/home/user/project/test.py")
+        assert not _is_temp_path("/tmp/other/directory")
+        assert not _is_temp_path("/var/log/test.log")
+        assert not _is_temp_path("./relative/path")
+        assert not _is_temp_path("test_file.py")
+
+    def test_similar_but_not_temp_paths(self):
+        """Test paths that look similar but don't match the pattern."""
+        assert not _is_temp_path("/tmp/pytest-user/pytest-0/")  # missing "of-"
+        assert not _is_temp_path("/tmp/pytest-of-user/pytest-/")  # no number
+        assert not _is_temp_path("/tmp/pytest-of-/pytest-0/")  # empty username
+        assert not _is_temp_path("/tmp/pytest-of-user/pytest-abc/")  # non-numeric session
+
+    def test_edge_cases(self):
+        """Test edge cases for _is_temp_path."""
+        assert not _is_temp_path("")
+        assert not _is_temp_path("/")
+        assert not _is_temp_path("/tmp/")
+        assert not _is_temp_path("/tmp/pytest-of-")
+
+    def test_path_embedded_in_string(self):
+        """Test that temp paths are detected when embedded in longer strings."""
+        assert _is_temp_path("Error in /tmp/pytest-of-user/pytest-0/test.py: failed")
+        assert _is_temp_path("File: /tmp/pytest-of-user/pytest-123/output.txt")
+
+    def test_windows_style_paths(self):
+        """Test that Windows-style paths are not detected as temp paths."""
+        assert not _is_temp_path("C:\\Users\\test\\pytest")
+        assert not _is_temp_path("D:\\tmp\\pytest-of-user\\pytest-0\\")
+
+
+class TestNormalizeTempPath:
+    """Tests for the _normalize_temp_path() function."""
+
+    def test_basic_normalization(self):
+        """Test basic temp path normalization."""
+        assert _normalize_temp_path("/tmp/pytest-of-user/pytest-0/test") == "/tmp/pytest-temp/test"
+        assert _normalize_temp_path("/tmp/pytest-of-user/pytest-123/test") == "/tmp/pytest-temp/test"
+
+    def test_different_session_numbers_normalize_same(self):
+        """Test that different session numbers normalize to the same result."""
+        path1 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/file.txt")
+        path2 = _normalize_temp_path("/tmp/pytest-of-user/pytest-99/file.txt")
+        path3 = _normalize_temp_path("/tmp/pytest-of-user/pytest-12345/file.txt")
+        assert path1 == path2 == path3 == "/tmp/pytest-temp/file.txt"
+
+    def test_different_usernames_normalize_same(self):
+        """Test that different usernames normalize to the same result."""
+        path1 = _normalize_temp_path("/tmp/pytest-of-alice/pytest-0/file.txt")
+        path2 = _normalize_temp_path("/tmp/pytest-of-bob/pytest-0/file.txt")
+        path3 = _normalize_temp_path("/tmp/pytest-of-root/pytest-0/file.txt")
+        assert path1 == path2 == path3 == "/tmp/pytest-temp/file.txt"
+
+    def test_complex_subdirectories(self):
+        """Test normalization with complex subdirectory structures."""
+        result = _normalize_temp_path("/tmp/pytest-of-user/pytest-42/test_module/subdir/file.py")
+        assert result == "/tmp/pytest-temp/test_module/subdir/file.py"
+
+    def test_non_temp_path_unchanged(self):
+        """Test that non-temp paths are returned unchanged."""
+        path = "/home/user/project/test.py"
+        assert _normalize_temp_path(path) == path
+
+    def test_empty_string(self):
+        """Test normalization of empty string."""
+        assert _normalize_temp_path("") == ""
+
+    def test_path_with_multiple_occurrences(self):
+        """Test paths with multiple temp path patterns (unusual but possible in error messages)."""
+        path = "/tmp/pytest-of-user/pytest-0/ref to /tmp/pytest-of-user/pytest-1/other"
+        result = _normalize_temp_path(path)
+        assert result == "/tmp/pytest-temp/ref to /tmp/pytest-temp/other"
+
+    def test_trailing_slash_handling(self):
+        """Test normalization preserves or removes trailing slashes correctly."""
+        result1 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/")
+        result2 = _normalize_temp_path("/tmp/pytest-of-user/pytest-0/subdir/")
+        assert result1 == "/tmp/pytest-temp/"
+        assert result2 == "/tmp/pytest-temp/subdir/"
+
+
+class TestComparatorTempPaths:
+    """Tests for comparator() with temp path strings."""
+
+    def test_identical_temp_paths(self):
+        """Test that identical temp paths compare as equal."""
+        path = "/tmp/pytest-of-user/pytest-0/test.txt"
+        assert comparator(path, path)
+
+    def test_different_session_numbers(self):
+        """Test that paths differing only in session number are equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/output.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/output.txt"
+        assert comparator(path1, path2)
+
+    def test_different_usernames(self):
+        """Test that paths differing in username are equal."""
+        path1 = "/tmp/pytest-of-alice/pytest-0/result.json"
+        path2 = "/tmp/pytest-of-bob/pytest-0/result.json"
+        assert comparator(path1, path2)
+
+    def test_different_usernames_and_sessions(self):
+        """Test that paths differing in both username and session are equal."""
+        path1 = "/tmp/pytest-of-alice/pytest-10/data/file.csv"
+        path2 = "/tmp/pytest-of-bob/pytest-999/data/file.csv"
+        assert comparator(path1, path2)
+
+    def test_different_subdirectories_not_equal(self):
+        """Test that paths with different subdirectories are not equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/subdir1/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/subdir2/file.txt"
+        assert not comparator(path1, path2)
+
+    def test_different_filenames_not_equal(self):
+        """Test that paths with different filenames are not equal."""
+        path1 = "/tmp/pytest-of-user/pytest-0/file1.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/file2.txt"
+        assert not comparator(path1, path2)
+
+    def test_temp_path_vs_non_temp_path(self):
+        """Test that temp paths don't match non-temp paths."""
+        temp_path = "/tmp/pytest-of-user/pytest-0/file.txt"
+        non_temp_path = "/home/user/file.txt"
+        assert not comparator(temp_path, non_temp_path)
+
+    def test_regular_strings_still_work(self):
+        """Test that regular string comparison still works."""
+        assert comparator("hello", "hello")
+        assert not comparator("hello", "world")
+        assert comparator("", "")
+        assert not comparator("test", "")
+
+    def test_non_temp_paths_must_be_exact(self):
+        """Test that non-temp paths require exact equality."""
+        path1 = "/home/user/project/file.txt"
+        path2 = "/home/user/project/file.txt"
+        path3 = "/home/user/project/other.txt"
+        assert comparator(path1, path2)
+        assert not comparator(path1, path3)
+
+
+class TestComparatorTempPathsInNestedStructures:
+    """Tests for comparator() with temp paths in nested data structures."""
+
+    def test_temp_paths_in_list(self):
+        """Test temp paths inside lists."""
+        list1 = ["/tmp/pytest-of-alice/pytest-0/file.txt", "other"]
+        list2 = ["/tmp/pytest-of-bob/pytest-99/file.txt", "other"]
+        assert comparator(list1, list2)
+
+    def test_temp_paths_in_tuple(self):
+        """Test temp paths inside tuples."""
+        tuple1 = ("/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt")
+        tuple2 = ("/tmp/pytest-of-user/pytest-123/a.txt", "/tmp/pytest-of-user/pytest-123/b.txt")
+        assert comparator(tuple1, tuple2)
+
+    def test_temp_paths_in_dict_values(self):
+        """Test temp paths as dictionary values."""
+        dict1 = {"path": "/tmp/pytest-of-user/pytest-0/output.json", "name": "test"}
+        dict2 = {"path": "/tmp/pytest-of-user/pytest-999/output.json", "name": "test"}
+        assert comparator(dict1, dict2)
+
+    def test_temp_paths_in_dict_keys_not_supported(self):
+        """Test that temp paths as dictionary keys must match exactly (keys are not normalized)."""
+        # Dict keys use direct comparison, so temp paths as keys won't be normalized
+        # This tests the expected behavior
+        dict1 = {"/tmp/pytest-of-user/pytest-0/key": "value"}
+        dict2 = {"/tmp/pytest-of-user/pytest-0/key": "value"}
+        assert comparator(dict1, dict2)
+
+    def test_temp_paths_in_nested_dict(self):
+        """Test temp paths in nested dictionaries."""
+        nested1 = {
+            "config": {
+                "output_path": "/tmp/pytest-of-alice/pytest-5/results",
+                "log_path": "/tmp/pytest-of-alice/pytest-5/logs"
+            }
+        }
+        nested2 = {
+            "config": {
+                "output_path": "/tmp/pytest-of-bob/pytest-10/results",
+                "log_path": "/tmp/pytest-of-bob/pytest-10/logs"
+            }
+        }
+        assert comparator(nested1, nested2)
+
+    def test_temp_paths_in_deeply_nested_structure(self):
+        """Test temp paths in deeply nested structures."""
+        deep1 = {"a": {"b": {"c": ["/tmp/pytest-of-user/pytest-0/file.txt"]}}}
+        deep2 = {"a": {"b": {"c": ["/tmp/pytest-of-other/pytest-99/file.txt"]}}}
+        assert comparator(deep1, deep2)
+
+    def test_mixed_temp_and_regular_paths(self):
+        """Test structures with both temp and regular paths."""
+        data1 = {
+            "temp": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "regular": "/home/user/file.txt"
+        }
+        data2 = {
+            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "regular": "/home/user/file.txt"
+        }
+        assert comparator(data1, data2)
+
+        data3 = {
+            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "regular": "/home/user/different.txt"
+        }
+        assert not comparator(data1, data3)
+
+    def test_temp_paths_in_deque(self):
+        """Test temp paths inside deque."""
+        from collections import deque
+        d1 = deque(["/tmp/pytest-of-user/pytest-0/file.txt"])
+        d2 = deque(["/tmp/pytest-of-user/pytest-123/file.txt"])
+        assert comparator(d1, d2)
+
+    def test_temp_paths_in_chainmap(self):
+        """Test temp paths inside ChainMap."""
+        from collections import ChainMap
+        cm1 = ChainMap({"path": "/tmp/pytest-of-user/pytest-0/file.txt"})
+        cm2 = ChainMap({"path": "/tmp/pytest-of-user/pytest-99/file.txt"})
+        assert comparator(cm1, cm2)
+
+
+class TestComparatorTempPathsEdgeCases:
+    """Edge case tests for temp path handling in comparator."""
+
+    def test_empty_string_vs_temp_path(self):
+        """Test empty string comparison with temp path."""
+        assert not comparator("", "/tmp/pytest-of-user/pytest-0/file.txt")
+        assert not comparator("/tmp/pytest-of-user/pytest-0/file.txt", "")
+
+    def test_path_with_special_characters(self):
+        """Test temp paths containing special characters in filenames."""
+        path1 = "/tmp/pytest-of-user/pytest-0/file with spaces.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/file with spaces.txt"
+        assert comparator(path1, path2)
+
+        path3 = "/tmp/pytest-of-user/pytest-0/file-with-dashes.txt"
+        path4 = "/tmp/pytest-of-user/pytest-99/file-with-dashes.txt"
+        assert comparator(path3, path4)
+
+    def test_path_with_unicode_characters(self):
+        """Test temp paths with unicode characters."""
+        path1 = "/tmp/pytest-of-user/pytest-0/файл.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/файл.txt"
+        assert comparator(path1, path2)
+
+    def test_very_long_session_number(self):
+        """Test temp paths with very long session numbers."""
+        path1 = "/tmp/pytest-of-user/pytest-9999999999/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-0/file.txt"
+        assert comparator(path1, path2)
+
+    def test_username_with_special_characters(self):
+        """Test temp paths with special characters in username."""
+        path1 = "/tmp/pytest-of-user-name/pytest-0/file.txt"
+        path2 = "/tmp/pytest-of-other-user/pytest-99/file.txt"
+        assert comparator(path1, path2)
+
+    def test_path_only_differs_in_temp_portion(self):
+        """Test that only the temp portion is normalized, rest must match."""
+        path1 = "/tmp/pytest-of-user/pytest-0/subdir/nested/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/subdir/nested/file.txt"
+        assert comparator(path1, path2)
+
+        path3 = "/tmp/pytest-of-user/pytest-0/subdir/nested/other.txt"
+        assert not comparator(path1, path3)
+
+    def test_multiple_slashes(self):
+        """Test temp paths with multiple consecutive slashes (should still work)."""
+        # Note: The regex handles the standard format, extra slashes may not be normalized
+        path1 = "/tmp/pytest-of-user/pytest-0/file.txt"
+        path2 = "/tmp/pytest-of-user/pytest-99/file.txt"
+        assert comparator(path1, path2)
+
+    def test_temp_path_at_start_middle_end(self):
+        """Test that temp paths are detected regardless of position in string."""
+        # Path at start
+        assert _is_temp_path("/tmp/pytest-of-user/pytest-0/test")
+        # Path in middle (embedded in error message)
+        assert _is_temp_path("Error: /tmp/pytest-of-user/pytest-0/test failed")
+        # Path at end
+        assert _is_temp_path("Output saved to /tmp/pytest-of-user/pytest-0/")
+
+    def test_partial_temp_path_patterns(self):
+        """Test strings that partially match temp path pattern."""
+        # Missing components
+        assert not _is_temp_path("/tmp/pytest-of-user/")
+        assert not _is_temp_path("/tmp/pytest-0/")
+        assert not _is_temp_path("pytest-of-user/pytest-0/")
+
+
+class TestPytestTempPathPatternRegex:
+    """Tests for the PYTEST_TEMP_PATH_PATTERN regex directly."""
+
+    def test_pattern_matches_standard_format(self):
+        """Test regex matches standard pytest temp path format."""
+        import re
+        assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-0/")
+        assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-123/file")
+
+    def test_pattern_captures_correctly(self):
+        """Test that the pattern substitution works correctly."""
+        result = PYTEST_TEMP_PATH_PATTERN.sub("REPLACED", "/tmp/pytest-of-user/pytest-0/file.txt")
+        assert result == "REPLACEDfile.txt"
+
+    def test_pattern_handles_multiple_matches(self):
+        """Test pattern with multiple temp paths in same string."""
+        text = "/tmp/pytest-of-a/pytest-1/ and /tmp/pytest-of-b/pytest-2/"
+        result = PYTEST_TEMP_PATH_PATTERN.sub("X", text)
+        assert result == "X and X"
+
+    def test_pattern_greedy_behavior(self):
+        """Test that the pattern doesn't over-match."""
+        # The pattern should stop at the trailing slash of the session number
+        path = "/tmp/pytest-of-user/pytest-0/subdir/pytest-1/file.txt"
+        result = PYTEST_TEMP_PATH_PATTERN.sub("X", path)
+        # The first temp path should be replaced, but "pytest-1" in subdir shouldn't trigger
+        assert "subdir" in result
+
+
+class TestComparatorTempPathsWithSuperset:
+    """Tests for temp path comparison with superset_obj=True."""
+
+    def test_superset_with_temp_paths_in_dict(self):
+        """Test superset comparison with temp paths in dictionaries."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"path": "/tmp/pytest-of-user/pytest-99/file.txt", "extra": "data"}
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_paths_must_still_match(self):
+        """Test that temp paths must still be equivalent in superset mode."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"path": "/tmp/pytest-of-user/pytest-99/other.txt", "extra": "data"}
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_nested_dict_with_temp_paths(self):
+        """Test superset comparison with temp paths in nested dictionaries."""
+        orig = {
+            "config": {
+                "output": "/tmp/pytest-of-alice/pytest-5/results.json"
+            }
+        }
+        new = {
+            "config": {
+                "output": "/tmp/pytest-of-bob/pytest-100/results.json",
+                "debug": True
+            },
+            "metadata": {"version": "1.0"}
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_multiple_temp_paths_in_dict(self):
+        """Test superset with multiple temp paths in dictionary values."""
+        orig = {
+            "input": "/tmp/pytest-of-user/pytest-0/input.txt",
+            "output": "/tmp/pytest-of-user/pytest-0/output.txt"
+        }
+        new = {
+            "input": "/tmp/pytest-of-user/pytest-99/input.txt",
+            "output": "/tmp/pytest-of-user/pytest-99/output.txt",
+            "log": "/tmp/pytest-of-user/pytest-99/debug.log"
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_path_in_list_inside_dict(self):
+        """Test superset with temp paths in lists inside dictionaries."""
+        orig = {
+            "files": ["/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt"]
+        }
+        new = {
+            "files": ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"],
+            "count": 2
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_false_when_temp_path_missing(self):
+        """Test superset fails when temp path key is missing in new."""
+        orig = {"path": "/tmp/pytest-of-user/pytest-0/file.txt"}
+        new = {"other": "data"}
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_temp_path_with_different_filenames_fails(self):
+        """Test superset fails when normalized temp paths have different filenames."""
+        orig = {
+            "result": "/tmp/pytest-of-user/pytest-0/output_v1.json"
+        }
+        new = {
+            "result": "/tmp/pytest-of-user/pytest-99/output_v2.json",
+            "extra": "data"
+        }
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_mixed_temp_and_regular_paths(self):
+        """Test superset with mix of temp paths and regular paths."""
+        orig = {
+            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "config_file": "/etc/app/config.yaml"
+        }
+        new = {
+            "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "config_file": "/etc/app/config.yaml",
+            "extra_key": "extra_value"
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_regular_path_must_match_exactly(self):
+        """Test that regular paths must match exactly even in superset mode."""
+        orig = {
+            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
+            "config_file": "/etc/app/config.yaml"
+        }
+        new = {
+            "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
+            "config_file": "/etc/app/other.yaml",
+            "extra_key": "extra_value"
+        }
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_deeply_nested_temp_paths(self):
+        """Test superset with deeply nested structures containing temp paths."""
+        orig = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "path": "/tmp/pytest-of-user/pytest-0/deep.txt"
+                    }
+                }
+            }
+        }
+        new = {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "path": "/tmp/pytest-of-other/pytest-999/deep.txt",
+                        "extra": True
+                    },
+                    "sibling": "value"
+                }
+            },
+            "top_level_extra": 123
+        }
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_with_attrs_class_containing_temp_paths(self):
+        """Test superset with attrs classes containing temp paths."""
+        try:
+            import attr
+        except ImportError:
+            pytest.skip("attrs not installed")
+
+        @attr.s
+        class Config:
+            path = attr.ib()
+            name = attr.ib(default="default")
+
+        # Test that temp paths are normalized in attrs classes
+        orig = Config(path="/tmp/pytest-of-user/pytest-0/config.json")
+        new = Config(path="/tmp/pytest-of-user/pytest-99/config.json")
+        assert comparator(orig, new, superset_obj=True)
+
+        # Test that different non-temp values still fail
+        orig2 = Config(path="/tmp/pytest-of-user/pytest-0/config.json", name="name1")
+        new2 = Config(path="/tmp/pytest-of-user/pytest-99/config.json", name="name2")
+        assert not comparator(orig2, new2, superset_obj=True)
+
+    def test_superset_with_class_dict_containing_temp_paths(self):
+        """Test superset with regular class objects containing temp paths."""
+        class Result:
+            def __init__(self, output_path):
+                self.output_path = output_path
+
+        class ResultExtended:
+            def __init__(self, output_path, extra=None):
+                self.output_path = output_path
+                self.extra = extra
+
+        # Note: These are different classes, so type check will fail first
+        # Let's use the same class
+        orig = Result("/tmp/pytest-of-user/pytest-0/result.json")
+        new = Result("/tmp/pytest-of-user/pytest-99/result.json")
+        # Add extra attribute to new
+        new.extra_field = "extra_data"
+        assert comparator(orig, new, superset_obj=True)
+
+    def test_superset_list_temp_paths_must_have_same_length(self):
+        """Test that lists with temp paths must have same length even in superset mode."""
+        # superset_obj doesn't apply to list lengths - they must match
+        orig = ["/tmp/pytest-of-user/pytest-0/a.txt"]
+        new = ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"]
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_tuple_temp_paths_must_have_same_length(self):
+        """Test that tuples with temp paths must have same length even in superset mode."""
+        orig = ("/tmp/pytest-of-user/pytest-0/a.txt",)
+        new = ("/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt")
+        assert not comparator(orig, new, superset_obj=True)
+
+    def test_superset_with_exception_containing_temp_path(self):
+        """Test superset with exception objects containing temp paths in attributes."""
+        class CustomError(Exception):
+            def __init__(self, message, path):
+                super().__init__(message)
+                self.path = path
+
+        orig = CustomError("File error", "/tmp/pytest-of-user/pytest-0/file.txt")
+        new = CustomError("File error", "/tmp/pytest-of-user/pytest-99/file.txt")
+        new.extra_info = "additional data"
+        assert comparator(orig, new, superset_obj=True)
+
+
+class TestComparatorTempPathsRealisticScenarios:
+    """Tests simulating realistic scenarios where temp path comparison matters."""
+
+    def test_test_output_comparison(self):
+        """Simulate comparing test outputs that contain temp paths."""
+        original_result = {
+            "status": "success",
+            "output_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/results.json",
+            "log_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/debug.log"
+        }
+        replay_result = {
+            "status": "success",
+            "output_file": "/tmp/pytest-of-local-user/pytest-0/test_output/results.json",
+            "log_file": "/tmp/pytest-of-local-user/pytest-0/test_output/debug.log"
+        }
+        assert comparator(original_result, replay_result)
+
+    def test_exception_message_with_temp_path(self):
+        """Test comparing exception-like structures with temp paths."""
+        exc1 = {
+            "type": "FileNotFoundError",
+            "message": "File not found: /tmp/pytest-of-user/pytest-0/missing.txt"
+        }
+        exc2 = {
+            "type": "FileNotFoundError",
+            "message": "File not found: /tmp/pytest-of-user/pytest-99/missing.txt"
+        }
+        assert comparator(exc1, exc2)
+
+    def test_function_return_with_temp_path(self):
+        """Test comparing function returns that include temp paths."""
+        # Simulating a function that returns a created file path
+        return1 = "/tmp/pytest-of-user/pytest-5/generated_file_abc123.txt"
+        return2 = "/tmp/pytest-of-user/pytest-10/generated_file_abc123.txt"
+        assert comparator(return1, return2)
+
+    def test_list_of_created_files(self):
+        """Test comparing lists of created file paths."""
+        files1 = [
+            "/tmp/pytest-of-user/pytest-0/output/file1.txt",
+            "/tmp/pytest-of-user/pytest-0/output/file2.txt",
+            "/tmp/pytest-of-user/pytest-0/output/file3.txt"
+        ]
+        files2 = [
+            "/tmp/pytest-of-user/pytest-99/output/file1.txt",
+            "/tmp/pytest-of-user/pytest-99/output/file2.txt",
+            "/tmp/pytest-of-user/pytest-99/output/file3.txt"
+        ]
+        assert comparator(files1, files2)
+
+    def test_config_object_with_paths(self):
+        """Test comparing config-like objects with multiple paths."""
+        config1 = {
+            "temp_dir": "/tmp/pytest-of-user/pytest-0/",
+            "cache_dir": "/tmp/pytest-of-user/pytest-0/cache/",
+            "output_dir": "/tmp/pytest-of-user/pytest-0/output/",
+            "permanent_dir": "/home/user/data/"
+        }
+        config2 = {
+            "temp_dir": "/tmp/pytest-of-other/pytest-100/",
+            "cache_dir": "/tmp/pytest-of-other/pytest-100/cache/",
+            "output_dir": "/tmp/pytest-of-other/pytest-100/output/",
+            "permanent_dir": "/home/user/data/"
+        }
+        assert comparator(config1, config2)
