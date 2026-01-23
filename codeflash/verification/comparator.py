@@ -157,6 +157,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                 range,
                 slice,
                 OrderedDict,
+                types.GenericAlias,
             ),
         ):
             return orig == new
@@ -297,8 +298,8 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                     # fails at "ufunc 'isfinite' not supported for the input types"
                     return np.all([comparator(x, y, superset_obj) for x, y in zip(orig, new)])
 
-            if isinstance(orig, (np.floating, np.complex64, np.complex128)):
-                return np.isclose(orig, new)
+            if isinstance(orig, (np.floating, np.complexfloating)):
+                return np.isclose(orig, new, equal_nan=True)
 
             if isinstance(orig, (np.integer, np.bool_, np.byte)):
                 return orig == new

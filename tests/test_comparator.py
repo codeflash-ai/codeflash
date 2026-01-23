@@ -2918,6 +2918,108 @@ def test_numpy_dtypes() -> None:
     assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
 
 
+def test_numpy_extended_precision_types() -> None:
+    """Test comparator for numpy extended precision types like clongdouble."""
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip("numpy not available")
+
+    # Test np.clongdouble (extended precision complex)
+    c1 = np.clongdouble(1 + 2j)
+    c2 = np.clongdouble(1 + 2j)
+    c3 = np.clongdouble(1 + 3j)
+    assert comparator(c1, c2)
+    assert not comparator(c1, c3)
+
+    # Test np.longdouble (extended precision float)
+    l1 = np.longdouble(1.5)
+    l2 = np.longdouble(1.5)
+    l3 = np.longdouble(2.5)
+    assert comparator(l1, l2)
+    assert not comparator(l1, l3)
+
+    # Test NaN handling for extended precision complex
+    nan_c1 = np.clongdouble(complex(np.nan, 2))
+    nan_c2 = np.clongdouble(complex(np.nan, 2))
+    assert comparator(nan_c1, nan_c2)
+
+    # Test NaN handling for extended precision float
+    nan_l1 = np.longdouble(np.nan)
+    nan_l2 = np.longdouble(np.nan)
+    assert comparator(nan_l1, nan_l2)
+
+
+def test_numpy_typing_types() -> None:
+    """Test comparator for numpy.typing types like NDArray type aliases."""
+    try:
+        import numpy as np
+        import numpy.typing as npt
+    except ImportError:
+        pytest.skip("numpy or numpy.typing not available")
+
+    # Test NDArray type alias comparisons
+    arr_type1 = npt.NDArray[np.float64]
+    arr_type2 = npt.NDArray[np.float64]
+    arr_type3 = npt.NDArray[np.int64]
+    assert comparator(arr_type1, arr_type2)
+    assert not comparator(arr_type1, arr_type3)
+
+    # Test NBitBase (if it can be instantiated)
+    try:
+        nbit1 = npt.NBitBase()
+        nbit2 = npt.NBitBase()
+        # NBitBase instances with empty __dict__ should compare as equal
+        assert comparator(nbit1, nbit2)
+        # Also test with superset_obj=True
+        assert comparator(nbit1, nbit2, superset_obj=True)
+    except TypeError:
+        # NBitBase may not be instantiable in all numpy versions
+        pass
+
+
+def test_numpy_typing_superset_obj() -> None:
+    """Test comparator with superset_obj=True for numpy types."""
+    try:
+        import numpy as np
+        import numpy.typing as npt
+    except ImportError:
+        pytest.skip("numpy or numpy.typing not available")
+
+    # Test numpy arrays with object dtype containing dicts (superset scenario)
+    a1 = np.array([{'a': 1}], dtype=object)
+    a2 = np.array([{'a': 1, 'b': 2}], dtype=object)  # superset
+    assert comparator(a1, a2, superset_obj=True)
+    assert not comparator(a1, a2, superset_obj=False)
+
+    # Test extended precision types with superset_obj=True
+    c1 = np.clongdouble(1 + 2j)
+    c2 = np.clongdouble(1 + 2j)
+    assert comparator(c1, c2, superset_obj=True)
+
+    l1 = np.longdouble(1.5)
+    l2 = np.longdouble(1.5)
+    assert comparator(l1, l2, superset_obj=True)
+
+    # Test NDArray type alias with superset_obj=True
+    arr_type1 = npt.NDArray[np.float64]
+    arr_type2 = npt.NDArray[np.float64]
+    assert comparator(arr_type1, arr_type2, superset_obj=True)
+
+    # Test numpy structured arrays (np.void) with superset_obj=True
+    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
+    a_struct = np.array([('Alice', 25)], dtype=dt)
+    b_struct = np.array([('Alice', 25)], dtype=dt)
+    assert comparator(a_struct[0], b_struct[0], superset_obj=True)
+
+    # Test numpy random generators with superset_obj=True
+    rng1 = np.random.default_rng(seed=42)
+    rng2 = np.random.default_rng(seed=42)
+    assert comparator(rng1, rng2, superset_obj=True)
+
+    rs1 = np.random.RandomState(seed=42)
+    rs2 = np.random.RandomState(seed=42)
+    assert comparator(rs1, rs2, superset_obj=True)
 def test_numba_typed_list() -> None:
     """Test comparator for numba.typed.List."""
     try:
