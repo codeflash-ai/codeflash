@@ -1,3 +1,5 @@
+const _fibCache = new Map();
+
 /**
  * Fibonacci implementations - ES Module
  * Intentionally inefficient for optimization testing.
@@ -13,7 +15,12 @@ export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    if (_fibCache.has(n)) {
+        return _fibCache.get(n);
+    }
+    const result = fibonacci(n - 1) + fibonacci(n - 2);
+    _fibCache.set(n, result);
+    return result;
 }
 
 /**
