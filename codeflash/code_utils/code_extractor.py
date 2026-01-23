@@ -25,6 +25,96 @@ if TYPE_CHECKING:
     from codeflash.models.models import FunctionSource
 
 
+class GlobalFunctionCollector(cst.CSTVisitor):
+    """Collects all module-level function definitions (not inside classes or other functions)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.functions: dict[str, cst.FunctionDef] = {}
+        self.function_order: list[str] = []
+        self.scope_depth = 0
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
+        if self.scope_depth == 0:
+            # Module-level function
+            name = node.name.value
+            self.functions[name] = node
+            if name not in self.function_order:
+                self.function_order.append(name)
+        self.scope_depth += 1
+        return True
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+        self.scope_depth -= 1
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:  # noqa: ARG002
+        self.scope_depth += 1
+        return True
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.scope_depth -= 1
+
+
+class GlobalFunctionTransformer(cst.CSTTransformer):
+    """Transforms/adds module-level functions from the new file to the original file."""
+
+    def __init__(self, new_functions: dict[str, cst.FunctionDef], new_function_order: list[str]) -> None:
+        super().__init__()
+        self.new_functions = new_functions
+        self.new_function_order = new_function_order
+        self.processed_functions: set[str] = set()
+        self.scope_depth = 0
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+        self.scope_depth += 1
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        self.scope_depth -= 1
+        if self.scope_depth > 0:
+            return updated_node
+
+        # Check if this is a module-level function we need to replace
+        name = original_node.name.value
+        if name in self.new_functions:
+            self.processed_functions.add(name)
+            return self.new_functions[name]
+        return updated_node
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.scope_depth += 1
+
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+        self.scope_depth -= 1
+        return updated_node
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        # Add any new functions that weren't in the original file
+        new_statements = list(updated_node.body)
+
+        functions_to_append = [
+            self.new_functions[name]
+            for name in self.new_function_order
+            if name not in self.processed_functions and name in self.new_functions
+        ]
+
+        if functions_to_append:
+            # Find the position of the last function or class definition
+            insert_index = find_insertion_index_after_imports(updated_node)
+            for i, stmt in enumerate(new_statements):
+                if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
+                    insert_index = i + 1
+
+            # Add empty line before each new function
+            function_nodes = []
+            for func in functions_to_append:
+                func_with_empty_line = func.with_changes(leading_lines=[cst.EmptyLine(), *func.leading_lines])
+                function_nodes.append(func_with_empty_line)
+
+            new_statements = list(chain(new_statements[:insert_index], function_nodes, new_statements[insert_index:]))
+
+        return updated_node.with_changes(body=new_statements)
+
+
 class GlobalAssignmentCollector(cst.CSTVisitor):
     """Collects all global assignment statements."""
 
@@ -439,17 +529,41 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
 
     # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file
-    new_collector = GlobalAssignmentCollector()
-    src_module.visit(new_collector)
-    # Only create transformer if there are assignments to insert/transform
-    if not new_collector.assignments:  # nothing to transform
+    new_assignment_collector = GlobalAssignmentCollector()
+    src_module.visit(new_assignment_collector)
+
+    # Collect module-level functions from both source and destination
+    src_function_collector = GlobalFunctionCollector()
+    src_module.visit(src_function_collector)
+
+    dst_function_collector = GlobalFunctionCollector()
+    original_module.visit(dst_function_collector)
+
+    # Filter out functions that already exist in the destination (only add truly new functions)
+    new_functions = {
+        name: func
+        for name, func in src_function_collector.functions.items()
+        if name not in dst_function_collector.functions
+    }
+    new_function_order = [name for name in src_function_collector.function_order if name in new_functions]
+
+    # If there are no assignments and no new functions, return the current code
+    if not new_assignment_collector.assignments and not new_functions:
         return mod_dst_code
 
-    # Transform the original destination module
-    transformer = GlobalAssignmentTransformer(new_collector.assignments, new_collector.assignment_order)
-    transformed_module = original_module.visit(transformer)
+    # Transform assignments if any
+    if new_assignment_collector.assignments:
+        transformer = GlobalAssignmentTransformer(
+            new_assignment_collector.assignments, new_assignment_collector.assignment_order
+        )
+        original_module = original_module.visit(transformer)
 
-    return transformed_module.code
+    # Transform functions if any
+    if new_functions:
+        function_transformer = GlobalFunctionTransformer(new_functions, new_function_order)
+        original_module = original_module.visit(function_transformer)
+
+    return original_module.code
 
 
 def resolve_star_import(module_name: str, project_root: Path) -> set[str]:

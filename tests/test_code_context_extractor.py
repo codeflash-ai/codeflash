@@ -2815,6 +2815,188 @@ FINAL_VAR = 123
     assert collector.assignment_order == expected_order
 
 
+def test_global_function_collector():
+    """Test GlobalFunctionCollector correctly collects module-level function definitions."""
+    import libcst as cst
+
+    from codeflash.code_utils.code_extractor import GlobalFunctionCollector
+
+    source_code = """
+# Module-level functions
+def helper_function():
+    return "helper"
+
+def another_helper(x: int) -> str:
+    return str(x)
+
+class SomeClass:
+    def method(self):
+        # This is a method, not a module-level function
+        return "method"
+
+    def another_method(self):
+        # Also a method
+        def nested_function():
+            # Nested function inside method
+            return "nested"
+        return nested_function()
+
+def final_function():
+    def inner_function():
+        # This is a nested function, not module-level
+        return "inner"
+    return inner_function()
+"""
+
+    tree = cst.parse_module(source_code)
+    collector = GlobalFunctionCollector()
+    tree.visit(collector)
+
+    # Should collect only module-level functions
+    assert len(collector.functions) == 3
+    assert "helper_function" in collector.functions
+    assert "another_helper" in collector.functions
+    assert "final_function" in collector.functions
+
+    # Should not collect methods or nested functions
+    assert "method" not in collector.functions
+    assert "another_method" not in collector.functions
+    assert "nested_function" not in collector.functions
+    assert "inner_function" not in collector.functions
+
+    # Verify correct order
+    expected_order = ["helper_function", "another_helper", "final_function"]
+    assert collector.function_order == expected_order
+
+
+def test_add_global_assignments_with_new_functions():
+    """Test add_global_assignments correctly adds new module-level functions."""
+    source_code = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        return _get_decorator_for_action(action)
+
+@lru_cache(maxsize=None)
+def _get_decorator_for_action(action):
+    def decorator(fn):
+        return fn
+    return decorator
+"""
+
+    destination_code = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        # Original implementation
+        return action
+"""
+
+    expected = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        # Original implementation
+        return action
+
+
+@lru_cache(maxsize=None)
+def _get_decorator_for_action(action):
+    def decorator(fn):
+        return fn
+    return decorator
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_does_not_duplicate_existing_functions():
+    """Test add_global_assignments does not duplicate functions that already exist in destination."""
+    source_code = """\
+def helper():
+    return "source_helper"
+
+def existing_function():
+    return "source_existing"
+"""
+
+    destination_code = """\
+def existing_function():
+    return "dest_existing"
+
+class MyClass:
+    pass
+"""
+
+    expected = """\
+def existing_function():
+    return "dest_existing"
+
+class MyClass:
+    pass
+
+def helper():
+    return "source_helper"
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_with_decorated_functions():
+    """Test add_global_assignments correctly adds decorated functions."""
+    source_code = """\
+from functools import lru_cache
+from typing import Callable
+
+_LOCAL_CACHE: dict[str, int] = {}
+
+@lru_cache(maxsize=128)
+def cached_helper(x: int) -> int:
+    return x * 2
+
+def regular_helper():
+    return "regular"
+"""
+
+    destination_code = """\
+from typing import Any
+
+class MyClass:
+    def method(self):
+        return cached_helper(5)
+"""
+
+    expected = """\
+from typing import Any
+
+_LOCAL_CACHE: dict[str, int] = {}
+
+class MyClass:
+    def method(self):
+        return cached_helper(5)
+
+
+@lru_cache(maxsize=128)
+def cached_helper(x: int) -> int:
+    return x * 2
+
+
+def regular_helper():
+    return "regular"
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
 def test_class_instantiation_includes_init_as_helper(tmp_path: Path) -> None:
     """Test that when a class is instantiated, its __init__ method is tracked as a helper.
 
