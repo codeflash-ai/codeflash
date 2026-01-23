@@ -10,12 +10,20 @@ import sentry_sdk
 
 from codeflash.code_utils.compat import get_codeflash_temp_dir, get_safe_sys_executable
 
+# Known CrossHair limitations that produce invalid Python syntax in generated tests:
+# - "<locals>" - higher-order functions returning nested functions
+# - " object at 0x" - objects with default __repr__
+# - "<list_iterator" - iterator objects
+CROSSHAIR_KNOWN_LIMITATION_PATTERNS = ("<locals>", " object at 0x", "<list_iterator")
+
 
 def is_valid_concolic_test(test_code: str, project_root: Optional[str] = None) -> bool:
     try:
         ast.parse(test_code)
     except SyntaxError:
-        sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
+        is_known_limitation = any(pattern in test_code for pattern in CROSSHAIR_KNOWN_LIMITATION_PATTERNS)
+        if not is_known_limitation:
+            sentry_sdk.capture_message(f"CrossHair generated test with syntax error:\n{test_code}")
         return False
 
     temp_path = (get_codeflash_temp_dir() / f"concolic_test_{uuid.uuid4().hex}.py").resolve()
