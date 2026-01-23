@@ -75,7 +75,7 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages.base import FunctionInfo
+from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
@@ -657,7 +657,11 @@ class FunctionOptimizer:
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
             test_ext = self.language_support.get_test_file_suffix() if not self._is_python else ".py"
-            code_print(generated_test.generated_original_test_source, file_name=f"test_{i + 1}{test_ext}", language=self.function_to_optimize.language)
+            code_print(
+                generated_test.generated_original_test_source,
+                file_name=f"test_{i + 1}{test_ext}",
+                language=self.function_to_optimize.language,
+            )
         if concolic_test_str:
             logger.info(f"Generated test {count_tests}/{count_tests}:")
             code_print(concolic_test_str, language=self.function_to_optimize.language)
@@ -1864,6 +1868,7 @@ class FunctionOptimizer:
             self.function_to_optimize.qualified_name,
             self.project_root,
             self.test_cfg.tests_root,
+            Language(self.function_to_optimize.language),
         )
 
         futures = [future_optimization_candidates, future_references]

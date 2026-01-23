@@ -11,7 +11,9 @@
     "moduleRoot": ".",
     "testsRoot": "tests",
     "language": "javascript",
-    "formatterCmds": ["npx prettier --write $file"]
+    "formatterCmds": [
+      "npx prettier --write $file"
+    ]
   },
   "keywords": [
     "codeflash",
@@ -21,6 +23,7 @@
   "author": "CodeFlash Inc.",
   "license": "BSL 1.1",
   "devDependencies": {
+    "@codeflash/jest-runtime": "file:../packages/jest-runtime",
     "jest": "^29.7.0",
     "jest-junit": "^16.0.0"
   },
