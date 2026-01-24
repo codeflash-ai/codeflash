@@ -1016,10 +1016,29 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
         # Do not recurse into nested classes
         if prefix:
             return None, False
+
+        class_name = node.name.value
+
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
             raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
-        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
+        class_prefix = f"{prefix}.{class_name}" if prefix else class_name
+
+        # Check if this class contains any target functions
+        has_target_functions = any(
+            isinstance(stmt, cst.FunctionDef) and f"{class_prefix}.{stmt.name.value}" in target_functions
+            for stmt in node.body.body
+        )
+
+        # If the class is used as a dependency (not containing target functions), keep it entirely
+        # This handles cases like enums, dataclasses, and other types used by the target function
+        if (
+            not has_target_functions
+            and class_name in defs_with_usages
+            and defs_with_usages[class_name].used_by_qualified_function
+        ):
+            return node, True
+
         new_body = []
         found_target = False
 
