@@ -2975,10 +2975,10 @@ class MyClass:
         return cached_helper(5)
 """
 
+    # Global assignments are now inserted AFTER class/function definitions
+    # to ensure they can reference classes defined in the module
     expected = """\
 from typing import Any
-
-_LOCAL_CACHE: dict[str, int] = {}
 
 class MyClass:
     def method(self):
@@ -2992,6 +2992,71 @@ def cached_helper(x: int) -> int:
 
 def regular_helper():
     return "regular"
+
+_LOCAL_CACHE: dict[str, int] = {}
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_references_class_defined_in_module():
+    """Test that global assignments referencing classes are placed after those class definitions.
+
+    This test verifies the fix for a bug where LLM-generated optimization code like:
+        _REIFIERS = {MessageKind.XXX: lambda d: ...}
+    was placed BEFORE the MessageKind class definition, causing NameError at module load.
+
+    The fix ensures that new global assignments are inserted AFTER all class/function
+    definitions in the module, so they can safely reference any class defined in the module.
+    """
+    source_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+_MESSAGE_HANDLERS = {
+    MessageKind.ASK: lambda: "ask handler",
+    MessageKind.REPLY: lambda: "reply handler",
+}
+
+def handle_message(kind):
+    return _MESSAGE_HANDLERS[kind]()
+"""
+
+    destination_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+"""
+
+    # Global assignments are now inserted AFTER class/function definitions
+    # to ensure they can reference classes defined in the module
+    expected = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+
+_MESSAGE_HANDLERS = {
+    MessageKind.ASK: lambda: "ask handler",
+    MessageKind.REPLY: lambda: "reply handler",
+}
 """
 
     result = add_global_assignments(source_code, destination_code)

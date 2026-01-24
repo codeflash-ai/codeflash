@@ -280,8 +280,12 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         ]
 
         if assignments_to_append:
-            # after last top-level imports
+            # Start after imports, then advance past class/function definitions
+            # to ensure assignments can reference any classes defined in the module
             insert_index = find_insertion_index_after_imports(updated_node)
+            for i, stmt in enumerate(new_statements):
+                if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
+                    insert_index = i + 1
 
             assignment_lines = [
                 cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
@@ -331,8 +335,8 @@ class GlobalStatementCollector(cst.CSTVisitor):
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
         if not self.in_function_or_class:
             for statement in node.body:
-                # Skip imports
-                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign)):
+                # Skip imports and assignments (both regular and annotated)
+                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign, cst.AnnAssign)):
                     self.global_statements.append(node)
                     break
 
