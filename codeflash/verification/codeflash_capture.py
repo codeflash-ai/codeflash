@@ -15,6 +15,8 @@ from typing import Callable
 import dill as pickle
 from dill import PicklingWarning
 
+from codeflash.picklepatch.pickle_patcher import PicklePatcher
+
 warnings.filterwarnings("ignore", category=PicklingWarning)
 
 
@@ -170,7 +172,7 @@ def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is
             )
 
             # Write to sqlite
-            pickled_return_value = pickle.dumps(exception) if exception else pickle.dumps(instance_state)
+            pickled_return_value = pickle.dumps(exception) if exception else PicklePatcher.dumps(instance_state)
             codeflash_cur.execute(
                 "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
