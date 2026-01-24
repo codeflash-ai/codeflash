@@ -969,12 +969,22 @@ def parse_code_and_prune_cst(
     if code_context_type == CodeContextType.READ_WRITABLE:
         filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions, defs_with_usages)
     elif code_context_type == CodeContextType.READ_ONLY:
-        filtered_node, found_target = prune_cst_for_read_only_code(
-            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        filtered_node, found_target = prune_cst_for_context(
+            module,
+            target_functions,
+            helpers_of_helper_functions,
+            remove_docstrings=remove_docstrings,
+            include_target_in_output=False,
+            include_init_dunder=False,
         )
     elif code_context_type == CodeContextType.TESTGEN:
-        filtered_node, found_target = prune_cst_for_testgen_code(
-            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        filtered_node, found_target = prune_cst_for_context(
+            module,
+            target_functions,
+            helpers_of_helper_functions,
+            remove_docstrings=remove_docstrings,
+            include_target_in_output=True,
+            include_init_dunder=True,
         )
     elif code_context_type == CodeContextType.HASHING:
         filtered_node, found_target = prune_cst_for_code_hashing(module, target_functions)
@@ -1198,17 +1208,29 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_read_only_code(  # noqa: PLR0911
+def prune_cst_for_context(  # noqa: PLR0911
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
     remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    include_target_in_output: bool = False,  # noqa: FBT001, FBT002
+    include_init_dunder: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for read-only context.
+    """Recursively filter the node for code context extraction.
 
-    Returns
-    -------
+    Args:
+        node: The CST node to filter
+        target_functions: Set of qualified function names that are targets
+        helpers_of_helper_functions: Set of helper function qualified names
+        prefix: Current qualified name prefix (for class methods)
+        remove_docstrings: Whether to remove docstrings from output
+        include_target_in_output: If True, include target functions in output (testgen mode)
+                                  If False, exclude target functions (read-only mode)
+        include_init_dunder: If True, include __init__ in dunder methods (testgen mode)
+                             If False, exclude __init__ from dunder methods (read-only mode)
+
+    Returns:
         (filtered_node, found_target):
           filtered_node: The modified CST node or None if it should be removed.
           found_target: True if a target function was found in this node's subtree.
@@ -1219,17 +1241,28 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
 
     if isinstance(node, cst.FunctionDef):
         qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        # If it's a target function, remove it but mark found_target = True
+
+        # Check if it's a helper of helper function
         if qualified_name in helpers_of_helper_functions:
+            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                return node.with_changes(body=remove_docstring_from_body(node.body)), True
             return node, True
+
+        # Check if it's a target function
         if qualified_name in target_functions:
+            if include_target_in_output:
+                if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                    return node.with_changes(body=remove_docstring_from_body(node.body)), True
+                return node, True
             return None, True
-        # Keep only dunder methods
-        if is_dunder_method(node.name.value) and node.name.value != "__init__":
+
+        # Check dunder methods
+        # For read-only mode, exclude __init__; for testgen mode, include all dunders
+        if is_dunder_method(node.name.value) and (include_init_dunder or node.name.value != "__init__"):
             if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), False
+                return node.with_changes(body=remove_docstring_from_body(node.body)), False
             return node, False
+
         return None, False
 
     if isinstance(node, cst.ClassDef):
@@ -1246,8 +1279,14 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
         found_in_class = False
         new_class_body: list[CSTNode] = []
         for stmt in node.body.body:
-            filtered, found_target = prune_cst_for_read_only_code(
-                stmt, target_functions, helpers_of_helper_functions, class_prefix, remove_docstrings=remove_docstrings
+            filtered, found_target = prune_cst_for_context(
+                stmt,
+                target_functions,
+                helpers_of_helper_functions,
+                class_prefix,
+                remove_docstrings=remove_docstrings,
+                include_target_in_output=include_target_in_output,
+                include_init_dunder=include_init_dunder,
             )
             found_in_class |= found_target
             if filtered:
@@ -1276,8 +1315,14 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
             new_children = []
             section_found_target = False
             for child in original_content:
-                filtered, found_target = prune_cst_for_read_only_code(
-                    child, target_functions, helpers_of_helper_functions, prefix, remove_docstrings=remove_docstrings
+                filtered, found_target = prune_cst_for_context(
+                    child,
+                    target_functions,
+                    helpers_of_helper_functions,
+                    prefix,
+                    remove_docstrings=remove_docstrings,
+                    include_target_in_output=include_target_in_output,
+                    include_init_dunder=include_init_dunder,
                 )
                 if filtered:
                     new_children.append(filtered)
@@ -1287,122 +1332,19 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
                 found_any_target |= section_found_target
                 updates[section] = new_children
         elif original_content is not None:
-            filtered, found_target = prune_cst_for_read_only_code(
+            filtered, found_target = prune_cst_for_context(
                 original_content,
                 target_functions,
                 helpers_of_helper_functions,
                 prefix,
                 remove_docstrings=remove_docstrings,
+                include_target_in_output=include_target_in_output,
+                include_init_dunder=include_init_dunder,
             )
             found_any_target |= found_target
             if filtered:
                 updates[section] = filtered
-    if updates:
-        return (node.with_changes(**updates), found_any_target)
 
-    return None, False
-
-
-def prune_cst_for_testgen_code(  # noqa: PLR0911
-    node: cst.CSTNode,
-    target_functions: set[str],
-    helpers_of_helper_functions: set[str],
-    prefix: str = "",
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
-) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for testgen context.
-
-    Returns
-    -------
-        (filtered_node, found_target):
-          filtered_node: The modified CST node or None if it should be removed.
-          found_target: True if a target function was found in this node's subtree.
-
-    """
-    if isinstance(node, (cst.Import, cst.ImportFrom)):
-        return None, False
-
-    if isinstance(node, cst.FunctionDef):
-        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        # If it's a target function, remove it but mark found_target = True
-        if qualified_name in helpers_of_helper_functions or qualified_name in target_functions:
-            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), True
-            return node, True
-        # Keep all dunder methods
-        if is_dunder_method(node.name.value):
-            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), False
-            return node, False
-        return None, False
-
-    if isinstance(node, cst.ClassDef):
-        # Do not recurse into nested classes
-        if prefix:
-            return None, False
-        # Assuming always an IndentedBlock
-        if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
-
-        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
-
-        # First pass: detect if there is a target function in the class
-        found_in_class = False
-        new_class_body: list[CSTNode] = []
-        for stmt in node.body.body:
-            filtered, found_target = prune_cst_for_testgen_code(
-                stmt, target_functions, helpers_of_helper_functions, class_prefix, remove_docstrings=remove_docstrings
-            )
-            found_in_class |= found_target
-            if filtered:
-                new_class_body.append(filtered)
-
-        if not found_in_class:
-            return None, False
-
-        if remove_docstrings:
-            return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
-            ) if new_class_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
-
-    # For other nodes, keep the node and recursively filter children
-    section_names = get_section_names(node)
-    if not section_names:
-        return node, False
-
-    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
-    found_any_target = False
-
-    for section in section_names:
-        original_content = getattr(node, section, None)
-        if isinstance(original_content, (list, tuple)):
-            new_children = []
-            section_found_target = False
-            for child in original_content:
-                filtered, found_target = prune_cst_for_testgen_code(
-                    child, target_functions, helpers_of_helper_functions, prefix, remove_docstrings=remove_docstrings
-                )
-                if filtered:
-                    new_children.append(filtered)
-                section_found_target |= found_target
-
-            if section_found_target or new_children:
-                found_any_target |= section_found_target
-                updates[section] = new_children
-        elif original_content is not None:
-            filtered, found_target = prune_cst_for_testgen_code(
-                original_content,
-                target_functions,
-                helpers_of_helper_functions,
-                prefix,
-                remove_docstrings=remove_docstrings,
-            )
-            found_any_target |= found_target
-            if filtered:
-                updates[section] = filtered
     if updates:
         return (node.with_changes(**updates), found_any_target)
 
