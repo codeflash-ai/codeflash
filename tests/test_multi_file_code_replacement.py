@@ -125,12 +125,13 @@ def _get_string_usage(text: str) -> Usage:
     helper_file.unlink(missing_ok=True)
     main_file.unlink(missing_ok=True)
     
+    # Global assignments are now inserted AFTER class/function definitions
+    # to prevent NameError when they reference classes or functions.
+    # See commit 50fba096 for details.
     expected_helper = """import re
 from collections.abc import Sequence
 
 from pydantic_ai_slim.pydantic_ai.messages import BinaryContent, UserContent
-
-_translate_table = {ord(c): ord(' ') for c in ' \\t\\n\\r\\x0b\\x0c",.:'}
 
 _TOKEN_SPLIT_RE = re.compile(r'[\\s",.:]+')
 
@@ -158,6 +159,8 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
             tokens += len(part.data)
 
     return tokens
+
+_translate_table = {ord(c): ord(' ') for c in ' \\t\\n\\r\\x0b\\x0c",.:'}
 """
 
     assert new_code.rstrip() == original_main.rstrip() # No Change

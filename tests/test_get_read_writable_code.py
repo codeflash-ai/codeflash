@@ -218,8 +218,32 @@ def test_no_targets_found() -> None:
             def target(self):
                 pass
     """
+    # Nested class methods (MyClass.Inner.target) aren't directly targetable,
+    # but the outer class is kept when the qualified name starts with it.
+    # This is because the dependency tracking marks "MyClass" as used when it
+    # sees "MyClass.Inner.target" as a target function.
+    result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
+    expected = dedent("""
+    class MyClass:
+        def method(self):
+            pass
+
+        class Inner:
+            def target(self):
+                pass
+    """)
+    assert result.strip() == expected.strip()
+
+
+def test_no_targets_found_raises_for_nonexistent() -> None:
+    """Test that ValueError is raised when the target function doesn't exist at all."""
+    code = """
+    class MyClass:
+        def method(self):
+            pass
+    """
     with pytest.raises(ValueError, match="No target functions found in the provided code"):
-        parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
+        parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"NonExistent.target"})
 
 
 def test_module_var() -> None:
