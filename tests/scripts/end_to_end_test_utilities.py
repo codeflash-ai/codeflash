@@ -37,6 +37,7 @@ class TestConfig:
     benchmarks_root: Optional[pathlib.Path] = None
     use_worktree: bool = False
     no_gen_tests: bool = False
+    expected_acceptance_reason: Optional[str] = None  # "runtime", "throughput", "concurrency"
 
 
 def clear_directory(directory_path: str | pathlib.Path) -> None:
@@ -176,7 +177,7 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
         logging.error("Failed to find performance improvement message")
         return False
 
-    improvement_match = re.search(r"📈 ([\d,]+)% improvement", stdout)
+    improvement_match = re.search(r"📈 ([\d,]+)% (?:(\w+) )?improvement", stdout)
     if not improvement_match:
         logging.error("Could not find improvement percentage in output")
         return False
@@ -192,6 +193,15 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
     if improvement_x <= config.min_improvement_x:
         logging.error(f"Performance improvement rate {improvement_x}x not above {config.min_improvement_x}x")
         return False
+
+    if config.expected_acceptance_reason is not None:
+        actual_reason = improvement_match.group(2)
+        if not actual_reason:
+            logging.error("Could not find acceptance reason type in output")
+            return False
+        if actual_reason != config.expected_acceptance_reason:
+            logging.error(f"Expected acceptance reason '{config.expected_acceptance_reason}', got '{actual_reason}'")
+            return False
 
     if config.expected_unit_tests_count is not None:
         # Match the global test discovery message from optimizer.py which counts test invocations

@@ -161,6 +161,7 @@ class BestOptimization(BaseModel):
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
     line_profiler_test_results: dict
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,14 @@ class BenchmarkKey:
 
     def __str__(self) -> str:
         return f"{self.module_path}::{self.function_name}"
+
+
+@dataclass
+class ConcurrencyMetrics:
+    sequential_time_ns: int
+    concurrent_time_ns: int
+    concurrency_factor: int
+    concurrency_ratio: float  # sequential_time / concurrent_time
 
 
 @dataclass
@@ -336,6 +345,7 @@ class OptimizedCandidateResult(BaseModel):
     optimization_candidate_index: int
     total_candidate_timing: int
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 class GeneratedTests(BaseModel):
@@ -558,6 +568,7 @@ class OriginalCodeBaseline(BaseModel):
     runtime: int
     coverage_results: Optional[CoverageData]
     async_throughput: Optional[int] = None
+    concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
 
 class CoverageStatus(Enum):
@@ -649,6 +660,7 @@ class TestingMode(enum.Enum):
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
     LINE_PROFILE = "line_profile"
+    CONCURRENCY = "concurrency"
 
 
 # TODO this class is duplicated in codeflash_capture
