@@ -115,6 +115,21 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
         return updated_node.with_changes(body=new_statements)
 
 
+def collect_referenced_names(node: cst.CSTNode) -> set[str]:
+    """Collect all names referenced in a CST node using recursive traversal."""
+    names: set[str] = set()
+
+    def _collect(n: cst.CSTNode) -> None:
+        if isinstance(n, cst.Name):
+            names.add(n.value)
+        # Recursively process all children
+        for child in n.children:
+            _collect(child)
+
+    _collect(node)
+    return names
+
+
 class GlobalAssignmentCollector(cst.CSTVisitor):
     """Collects all global assignment statements."""
 
@@ -274,36 +289,68 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         # Find assignments to append
         assignments_to_append = [
-            self.new_assignments[name]
+            (name, self.new_assignments[name])
             for name in self.new_assignment_order
             if name not in self.processed_assignments and name in self.new_assignments
         ]
 
-        if assignments_to_append:
-            # Start after imports, then advance past class/function definitions
-            # to ensure assignments can reference any classes defined in the module
+        if not assignments_to_append:
+            return updated_node.with_changes(body=new_statements)
+
+        # Collect all class and function names defined in the module
+        # These are the names that assignments might reference
+        module_defined_names: set[str] = set()
+        for stmt in new_statements:
+            if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
+                module_defined_names.add(stmt.name.value)
+
+        # Partition assignments: those that reference module definitions go at the end,
+        # those that don't can go right after imports
+        assignments_after_imports: list[tuple[str, cst.Assign | cst.AnnAssign]] = []
+        assignments_after_definitions: list[tuple[str, cst.Assign | cst.AnnAssign]] = []
+
+        for name, assignment in assignments_to_append:
+            # Get the value being assigned
+            if isinstance(assignment, (cst.Assign, cst.AnnAssign)) and assignment.value is not None:
+                value_node = assignment.value
+            else:
+                # No value to analyze, safe to place after imports
+                assignments_after_imports.append((name, assignment))
+                continue
+
+            # Collect names referenced in the assignment value
+            referenced_names = collect_referenced_names(value_node)
+
+            # Check if any referenced names are module-level definitions
+            if referenced_names & module_defined_names:
+                # This assignment references a class/function, place it after definitions
+                assignments_after_definitions.append((name, assignment))
+            else:
+                # Safe to place right after imports
+                assignments_after_imports.append((name, assignment))
+
+        # Insert assignments that don't depend on module definitions right after imports
+        if assignments_after_imports:
             insert_index = find_insertion_index_after_imports(updated_node)
+            assignment_lines = [
+                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
+                for _, assignment in assignments_after_imports
+            ]
+            new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
+
+        # Insert assignments that depend on module definitions after all class/function definitions
+        if assignments_after_definitions:
+            # Find the position after the last function or class definition
+            insert_index = find_insertion_index_after_imports(cst.Module(body=new_statements))
             for i, stmt in enumerate(new_statements):
                 if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
                     insert_index = i + 1
 
             assignment_lines = [
                 cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                for assignment in assignments_to_append
+                for _, assignment in assignments_after_definitions
             ]
-
             new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
-
-            # Add a blank line after the last assignment if needed
-            after_index = insert_index + len(assignment_lines)
-            if after_index < len(new_statements):
-                next_stmt = new_statements[after_index]
-                # If there's no empty line, add one
-                has_empty = any(isinstance(line, cst.EmptyLine) for line in next_stmt.leading_lines)
-                if not has_empty:
-                    new_statements[after_index] = next_stmt.with_changes(
-                        leading_lines=[cst.EmptyLine(), *next_stmt.leading_lines]
-                    )
 
         return updated_node.with_changes(body=new_statements)
 

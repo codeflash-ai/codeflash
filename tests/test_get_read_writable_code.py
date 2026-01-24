@@ -218,10 +218,6 @@ def test_no_targets_found() -> None:
             def target(self):
                 pass
     """
-    # Nested class methods (MyClass.Inner.target) aren't directly targetable,
-    # but the outer class is kept when the qualified name starts with it.
-    # This is because the dependency tracking marks "MyClass" as used when it
-    # sees "MyClass.Inner.target" as a target function.
     result = parse_code_and_prune_cst(dedent(code),CodeContextType.READ_WRITABLE, {"MyClass.Inner.target"})
     expected = dedent("""
     class MyClass:

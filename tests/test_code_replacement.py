@@ -2116,12 +2116,9 @@ class NewClass:
 print("Hello world")
 ```
 """
-    # Global assignments are now inserted AFTER class/function definitions
-    # to ensure they can reference any classes defined in the module.
-    # This prevents NameError when LLM-generated optimizations like
-    # `_HANDLERS = {MessageKind.XXX: ...}` reference classes.
     expected_code = """import numpy as np
 
+a = 6
 if 2<3:
     a=4
 else:
@@ -2143,8 +2140,6 @@ class NewClass:
         return "I am still old"
     def new_function2(value):
         return cst.ensure_type(value, str)
-
-a = 6
 """
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/global_var_original.py").resolve()
     code_path.write_text(original_code, encoding="utf-8")
@@ -3371,9 +3366,6 @@ def hydrate_input_text_actions_with_field_names(
     return updated_actions_by_task
 ```
 '''
-    # Global assignments are now inserted AFTER class/function definitions
-    # to ensure they can reference any classes defined in the module.
-    # This prevents NameError when LLM-generated optimizations reference classes.
     expected = '''"""
 Module for generating GeneratedWorkflowParameters schema from workflow run input_text actions.
 """
@@ -3387,6 +3379,8 @@ from skyvern.forge import app
 from skyvern.forge.sdk.prompting import PromptEngine
 from skyvern.webeye.actions.actions import ActionType
 import re
+
+_INTENTION_CLEANUP_RE = re.compile(r"[^a-zA-Z0-9_]+")
 
 LOG = structlog.get_logger(__name__)
 
@@ -3441,8 +3435,6 @@ def hydrate_input_text_actions_with_field_names(
         updated_actions_by_task[task_id] = updated_actions
 
     return updated_actions_by_task
-
-_INTENTION_CLEANUP_RE = re.compile(r"[^a-zA-Z0-9_]+")
 '''
 
     func = FunctionToOptimize(function_name="hydrate_input_text_actions_with_field_names", parents=[], file_path=main_file)
