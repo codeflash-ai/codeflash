@@ -3961,6 +3961,7 @@ def test_get_external_base_class_inits_empty_when_no_inheritance(tmp_path: Path)
     assert result.code_strings == []
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="enum.StrEnum requires Python 3.11+")
 def test_dependency_classes_kept_in_read_writable_context(tmp_path: Path) -> None:
     """Tests that classes used as dependencies (enums, dataclasses) are kept in read-writable context.
 
