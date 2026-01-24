@@ -815,7 +815,7 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
                 needed_names.add(decorator.func.value.id)
 
     # Get type annotation names from class body (for dataclass fields)
-    for item in ast.walk(class_node):
+    for item in class_node.body:
         if isinstance(item, ast.AnnAssign) and item.annotation:
             collect_names_from_annotation(item.annotation, needed_names)
         # Also check for field() calls which are common in dataclasses
