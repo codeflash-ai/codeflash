@@ -3063,6 +3063,84 @@ _MESSAGE_HANDLERS = {
     assert result == expected
 
 
+def test_add_global_assignments_function_calls_after_function_definitions():
+    """Test that global function calls are placed after the functions they reference.
+
+    This test verifies the fix for a bug where LLM-generated optimization code like:
+        def _register(kind, factory):
+            _factories[kind] = factory
+
+        _register(MessageKind.ASK, lambda: "ask")
+
+    would have the _register(...) calls placed BEFORE the _register function definition,
+    causing NameError at module load time.
+
+    The fix ensures that new global statements (like function calls) are inserted AFTER
+    all class/function definitions, so they can safely reference any function defined in
+    the module.
+    """
+    source_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+_factories = {}
+
+def _register(kind, factory):
+    _factories[kind] = factory
+
+_register(MessageKind.ASK, lambda: "ask handler")
+_register(MessageKind.REPLY, lambda: "reply handler")
+
+def handle_message(kind):
+    return _factories[kind]()
+"""
+
+    destination_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+"""
+
+    # Global statements (function calls) should be inserted AFTER all class/function
+    # definitions to ensure they can reference any function defined in the module
+    expected = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+
+
+def _register(kind, factory):
+    _factories[kind] = factory
+
+_factories = {}
+
+
+_register(MessageKind.ASK, lambda: "ask handler")
+
+_register(MessageKind.REPLY, lambda: "reply handler")
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
 def test_class_instantiation_includes_init_as_helper(tmp_path: Path) -> None:
     """Test that when a class is instantiated, its __init__ method is tracked as a helper.
 
