@@ -295,11 +295,18 @@ class DependencyCollector(cst.CSTVisitor):
             return
 
         if name in self.definitions and name != self.current_top_level_name:
-            # skip if we are refrencing a class attribute and not a top-level definition
+            # Skip if this Name is the .attr part of an Attribute (e.g., 'x' in 'self.x')
+            # We only want to track the base/value of attribute access, not the attribute name itself
             if self.class_depth > 0:
                 parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
                 if parent is not None and isinstance(parent, cst.Attribute):
-                    return
+                    # Check if this Name is the .attr (property name), not the .value (base)
+                    # If it's the .attr, skip it - attribute names aren't references to definitions
+                    if parent.attr is node:
+                        return
+                    # If it's the .value (base), only skip if it's self/cls
+                    if name in ("self", "cls"):
+                        return
             self.definitions[self.current_top_level_name].dependencies.add(name)
 
 

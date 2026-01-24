@@ -481,3 +481,86 @@ def unused_function():
     qualified_functions = {"get_platform_info", "get_loop_result"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     assert result.strip() == expected.strip()
+
+
+def test_enum_attribute_access_dependency() -> None:
+    """Test that enum/class attribute access like MessageKind.VALUE is tracked as a dependency."""
+    code = """
+from enum import Enum
+
+class MessageKind(Enum):
+    VALUE = "value"
+    OTHER = "other"
+
+class UnusedEnum(Enum):
+    UNUSED = "unused"
+
+UNUSED_VAR = 123
+
+def process_message(kind):
+    match kind:
+        case MessageKind.VALUE:
+            return "got value"
+        case MessageKind.OTHER:
+            return "got other"
+    return "unknown"
+"""
+
+    expected = """
+from enum import Enum
+
+class MessageKind(Enum):
+    VALUE = "value"
+    OTHER = "other"
+
+class UnusedEnum(Enum):
+    UNUSED = "unused"
+
+def process_message(kind):
+    match kind:
+        case MessageKind.VALUE:
+            return "got value"
+        case MessageKind.OTHER:
+            return "got other"
+    return "unknown"
+"""
+
+    qualified_functions = {"process_message"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # MessageKind should be preserved because process_message uses MessageKind.VALUE
+    assert "class MessageKind" in result
+    # UNUSED_VAR should be removed
+    assert "UNUSED_VAR" not in result
+    assert result.strip() == expected.strip()
+
+
+def test_attribute_access_does_not_track_attr_name() -> None:
+    """Test that self.x attribute access doesn't track 'x' as a dependency on module-level x."""
+    code = """
+x = "module_level_x"
+UNUSED_VAR = "unused"
+
+class MyClass:
+    def __init__(self):
+        self.x = 1  # This 'x' is an attribute, not a reference to module-level 'x'
+
+    def get_x(self):
+        return self.x  # This 'x' is also an attribute access
+"""
+
+    expected = """
+class MyClass:
+    def __init__(self):
+        self.x = 1  # This 'x' is an attribute, not a reference to module-level 'x'
+
+    def get_x(self):
+        return self.x  # This 'x' is also an attribute access
+"""
+
+    qualified_functions = {"MyClass.get_x", "MyClass.__init__"}
+    result = remove_unused_definitions_by_function_names(code, qualified_functions)
+    # Module-level x should NOT be kept (self.x doesn't reference it)
+    assert 'x = "module_level_x"' not in result
+    # UNUSED_VAR should also be removed
+    assert "UNUSED_VAR" not in result
+    assert result.strip() == expected.strip()

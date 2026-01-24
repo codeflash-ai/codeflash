@@ -867,6 +867,78 @@ def is_dunder_method(name: str) -> bool:
     return len(name) > 4 and name.isascii() and name.startswith("__") and name.endswith("__")
 
 
+class UsedNameCollector(cst.CSTVisitor):
+    """Collects all base names referenced in code (for import preservation)."""
+
+    def __init__(self) -> None:
+        self.used_names: set[str] = set()
+        self.defined_names: set[str] = set()
+
+    def visit_Name(self, node: cst.Name) -> None:
+        self.used_names.add(node.value)
+
+    def visit_Attribute(self, node: cst.Attribute) -> bool | None:
+        base = node.value
+        while isinstance(base, cst.Attribute):
+            base = base.value
+        if isinstance(base, cst.Name):
+            self.used_names.add(base.value)
+        return True
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
+        self.defined_names.add(node.name.value)
+        return True
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool | None:
+        self.defined_names.add(node.name.value)
+        return True
+
+    def visit_Assign(self, node: cst.Assign) -> bool | None:
+        for target in node.targets:
+            names = extract_names_from_targets(target.target)
+            self.defined_names.update(names)
+        return True
+
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> bool | None:
+        names = extract_names_from_targets(node.target)
+        self.defined_names.update(names)
+        return True
+
+    def get_external_names(self) -> set[str]:
+        return self.used_names - self.defined_names - {"self", "cls"}
+
+
+def get_imported_names(import_node: cst.Import | cst.ImportFrom) -> set[str]:
+    """Extract the names made available by an import statement."""
+    names: set[str] = set()
+    if isinstance(import_node, cst.Import):
+        if isinstance(import_node.names, cst.ImportStar):
+            return {"*"}
+        for alias in import_node.names:
+            if isinstance(alias, cst.ImportAlias):
+                if alias.asname and isinstance(alias.asname.name, cst.Name):
+                    names.add(alias.asname.name.value)
+                elif isinstance(alias.name, cst.Name):
+                    names.add(alias.name.value)
+                elif isinstance(alias.name, cst.Attribute):
+                    # import foo.bar -> accessible as "foo"
+                    base = alias.name
+                    while isinstance(base, cst.Attribute):
+                        base = base.value
+                    if isinstance(base, cst.Name):
+                        names.add(base.value)
+    elif isinstance(import_node, cst.ImportFrom):
+        if isinstance(import_node.names, cst.ImportStar):
+            return {"*"}
+        for alias in import_node.names:
+            if isinstance(alias, cst.ImportAlias):
+                if alias.asname and isinstance(alias.asname.name, cst.Name):
+                    names.add(alias.asname.name.value)
+                elif isinstance(alias.name, cst.Name):
+                    names.add(alias.name.value)
+    return names
+
+
 def get_section_names(node: cst.CSTNode) -> list[str]:
     """Returns the section attribute names (e.g., body, orelse) for a given node if they exist."""  # noqa: D401
     possible_sections = ["body", "orelse", "finalbody", "handlers"]
