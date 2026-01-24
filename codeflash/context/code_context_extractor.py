@@ -5,6 +5,7 @@ import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import libcst as cst
@@ -29,8 +30,6 @@ from codeflash.models.models import (
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from jedi.api.classes import Name
     from libcst import CSTNode
 
@@ -138,6 +137,14 @@ def get_code_optimization_context(
             code_strings=testgen_context.code_strings + imported_class_context.code_strings
         )
 
+    # Extract __init__ methods from external library base classes
+    # This helps the LLM understand how to mock/test classes that inherit from external libraries
+    external_base_inits = get_external_base_class_inits(testgen_context, project_root_path)
+    if external_base_inits.code_strings:
+        testgen_context = CodeStringsMarkdown(
+            code_strings=testgen_context.code_strings + external_base_inits.code_strings
+        )
+
     testgen_markdown_code = testgen_context.markdown
     testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
     if testgen_code_token_length > testgen_token_limit:
@@ -154,6 +161,12 @@ def get_code_optimization_context(
         if imported_class_context.code_strings:
             testgen_context = CodeStringsMarkdown(
                 code_strings=testgen_context.code_strings + imported_class_context.code_strings
+            )
+        # Re-extract external base class inits
+        external_base_inits = get_external_base_class_inits(testgen_context, project_root_path)
+        if external_base_inits.code_strings:
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_context.code_strings + external_base_inits.code_strings
             )
         testgen_markdown_code = testgen_context.markdown
         testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
@@ -673,6 +686,107 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
             continue
 
     return CodeStringsMarkdown(code_strings=class_code_strings)
+
+
+def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
+    """Extract __init__ methods from external library base classes.
+
+    Scans the code context for classes that inherit from external libraries and extracts
+    just their __init__ methods. This helps the LLM understand constructor signatures
+    for mocking or instantiation.
+    """
+    import importlib
+    import inspect
+    import textwrap
+
+    all_code = "\n".join(cs.code for cs in code_context.code_strings)
+
+    try:
+        tree = ast.parse(all_code)
+    except SyntaxError:
+        return CodeStringsMarkdown(code_strings=[])
+
+    imported_names: dict[str, str] = {}
+    external_bases: list[tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_names[imported_name] = node.module
+        elif isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                base_name = None
+                if isinstance(base, ast.Name):
+                    base_name = base.id
+                elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+                    base_name = base.attr
+
+                if base_name and base_name in imported_names:
+                    module_name = imported_names[base_name]
+                    if not _is_project_module(module_name, project_root_path):
+                        external_bases.append((base_name, module_name))
+
+    if not external_bases:
+        return CodeStringsMarkdown(code_strings=[])
+
+    code_strings: list[CodeString] = []
+    extracted: set[tuple[str, str]] = set()
+
+    for base_name, module_name in external_bases:
+        if (module_name, base_name) in extracted:
+            continue
+
+        try:
+            module = importlib.import_module(module_name)
+            base_class = getattr(module, base_name, None)
+            if base_class is None:
+                continue
+
+            init_method = getattr(base_class, "__init__", None)
+            if init_method is None:
+                continue
+
+            try:
+                init_source = inspect.getsource(init_method)
+                init_source = textwrap.dedent(init_source)
+                class_file = Path(inspect.getfile(base_class))
+                parts = class_file.parts
+                if "site-packages" in parts:
+                    idx = parts.index("site-packages")
+                    class_file = Path(*parts[idx + 1 :])
+            except (OSError, TypeError):
+                continue
+
+            class_source = f"class {base_name}:\n" + textwrap.indent(init_source, "    ")
+            code_strings.append(CodeString(code=class_source, file_path=class_file))
+            extracted.add((module_name, base_name))
+
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            logger.debug(f"Failed to extract __init__ for {module_name}.{base_name}")
+            continue
+
+    return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def _is_project_module(module_name: str, project_root_path: Path) -> bool:
+    """Check if a module is part of the project (not external/stdlib)."""
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+    else:
+        if spec is None or spec.origin is None:
+            return False
+        module_path = Path(spec.origin)
+        # Check if the module is in site-packages (external dependency)
+        # This must be checked first because .venv/site-packages is under project root
+        if path_belongs_to_site_packages(module_path):
+            return False
+        # Check if the module is within the project root
+        return str(module_path).startswith(str(project_root_path) + os.sep)
 
 
 def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:

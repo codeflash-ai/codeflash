@@ -14,6 +14,7 @@ from codeflash.context.code_context_extractor import (
     collect_names_from_annotation,
     extract_imports_for_class,
     get_code_optimization_context,
+    get_external_base_class_inits,
     get_imported_class_definitions,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -3717,3 +3718,105 @@ class ConfigRegistry:
     assert "supports_vision: bool" in all_extracted_code, "Should include supports_vision field from Parent"
     assert "litellm_params:" in all_extracted_code, "Should include litellm_params field from Child"
     assert "model_list: list" in all_extracted_code, "Should include model_list field from Router"
+
+
+def test_get_external_base_class_inits_extracts_userdict(tmp_path: Path) -> None:
+    """Extracts __init__ from collections.UserDict when a class inherits from it."""
+    code = """from collections import UserDict
+
+class MyCustomDict(UserDict):
+    pass
+"""
+    code_path = tmp_path / "mydict.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    code_string = result.code_strings[0]
+
+    expected_code = """\
+class UserDict:
+    def __init__(self, dict=None, /, **kwargs):
+        self.data = {}
+        if dict is not None:
+            self.update(dict)
+        if kwargs:
+            self.update(kwargs)
+"""
+    assert code_string.code == expected_code
+    assert code_string.file_path.as_posix().endswith("collections/__init__.py")
+
+
+def test_get_external_base_class_inits_skips_project_classes(tmp_path: Path) -> None:
+    """Returns empty when base class is from the project, not external."""
+    child_code = """from base import ProjectBase
+
+class Child(ProjectBase):
+    pass
+"""
+    child_path = tmp_path / "child.py"
+    child_path.write_text(child_code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=child_code, file_path=child_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_base_class_inits_skips_builtins(tmp_path: Path) -> None:
+    """Returns empty for builtin classes like list that have no inspectable source."""
+    code = """class MyList(list):
+    pass
+"""
+    code_path = tmp_path / "mylist.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_base_class_inits_deduplicates(tmp_path: Path) -> None:
+    """Extracts the same external base class only once even when inherited multiple times."""
+    code = """from collections import UserDict
+
+class MyDict1(UserDict):
+    pass
+
+class MyDict2(UserDict):
+    pass
+"""
+    code_path = tmp_path / "mydicts.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    expected_code = """\
+class UserDict:
+    def __init__(self, dict=None, /, **kwargs):
+        self.data = {}
+        if dict is not None:
+            self.update(dict)
+        if kwargs:
+            self.update(kwargs)
+"""
+    assert result.code_strings[0].code == expected_code
+
+
+def test_get_external_base_class_inits_empty_when_no_inheritance(tmp_path: Path) -> None:
+    """Returns empty when there are no external base classes."""
+    code = """class SimpleClass:
+    pass
+"""
+    code_path = tmp_path / "simple.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
