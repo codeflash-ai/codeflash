@@ -560,16 +560,6 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         return code
 
 
-def print_definitions(definitions: dict[str, UsageInfo]) -> None:
-    """Print information about each definition without the complex node object, used for debugging."""
-    print(f"Found {len(definitions)} definitions:")
-    for name, info in sorted(definitions.items()):
-        print(f"  - Name: {name}")
-        print(f"    Used by qualified function: {info.used_by_qualified_function}")
-        print(f"    Dependencies: {', '.join(sorted(info.dependencies)) if info.dependencies else 'None'}")
-        print()
-
-
 def revert_unused_helper_functions(
     project_root: Path, unused_helpers: list[FunctionSource], original_helper_code: dict[Path, str]
 ) -> None:
@@ -817,9 +807,8 @@ def detect_unused_helper_functions(
                     logger.debug(f"Helper function {helper_qualified_name} is still called in optimized code")
                     logger.debug(f"  Called via: {possible_call_names.intersection(called_function_names)}")
 
-        ret_val = unused_helpers
-
     except Exception as e:
         logger.debug(f"Error detecting unused helper functions: {e}")
-        ret_val = []
-    return ret_val
+        return []
+    else:
+        return unused_helpers
