@@ -22,7 +22,7 @@ Numba compiles Python functions to optimized machine code using the LLVM compile
   - **`nopython=True`** - Compiles to machine code without falling back to the Python interpreter.
   - **`fastmath=True`** - Uses aggressive floating-point optimizations via LLVM's fastmath flag.
   - **`cache=True`** - cache compiled function to disk which reduces future runtimes.
-  - **`parallel=True`** - Parallalizes code inside loops.
+  - **`parallel=True`** - Parallelizes code inside loops.
 
 ### PyTorch
 
@@ -53,12 +53,14 @@ JAX uses XLA to JIT compile pure functions into optimized machine code. It empha
 
 When Codeflash identifies a function that could benefit from JIT compilation, it:
 
-1. **Rewrites the code** in a JIT-compatible format, which may involve breaking down complex functions into separate JIT-compiled components.
-2. **Generates appropriate tests** that are compatible with JIT-compiled code, carefully handling data types since JIT compilers have stricter input type requirements.
+1. Rewrites the code in a JIT-compatible format, which may involve breaking down complex functions into separate JIT-compiled components.
+2. Generates appropriate tests that are compatible with JIT-compiled code, carefully handling data types since JIT compilers have stricter input type requirements.
+3. Disables JIT compilation while running coverage and tracer to get accurate coverage and trace information. Both of them rely on Python bytecode execution but JIT compiled code stops running as Python bytecode.
+4. Disables Line Profiler information collection whenever presented with JIT compiled code. It could be possible to disable JIT compilation and run the line profiler, but that would lead to inaccurate information which could misguide the optimization process.
 
 ## Accurate Benchmarking on Non-CPU devices
 
-Since GPU operations execute asynchronously, Codeflash automatically inserts synchronization barriers before measuring performance. This ensures timing measurements reflect actual computation time rather than just the time to queue operations:
+Since Non-CPU operations execute asynchronously, Codeflash automatically inserts synchronization barriers before measuring performance. This ensures timing measurements reflect actual computation time rather than just the time to queue operations:
 
 - **PyTorch**: Uses `torch.cuda.synchronize()` (NVIDIA GPUs) or `torch.mps.synchronize()` (MacOS Metal Performance Shaders) depending on the device.
 - **JAX**: Uses `jax.block_until_ready()` to wait for computation to complete.
@@ -71,7 +73,7 @@ JIT compilation is most effective for:
 - Numerical computations with loops that can't be easily vectorized.
 - Custom algorithms not covered by existing optimized libraries.
 - Functions that are called repeatedly with consistent input types.
-- Code that benefits from hardware-specific optimizations (SIMD, GPU acceleration)
+- Code that benefits from hardware-specific optimizations (SIMD, GPU acceleration).
 
 ### Example
 
@@ -146,7 +148,7 @@ Here, JIT compilation via `torch.compile` is the only viable option because
 
 JIT compilation may not provide speedups when:
 
-- The code already uses highly optimized libraries (e.g., NumPy with MKL, cuBLAS, cuDNN).
+- The code already uses highly optimized libraries (e.g., `NumPy` with `MKL`, `cuBLAS`, `cuDNN`).
 - Functions have variable input types or shapes that prevent effective compilation.
 - The compilation overhead exceeds the runtime savings for short-running functions.
 - The code relies heavily on Python objects or dynamic features that JIT compilers can't optimize.
