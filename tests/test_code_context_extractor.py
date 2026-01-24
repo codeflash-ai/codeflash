@@ -2975,10 +2975,10 @@ class MyClass:
         return cached_helper(5)
 """
 
-    # Global assignments are now inserted AFTER class/function definitions
-    # to ensure they can reference classes defined in the module
     expected = """\
 from typing import Any
+
+_LOCAL_CACHE: dict[str, int] = {}
 
 class MyClass:
     def method(self):
@@ -2992,8 +2992,6 @@ def cached_helper(x: int) -> int:
 
 def regular_helper():
     return "regular"
-
-_LOCAL_CACHE: dict[str, int] = {}
 """
 
     result = add_global_assignments(source_code, destination_code)
@@ -3111,10 +3109,10 @@ def handle_message(kind):
     return "reply"
 """
 
-    # Global statements (function calls) should be inserted AFTER all class/function
-    # definitions to ensure they can reference any function defined in the module
     expected = """\
 import enum
+
+_factories = {}
 
 class MessageKind(enum.StrEnum):
     ASK = "ask"
@@ -3128,8 +3126,6 @@ def handle_message(kind):
 
 def _register(kind, factory):
     _factories[kind] = factory
-
-_factories = {}
 
 
 _register(MessageKind.ASK, lambda: "ask handler")
