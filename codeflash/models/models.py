@@ -14,6 +14,7 @@ from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 import enum
 import re
 import sys
@@ -24,11 +25,14 @@ from re import Pattern
 from typing import Annotated, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
+from pydantic import (AfterValidator, BaseModel, ConfigDict, Field,
+                      PrivateAttr, ValidationError)
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
+from codeflash.code_utils.code_utils import (diff_length,
+                                             module_name_from_file_path,
+                                             validate_python_code)
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
@@ -834,9 +838,8 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
-        report = {}
-        for test_type in TestType:
-            report[test_type] = {"passed": 0, "failed": 0}
+        # Initialize the report with all TestType keys to ensure consistent structure
+        report = {test_type: {"passed": 0, "failed": 0} for test_type in TestType}
         for test_result in self.test_results:
             if test_result.loop_index == 1:
                 if test_result.did_pass:

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from functools import lru_cache
 
 import humanize
 
 
+@lru_cache(maxsize=1024)
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
     units = "nanoseconds"
@@ -44,7 +46,7 @@ def humanize_runtime(time_in_ns: int) -> str:
             )
     elif len(runtime_human_parts[0]) == 2:
         if len(runtime_human_parts) > 1:
-            runtime_human = f"{runtime_human_parts[0]}.{runtime_human_parts[1][0]}"
+            runtime_human = f"{runtime_human_parts[0]}.0"
         else:
             runtime_human = f"{runtime_human_parts[0]}.0"
     else:

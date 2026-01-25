@@ -32,21 +32,27 @@ class PrComment:
         if self.precomputed_test_report is not None:
             report_table = self.precomputed_test_report
         else:
-            report_table = {
-                test_type.to_name(): result
-                for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
-                if test_type.to_name()
-            }
+            raw_report = self.winning_behavior_test_results.get_test_pass_fail_report_by_type()
+            # Build the report_table while avoiding repeated calls and allocations
+            report_table = {}
+            for test_type, result in raw_report.items():
+                name = test_type.to_name()
+                if name:
+                    report_table[name] = result
+
         loop_count = (
             self.precomputed_loop_count
             if self.precomputed_loop_count is not None
             else self.winning_benchmarking_test_results.number_of_loops()
         )
 
+        best_runtime_human = humanize_runtime(self.best_runtime)
+        original_runtime_human = humanize_runtime(self.original_runtime)
+
         result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
-            "best_runtime": humanize_runtime(self.best_runtime),
-            "original_runtime": humanize_runtime(self.original_runtime),
+            "best_runtime": best_runtime_human,
+            "original_runtime": original_runtime_human,
             "function_name": self.function_name,
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,
