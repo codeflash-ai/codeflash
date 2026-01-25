@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.code_extractor import extract_names_from_target
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
@@ -25,27 +26,6 @@ class UsageInfo:
     name: str
     used_by_qualified_function: bool = False
     dependencies: set[str] = field(default_factory=set)
-
-
-def extract_names_from_targets(target: cst.CSTNode) -> list[str]:
-    """Extract all variable names from a target node, including from tuple unpacking."""
-    names = []
-
-    # Handle a simple name
-    if isinstance(target, cst.Name):
-        names.append(target.value)
-
-    # Handle any node with a value attribute (StarredElement, etc.)
-    elif hasattr(target, "value"):
-        names.extend(extract_names_from_targets(target.value))
-
-    # Handle any node with elements attribute (tuples, lists, etc.)
-    elif hasattr(target, "elements"):
-        for element in target.elements:
-            # Recursive call for each element
-            names.extend(extract_names_from_targets(element))
-
-    return names
 
 
 def collect_top_level_definitions(
@@ -94,11 +74,11 @@ def collect_top_level_definitions(
 
     # Fast path: assignment
     if node_type is Assign:
-        # Inline extract_names_from_targets for single-target speed
+        # Inline extract_names_from_target for single-target speed
         targets = node.targets
         append_def = definitions.__setitem__
         for target in targets:
-            names = extract_names_from_targets(target.target)
+            names = extract_names_from_target(target.target)
             for name in names:
                 append_def(name, UsageInfo(name=name))
         return definitions
@@ -109,7 +89,7 @@ def collect_top_level_definitions(
             name = tgt.value
             definitions[name] = UsageInfo(name=name)
         else:
-            names = extract_names_from_targets(tgt)
+            names = extract_names_from_target(tgt)
             for name in names:
                 definitions[name] = UsageInfo(name=name)
         return definitions
@@ -250,7 +230,7 @@ class DependencyCollector(cst.CSTVisitor):
         if self.function_depth == 0 and self.class_depth == 0:
             for target in node.targets:
                 # Extract all variable names from the target
-                names = extract_names_from_targets(target.target)
+                names = extract_names_from_target(target.target)
 
                 # Check if any of these names are top-level definitions we're tracking
                 tracked_names = [name for name in names if name in self.definitions]
@@ -274,7 +254,7 @@ class DependencyCollector(cst.CSTVisitor):
             if isinstance(node.target, cst.Name):
                 self.current_variable_names.add(node.target.value)
             else:
-                self.current_variable_names.update(extract_names_from_targets(node.target))
+                self.current_variable_names.update(extract_names_from_target(node.target))
 
             # Process the annotation
             self._collect_annotation_dependencies(node.annotation)
@@ -425,7 +405,7 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
                     # Check if any variable in this assignment is used
                     if isinstance(statement, cst.Assign):
                         for target in statement.targets:
-                            names = extract_names_from_targets(target.target)
+                            names = extract_names_from_target(target.target)
                             for name in names:
                                 class_var_name = f"{class_name}.{name}"
                                 if (
@@ -436,7 +416,7 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
                                     method_or_var_used = True
                                     break
                     elif isinstance(statement, (cst.AnnAssign, cst.AugAssign)):
-                        names = extract_names_from_targets(statement.target)
+                        names = extract_names_from_target(statement.target)
                         for name in names:
                             class_var_name = f"{class_name}.{name}"
                             if class_var_name in definitions and definitions[class_var_name].used_by_qualified_function:
@@ -461,14 +441,14 @@ def remove_unused_definitions_recursively(  # noqa: PLR0911
     # Handle assignments (Assign and AnnAssign)
     if isinstance(node, cst.Assign):
         for target in node.targets:
-            names = extract_names_from_targets(target.target)
+            names = extract_names_from_target(target.target)
             for name in names:
                 if name in definitions and definitions[name].used_by_qualified_function:
                     return node, True
         return None, False
 
     if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-        names = extract_names_from_targets(node.target)
+        names = extract_names_from_target(node.target)
         for name in names:
             if name in definitions and definitions[name].used_by_qualified_function:
                 return node, True

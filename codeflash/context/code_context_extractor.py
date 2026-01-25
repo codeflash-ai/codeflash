@@ -11,12 +11,15 @@ from typing import TYPE_CHECKING, cast
 import libcst as cst
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_extractor import add_needed_imports_from_module, find_preexisting_objects
+from codeflash.code_utils.code_extractor import (
+    add_needed_imports_from_module,
+    extract_names_from_target,
+    find_preexisting_objects,
+)
 from codeflash.code_utils.code_utils import encoded_tokens_len, get_qualified_name, path_belongs_to_site_packages
 from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT, TESTGEN_CONTEXT_TOKEN_LIMIT
 from codeflash.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
-    extract_names_from_targets,
     get_section_names,
     remove_unused_definitions_by_function_names,
 )
@@ -788,12 +791,12 @@ class UsedNameCollector(cst.CSTVisitor):
 
     def visit_Assign(self, node: cst.Assign) -> bool | None:
         for target in node.targets:
-            names = extract_names_from_targets(target.target)
+            names = extract_names_from_target(target.target)
             self.defined_names.update(names)
         return True
 
     def visit_AnnAssign(self, node: cst.AnnAssign) -> bool | None:
-        names = extract_names_from_targets(node.target)
+        names = extract_names_from_target(node.target)
         self.defined_names.update(names)
         return True
 
@@ -955,14 +958,14 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
 
     if isinstance(node, cst.Assign):
         for target in node.targets:
-            names = extract_names_from_targets(target.target)
+            names = extract_names_from_target(target.target)
             for name in names:
                 if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
                     return node, True
         return None, False
 
     if isinstance(node, (cst.AnnAssign, cst.AugAssign)):
-        names = extract_names_from_targets(node.target)
+        names = extract_names_from_target(node.target)
         for name in names:
             if name in defs_with_usages and defs_with_usages[name].used_by_qualified_function:
                 return node, True
