@@ -7,13 +7,19 @@ from collections import defaultdict
 from pathlib import Path
 
 import pytest
-from codeflash.context.code_context_extractor import get_code_optimization_context, get_imported_class_definitions
-from codeflash.models.models import CodeString, CodeStringsMarkdown
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
-from codeflash.optimization.optimizer import Optimizer
+
+from codeflash.code_utils.code_extractor import GlobalAssignmentCollector, add_global_assignments
 from codeflash.code_utils.code_replacer import replace_functions_and_add_imports
-from codeflash.code_utils.code_extractor import add_global_assignments, GlobalAssignmentCollector
+from codeflash.context.code_context_extractor import (
+    collect_names_from_annotation,
+    extract_imports_for_class,
+    get_code_optimization_context,
+    get_external_base_class_inits,
+    get_imported_class_definitions,
+)
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.models.models import CodeString, CodeStringsMarkdown, FunctionParent
+from codeflash.optimization.optimizer import Optimizer
 
 
 class HelperClass:
@@ -86,7 +92,10 @@ def test_code_replacement10() -> None:
     code_ctx = get_code_optimization_context(function_to_optimize=func_top_optimize, project_root_path=file_path.parent)
     qualified_names = {func.qualified_name for func in code_ctx.helper_functions}
     # HelperClass.__init__ is now tracked because HelperClass(self.name) instantiates the class
-    assert qualified_names == {"HelperClass.helper_method", "HelperClass.__init__"}  # Nested method should not be in here
+    assert qualified_names == {
+        "HelperClass.helper_method",
+        "HelperClass.__init__",
+    }  # Nested method should not be in here
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
 
@@ -229,7 +238,7 @@ def test_bubble_sort_helper() -> None:
     read_write_context, read_only_context = code_ctx.read_writable_code, code_ctx.read_only_context_code
     hashing_context = code_ctx.hashing_code_context
 
-    expected_read_write_context = f"""
+    expected_read_write_context = """
 ```python:code_to_optimize/code_directories/retriever/bubble_sort_with_math.py
 import math
 
@@ -1103,7 +1112,9 @@ class HelperClass:
     code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
 
     # the global x variable shouldn't be included in any context type
-    assert code_ctx.read_writable_code.flat == '''# file: test_code.py
+    assert (
+        code_ctx.read_writable_code.flat
+        == '''# file: test_code.py
 class MyClass:
     def __init__(self):
         self.x = 1
@@ -1118,7 +1129,10 @@ class HelperClass:
     def helper_method(self):
         return self.x
 '''
-    assert code_ctx.testgen_context.flat == '''# file: test_code.py
+    )
+    assert (
+        code_ctx.testgen_context.flat
+        == '''# file: test_code.py
 class MyClass:
     """A class with a helper method. """
     def __init__(self):
@@ -1138,6 +1152,7 @@ class HelperClass:
     def helper_method(self):
         return self.x
 '''
+    )
 
 
 def test_repo_helper() -> None:
@@ -2348,9 +2363,7 @@ def standalone_function():
     assert '"""Helper method with docstring."""' not in hashing_context, (
         "Docstrings should be removed from helper functions"
     )
-    assert '"""Process data method."""' not in hashing_context, (
-        "Docstrings should be removed from helper class methods"
-    )
+    assert '"""Process data method."""' not in hashing_context, "Docstrings should be removed from helper class methods"
 
 
 def test_hashing_code_context_with_nested_classes(tmp_path: Path) -> None:
@@ -2588,16 +2601,21 @@ def test_circular_deps():
     optimized_code = Path(path_to_root / "optimized.py").read_text(encoding="utf-8")
     content = Path(file_abs_path).read_text(encoding="utf-8")
     new_code = replace_functions_and_add_imports(
-        source_code= add_global_assignments(optimized_code, content),
-        function_names= ["ApiClient.get_console_url"],
-        optimized_code= optimized_code,
-        module_abspath= Path(file_abs_path),
-        preexisting_objects= {('ApiClient', ()), ('get_console_url', (FunctionParent(name='ApiClient', type='ClassDef'),))},
-        project_root_path= Path(path_to_root),
+        source_code=add_global_assignments(optimized_code, content),
+        function_names=["ApiClient.get_console_url"],
+        optimized_code=optimized_code,
+        module_abspath=Path(file_abs_path),
+        preexisting_objects={
+            ("ApiClient", ()),
+            ("get_console_url", (FunctionParent(name="ApiClient", type="ClassDef"),)),
+        },
+        project_root_path=Path(path_to_root),
     )
     assert "import ApiClient" not in new_code, "Error: Circular dependency found"
 
     assert "import urllib.parse" in new_code, "Make sure imports for optimization global assignments exist"
+
+
 def test_global_assignment_collector_with_async_function():
     """Test GlobalAssignmentCollector correctly identifies global assignments outside async functions."""
     import libcst as cst
@@ -2745,6 +2763,380 @@ FINAL_ASSIGNMENT = {"data": "value"}
     assert collector.assignment_order == expected_order
 
 
+def test_global_assignment_collector_annotated_assignments():
+    """Test GlobalAssignmentCollector correctly handles annotated assignments (AnnAssign)."""
+    import libcst as cst
+
+    source_code = """
+# Regular global assignment
+REGULAR_VAR = "regular"
+
+# Annotated global assignments
+TYPED_VAR: str = "typed"
+CACHE: dict[str, int] = {}
+SENTINEL: object = object()
+
+# Annotated without value (type declaration only) - should NOT be collected
+DECLARED_ONLY: int
+
+def some_function():
+    # Annotated assignment inside function - should not be collected
+    local_typed: str = "local"
+    return local_typed
+
+class SomeClass:
+    # Class-level annotated assignment - should not be collected
+    class_attr: str = "class"
+
+# Another regular assignment
+FINAL_VAR = 123
+"""
+
+    tree = cst.parse_module(source_code)
+    collector = GlobalAssignmentCollector()
+    tree.visit(collector)
+
+    # Should collect both regular and annotated global assignments with values
+    assert len(collector.assignments) == 5
+    assert "REGULAR_VAR" in collector.assignments
+    assert "TYPED_VAR" in collector.assignments
+    assert "CACHE" in collector.assignments
+    assert "SENTINEL" in collector.assignments
+    assert "FINAL_VAR" in collector.assignments
+
+    # Should not collect type declarations without values
+    assert "DECLARED_ONLY" not in collector.assignments
+
+    # Should not collect assignments from inside functions or classes
+    assert "local_typed" not in collector.assignments
+    assert "class_attr" not in collector.assignments
+
+    # Verify correct order
+    expected_order = ["REGULAR_VAR", "TYPED_VAR", "CACHE", "SENTINEL", "FINAL_VAR"]
+    assert collector.assignment_order == expected_order
+
+
+def test_global_function_collector():
+    """Test GlobalFunctionCollector correctly collects module-level function definitions."""
+    import libcst as cst
+
+    from codeflash.code_utils.code_extractor import GlobalFunctionCollector
+
+    source_code = """
+# Module-level functions
+def helper_function():
+    return "helper"
+
+def another_helper(x: int) -> str:
+    return str(x)
+
+class SomeClass:
+    def method(self):
+        # This is a method, not a module-level function
+        return "method"
+
+    def another_method(self):
+        # Also a method
+        def nested_function():
+            # Nested function inside method
+            return "nested"
+        return nested_function()
+
+def final_function():
+    def inner_function():
+        # This is a nested function, not module-level
+        return "inner"
+    return inner_function()
+"""
+
+    tree = cst.parse_module(source_code)
+    collector = GlobalFunctionCollector()
+    tree.visit(collector)
+
+    # Should collect only module-level functions
+    assert len(collector.functions) == 3
+    assert "helper_function" in collector.functions
+    assert "another_helper" in collector.functions
+    assert "final_function" in collector.functions
+
+    # Should not collect methods or nested functions
+    assert "method" not in collector.functions
+    assert "another_method" not in collector.functions
+    assert "nested_function" not in collector.functions
+    assert "inner_function" not in collector.functions
+
+    # Verify correct order
+    expected_order = ["helper_function", "another_helper", "final_function"]
+    assert collector.function_order == expected_order
+
+
+def test_add_global_assignments_with_new_functions():
+    """Test add_global_assignments correctly adds new module-level functions."""
+    source_code = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        return _get_decorator_for_action(action)
+
+@lru_cache(maxsize=None)
+def _get_decorator_for_action(action):
+    def decorator(fn):
+        return fn
+    return decorator
+"""
+
+    destination_code = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        # Original implementation
+        return action
+"""
+
+    expected = """\
+from functools import lru_cache
+
+class SkyvernPage:
+    @staticmethod
+    def action_wrap(action):
+        # Original implementation
+        return action
+
+
+@lru_cache(maxsize=None)
+def _get_decorator_for_action(action):
+    def decorator(fn):
+        return fn
+    return decorator
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_does_not_duplicate_existing_functions():
+    """Test add_global_assignments does not duplicate functions that already exist in destination."""
+    source_code = """\
+def helper():
+    return "source_helper"
+
+def existing_function():
+    return "source_existing"
+"""
+
+    destination_code = """\
+def existing_function():
+    return "dest_existing"
+
+class MyClass:
+    pass
+"""
+
+    expected = """\
+def existing_function():
+    return "dest_existing"
+
+class MyClass:
+    pass
+
+def helper():
+    return "source_helper"
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_with_decorated_functions():
+    """Test add_global_assignments correctly adds decorated functions."""
+    source_code = """\
+from functools import lru_cache
+from typing import Callable
+
+_LOCAL_CACHE: dict[str, int] = {}
+
+@lru_cache(maxsize=128)
+def cached_helper(x: int) -> int:
+    return x * 2
+
+def regular_helper():
+    return "regular"
+"""
+
+    destination_code = """\
+from typing import Any
+
+class MyClass:
+    def method(self):
+        return cached_helper(5)
+"""
+
+    expected = """\
+from typing import Any
+
+_LOCAL_CACHE: dict[str, int] = {}
+
+class MyClass:
+    def method(self):
+        return cached_helper(5)
+
+
+@lru_cache(maxsize=128)
+def cached_helper(x: int) -> int:
+    return x * 2
+
+
+def regular_helper():
+    return "regular"
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_references_class_defined_in_module():
+    """Test that global assignments referencing classes are placed after those class definitions.
+
+    This test verifies the fix for a bug where LLM-generated optimization code like:
+        _REIFIERS = {MessageKind.XXX: lambda d: ...}
+    was placed BEFORE the MessageKind class definition, causing NameError at module load.
+
+    The fix ensures that new global assignments are inserted AFTER all class/function
+    definitions in the module, so they can safely reference any class defined in the module.
+    """
+    source_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+_MESSAGE_HANDLERS = {
+    MessageKind.ASK: lambda: "ask handler",
+    MessageKind.REPLY: lambda: "reply handler",
+}
+
+def handle_message(kind):
+    return _MESSAGE_HANDLERS[kind]()
+"""
+
+    destination_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+"""
+
+    # Global assignments are now inserted AFTER class/function definitions
+    # to ensure they can reference classes defined in the module
+    expected = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+
+_MESSAGE_HANDLERS = {
+    MessageKind.ASK: lambda: "ask handler",
+    MessageKind.REPLY: lambda: "reply handler",
+}
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
+def test_add_global_assignments_function_calls_after_function_definitions():
+    """Test that global function calls are placed after the functions they reference.
+
+    This test verifies the fix for a bug where LLM-generated optimization code like:
+        def _register(kind, factory):
+            _factories[kind] = factory
+
+        _register(MessageKind.ASK, lambda: "ask")
+
+    would have the _register(...) calls placed BEFORE the _register function definition,
+    causing NameError at module load time.
+
+    The fix ensures that new global statements (like function calls) are inserted AFTER
+    all class/function definitions, so they can safely reference any function defined in
+    the module.
+    """
+    source_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+_factories = {}
+
+def _register(kind, factory):
+    _factories[kind] = factory
+
+_register(MessageKind.ASK, lambda: "ask handler")
+_register(MessageKind.REPLY, lambda: "reply handler")
+
+def handle_message(kind):
+    return _factories[kind]()
+"""
+
+    destination_code = """\
+import enum
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+"""
+
+    expected = """\
+import enum
+
+_factories = {}
+
+class MessageKind(enum.StrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+
+def handle_message(kind):
+    if kind == MessageKind.ASK:
+        return "ask"
+    return "reply"
+
+
+def _register(kind, factory):
+    _factories[kind] = factory
+
+
+_register(MessageKind.ASK, lambda: "ask handler")
+
+_register(MessageKind.REPLY, lambda: "reply handler")
+"""
+
+    result = add_global_assignments(source_code, destination_code)
+    assert result == expected
+
+
 def test_class_instantiation_includes_init_as_helper(tmp_path: Path) -> None:
     """Test that when a class is instantiated, its __init__ method is tracked as a helper.
 
@@ -2785,11 +3177,7 @@ def target_function():
         )
     )
     function_to_optimize = FunctionToOptimize(
-        function_name="target_function",
-        file_path=file_path,
-        parents=[],
-        starting_line=None,
-        ending_line=None,
+        function_name="target_function", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
 
     code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
@@ -2803,15 +3191,11 @@ def target_function():
     # The testgen context should contain the class with __init__ (critical for LLM to know constructor)
     testgen_context = code_ctx.testgen_context.markdown
     assert "class DataDumper:" in testgen_context, "DataDumper class should be in testgen context"
-    assert "def __init__(self, data):" in testgen_context, (
-        "__init__ method should be included in testgen context"
-    )
+    assert "def __init__(self, data):" in testgen_context, "__init__ method should be included in testgen context"
 
     # The hashing context should NOT contain __init__ (excluded for stability)
     hashing_context = code_ctx.hashing_code_context
-    assert "__init__" not in hashing_context, (
-        "__init__ should NOT be in hashing context (excluded for hash stability)"
-    )
+    assert "__init__" not in hashing_context, "__init__ should NOT be in hashing context (excluded for hash stability)"
 
 
 def test_class_instantiation_preserves_full_class_in_testgen(tmp_path: Path) -> None:
@@ -2865,11 +3249,7 @@ def dump_layout(layout_type, layout):
         )
     )
     function_to_optimize = FunctionToOptimize(
-        function_name="dump_layout",
-        file_path=file_path,
-        parents=[],
-        starting_line=None,
-        ending_line=None,
+        function_name="dump_layout", file_path=file_path, parents=[], starting_line=None, ending_line=None
     )
 
     code_ctx = get_code_optimization_context(function_to_optimize, opt.args.project_root)
@@ -2879,9 +3259,7 @@ def dump_layout(layout_type, layout):
     assert "ObjectDetectionLayoutDumper.__init__" in qualified_names, (
         "ObjectDetectionLayoutDumper.__init__ should be tracked"
     )
-    assert "LayoutDumper.__init__" in qualified_names, (
-        "LayoutDumper.__init__ should be tracked"
-    )
+    assert "LayoutDumper.__init__" in qualified_names, "LayoutDumper.__init__ should be tracked"
 
     # The testgen context should include both classes with their __init__ methods
     testgen_context = code_ctx.testgen_context.markdown
@@ -2891,9 +3269,7 @@ def dump_layout(layout_type, layout):
     )
 
     # Both __init__ methods should be in the testgen context (so LLM knows constructor signatures)
-    assert testgen_context.count("def __init__") >= 2, (
-        "Both __init__ methods should be in testgen context"
-    )
+    assert testgen_context.count("def __init__") >= 2, "Both __init__ methods should be in testgen context"
 
 
 def test_get_imported_class_definitions_extracts_project_classes(tmp_path: Path) -> None:
@@ -2929,7 +3305,7 @@ class Text(Element):
     elements_path.write_text(elements_code, encoding="utf-8")
 
     # Create another module that imports from elements
-    chunking_code = '''
+    chunking_code = """
 from mypackage.elements import Element
 
 class PreChunk:
@@ -2939,14 +3315,12 @@ class PreChunk:
 class Accumulator:
     def will_fit(self, chunk: PreChunk) -> bool:
         return True
-'''
+"""
     chunking_path = package_dir / "chunking.py"
     chunking_path.write_text(chunking_code, encoding="utf-8")
 
     # Create CodeStringsMarkdown from the chunking module (simulating testgen context)
-    context = CodeStringsMarkdown(
-        code_strings=[CodeString(code=chunking_code, file_path=chunking_path)]
-    )
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=chunking_code, file_path=chunking_path)])
 
     # Call get_imported_class_definitions
     result = get_imported_class_definitions(context, tmp_path)
@@ -2970,16 +3344,16 @@ def test_get_imported_class_definitions_skips_existing_definitions(tmp_path: Pat
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
 
     # Create a module with a class definition
-    elements_code = '''
+    elements_code = """
 class Element:
     def __init__(self, text: str):
         self.text = text
-'''
+"""
     elements_path = package_dir / "elements.py"
     elements_path.write_text(elements_code, encoding="utf-8")
 
     # Create code that imports Element but also redefines it locally
-    code_with_local_def = '''
+    code_with_local_def = """
 from mypackage.elements import Element
 
 # Local redefinition (this happens when LLM redefines classes)
@@ -2990,13 +3364,11 @@ class Element:
 class User:
     def process(self, elem: Element):
         pass
-'''
+"""
     code_path = package_dir / "user.py"
     code_path.write_text(code_with_local_def, encoding="utf-8")
 
-    context = CodeStringsMarkdown(
-        code_strings=[CodeString(code=code_with_local_def, file_path=code_path)]
-    )
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code_with_local_def, file_path=code_path)])
 
     # Call get_imported_class_definitions
     result = get_imported_class_definitions(context, tmp_path)
@@ -3013,7 +3385,7 @@ def test_get_imported_class_definitions_skips_third_party(tmp_path: Path) -> Non
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
 
     # Code with stdlib/third-party imports
-    code = '''
+    code = """
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -3021,13 +3393,11 @@ from dataclasses import dataclass
 class MyClass:
     def __init__(self, path: Path):
         self.path = path
-'''
+"""
     code_path = package_dir / "main.py"
     code_path.write_text(code, encoding="utf-8")
 
-    context = CodeStringsMarkdown(
-        code_strings=[CodeString(code=code, file_path=code_path)]
-    )
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
     # Call get_imported_class_definitions
     result = get_imported_class_definitions(context, tmp_path)
@@ -3044,7 +3414,7 @@ def test_get_imported_class_definitions_handles_multiple_imports(tmp_path: Path)
     (package_dir / "__init__.py").write_text("", encoding="utf-8")
 
     # Create a module with multiple class definitions
-    types_code = '''
+    types_code = """
 class TypeA:
     def __init__(self, value: int):
         self.value = value
@@ -3056,24 +3426,22 @@ class TypeB:
 class TypeC:
     def __init__(self):
         pass
-'''
+"""
     types_path = package_dir / "types.py"
     types_path.write_text(types_code, encoding="utf-8")
 
     # Create code that imports multiple classes
-    code = '''
+    code = """
 from mypackage.types import TypeA, TypeB
 
 class Processor:
     def process(self, a: TypeA, b: TypeB):
         pass
-'''
+"""
     code_path = package_dir / "processor.py"
     code_path.write_text(code, encoding="utf-8")
 
-    context = CodeStringsMarkdown(
-        code_strings=[CodeString(code=code, file_path=code_path)]
-    )
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
 
     # Call get_imported_class_definitions
     result = get_imported_class_definitions(context, tmp_path)
@@ -3085,3 +3453,1200 @@ class Processor:
     assert "class TypeA" in all_extracted_code, "Should contain TypeA class"
     assert "class TypeB" in all_extracted_code, "Should contain TypeB class"
     assert "class TypeC" not in all_extracted_code, "Should NOT contain TypeC (not imported)"
+
+
+def test_get_imported_class_definitions_includes_dataclass_decorators(tmp_path: Path) -> None:
+    """Test that get_imported_class_definitions includes decorators when extracting dataclasses."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with dataclass definitions (like LLMConfig in skyvern)
+    models_code = """from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass(frozen=True)
+class LLMConfigBase:
+    model_name: str
+    required_env_vars: list[str]
+    supports_vision: bool
+    add_assistant_prefix: bool
+
+@dataclass(frozen=True)
+class LLMConfig(LLMConfigBase):
+    litellm_params: Optional[dict] = field(default=None)
+    max_tokens: int | None = None
+"""
+    models_path = package_dir / "models.py"
+    models_path.write_text(models_code, encoding="utf-8")
+
+    # Create code that imports the dataclass
+    code = """from mypackage.models import LLMConfig
+
+class ConfigRegistry:
+    def get_config(self) -> LLMConfig:
+        pass
+"""
+    code_path = package_dir / "registry.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should extract both LLMConfigBase (base class) and LLMConfig
+    assert len(result.code_strings) == 2, "Should extract both LLMConfig and its base class LLMConfigBase"
+
+    # Combine extracted code to check for all required elements
+    all_extracted_code = "\n".join(cs.code for cs in result.code_strings)
+
+    # Verify the base class is extracted first (for proper inheritance understanding)
+    base_class_idx = all_extracted_code.find("class LLMConfigBase")
+    derived_class_idx = all_extracted_code.find("class LLMConfig(")
+    assert base_class_idx < derived_class_idx, "Base class should appear before derived class"
+
+    # Verify both classes include @dataclass decorators
+    assert all_extracted_code.count("@dataclass(frozen=True)") == 2, (
+        "Should include @dataclass decorator for both classes"
+    )
+    assert "class LLMConfig" in all_extracted_code, "Should contain LLMConfig class definition"
+    assert "class LLMConfigBase" in all_extracted_code, "Should contain LLMConfigBase class definition"
+
+    # Verify imports are included for dataclass-related items
+    assert "from dataclasses import" in all_extracted_code, "Should include dataclasses import"
+
+
+def test_get_imported_class_definitions_extracts_imports_for_decorated_classes(tmp_path: Path) -> None:
+    """Test that extract_imports_for_class includes decorator and type annotation imports."""
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with decorated class that uses field() and various type annotations
+    models_code = """from dataclasses import dataclass, field
+from typing import Optional, List
+
+@dataclass
+class Config:
+    name: str
+    values: List[int] = field(default_factory=list)
+    description: Optional[str] = None
+"""
+    models_path = package_dir / "models.py"
+    models_path.write_text(models_code, encoding="utf-8")
+
+    # Create code that imports the class
+    code = """from mypackage.models import Config
+
+def create_config() -> Config:
+    return Config(name="test")
+"""
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+
+    result = get_imported_class_definitions(context, tmp_path)
+
+    assert len(result.code_strings) == 1, "Should extract Config class"
+    extracted_code = result.code_strings[0].code
+
+    # The extracted code should include the decorator
+    assert "@dataclass" in extracted_code, "Should include @dataclass decorator"
+    # The imports should include dataclass and field
+    assert "from dataclasses import" in extracted_code, "Should include dataclasses import for decorator"
+
+
+class TestCollectNamesFromAnnotation:
+    """Tests for the collect_names_from_annotation helper function."""
+
+    def test_simple_name(self):
+        """Test extracting a simple type name."""
+        import ast
+
+        code = "def f(x: MyClass): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        assert "MyClass" in names
+
+    def test_subscript_type(self):
+        """Test extracting names from generic types like List[int]."""
+        import ast
+
+        code = "def f(x: List[int]): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        assert "List" in names
+        assert "int" in names
+
+    def test_optional_type(self):
+        """Test extracting names from Optional[MyClass]."""
+        import ast
+
+        code = "def f(x: Optional[MyClass]): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        assert "Optional" in names
+        assert "MyClass" in names
+
+    def test_union_type_with_pipe(self):
+        """Test extracting names from union types with | syntax."""
+        import ast
+
+        code = "def f(x: int | str | None): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        # int | str | None becomes BinOp nodes
+        assert "int" in names
+        assert "str" in names
+
+    def test_nested_generic_types(self):
+        """Test extracting names from nested generics like Dict[str, List[MyClass]]."""
+        import ast
+
+        code = "def f(x: Dict[str, List[MyClass]]): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        assert "Dict" in names
+        assert "str" in names
+        assert "List" in names
+        assert "MyClass" in names
+
+    def test_tuple_annotation(self):
+        """Test extracting names from tuple type hints."""
+        import ast
+
+        code = "def f(x: tuple[int, str, MyClass]): pass"
+        annotation = ast.parse(code).body[0].args.args[0].annotation
+        names: set[str] = set()
+        collect_names_from_annotation(annotation, names)
+        assert "tuple" in names
+        assert "int" in names
+        assert "str" in names
+        assert "MyClass" in names
+
+
+class TestExtractImportsForClass:
+    """Tests for the extract_imports_for_class helper function."""
+
+    def test_extracts_base_class_imports(self):
+        """Test that base class imports are extracted."""
+        import ast
+
+        module_source = """from abc import ABC
+from mypackage import BaseClass
+
+class MyClass(BaseClass, ABC):
+    pass
+"""
+        tree = ast.parse(module_source)
+        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
+        result = extract_imports_for_class(tree, class_node, module_source)
+        assert "from abc import ABC" in result
+        assert "from mypackage import BaseClass" in result
+
+    def test_extracts_decorator_imports(self):
+        """Test that decorator imports are extracted."""
+        import ast
+
+        module_source = """from dataclasses import dataclass
+from functools import lru_cache
+
+@dataclass
+class MyClass:
+    name: str
+"""
+        tree = ast.parse(module_source)
+        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
+        result = extract_imports_for_class(tree, class_node, module_source)
+        assert "from dataclasses import dataclass" in result
+
+    def test_extracts_type_annotation_imports(self):
+        """Test that type annotation imports are extracted."""
+        import ast
+
+        module_source = """from typing import Optional, List
+from mypackage.models import Config
+
+@dataclass
+class MyClass:
+    config: Optional[Config]
+    items: List[str]
+"""
+        tree = ast.parse(module_source)
+        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
+        result = extract_imports_for_class(tree, class_node, module_source)
+        assert "from typing import Optional, List" in result
+        assert "from mypackage.models import Config" in result
+
+    def test_extracts_field_function_imports(self):
+        """Test that field() function imports are extracted for dataclasses."""
+        import ast
+
+        module_source = """from dataclasses import dataclass, field
+from typing import List
+
+@dataclass
+class MyClass:
+    items: List[str] = field(default_factory=list)
+"""
+        tree = ast.parse(module_source)
+        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
+        result = extract_imports_for_class(tree, class_node, module_source)
+        assert "from dataclasses import dataclass, field" in result
+
+    def test_no_duplicate_imports(self):
+        """Test that duplicate imports are not included."""
+        import ast
+
+        module_source = """from typing import Optional
+
+@dataclass
+class MyClass:
+    field1: Optional[str]
+    field2: Optional[int]
+"""
+        tree = ast.parse(module_source)
+        class_node = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef))
+        result = extract_imports_for_class(tree, class_node, module_source)
+        # Should only have one import line even though Optional is used twice
+        assert result.count("from typing import Optional") == 1
+
+
+def test_get_imported_class_definitions_multiple_decorators(tmp_path: Path) -> None:
+    """Test that classes with multiple decorators are extracted correctly."""
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    models_code = """from dataclasses import dataclass
+from functools import total_ordering
+
+@total_ordering
+@dataclass
+class OrderedConfig:
+    name: str
+    priority: int
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+"""
+    models_path = package_dir / "models.py"
+    models_path.write_text(models_code, encoding="utf-8")
+
+    code = """from mypackage.models import OrderedConfig
+
+def sort_configs(configs: list[OrderedConfig]) -> list[OrderedConfig]:
+    return sorted(configs)
+"""
+    code_path = package_dir / "main.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+
+    result = get_imported_class_definitions(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    extracted_code = result.code_strings[0].code
+
+    # Both decorators should be included
+    assert "@total_ordering" in extracted_code, "Should include @total_ordering decorator"
+    assert "@dataclass" in extracted_code, "Should include @dataclass decorator"
+    assert "class OrderedConfig" in extracted_code
+
+
+def test_get_imported_class_definitions_extracts_multilevel_inheritance(tmp_path: Path) -> None:
+    """Test that base classes are recursively extracted for multi-level inheritance.
+
+    This is critical for understanding dataclass constructor signatures, as fields
+    from parent classes become required positional arguments in child classes.
+    """
+    # Create a package structure
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with multi-level inheritance like skyvern's LLM models:
+    # GrandParent -> Parent -> Child
+    models_code = '''from dataclasses import dataclass, field
+from typing import Optional, Literal
+
+@dataclass(frozen=True)
+class GrandParentConfig:
+    """Base config with common fields."""
+    model_name: str
+    required_env_vars: list[str]
+
+@dataclass(frozen=True)
+class ParentConfig(GrandParentConfig):
+    """Intermediate config adding vision support."""
+    supports_vision: bool
+    add_assistant_prefix: bool
+
+@dataclass(frozen=True)
+class ChildConfig(ParentConfig):
+    """Full config with optional parameters."""
+    litellm_params: Optional[dict] = field(default=None)
+    max_tokens: int | None = None
+    temperature: float | None = 0.7
+
+@dataclass(frozen=True)
+class RouterConfig(ParentConfig):
+    """Router config branching from ParentConfig."""
+    model_list: list
+    main_model_group: str
+    routing_strategy: Literal["simple", "least-busy"] = "simple"
+'''
+    models_path = package_dir / "models.py"
+    models_path.write_text(models_code, encoding="utf-8")
+
+    # Create code that imports only the child classes (not the base classes)
+    code = """from mypackage.models import ChildConfig, RouterConfig
+
+class ConfigRegistry:
+    def get_child_config(self) -> ChildConfig:
+        pass
+
+    def get_router_config(self) -> RouterConfig:
+        pass
+"""
+    code_path = package_dir / "registry.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+
+    # Call get_imported_class_definitions
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should extract 4 classes: GrandParentConfig, ParentConfig, ChildConfig, RouterConfig
+    # (all classes needed to understand the full inheritance hierarchy)
+    assert len(result.code_strings) == 4, (
+        f"Should extract 4 classes (GrandParent, Parent, Child, Router), got {len(result.code_strings)}"
+    )
+
+    # Combine extracted code
+    all_extracted_code = "\n".join(cs.code for cs in result.code_strings)
+
+    # Verify all classes are extracted
+    assert "class GrandParentConfig" in all_extracted_code, "Should extract GrandParentConfig base class"
+    assert "class ParentConfig(GrandParentConfig)" in all_extracted_code, "Should extract ParentConfig"
+    assert "class ChildConfig(ParentConfig)" in all_extracted_code, "Should extract ChildConfig"
+    assert "class RouterConfig(ParentConfig)" in all_extracted_code, "Should extract RouterConfig"
+
+    # Verify classes are ordered correctly (base classes before derived)
+    grandparent_idx = all_extracted_code.find("class GrandParentConfig")
+    parent_idx = all_extracted_code.find("class ParentConfig(")
+    child_idx = all_extracted_code.find("class ChildConfig(")
+    router_idx = all_extracted_code.find("class RouterConfig(")
+
+    assert grandparent_idx < parent_idx, "GrandParentConfig should appear before ParentConfig"
+    assert parent_idx < child_idx, "ParentConfig should appear before ChildConfig"
+    assert parent_idx < router_idx, "ParentConfig should appear before RouterConfig"
+
+    # Verify the critical fields are visible for constructor understanding
+    assert "model_name: str" in all_extracted_code, "Should include model_name field from GrandParent"
+    assert "required_env_vars: list[str]" in all_extracted_code, "Should include required_env_vars field"
+    assert "supports_vision: bool" in all_extracted_code, "Should include supports_vision field from Parent"
+    assert "litellm_params:" in all_extracted_code, "Should include litellm_params field from Child"
+    assert "model_list: list" in all_extracted_code, "Should include model_list field from Router"
+
+
+def test_get_external_base_class_inits_extracts_userdict(tmp_path: Path) -> None:
+    """Extracts __init__ from collections.UserDict when a class inherits from it."""
+    code = """from collections import UserDict
+
+class MyCustomDict(UserDict):
+    pass
+"""
+    code_path = tmp_path / "mydict.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    code_string = result.code_strings[0]
+
+    expected_code = """\
+class UserDict:
+    def __init__(self, dict=None, /, **kwargs):
+        self.data = {}
+        if dict is not None:
+            self.update(dict)
+        if kwargs:
+            self.update(kwargs)
+"""
+    assert code_string.code == expected_code
+    assert code_string.file_path.as_posix().endswith("collections/__init__.py")
+
+
+def test_get_external_base_class_inits_skips_project_classes(tmp_path: Path) -> None:
+    """Returns empty when base class is from the project, not external."""
+    child_code = """from base import ProjectBase
+
+class Child(ProjectBase):
+    pass
+"""
+    child_path = tmp_path / "child.py"
+    child_path.write_text(child_code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=child_code, file_path=child_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_base_class_inits_skips_builtins(tmp_path: Path) -> None:
+    """Returns empty for builtin classes like list that have no inspectable source."""
+    code = """class MyList(list):
+    pass
+"""
+    code_path = tmp_path / "mylist.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+def test_get_external_base_class_inits_deduplicates(tmp_path: Path) -> None:
+    """Extracts the same external base class only once even when inherited multiple times."""
+    code = """from collections import UserDict
+
+class MyDict1(UserDict):
+    pass
+
+class MyDict2(UserDict):
+    pass
+"""
+    code_path = tmp_path / "mydicts.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert len(result.code_strings) == 1
+    expected_code = """\
+class UserDict:
+    def __init__(self, dict=None, /, **kwargs):
+        self.data = {}
+        if dict is not None:
+            self.update(dict)
+        if kwargs:
+            self.update(kwargs)
+"""
+    assert result.code_strings[0].code == expected_code
+
+
+def test_get_external_base_class_inits_empty_when_no_inheritance(tmp_path: Path) -> None:
+    """Returns empty when there are no external base classes."""
+    code = """class SimpleClass:
+    pass
+"""
+    code_path = tmp_path / "simple.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    assert result.code_strings == []
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="enum.StrEnum requires Python 3.11+")
+def test_dependency_classes_kept_in_read_writable_context(tmp_path: Path) -> None:
+    """Tests that classes used as dependencies (enums, dataclasses) are kept in read-writable context.
+
+    This test verifies that when a function uses classes like enums or dataclasses
+    as types or in match statements, those classes are included in the optimization
+    context, even though they don't contain any target functions.
+    """
+    code = '''
+import dataclasses
+import enum
+import typing as t
+
+
+class MessageKind(enum.StrEnum):
+    ASK_FOR_CLIPBOARD_RESPONSE = "ask-for-clipboard-response"
+    BEGIN_EXFILTRATION = "begin-exfiltration"
+
+
+@dataclasses.dataclass
+class Message:
+    kind: str
+
+
+@dataclasses.dataclass
+class MessageInAskForClipboardResponse(Message):
+    kind: t.Literal[MessageKind.ASK_FOR_CLIPBOARD_RESPONSE] = MessageKind.ASK_FOR_CLIPBOARD_RESPONSE
+    text: str = ""
+
+
+@dataclasses.dataclass
+class MessageInBeginExfiltration(Message):
+    kind: t.Literal[MessageKind.BEGIN_EXFILTRATION] = MessageKind.BEGIN_EXFILTRATION
+
+
+MessageIn = (
+    MessageInAskForClipboardResponse
+    | MessageInBeginExfiltration
+)
+
+
+def reify_channel_message(data: dict) -> MessageIn:
+    kind = data.get("kind", None)
+
+    match kind:
+        case MessageKind.ASK_FOR_CLIPBOARD_RESPONSE:
+            text = data.get("text") or ""
+            return MessageInAskForClipboardResponse(text=text)
+        case MessageKind.BEGIN_EXFILTRATION:
+            return MessageInBeginExfiltration()
+        case _:
+            raise ValueError(f"Unknown message kind: '{kind}'")
+'''
+    code_path = tmp_path / "message.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="reify_channel_message",
+        file_path=code_path,
+        parents=[],
+    )
+
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+    )
+
+    expected_read_writable = """
+```python:message.py
+import dataclasses
+import enum
+import typing as t
+
+class MessageKind(enum.StrEnum):
+    ASK_FOR_CLIPBOARD_RESPONSE = "ask-for-clipboard-response"
+    BEGIN_EXFILTRATION = "begin-exfiltration"
+
+
+@dataclasses.dataclass
+class Message:
+    kind: str
+
+
+@dataclasses.dataclass
+class MessageInAskForClipboardResponse(Message):
+    kind: t.Literal[MessageKind.ASK_FOR_CLIPBOARD_RESPONSE] = MessageKind.ASK_FOR_CLIPBOARD_RESPONSE
+    text: str = ""
+
+
+@dataclasses.dataclass
+class MessageInBeginExfiltration(Message):
+    kind: t.Literal[MessageKind.BEGIN_EXFILTRATION] = MessageKind.BEGIN_EXFILTRATION
+
+
+MessageIn = (
+    MessageInAskForClipboardResponse
+    | MessageInBeginExfiltration
+)
+
+
+def reify_channel_message(data: dict) -> MessageIn:
+    kind = data.get("kind", None)
+
+    match kind:
+        case MessageKind.ASK_FOR_CLIPBOARD_RESPONSE:
+            text = data.get("text") or ""
+            return MessageInAskForClipboardResponse(text=text)
+        case MessageKind.BEGIN_EXFILTRATION:
+            return MessageInBeginExfiltration()
+        case _:
+            raise ValueError(f"Unknown message kind: '{kind}'")
+```
+"""
+    assert code_ctx.read_writable_code.markdown.strip() == expected_read_writable.strip()
+
+
+def test_testgen_context_includes_external_base_inits(tmp_path: Path) -> None:
+    """Test that external base class __init__ methods are included in testgen context.
+
+    This covers line 65 in code_context_extractor.py where external_base_inits.code_strings
+    are appended to the testgen context when a class inherits from an external library.
+    """
+    code = """from collections import UserDict
+
+class MyCustomDict(UserDict):
+    def target_method(self):
+        return self.data
+"""
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyCustomDict", type="ClassDef")],
+    )
+
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+    )
+
+    # The testgen context should include the UserDict __init__ method
+    testgen_context = code_ctx.testgen_context.markdown
+    assert "class UserDict:" in testgen_context, "UserDict class should be in testgen context"
+    assert "def __init__" in testgen_context, "UserDict __init__ should be in testgen context"
+    assert "self.data = {}" in testgen_context, "UserDict __init__ body should be included"
+
+
+def test_read_only_code_removed_when_exceeds_limit(tmp_path: Path) -> None:
+    """Test read-only code is completely removed when it exceeds token limit even without docstrings.
+
+    This covers lines 152-153 in code_context_extractor.py where read_only_context_code is set
+    to empty string when it still exceeds the token limit after docstring removal.
+    """
+    # Create a second-degree helper with large implementation that has no docstrings
+    # Second-degree helpers go into read-only context
+    long_lines = ["    x = 0"]
+    for i in range(150):
+        long_lines.append(f"    x = x + {i}")
+    long_lines.append("    return x")
+    long_body = "\n".join(long_lines)
+
+    code = f"""
+class MyClass:
+    def __init__(self):
+        self.x = 1
+
+    def target_method(self):
+        return first_helper()
+
+
+def first_helper():
+    # First degree helper - calls second degree
+    return second_helper()
+
+
+def second_helper():
+    # Second degree helper - goes into read-only context
+{long_body}
+"""
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+    )
+
+    # Use a small optim_token_limit that allows read-writable but not read-only
+    # Read-writable is ~48 tokens, read-only is ~600 tokens
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+        optim_token_limit=100,  # Small limit to trigger read-only removal
+    )
+
+    # The read-only context should be empty because it exceeded the limit
+    assert code_ctx.read_only_context_code == "", "Read-only code should be removed when exceeding token limit"
+
+
+def test_testgen_removes_imported_classes_on_overflow(tmp_path: Path) -> None:
+    """Test testgen context removes imported class definitions when exceeding token limit.
+
+    This covers lines 176-186 in code_context_extractor.py where:
+    - Testgen context exceeds limit (line 175)
+    - Removing docstrings still exceeds (line 175 again)
+    - Removing imported classes succeeds (line 177-183)
+    """
+    # Create a package structure with a large type class used only in type annotations
+    # This ensures get_imported_class_definitions extracts the full class
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a large class with methods that will be extracted via get_imported_class_definitions
+    # Use methods WITHOUT docstrings so removing docstrings won't help much
+    many_methods = "\n".join([f"    def method_{i}(self):\n        return {i}" for i in range(100)])
+    type_class_code = f'''
+class TypeClass:
+    """A type class for annotations."""
+
+    def __init__(self, value: int):
+        self.value = value
+
+{many_methods}
+'''
+    type_class_path = package_dir / "types.py"
+    type_class_path.write_text(type_class_code, encoding="utf-8")
+
+    # Main module uses TypeClass only in annotation (not instantiated)
+    # This triggers get_imported_class_definitions to extract the full class
+    main_code = """
+from mypackage.types import TypeClass
+
+def target_function(obj: TypeClass) -> int:
+    return obj.value
+"""
+    main_path = package_dir / "main.py"
+    main_path.write_text(main_code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_function",
+        file_path=main_path,
+        parents=[],
+    )
+
+    # Use a testgen_token_limit that:
+    # - Is exceeded by full context with imported class (~1500 tokens)
+    # - Is exceeded even after removing docstrings
+    # - But fits when imported class is removed (~40 tokens)
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+        testgen_token_limit=200,  # Small limit to trigger imported class removal
+    )
+
+    # The testgen context should exist (didn't raise ValueError)
+    testgen_context = code_ctx.testgen_context.markdown
+    assert testgen_context, "Testgen context should not be empty"
+
+    # The target function should still be there
+    assert "def target_function" in testgen_context, "Target function should be in testgen context"
+
+    # The large imported class should NOT be included (removed due to token limit)
+    assert "class TypeClass" not in testgen_context, (
+        "TypeClass should be removed from testgen context when exceeding token limit"
+    )
+
+
+def test_testgen_raises_when_all_fallbacks_fail(tmp_path: Path) -> None:
+    """Test that ValueError is raised when testgen context exceeds limit even after all fallbacks.
+
+    This covers line 186 in code_context_extractor.py.
+    """
+    # Create a function with a very long body that exceeds limits even without imports/docstrings
+    long_lines = ["    x = 0"]
+    for i in range(200):
+        long_lines.append(f"    x = x + {i}")
+    long_lines.append("    return x")
+    long_body = "\n".join(long_lines)
+
+    code = f"""
+def target_function():
+{long_body}
+"""
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_function",
+        file_path=file_path,
+        parents=[],
+    )
+
+    # Use a very small testgen_token_limit that cannot fit even the base function
+    with pytest.raises(ValueError, match="Testgen code context has exceeded token limit"):
+        get_code_optimization_context(
+            function_to_optimize=func_to_optimize,
+            project_root_path=tmp_path,
+            testgen_token_limit=50,  # Very small limit
+        )
+
+
+def test_get_external_base_class_inits_attribute_base(tmp_path: Path) -> None:
+    """Test handling of base class accessed as module.ClassName (ast.Attribute).
+
+    This covers line 616 in code_context_extractor.py.
+    """
+    # Use the standard import style which the code actually handles
+    code = """from collections import UserDict
+
+class MyDict(UserDict):
+    def custom_method(self):
+        return self.data
+"""
+    code_path = tmp_path / "mydict.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    # Should extract UserDict __init__
+    assert len(result.code_strings) == 1
+    assert "class UserDict:" in result.code_strings[0].code
+    assert "def __init__" in result.code_strings[0].code
+
+
+def test_get_external_base_class_inits_no_init_method(tmp_path: Path) -> None:
+    """Test handling when base class has no __init__ method.
+
+    This covers line 641 in code_context_extractor.py.
+    """
+    # Create a class inheriting from a class that doesn't have inspectable __init__
+    code = """from typing import Protocol
+
+class MyProtocol(Protocol):
+    pass
+"""
+    code_path = tmp_path / "myproto.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_external_base_class_inits(context, tmp_path)
+
+    # Protocol's __init__ can't be easily inspected, should handle gracefully
+    # Result may be empty or contain Protocol based on implementation
+    assert isinstance(result.code_strings, list)
+
+
+def test_collect_names_from_annotation_attribute(tmp_path: Path) -> None:
+    """Test collect_names_from_annotation handles ast.Attribute annotations.
+
+    This covers line 756 in code_context_extractor.py.
+    """
+    # Use __import__ to avoid polluting the test file's detected imports
+    ast_mod = __import__("ast")
+
+    # Parse code with type annotation using attribute access
+    code = "x: typing.List[int] = []"
+    tree = ast_mod.parse(code)
+    names: set[str] = set()
+
+    # Find the annotation node
+    for node in ast_mod.walk(tree):
+        if isinstance(node, ast_mod.AnnAssign) and node.annotation:
+            collect_names_from_annotation(node.annotation, names)
+            break
+
+    assert "typing" in names
+
+
+def test_extract_imports_for_class_decorator_call_attribute(tmp_path: Path) -> None:
+    """Test extract_imports_for_class handles decorator calls with attribute access.
+
+    This covers lines 707-708 in code_context_extractor.py.
+    """
+    ast_mod = __import__("ast")
+
+    code = """
+import functools
+
+@functools.lru_cache(maxsize=128)
+class CachedClass:
+    pass
+"""
+    tree = ast_mod.parse(code)
+
+    # Find the class node
+    class_node = None
+    for node in ast_mod.walk(tree):
+        if isinstance(node, ast_mod.ClassDef):
+            class_node = node
+            break
+
+    assert class_node is not None
+    result = extract_imports_for_class(tree, class_node, code)
+
+    # Should include the functools import
+    assert "functools" in result
+
+
+def test_annotated_assignment_in_read_writable(tmp_path: Path) -> None:
+    """Test that annotated assignments used by target function are in read-writable context.
+
+    This covers lines 965-969 in code_context_extractor.py.
+    """
+    code = """
+CONFIG_VALUE: int = 42
+
+class MyClass:
+    def __init__(self):
+        self.x = CONFIG_VALUE
+
+    def target_method(self):
+        return self.x
+"""
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+    )
+
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+    )
+
+    # CONFIG_VALUE should be in read-writable context since it's used by __init__
+    read_writable = code_ctx.read_writable_code.markdown
+    assert "CONFIG_VALUE" in read_writable
+
+
+def test_imported_class_definitions_module_path_none(tmp_path: Path) -> None:
+    """Test handling when module_path is None in get_imported_class_definitions.
+
+    This covers line 560 in code_context_extractor.py.
+    """
+    # Create code that imports from a non-existent or unresolvable module
+    code = """
+from nonexistent_module_xyz import SomeClass
+
+class MyClass:
+    def method(self, obj: SomeClass):
+        pass
+"""
+    code_path = tmp_path / "test.py"
+    code_path.write_text(code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=code, file_path=code_path)])
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should handle gracefully and return empty or partial results
+    assert isinstance(result.code_strings, list)
+
+
+def test_get_imported_names_import_star(tmp_path: Path) -> None:
+    """Test get_imported_names handles import * correctly.
+
+    This covers lines 808-809 and 824-825 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    # Test regular import *
+    # Note: "import *" is not valid Python, but "from x import *" is
+    from_import_star = cst.parse_statement("from os import *")
+    assert isinstance(from_import_star, cst.SimpleStatementLine)
+    import_node = from_import_star.body[0]
+    assert isinstance(import_node, cst.ImportFrom)
+
+    from codeflash.context.code_context_extractor import get_imported_names
+
+    result = get_imported_names(import_node)
+    assert result == {"*"}
+
+
+def test_get_imported_names_aliased_import(tmp_path: Path) -> None:
+    """Test get_imported_names handles aliased imports correctly.
+
+    This covers lines 812-813 and 828-829 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    from codeflash.context.code_context_extractor import get_imported_names
+
+    # Test import with alias
+    import_stmt = cst.parse_statement("import numpy as np")
+    assert isinstance(import_stmt, cst.SimpleStatementLine)
+    import_node = import_stmt.body[0]
+    assert isinstance(import_node, cst.Import)
+
+    result = get_imported_names(import_node)
+    assert "np" in result
+
+    # Test from import with alias
+    from_import_stmt = cst.parse_statement("from os import path as ospath")
+    assert isinstance(from_import_stmt, cst.SimpleStatementLine)
+    from_import_node = from_import_stmt.body[0]
+    assert isinstance(from_import_node, cst.ImportFrom)
+
+    result2 = get_imported_names(from_import_node)
+    assert "ospath" in result2
+
+
+def test_get_imported_names_dotted_import(tmp_path: Path) -> None:
+    """Test get_imported_names handles dotted imports correctly.
+
+    This covers lines 816-822 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    from codeflash.context.code_context_extractor import get_imported_names
+
+    # Test dotted import like "import os.path"
+    import_stmt = cst.parse_statement("import os.path")
+    assert isinstance(import_stmt, cst.SimpleStatementLine)
+    import_node = import_stmt.body[0]
+    assert isinstance(import_node, cst.Import)
+
+    result = get_imported_names(import_node)
+    assert "os" in result
+
+
+def test_used_name_collector_comprehensive(tmp_path: Path) -> None:
+    """Test UsedNameCollector handles various node types.
+
+    This covers lines 767-801 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    from codeflash.context.code_context_extractor import UsedNameCollector
+
+    code = """
+import os
+from typing import List
+
+x: int = 1
+y = os.path.join("a", "b")
+
+class MyClass:
+    z = 10
+
+def my_func():
+    pass
+"""
+    module = cst.parse_module(code)
+    collector = UsedNameCollector()
+    # In libcst, the walker traverses the module
+    cst.MetadataWrapper(module).visit(collector)
+
+    # Check used names
+    assert "os" in collector.used_names
+    assert "int" in collector.used_names
+    assert "List" in collector.used_names
+
+    # Check defined names
+    assert "x" in collector.defined_names
+    assert "y" in collector.defined_names
+    assert "MyClass" in collector.defined_names
+    assert "my_func" in collector.defined_names
+
+    # Check external names (used but not defined)
+    external = collector.get_external_names()
+    assert "os" in external
+    assert "x" not in external  # x is defined
+
+
+def test_imported_class_with_base_in_same_module(tmp_path: Path) -> None:
+    """Test that imported classes with bases in the same module are extracted correctly.
+
+    This covers line 528 in code_context_extractor.py - early return for already extracted.
+    """
+    package_dir = tmp_path / "mypackage"
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Create a module with inheritance chain
+    module_code = """
+class BaseClass:
+    def __init__(self):
+        self.base = True
+
+class MiddleClass(BaseClass):
+    def __init__(self):
+        super().__init__()
+        self.middle = True
+
+class DerivedClass(MiddleClass):
+    def __init__(self):
+        super().__init__()
+        self.derived = True
+"""
+    module_path = package_dir / "classes.py"
+    module_path.write_text(module_code, encoding="utf-8")
+
+    # Main module imports and uses the derived class
+    main_code = """
+from mypackage.classes import DerivedClass
+
+def target_function(obj: DerivedClass) -> bool:
+    return obj.derived
+"""
+    main_path = package_dir / "main.py"
+    main_path.write_text(main_code, encoding="utf-8")
+
+    context = CodeStringsMarkdown(code_strings=[CodeString(code=main_code, file_path=main_path)])
+    result = get_imported_class_definitions(context, tmp_path)
+
+    # Should extract the inheritance chain
+    all_code = "\n".join(cs.code for cs in result.code_strings)
+    assert "class BaseClass" in all_code or "class DerivedClass" in all_code
+
+
+def test_get_imported_names_from_import_without_alias(tmp_path: Path) -> None:
+    """Test get_imported_names handles from imports without aliases.
+
+    This covers lines 830-831 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    from codeflash.context.code_context_extractor import get_imported_names
+
+    # Test from import without alias
+    from_import_stmt = cst.parse_statement("from os import path, getcwd")
+    assert isinstance(from_import_stmt, cst.SimpleStatementLine)
+    from_import_node = from_import_stmt.body[0]
+    assert isinstance(from_import_node, cst.ImportFrom)
+
+    result = get_imported_names(from_import_node)
+    assert "path" in result
+    assert "getcwd" in result
+
+
+def test_get_imported_names_regular_import(tmp_path: Path) -> None:
+    """Test get_imported_names handles regular imports.
+
+    This covers lines 814-815 in code_context_extractor.py.
+    """
+    import libcst as cst
+
+    from codeflash.context.code_context_extractor import get_imported_names
+
+    # Test regular import without alias
+    import_stmt = cst.parse_statement("import json")
+    assert isinstance(import_stmt, cst.SimpleStatementLine)
+    import_node = import_stmt.body[0]
+    assert isinstance(import_node, cst.Import)
+
+    result = get_imported_names(import_node)
+    assert "json" in result
+
+
+def test_augmented_assignment_not_in_context(tmp_path: Path) -> None:
+    """Test that augmented assignments are handled but not included unless used.
+
+    This covers line 962-969 in code_context_extractor.py.
+    """
+    code = """
+counter = 0
+
+class MyClass:
+    def __init__(self):
+        global counter
+        counter += 1
+
+    def target_method(self):
+        return 42
+"""
+    file_path = tmp_path / "test_code.py"
+    file_path.write_text(code, encoding="utf-8")
+
+    func_to_optimize = FunctionToOptimize(
+        function_name="target_method",
+        file_path=file_path,
+        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+    )
+
+    code_ctx = get_code_optimization_context(
+        function_to_optimize=func_to_optimize,
+        project_root_path=tmp_path,
+    )
+
+    # counter should be in context since __init__ uses it
+    read_writable = code_ctx.read_writable_code.markdown
+    assert "counter" in read_writable

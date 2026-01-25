@@ -177,6 +177,111 @@ def get_names_in_expression(node: cst.BaseExpression) -> set[str]:
     return collector.names
 
 
+class GlobalFunctionCollector(cst.CSTVisitor):
+    """Collects all module-level function definitions (not inside classes or other functions)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.functions: dict[str, cst.FunctionDef] = {}
+        self.function_order: list[str] = []
+        self.scope_depth = 0
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
+        if self.scope_depth == 0:
+            # Module-level function
+            name = node.name.value
+            self.functions[name] = node
+            if name not in self.function_order:
+                self.function_order.append(name)
+        self.scope_depth += 1
+        return True
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+        self.scope_depth -= 1
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:  # noqa: ARG002
+        self.scope_depth += 1
+        return True
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.scope_depth -= 1
+
+
+class GlobalFunctionTransformer(cst.CSTTransformer):
+    """Transforms/adds module-level functions from the new file to the original file."""
+
+    def __init__(self, new_functions: dict[str, cst.FunctionDef], new_function_order: list[str]) -> None:
+        super().__init__()
+        self.new_functions = new_functions
+        self.new_function_order = new_function_order
+        self.processed_functions: set[str] = set()
+        self.scope_depth = 0
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+        self.scope_depth += 1
+
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
+        self.scope_depth -= 1
+        if self.scope_depth > 0:
+            return updated_node
+
+        # Check if this is a module-level function we need to replace
+        name = original_node.name.value
+        if name in self.new_functions:
+            self.processed_functions.add(name)
+            return self.new_functions[name]
+        return updated_node
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.scope_depth += 1
+
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+        self.scope_depth -= 1
+        return updated_node
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        # Add any new functions that weren't in the original file
+        new_statements = list(updated_node.body)
+
+        functions_to_append = [
+            self.new_functions[name]
+            for name in self.new_function_order
+            if name not in self.processed_functions and name in self.new_functions
+        ]
+
+        if functions_to_append:
+            # Find the position of the last function or class definition
+            insert_index = find_insertion_index_after_imports(updated_node)
+            for i, stmt in enumerate(new_statements):
+                if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
+                    insert_index = i + 1
+
+            # Add empty line before each new function
+            function_nodes = []
+            for func in functions_to_append:
+                func_with_empty_line = func.with_changes(leading_lines=[cst.EmptyLine(), *func.leading_lines])
+                function_nodes.append(func_with_empty_line)
+
+            new_statements = list(chain(new_statements[:insert_index], function_nodes, new_statements[insert_index:]))
+
+        return updated_node.with_changes(body=new_statements)
+
+
+def collect_referenced_names(node: cst.CSTNode) -> set[str]:
+    """Collect all names referenced in a CST node using recursive traversal."""
+    names: set[str] = set()
+
+    def _collect(n: cst.CSTNode) -> None:
+        if isinstance(n, cst.Name):
+            names.add(n.value)
+        # Recursively process all children
+        for child in n.children:
+            _collect(child)
+
+    _collect(node)
+    return names
+
+
 class GlobalAssignmentCollector(cst.CSTVisitor):
     """Collects all global assignment statements.
 
@@ -188,7 +293,7 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
 
     def __init__(self) -> None:
         super().__init__()
-        self.assignments: dict[str, cst.Assign] = {}
+        self.assignments: dict[str, cst.Assign | cst.AnnAssign] = {}
         self.assignment_order: list[str] = []
         # Track scope depth to identify global assignments
         self.scope_depth = 0
@@ -268,6 +373,21 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
                         self.assignment_order.append(name)
         return True
 
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> Optional[bool]:
+        # Handle annotated assignments like: _CACHE: Dict[str, int] = {}
+        # Only process module-level annotated assignments with a value
+        if (
+            self.scope_depth == 0
+            and self.if_else_depth == 0
+            and isinstance(node.target, cst.Name)
+            and node.value is not None
+        ):
+            name = node.target.value
+            self.assignments[name] = node
+            if name not in self.assignment_order:
+                self.assignment_order.append(name)
+        return True
+
 
 def find_insertion_index_after_imports(node: cst.Module) -> int:
     """Find the position of the last import statement in the top-level of the module."""
@@ -305,7 +425,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
     - For/while loops, with statements, try blocks (compound_depth)
     """
 
-    def __init__(self, new_assignments: dict[str, cst.Assign], new_assignment_order: list[str]) -> None:
+    def __init__(self, new_assignments: dict[str, cst.Assign | cst.AnnAssign], new_assignment_order: list[str]) -> None:
         super().__init__()
         self.new_assignments = new_assignments
         self.new_assignment_order = new_assignment_order
@@ -388,6 +508,19 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         return updated_node
 
+    def leave_AnnAssign(self, original_node: cst.AnnAssign, updated_node: cst.AnnAssign) -> cst.CSTNode:
+        if self.scope_depth > 0 or self.if_else_depth > 0:
+            return updated_node
+
+        # Check if this is a global annotated assignment we need to replace
+        if isinstance(original_node.target, cst.Name):
+            name = original_node.target.value
+            if name in self.new_assignments:
+                self.processed_assignments.add(name)
+                return self.new_assignments[name]
+
+        return updated_node
+
     def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
@@ -438,19 +571,40 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
             assignment_lines = [
                 cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()]) for assignment in assignments
             ]
-
             new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
 
-            # Add a blank line after the last assignment if needed
-            after_index = insert_index + len(assignment_lines)
-            if after_index < len(new_statements):
-                next_stmt = new_statements[after_index]
-                # If there's no empty line, add one
-                has_empty = any(isinstance(line, cst.EmptyLine) for line in next_stmt.leading_lines)
-                if not has_empty:
-                    new_statements[after_index] = next_stmt.with_changes(
-                        leading_lines=[cst.EmptyLine(), *next_stmt.leading_lines]
-                    )
+        return updated_node.with_changes(body=new_statements)
+
+
+class GlobalStatementTransformer(cst.CSTTransformer):
+    """Transformer that appends global statements at the end of the module.
+
+    This ensures that global statements (like function calls at module level) are placed
+    after all functions, classes, and assignments they might reference, preventing NameError
+    at module load time.
+
+    This transformer should be run LAST after GlobalFunctionTransformer and
+    GlobalAssignmentTransformer have already added their content.
+    """
+
+    def __init__(self, global_statements: list[cst.SimpleStatementLine]) -> None:
+        super().__init__()
+        self.global_statements = global_statements
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        if not self.global_statements:
+            return updated_node
+
+        new_statements = list(updated_node.body)
+
+        # Add empty line before each statement for readability
+        statement_lines = [
+            stmt.with_changes(leading_lines=[cst.EmptyLine(), *stmt.leading_lines]) for stmt in self.global_statements
+        ]
+
+        # Append statements at the end of the module
+        # This ensures they come after all functions, classes, and assignments
+        new_statements.extend(statement_lines)
 
         return updated_node.with_changes(body=new_statements)
 
@@ -1096,20 +1250,8 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
             continue
         unique_global_statements.append(stmt)
 
-    mod_dst_code = dst_module_code
-    # Insert unique global statements if any
-    if unique_global_statements:
-        last_import_line = find_last_import_line(dst_module_code)
-        # Reuse already-parsed dst_module
-        transformer = ImportInserter(unique_global_statements, last_import_line)
-        # Use visit inplace, don't parse again
-        modified_module = dst_module.visit(transformer)
-        mod_dst_code = modified_module.code
-        # Parse the code after insertion
-        original_module = cst.parse_module(mod_dst_code)
-    else:
-        # No new statements to insert, reuse already-parsed dst_module
-        original_module = dst_module
+    # Reuse already-parsed dst_module
+    original_module = dst_module
 
     # Insert new function definitions if any
     if new_function_defs:
@@ -1121,17 +1263,53 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
 
     # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file
-    new_collector = GlobalAssignmentCollector()
-    src_module.visit(new_collector)
-    # Only create transformer if there are assignments to insert/transform
-    if not new_collector.assignments:  # nothing to transform
-        return mod_dst_code
+    new_assignment_collector = GlobalAssignmentCollector()
+    src_module.visit(new_assignment_collector)
 
-    # Transform the original destination module
-    transformer = GlobalAssignmentTransformer(new_collector.assignments, new_collector.assignment_order)
-    transformed_module = original_module.visit(transformer)
+    # Collect module-level functions from both source and destination
+    src_function_collector = GlobalFunctionCollector()
+    src_module.visit(src_function_collector)
 
-    return transformed_module.code
+    dst_function_collector = GlobalFunctionCollector()
+    original_module.visit(dst_function_collector)
+
+    # Filter out functions that already exist in the destination (only add truly new functions)
+    new_functions = {
+        name: func
+        for name, func in src_function_collector.functions.items()
+        if name not in dst_function_collector.functions
+    }
+    new_function_order = [name for name in src_function_collector.function_order if name in new_functions]
+
+    # If there are no assignments, no new functions, and no global statements, return unchanged
+    if not new_assignment_collector.assignments and not new_functions and not unique_global_statements:
+        return dst_module_code
+
+    # The order of transformations matters:
+    # 1. Functions first - so assignments and statements can reference them
+    # 2. Assignments second - so they come after functions but before statements
+    # 3. Global statements last - so they can reference both functions and assignments
+
+    # Transform functions if any
+    if new_functions:
+        function_transformer = GlobalFunctionTransformer(new_functions, new_function_order)
+        original_module = original_module.visit(function_transformer)
+
+    # Transform assignments if any
+    if new_assignment_collector.assignments:
+        transformer = GlobalAssignmentTransformer(
+            new_assignment_collector.assignments, new_assignment_collector.assignment_order
+        )
+        original_module = original_module.visit(transformer)
+
+    # Insert global statements (like function calls at module level) LAST,
+    # after all functions and assignments are added, to ensure they can reference any
+    # functions or variables defined in the module
+    if unique_global_statements:
+        statement_transformer = GlobalStatementTransformer(unique_global_statements)
+        original_module = original_module.visit(statement_transformer)
+
+    return original_module.code
 
 
 def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
