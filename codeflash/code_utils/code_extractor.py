@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from importlib.util import find_spec
 from itertools import chain
@@ -23,6 +24,157 @@ if TYPE_CHECKING:
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.models.models import FunctionSource
+
+
+class NameCollector(cst.CSTVisitor):
+    """Collects all Name nodes referenced in a CST expression.
+
+    Used to find what names an assignment depends on (e.g., function calls in the RHS).
+    Properly scopes comprehension variables and lambda parameters so they are not
+    treated as external dependencies.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+        # Stack of sets tracking locally bound names (comprehension vars, lambda params)
+        self._local_names_stack: list[set[str]] = []
+
+    def _is_local_name(self, name: str) -> bool:
+        """Check if a name is bound in any enclosing local scope."""
+        return any(name in scope for scope in self._local_names_stack)
+
+    def visit_Name(self, node: cst.Name) -> None:
+        if not self._is_local_name(node.value):
+            self.names.add(node.value)
+
+    # --- Comprehension handling ---
+    def visit_ListComp(self, node: cst.ListComp) -> bool:
+        """Handle list comprehensions: [expr for x in iterable if cond]."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False  # Don't visit children - we handle them manually
+
+    def visit_SetComp(self, node: cst.SetComp) -> bool:
+        """Handle set comprehensions: {expr for x in iterable if cond}."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False
+
+    def visit_DictComp(self, node: cst.DictComp) -> bool:
+        """Handle dict comprehensions: {key: value for x in iterable if cond}."""
+        # For dict comps, we need to visit both key and value
+        self._visit_dict_comprehension(node.for_in, node.key, node.value)
+        return False
+
+    def visit_GeneratorExp(self, node: cst.GeneratorExp) -> bool:
+        """Handle generator expressions: (expr for x in iterable if cond)."""
+        self._visit_comprehension(node.for_in, node.elt)
+        return False
+
+    def _extract_comp_target_names(self, target: cst.BaseExpression) -> set[str]:
+        """Extract names bound by a comprehension target (e.g., x in 'for x in items')."""
+        return _extract_names_from_target(target)
+
+    def _visit_comprehension(self, for_in: cst.CompFor, elt: cst.BaseExpression) -> None:
+        """Visit a comprehension, properly scoping the loop variables."""
+        # Create a new scope for this comprehension
+        local_scope: set[str] = set()
+        self._local_names_stack.append(local_scope)
+
+        # Process all for..in clauses, collecting bound names as we go
+        self._visit_comp_for(for_in, local_scope)
+
+        # Visit the element expression (all bound names are now in scope)
+        elt.visit(self)
+
+        # Pop the scope
+        self._local_names_stack.pop()
+
+    def _visit_dict_comprehension(
+        self, for_in: cst.CompFor, key: cst.BaseExpression, value: cst.BaseExpression
+    ) -> None:
+        """Visit a dict comprehension, properly scoping the loop variables."""
+        local_scope: set[str] = set()
+        self._local_names_stack.append(local_scope)
+
+        self._visit_comp_for(for_in, local_scope)
+
+        # Visit both key and value expressions
+        key.visit(self)
+        value.visit(self)
+
+        self._local_names_stack.pop()
+
+    def _visit_comp_for(self, comp_for: cst.CompFor, local_scope: set[str]) -> None:
+        """Recursively visit CompFor nodes, adding bound names to scope."""
+        # First, visit the iterable (before adding target names to scope!)
+        # This is important: `x` in `[x for x in x]` - the RHS `x` is external
+        comp_for.iter.visit(self)
+
+        # Add the target names to the local scope
+        target_names = self._extract_comp_target_names(comp_for.target)
+        local_scope.update(target_names)
+
+        # Visit any conditions (ifs)
+        for if_clause in comp_for.ifs:
+            if_clause.test.visit(self)
+
+        # Visit nested for..in if present
+        if comp_for.inner_for_in is not None:
+            self._visit_comp_for(comp_for.inner_for_in, local_scope)
+
+    # --- Lambda handling ---
+    def visit_Lambda(self, node: cst.Lambda) -> bool:
+        """Handle lambda expressions: lambda x, y: x + y + z."""
+        # Collect parameter names
+        param_names = self._extract_lambda_param_names(node.params)
+
+        # Push a new scope with these parameters
+        self._local_names_stack.append(param_names)
+
+        # Visit the lambda body
+        node.body.visit(self)
+
+        # Pop the scope
+        self._local_names_stack.pop()
+
+        return False  # Don't visit children - we handle them manually
+
+    def _extract_lambda_param_names(self, params: cst.Parameters) -> set[str]:
+        """Extract all parameter names from a lambda's parameters."""
+        names: set[str] = set()
+
+        # Regular positional/keyword params
+        for param in params.params:
+            names.add(param.name.value)
+
+        # *args
+        if params.star_arg and isinstance(params.star_arg, cst.Param):
+            names.add(params.star_arg.name.value)
+
+        # Keyword-only params
+        for param in params.kwonly_params:
+            names.add(param.name.value)
+
+        # **kwargs
+        if params.star_kwarg:
+            names.add(params.star_kwarg.name.value)
+
+        # Positional-only params (Python 3.8+)
+        for param in params.posonly_params:
+            names.add(param.name.value)
+
+        return names
+
+
+def get_names_in_expression(node: cst.BaseExpression) -> set[str]:
+    """Extract all names referenced in a CST expression.
+
+    Comprehension variables and lambda parameters are properly scoped and
+    are NOT included as external dependencies.
+    """
+    collector = NameCollector()
+    node.visit(collector)
+    return collector.names
 
 
 class GlobalFunctionCollector(cst.CSTVisitor):
@@ -131,7 +283,13 @@ def collect_referenced_names(node: cst.CSTNode) -> set[str]:
 
 
 class GlobalAssignmentCollector(cst.CSTVisitor):
-    """Collects all global assignment statements."""
+    """Collects all global assignment statements.
+
+    Only collects simple assignments at module level, NOT inside:
+    - Functions/classes (scope_depth)
+    - If/else blocks (if_else_depth)
+    - For/while loops, with statements, try blocks (compound_depth)
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -140,6 +298,9 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         # Track scope depth to identify global assignments
         self.scope_depth = 0
         self.if_else_depth = 0
+        # Track other compound statements (for, while, with, try) where assignments
+        # inside them depend on loop variables or context managers
+        self.compound_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:  # noqa: ARG002
         self.scope_depth += 1
@@ -166,9 +327,44 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         # Else blocks are already counted as part of the if statement
         return True
 
+    def visit_For(self, node: cst.For) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_For(self, original_node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_While(self, node: cst.While) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_While(self, original_node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_With(self, node: cst.With) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_With(self, original_node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Try(self, node: cst.Try) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Match(self, node: cst.Match) -> Optional[bool]:  # noqa: ARG002
+        self.compound_depth += 1
+        return True
+
+    def leave_Match(self, original_node: cst.Match) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
     def visit_Assign(self, node: cst.Assign) -> Optional[bool]:
-        # Only process global assignments (not inside functions, classes, etc.)
-        if self.scope_depth == 0 and self.if_else_depth == 0:  # We're at module level
+        # Only process global assignments (not inside functions, classes, loops, etc.)
+        if self.scope_depth == 0 and self.if_else_depth == 0 and self.compound_depth == 0:
             for target in node.targets:
                 if isinstance(target.target, cst.Name):
                     name = target.target.value
@@ -221,7 +417,13 @@ def find_insertion_index_after_imports(node: cst.Module) -> int:
 
 
 class GlobalAssignmentTransformer(cst.CSTTransformer):
-    """Transforms global assignments in the original file with those from the new file."""
+    """Transforms global assignments in the original file with those from the new file.
+
+    Only transforms simple assignments at module level, NOT inside:
+    - Functions/classes (scope_depth)
+    - If/else blocks (if_else_depth)
+    - For/while loops, with statements, try blocks (compound_depth)
+    """
 
     def __init__(self, new_assignments: dict[str, cst.Assign | cst.AnnAssign], new_assignment_order: list[str]) -> None:
         super().__init__()
@@ -230,6 +432,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.processed_assignments: set[str] = set()
         self.scope_depth = 0
         self.if_else_depth = 0
+        self.compound_depth = 0
 
     def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.scope_depth += 1
@@ -256,8 +459,43 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         # Else blocks are already counted as part of the if statement
         pass
 
+    def visit_For(self, node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_For(self, original_node: cst.For, updated_node: cst.For) -> cst.For:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_While(self, node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_While(self, original_node: cst.While, updated_node: cst.While) -> cst.While:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_With(self, node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_With(self, original_node: cst.With, updated_node: cst.With) -> cst.With:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_Try(self, node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_Try(self, original_node: cst.Try, updated_node: cst.Try) -> cst.Try:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
+    def visit_Match(self, node: cst.Match) -> None:  # noqa: ARG002
+        self.compound_depth += 1
+
+    def leave_Match(self, original_node: cst.Match, updated_node: cst.Match) -> cst.Match:  # noqa: ARG002
+        self.compound_depth -= 1
+        return updated_node
+
     def leave_Assign(self, original_node: cst.Assign, updated_node: cst.Assign) -> cst.CSTNode:
-        if self.scope_depth > 0 or self.if_else_depth > 0:
+        if self.scope_depth > 0 or self.if_else_depth > 0 or self.compound_depth > 0:
             return updated_node
 
         # Check if this is a global assignment we need to replace
@@ -287,7 +525,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
 
-        # Find assignments to append
+        # Find assignments to append (with their names for dependency analysis)
         assignments_to_append = [
             (name, self.new_assignments[name])
             for name in self.new_assignment_order
@@ -297,58 +535,41 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         if not assignments_to_append:
             return updated_node.with_changes(body=new_statements)
 
-        # Collect all class and function names defined in the module
-        # These are the names that assignments might reference
-        module_defined_names: set[str] = set()
-        for stmt in new_statements:
-            if isinstance(stmt, (cst.ClassDef, cst.FunctionDef)):
-                module_defined_names.add(stmt.name.value)
+        # Build a map of where functions/classes/assignments are defined in the module
+        # Maps name -> index AFTER the definition (i.e., the first valid insertion point)
+        definition_positions: dict[str, int] = {}
+        for i, stmt in enumerate(new_statements):
+            if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
+                definition_positions[stmt.name.value] = i + 1
+            # Get all names defined by this statement (handles simple assignments,
+            # compound statements like for/while/with/try, etc.)
+            for name in get_statement_defined_names(stmt):
+                definition_positions[name] = i + 1
 
-        # Partition assignments: those that reference module definitions go at the end,
-        # those that don't can go right after imports
-        assignments_after_imports: list[tuple[str, cst.Assign | cst.AnnAssign]] = []
-        assignments_after_definitions: list[tuple[str, cst.Assign | cst.AnnAssign]] = []
+        # Find the default insertion index (after imports)
+        default_insert_index = find_insertion_index_after_imports(updated_node)
 
-        for name, assignment in assignments_to_append:
-            # Get the value being assigned
-            if isinstance(assignment, (cst.Assign, cst.AnnAssign)) and assignment.value is not None:
-                value_node = assignment.value
-            else:
-                # No value to analyze, safe to place after imports
-                assignments_after_imports.append((name, assignment))
-                continue
+        # For each assignment, determine its minimum insertion index
+        # by finding the max position of all functions/names it depends on
+        assignments_by_insert_index: dict[int, list[cst.Assign]] = defaultdict(list)
+        for _name, assignment in assignments_to_append:
+            # Get names referenced in the assignment's value (RHS)
+            dependencies = get_names_in_expression(assignment.value)
 
-            # Collect names referenced in the assignment value
-            referenced_names = collect_referenced_names(value_node)
+            # Find the minimum insertion index (after all dependencies are defined)
+            min_insert_index = default_insert_index
+            for dep_name in dependencies:
+                if dep_name in definition_positions:
+                    min_insert_index = max(min_insert_index, definition_positions[dep_name])
 
-            # Check if any referenced names are module-level definitions
-            if referenced_names & module_defined_names:
-                # This assignment references a class/function, place it after definitions
-                assignments_after_definitions.append((name, assignment))
-            else:
-                # Safe to place right after imports
-                assignments_after_imports.append((name, assignment))
+            assignments_by_insert_index[min_insert_index].append(assignment)
 
-        # Insert assignments that don't depend on module definitions right after imports
-        if assignments_after_imports:
-            insert_index = find_insertion_index_after_imports(updated_node)
+        # Insert assignments at their appropriate positions
+        # Process in reverse order of indices to avoid offset issues when inserting
+        for insert_index in sorted(assignments_by_insert_index.keys(), reverse=True):
+            assignments = assignments_by_insert_index[insert_index]
             assignment_lines = [
-                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                for _, assignment in assignments_after_imports
-            ]
-            new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
-
-        # Insert assignments that depend on module definitions after all class/function definitions
-        if assignments_after_definitions:
-            # Find the position after the last function or class definition
-            insert_index = find_insertion_index_after_imports(cst.Module(body=new_statements))
-            for i, stmt in enumerate(new_statements):
-                if isinstance(stmt, (cst.FunctionDef, cst.ClassDef)):
-                    insert_index = i + 1
-
-            assignment_lines = [
-                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()])
-                for _, assignment in assignments_after_definitions
+                cst.SimpleStatementLine([assignment], leading_lines=[cst.EmptyLine()]) for assignment in assignments
             ]
             new_statements = list(chain(new_statements[:insert_index], assignment_lines, new_statements[insert_index:]))
 
@@ -388,13 +609,68 @@ class GlobalStatementTransformer(cst.CSTTransformer):
         return updated_node.with_changes(body=new_statements)
 
 
-class GlobalStatementCollector(cst.CSTVisitor):
-    """Visitor that collects all global statements (excluding imports and functions/classes)."""
+class FunctionDefCollector(cst.CSTVisitor):
+    """Collects all top-level function definitions from a module.
+
+    Used to find new helper functions in optimized code that need to be transferred.
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self.global_statements = []
+        self.function_defs: dict[str, cst.FunctionDef] = {}
+        self.function_order: list[str] = []
+        self.in_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: ARG002
+        self.in_class = True
+        return False  # Don't visit inside classes
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.in_class = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        if not self.in_class:
+            name = node.name.value
+            self.function_defs[name] = node
+            self.function_order.append(name)
+        return False  # Don't visit inside functions
+
+
+class FunctionNameCollector(cst.CSTVisitor):
+    """Collects all top-level function and class names from a module."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+        self.in_class = False
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
+        if not self.in_class:
+            self.names.add(node.name.value)
+        self.in_class = True
+        return False
+
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+        self.in_class = False
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
+        if not self.in_class:
+            self.names.add(node.name.value)
+        return False
+
+
+class GlobalStatementCollector(cst.CSTVisitor):
+    """Visitor that collects all global statements (excluding imports and functions/classes).
+
+    Collects both simple statements and compound statements (for, while, with, try)
+    at module level.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.global_statements: list[cst.BaseStatement] = []
         self.in_function_or_class = False
+        self.compound_depth = 0
 
     def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: ARG002
         # Don't visit inside classes
@@ -412,13 +688,69 @@ class GlobalStatementCollector(cst.CSTVisitor):
     def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
         self.in_function_or_class = False
 
+    def visit_For(self, node: cst.For) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_For(self, original_node: cst.For) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_While(self, node: cst.While) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_While(self, original_node: cst.While) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_With(self, node: cst.With) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_With(self, original_node: cst.With) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Try(self, node: cst.Try) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_Try(self, original_node: cst.Try) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
+    def visit_Match(self, node: cst.Match) -> Optional[bool]:
+        if not self.in_function_or_class and self.compound_depth == 0:
+            self.global_statements.append(node)
+        self.compound_depth += 1
+        return False  # Don't visit children - we collect the whole node
+
+    def leave_Match(self, original_node: cst.Match) -> None:  # noqa: ARG002
+        self.compound_depth -= 1
+
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
-        if not self.in_function_or_class:
+        if not self.in_function_or_class and self.compound_depth == 0:
             for statement in node.body:
-                # Skip imports and assignments (both regular and annotated)
-                if not isinstance(statement, (cst.Import, cst.ImportFrom, cst.Assign, cst.AnnAssign)):
+                # Skip imports
+                if isinstance(statement, (cst.Import, cst.ImportFrom)):
+                    continue
+                # Skip simple name assignments (handled by GlobalAssignmentCollector)
+                # But include tuple unpacking and chained assignments
+                if isinstance(statement, cst.Assign):
+                    # Check if it's a simple single-name assignment
+                    if len(statement.targets) == 1 and isinstance(statement.targets[0].target, cst.Name):
+                        continue
+                    # Tuple unpacking, chained assignment, etc. - include it
                     self.global_statements.append(node)
                     break
+                # Include other statement types (AnnAssign, Expr, etc.)
+                self.global_statements.append(node)
+                break
 
 
 class LastImportFinder(cst.CSTVisitor):
@@ -511,7 +843,349 @@ class DottedImportCollector(cst.CSTVisitor):
             self._collect_imports_from_block(node.body)
 
 
-def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.SimpleStatementLine]]:
+class FunctionDefInserter(cst.CSTTransformer):
+    """Transformer that inserts new function definitions into a module.
+
+    New function definitions are inserted after imports but before any code that depends on them.
+    """
+
+    def __init__(self, function_defs: list[cst.FunctionDef], last_import_line: int) -> None:
+        super().__init__()
+        self.function_defs = function_defs
+        self.last_import_line = last_import_line
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        if not self.function_defs:
+            return updated_node
+
+        updated_body = list(updated_node.body)
+
+        # Insert function definitions after imports (or at beginning if no imports)
+        if self.last_import_line == 0:
+            # No imports, insert at the beginning
+            for j, func_def in enumerate(self.function_defs):
+                updated_body.insert(j, func_def)
+        else:
+            # Find insertion point after last import
+            insertion_index = 0
+            for i in range(len(updated_body)):
+                if i + 1 == self.last_import_line:
+                    insertion_index = i + 1
+                    break
+            for j, func_def in enumerate(self.function_defs):
+                updated_body.insert(insertion_index + j, func_def)
+
+        return updated_node.with_changes(body=updated_body)
+
+
+def get_statement_dependencies(stmt: cst.BaseStatement) -> set[str]:
+    """Extract all names that a statement depends on (names used on the RHS).
+
+    Note: Type annotations are NOT included as dependencies since they only affect
+    static type checking and don't cause runtime NameErrors.
+    """
+    deps: set[str] = set()
+    if isinstance(stmt, cst.SimpleStatementLine):
+        for body_item in stmt.body:
+            if isinstance(body_item, cst.Assign):
+                # Get names used in the value (RHS)
+                deps.update(get_names_in_expression(body_item.value))
+            elif isinstance(body_item, cst.AnnAssign) and body_item.value is not None:
+                # Only get names from the value, NOT from the annotation
+                # Type annotations don't create runtime dependencies
+                deps.update(get_names_in_expression(body_item.value))
+    return deps
+
+
+def _extract_names_from_target(target: cst.BaseExpression) -> set[str]:
+    """Extract all names from an assignment target (handles tuples, names, etc.)."""
+    names: set[str] = set()
+    if isinstance(target, cst.Name):
+        names.add(target.value)
+    elif isinstance(target, (cst.Tuple, cst.List)):
+        for element in target.elements:
+            if isinstance(element, (cst.Element, cst.StarredElement)):
+                names.update(_extract_names_from_target(element.value))
+    return names
+
+
+def _extract_names_from_pattern(pattern: cst.MatchPattern) -> set[str]:
+    """Extract all names bound by a match pattern (Python 3.10+).
+
+    Match patterns can bind names in several ways:
+    - MatchAs: `case x:` or `case _ as x:`
+    - MatchStar: `case [*rest]:`
+    - MatchMapping: `case {"key": value}:`
+    - MatchSequence/MatchList/MatchTuple: `case [x, y]:`
+    - MatchClass: `case Point(x=px, y=py):`
+    - MatchOr: `case x | y:` (names must be same in all alternatives)
+    """
+    names: set[str] = set()
+
+    if isinstance(pattern, cst.MatchAs):
+        # `case x:` or `case _ as x:` - the name is bound
+        if pattern.name is not None:
+            names.add(pattern.name.value)
+        # Also check nested pattern (e.g., `case [a, b] as both:`)
+        if pattern.pattern is not None:
+            names.update(_extract_names_from_pattern(pattern.pattern))
+
+    elif isinstance(pattern, cst.MatchStar):
+        # `case [first, *rest]:` - rest is bound
+        if pattern.name is not None:
+            names.add(pattern.name.value)
+
+    elif isinstance(pattern, (cst.MatchSequence, cst.MatchList, cst.MatchTuple)):
+        # `case [x, y]:` or `case (x, y):`
+        for element in pattern.patterns:
+            if isinstance(element, cst.MatchSequenceElement):
+                names.update(_extract_names_from_pattern(element.value))
+            elif isinstance(element, cst.MatchStar) and element.name is not None:
+                names.add(element.name.value)
+
+    elif isinstance(pattern, cst.MatchMapping):
+        # `case {"key": value}:`
+        for element in pattern.elements:
+            if isinstance(element, cst.MatchMappingElement):
+                names.update(_extract_names_from_pattern(element.pattern))
+        # Also handle `case {**rest}:`
+        if pattern.rest is not None:
+            names.add(pattern.rest.value)
+
+    elif isinstance(pattern, cst.MatchClass):
+        # `case Point(x, y):` or `case Point(x=px, y=py):`
+        for arg in pattern.patterns:
+            if isinstance(arg, cst.MatchSequenceElement):
+                names.update(_extract_names_from_pattern(arg.value))
+        for kwarg in pattern.keywords:
+            if isinstance(kwarg, cst.MatchKeywordElement):
+                names.update(_extract_names_from_pattern(kwarg.pattern))
+
+    elif isinstance(pattern, cst.MatchOr):
+        # `case x | y:` - all alternatives must bind same names
+        for element in pattern.patterns:
+            if isinstance(element, cst.MatchOrElement):
+                names.update(_extract_names_from_pattern(element.pattern))
+
+    # MatchValue and MatchSingleton don't bind names
+
+    return names
+
+
+def _collect_defined_names_from_body(body: cst.BaseSuite) -> set[str]:
+    """Recursively collect all names defined by assignments inside a code block.
+
+    This is used to find names defined inside compound statements (for, while, with, try).
+    """
+    names: set[str] = set()
+    if isinstance(body, cst.IndentedBlock):
+        for stmt in body.body:
+            names.update(get_statement_defined_names(stmt))
+    return names
+
+
+def get_statement_defined_names(stmt: cst.BaseStatement) -> set[str]:
+    """Get all names defined by a statement (LHS of assignment).
+
+    For compound statements (for, while, with, try, if), this also collects
+    names defined inside their bodies.
+    """
+    names: set[str] = set()
+    if isinstance(stmt, cst.SimpleStatementLine):
+        for body_item in stmt.body:
+            if isinstance(body_item, cst.Assign):
+                # Handle chained assignments: a = b = c = 5
+                for target_node in body_item.targets:
+                    names.update(_extract_names_from_target(target_node.target))
+            elif isinstance(body_item, cst.AnnAssign):
+                names.update(_extract_names_from_target(body_item.target))
+    elif isinstance(stmt, cst.For):
+        # For loop target variable
+        names.update(_extract_names_from_target(stmt.target))
+        # Names defined inside the for loop body
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+    elif isinstance(stmt, cst.While):
+        # Names defined inside the while loop body
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+    elif isinstance(stmt, cst.With):
+        # With statement can bind names via 'as' clause
+        for item in stmt.items:
+            if item.asname:
+                names.update(_extract_names_from_target(item.asname.name))
+        # Names defined inside the with body
+        names.update(_collect_defined_names_from_body(stmt.body))
+    elif isinstance(stmt, cst.Try):
+        # Names defined in try/except/else/finally bodies
+        names.update(_collect_defined_names_from_body(stmt.body))
+        for handler in stmt.handlers:
+            if handler.name:
+                names.add(handler.name.value)
+            names.update(_collect_defined_names_from_body(handler.body))
+        if stmt.orelse:
+            names.update(_collect_defined_names_from_body(stmt.orelse.body))
+        if stmt.finalbody:
+            names.update(_collect_defined_names_from_body(stmt.finalbody.body))
+    elif isinstance(stmt, cst.If):
+        # Names defined inside if/elif/else bodies
+        names.update(_collect_defined_names_from_body(stmt.body))
+        if stmt.orelse:
+            if isinstance(stmt.orelse, cst.Else):
+                names.update(_collect_defined_names_from_body(stmt.orelse.body))
+            elif isinstance(stmt.orelse, cst.If):
+                # elif branch
+                names.update(get_statement_defined_names(stmt.orelse))
+    elif isinstance(stmt, cst.Match):
+        # Match statement (Python 3.10+) can bind names through patterns
+        for case in stmt.cases:
+            # Extract names bound by the pattern
+            names.update(_extract_names_from_pattern(case.pattern))
+            # Names defined inside the case body
+            names.update(_collect_defined_names_from_body(case.body))
+    return names
+
+
+def find_last_definition_index(name: str, body: list[cst.BaseStatement]) -> int:
+    """Find the index of the last statement that defines a given name."""
+    last_idx = -1
+    for i, stmt in enumerate(body):
+        defined_names = get_statement_defined_names(stmt)
+        if name in defined_names:
+            last_idx = i
+    return last_idx
+
+
+def _sort_statements_by_dependencies(statements: list[cst.BaseStatement]) -> list[cst.BaseStatement]:
+    """Sort statements so that definitions come before their dependents.
+
+    Uses a stable topological sort - statements without dependencies on each other
+    maintain their original relative order.
+    """
+    if len(statements) <= 1:
+        return statements
+
+    # Build a map of defined names to statement index
+    name_to_idx: dict[str, int] = {}
+    for i, stmt in enumerate(statements):
+        for name in get_statement_defined_names(stmt):
+            name_to_idx[name] = i
+
+    # Build dependency graph: idx -> set of indices it depends on
+    deps_graph: dict[int, set[int]] = {i: set() for i in range(len(statements))}
+    for i, stmt in enumerate(statements):
+        for dep_name in get_statement_dependencies(stmt):
+            if dep_name in name_to_idx:
+                dep_idx = name_to_idx[dep_name]
+                if dep_idx != i:  # Don't add self-dependency
+                    deps_graph[i].add(dep_idx)
+
+    # Kahn's algorithm for topological sort with stable ordering
+    in_degree = {i: len(deps) for i, deps in deps_graph.items()}
+    # Start with nodes that have no dependencies, in original order
+    queue = [i for i in range(len(statements)) if in_degree[i] == 0]
+    result: list[cst.BaseStatement] = []
+
+    while queue:
+        # Take from front (maintains original order for independent items)
+        idx = queue.pop(0)
+        result.append(statements[idx])
+
+        # Find nodes that depend on this one and reduce their in-degree
+        for other_idx in range(len(statements)):
+            if idx in deps_graph[other_idx]:
+                in_degree[other_idx] -= 1
+                if in_degree[other_idx] == 0:
+                    queue.append(other_idx)
+
+    # If we couldn't sort all (cycle), return original order
+    if len(result) != len(statements):
+        # Find the statements involved in the cycle for a more helpful warning
+        unsorted_indices = [i for i in range(len(statements)) if in_degree[i] > 0]
+        cycle_names = []
+        for idx in unsorted_indices:
+            names = get_statement_defined_names(statements[idx])
+            if names:
+                cycle_names.extend(names)
+        logger.warning(
+            f"Circular dependency detected among statements defining: {', '.join(cycle_names) or 'unknown'}. "
+            "Using original statement order. This may cause NameError at runtime."
+        )
+        return statements
+
+    return result
+
+
+class ImportInserter(cst.CSTTransformer):
+    """Transformer that inserts global statements into a module.
+
+    - Simple statements (assignments, etc.) are inserted after the globals they depend on
+    - If no dependencies, they are inserted after imports
+    - Compound statements (for, while, with, try) are inserted at the END of the module
+      because they may call functions that are defined later in the file
+    """
+
+    def __init__(self, global_statements: list[cst.BaseStatement], last_import_line: int) -> None:
+        super().__init__()
+        self.global_statements = global_statements
+        self.last_import_line = last_import_line
+
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+        if not self.global_statements:
+            return updated_node
+
+        # Separate simple statements from compound statements
+        simple_statements = []
+        compound_statements = []
+        for stmt in self.global_statements:
+            if isinstance(stmt, cst.SimpleStatementLine):
+                simple_statements.append(stmt)
+            else:
+                # For, While, With, Try, If, etc. are compound statements
+                compound_statements.append(stmt)
+
+        updated_body = list(updated_node.body)
+
+        # For simple statements, insert after their dependencies or after imports
+        if simple_statements:
+            # Sort statements by their interdependencies first
+            simple_statements = _sort_statements_by_dependencies(simple_statements)
+
+            # Find the base insertion point (after imports)
+            base_insertion_index = 0
+            if self.last_import_line > 0:
+                for i in range(len(updated_body)):
+                    if i + 1 == self.last_import_line:
+                        base_insertion_index = i + 1
+                        break
+
+            # Insert each statement at the correct position based on its dependencies
+            # Track how many statements have been inserted to maintain relative order
+            for inserted_count, stmt in enumerate(simple_statements):
+                deps = get_statement_dependencies(stmt)
+
+                # Find the position after the last dependency definition
+                # Account for already-inserted statements to maintain order
+                insertion_index = base_insertion_index + inserted_count
+                for dep_name in deps:
+                    dep_idx = find_last_definition_index(dep_name, updated_body)
+                    if dep_idx >= 0:
+                        # Insert after this dependency
+                        insertion_index = max(insertion_index, dep_idx + 1)
+
+                updated_body.insert(insertion_index, stmt)
+
+        # Append compound statements at the END of the module
+        # This ensures they run after all function definitions
+        if compound_statements:
+            updated_body.extend(compound_statements)
+
+        return updated_node.with_changes(body=updated_body)
+
+
+def extract_global_statements(source_code: str) -> tuple[cst.Module, list[cst.BaseStatement]]:
     """Extract global statements from source code."""
     module = cst.parse_module(source_code)
     collector = GlobalStatementCollector()
@@ -554,6 +1228,20 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
     src_module, new_added_global_statements = extract_global_statements(src_module_code)
     dst_module, existing_global_statements = extract_global_statements(dst_module_code)
 
+    # Collect function definitions from source and destination
+    src_func_collector = FunctionDefCollector()
+    src_module.visit(src_func_collector)
+
+    dst_name_collector = FunctionNameCollector()
+    dst_module.visit(dst_name_collector)
+
+    # Find new function definitions that don't exist in destination
+    new_function_defs: list[cst.FunctionDef] = [
+        src_func_collector.function_defs[func_name]
+        for func_name in src_func_collector.function_order
+        if func_name not in dst_name_collector.names
+    ]
+
     unique_global_statements = []
     for stmt in new_added_global_statements:
         if any(
@@ -564,6 +1252,14 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
 
     # Reuse already-parsed dst_module
     original_module = dst_module
+
+    # Insert new function definitions if any
+    if new_function_defs:
+        last_import_line = find_last_import_line(dst_module_code)
+        transformer = FunctionDefInserter(new_function_defs, last_import_line)
+        modified_module = original_module.visit(transformer)
+        dst_module_code = modified_module.code
+        original_module = cst.parse_module(dst_module_code)
 
     # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file

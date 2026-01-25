@@ -3742,3 +3742,1736 @@ def _collect_repeated_tools(tool_objs: list[Tool]) -> Iterator[Tool]:
         project_root_path=Path(__file__).resolve().parent.resolve(),
     )
     assert new_code == expected
+
+
+def test_global_assignments_with_function_dependencies() -> None:
+    """Test that global assignments that depend on functions are inserted after those functions.
+
+    This tests the fix for a bug where LLM-generated optimizations that use module-level
+    code like `_TABLE = unicode_to_char(...)` would fail because the assignment was inserted
+    before the function definition.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original file: standardize_quotes first, unicode_to_char second
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Standardize quotes in text."""
+    return text
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Convert unicode value to char."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code: defines unicode_to_char first, then module-level code that uses it
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Convert unicode value to char."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_CODES = ("U+0022", "U+201C")
+_TRANSLATION_TABLE = {ord(unicode_to_char(c)): ord('"') for c in _CODES}
+
+def standardize_quotes(text: str) -> str:
+    """Standardize quotes in text."""
+    return text.translate(_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The assignment that depends on unicode_to_char should be inserted AFTER unicode_to_char
+    # not after imports (which would cause a NameError)
+
+    # Parse the result and verify the order
+    import libcst as cst
+
+    module = cst.parse_module(result)
+
+    # Find positions of key elements
+    unicode_to_char_pos = None
+    translation_table_pos = None
+
+    for i, stmt in enumerate(module.body):
+        if isinstance(stmt, cst.FunctionDef) and stmt.name.value == "unicode_to_char":
+            unicode_to_char_pos = i
+        elif isinstance(stmt, cst.SimpleStatementLine):
+            for child in stmt.body:
+                if isinstance(child, cst.Assign):
+                    for target in child.targets:
+                        if isinstance(target.target, cst.Name) and target.target.value == "_TRANSLATION_TABLE":
+                            translation_table_pos = i
+
+    # Verify that _TRANSLATION_TABLE comes AFTER unicode_to_char
+    assert unicode_to_char_pos is not None, "unicode_to_char function not found in result"
+    assert translation_table_pos is not None, "_TRANSLATION_TABLE assignment not found in result"
+    assert translation_table_pos > unicode_to_char_pos, (
+        f"_TRANSLATION_TABLE (pos {translation_table_pos}) should be after "
+        f"unicode_to_char (pos {unicode_to_char_pos}) because it depends on it"
+    )
+
+
+def test_global_assignments_inside_for_loops_not_extracted() -> None:
+    """Test that assignments inside for-loops are NOT extracted as standalone globals.
+
+    This tests the fix for a bug where LLM-generated optimizations that build
+    translation tables using for-loops would have the loop body assignments
+    incorrectly extracted, causing NameError for loop variables.
+    """
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    # Code with assignments inside a for-loop (common optimization pattern)
+    # Note: Using regular assignment (not annotated) since GlobalAssignmentCollector only handles Assign
+    code_with_for_loop = '''
+double_quotes = {"a": "U+0022", "b": "U+201C"}
+
+_QUOTE_TRANSLATION = {}
+for unicode_val in double_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _QUOTE_TRANSLATION[ord(ch)] = _double_quote_standard
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_QUOTE_TRANSLATION)
+'''
+
+    module = cst.parse_module(code_with_for_loop)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    # Only the top-level assignments should be collected, NOT the one inside the for-loop
+    # _QUOTE_TRANSLATION = {} is at module level (should be collected)
+    # _QUOTE_TRANSLATION[ord(ch)] = ... is inside for-loop (should NOT be collected)
+    # double_quotes = {...} is at module level (should be collected)
+    assert "double_quotes" in collector.assignments, "double_quotes should be collected"
+    assert "_QUOTE_TRANSLATION" in collector.assignments, "_QUOTE_TRANSLATION init should be collected"
+
+    # The assignment inside the for-loop uses subscript, not Name, so it wouldn't be
+    # collected anyway. But let's verify the collector doesn't crash and works correctly.
+    # More importantly, verify that simple name assignments inside loops are NOT collected.
+
+    code_with_simple_assignment_in_loop = '''
+result = {}
+for item in items:
+    key = process(item)
+    result[key] = item
+'''
+    module2 = cst.parse_module(code_with_simple_assignment_in_loop)
+    collector2 = GlobalAssignmentCollector()
+    module2.visit(collector2)
+
+    assert "result" in collector2.assignments, "result should be collected (top-level)"
+    assert "key" not in collector2.assignments, "key should NOT be collected (inside for-loop)"
+
+
+def test_global_assignments_inside_while_loops_not_extracted() -> None:
+    """Test that assignments inside while-loops are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_while_loop = '''
+counter = 0
+while counter < 10:
+    value = compute(counter)
+    counter += 1
+'''
+    module = cst.parse_module(code_with_while_loop)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "counter" in collector.assignments, "counter should be collected (top-level)"
+    assert "value" not in collector.assignments, "value should NOT be collected (inside while-loop)"
+
+
+def test_global_assignments_inside_with_blocks_not_extracted() -> None:
+    """Test that assignments inside with-blocks are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_with_block = '''
+config = {}
+with open("file.txt") as f:
+    content = f.read()
+    data = parse(content)
+'''
+    module = cst.parse_module(code_with_with_block)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "config" in collector.assignments, "config should be collected (top-level)"
+    assert "content" not in collector.assignments, "content should NOT be collected (inside with-block)"
+    assert "data" not in collector.assignments, "data should NOT be collected (inside with-block)"
+
+
+def test_global_assignments_inside_try_blocks_not_extracted() -> None:
+    """Test that assignments inside try-blocks are NOT extracted."""
+    from codeflash.code_utils.code_extractor import GlobalAssignmentCollector
+
+    import libcst as cst
+
+    code_with_try_block = '''
+default = "fallback"
+try:
+    result = risky_operation()
+    processed = transform(result)
+except Exception:
+    pass
+'''
+    module = cst.parse_module(code_with_try_block)
+    collector = GlobalAssignmentCollector()
+    module.visit(collector)
+
+    assert "default" in collector.assignments, "default should be collected (top-level)"
+    assert "result" not in collector.assignments, "result should NOT be collected (inside try-block)"
+    assert "processed" not in collector.assignments, "processed should NOT be collected (inside try-block)"
+
+
+def test_global_assignment_transformer_ignores_loop_assignments() -> None:
+    """Test that GlobalAssignmentTransformer doesn't replace assignments inside loops.
+
+    The transformer should:
+    1. NOT replace assignments inside for/while/with/try blocks
+    2. Still add new top-level assignments that weren't in the original
+    """
+    from codeflash.code_utils.code_extractor import GlobalAssignmentTransformer
+
+    import libcst as cst
+
+    # Original code has 'key' inside a for-loop and 'result' at top level
+    original_code = '''
+result = {}
+for item in items:
+    key = process(item)
+    result[key] = item
+'''
+    # New assignments - 'result' should replace top-level, 'key' should NOT replace loop var
+    new_assignments = {
+        "result": cst.parse_statement("result = {'new': 'dict'}").body[0],
+        "key": cst.parse_statement("key = 'new_value'").body[0],
+    }
+
+    module = cst.parse_module(original_code)
+    transformer = GlobalAssignmentTransformer(new_assignments, ["result", "key"])
+    result_module = module.visit(transformer)
+
+    result_code = result_module.code
+
+    # The 'key' inside the for-loop should NOT be replaced
+    assert "key = process(item)" in result_code, "Assignment inside for-loop should not be transformed"
+
+    # The top-level 'result' SHOULD be replaced
+    assert "result = {'new': 'dict'}" in result_code, "Top-level assignment should be replaced"
+    assert "result = {}" not in result_code, "Original top-level assignment should be gone"
+
+
+def test_add_global_assignments_with_loop_variables() -> None:
+    """Test that add_global_assignments doesn't extract assignments that reference loop variables.
+
+    This is the specific bug case from optimization runs where code like:
+        for uval in double_quotes.values():
+            ch = unicode_to_char(uval)
+            _translation_map[ord(ch)] = _double_quote_ord
+
+    Would have 'ch = unicode_to_char(uval)' extracted and inserted at module level,
+    causing 'NameError: name 'uval' is not defined'.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original simple function
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with for-loop that builds translation table at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {"a": "U+0022", "b": "U+201C"}
+_translation_map = {}
+
+for uval in double_quotes.values():
+    ch = unicode_to_char(uval)
+    _translation_map[ord(ch)] = ord('"')
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    # If 'ch = unicode_to_char(uval)' was incorrectly extracted, it would cause
+    # NameError because 'uval' wouldn't be defined outside the for-loop
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (loop var extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop structure is preserved (ch assignment inside loop)
+    assert "for uval in" in result or "for unicode_val in" in result or "ch" not in result, (
+        "If ch is in result, the for-loop should also be present"
+    )
+
+
+def test_add_global_assignments_with_unicode_val_loop_variable() -> None:
+    """Test that add_global_assignments correctly transfers for-loops using 'unicode_val' as loop variable.
+
+    This is the specific bug case: NameError: name 'unicode_val' is not defined
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with for-loop using unicode_val as the loop variable
+    optimized_code = '''single_quotes = {"U+0027": "'", "U+2018": "'", "U+2019": "'"}
+_translation_map = {}
+
+for unicode_val in single_quotes:
+    ch = chr(int(unicode_val.replace("U+", ""), 16))
+    _translation_map[ord(ch)] = ord("'")
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (unicode_val extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for unicode_val in" in result, "For-loop with unicode_val should be transferred"
+
+
+def test_add_global_assignments_with_ch_loop_variable() -> None:
+    """Test that add_global_assignments correctly transfers for-loops using 'ch' as loop variable.
+
+    This is the specific bug case: NameError: name 'ch' is not defined
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def normalize_text(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with for-loop using ch as the loop variable
+    optimized_code = '''replacements = {"a": "A", "b": "B"}
+_char_map = {}
+
+for ch in replacements:
+    _char_map[ord(ch)] = ord(replacements[ch])
+
+def normalize_text(text: str) -> str:
+    return text.translate(_char_map)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError (ch extracted incorrectly): {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for ch in" in result, "For-loop with ch should be transferred"
+
+
+def test_add_global_assignments_with_helper_function_call() -> None:
+    """Test that add_global_assignments transfers assignments that call helper functions.
+
+    Note: add_global_assignments only handles assignments, not function definitions.
+    Function definitions are transferred via replace_functions_in_file separately.
+
+    This test verifies that assignments calling helper functions are correctly transferred.
+    The actual NameError: name '_build_quote_translation_table' is not defined would occur
+    if the function wasn't transferred in the full replacement flow.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code that already has the helper function defined
+    original_code = '''def _build_quote_translation_table():
+    table = {}
+    for i in range(128):
+        table[i] = i
+    return table
+
+def standardize_quotes(text: str) -> str:
+    return text
+'''
+
+    # Optimized code with an assignment that calls the helper function
+    optimized_code = '''def _build_quote_translation_table():
+    table = {}
+    for i in range(128):
+        table[i] = i
+    return table
+
+_QUOTE_TABLE = _build_quote_translation_table()
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_QUOTE_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when compiled
+    try:
+        compile(result, "<test>", "exec")
+    except NameError as e:
+        raise AssertionError(f"Generated code has NameError: {e}") from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the assignment is present and placed AFTER the function definition
+    assert "_QUOTE_TABLE = _build_quote_translation_table()" in result, "Assignment should be transferred"
+    # Verify the function is still present (it was already in original)
+    assert "def _build_quote_translation_table" in result, "Helper function should be preserved"
+
+    # Verify correct ordering: function must come before the assignment that uses it
+    func_pos = result.index("def _build_quote_translation_table")
+    assign_pos = result.index("_QUOTE_TABLE = _build_quote_translation_table()")
+    assert func_pos < assign_pos, "Function definition must come before assignment that calls it"
+
+
+def test_add_global_assignments_forloop_calls_function_defined_later() -> None:
+    """Test that for-loops calling functions are placed AFTER those function definitions.
+
+    This is the specific bug case: NameError: name 'unicode_to_char' is not defined
+
+    When the original file has a function defined later (e.g., after standardize_quotes),
+    and the optimized code adds a for-loop that calls that function, the for-loop must
+    be placed AFTER the function definition, not at the top of the file.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code where unicode_to_char is defined AFTER the main function
+    # This mirrors the real-world case where the helper is at the bottom
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with a for-loop that calls unicode_to_char at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_UNICODE_VALUES = ["U+0022", "U+201C", "U+201D"]
+_TRANSLATION_TABLE = {}
+
+for code in _DOUBLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(code)
+    _TRANSLATION_TABLE[ord(ch)] = ord('"')
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        # Also try to actually execute it to catch runtime NameErrors
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError (for-loop placed before function): {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for code in _DOUBLE_QUOTE_UNICODE_VALUES" in result, "For-loop should be transferred"
+
+    # Verify correct ordering: function must come before the for-loop that calls it
+    func_pos = result.index("def unicode_to_char")
+    forloop_pos = result.index("for code in _DOUBLE_QUOTE_UNICODE_VALUES")
+    assert func_pos < forloop_pos, (
+        f"Function definition must come before for-loop that calls it.\n"
+        f"Function at position {func_pos}, for-loop at position {forloop_pos}\n"
+        f"Generated code:\n{result}"
+    )
+
+
+def test_add_global_assignments_forloop_uses_computed_variable() -> None:
+    """Test that for-loops are placed after variables they depend on.
+
+    This is the specific bug case: NameError: name '_double_chars' is not defined
+
+    When optimized code computes a variable and then uses it in a for-loop,
+    the assignment must come before the for-loop.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''def process_text(text: str) -> str:
+    return text
+'''
+
+    # Optimized code where _double_chars is computed and then used in a for-loop
+    optimized_code = '''_UNICODE_VALUES = ["U+0022", "U+201C"]
+_double_chars = tuple(chr(int(u.replace("U+", ""), 16)) for u in _UNICODE_VALUES)
+
+_TRANSLATION = {}
+for ch in _double_chars:
+    _TRANSLATION[ord(ch)] = ord('"')
+
+def process_text(text: str) -> str:
+    return text.translate(_TRANSLATION)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError (variable not defined before for-loop): {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify the for-loop is present
+    assert "for ch in _double_chars" in result, "For-loop should be transferred"
+
+    # Verify correct ordering: _double_chars assignment must come before the for-loop
+    assign_pos = result.index("_double_chars = ")
+    forloop_pos = result.index("for ch in _double_chars")
+    assert assign_pos < forloop_pos, (
+        f"Variable assignment must come before for-loop that uses it.\n"
+        f"Assignment at position {assign_pos}, for-loop at position {forloop_pos}\n"
+        f"Generated code:\n{result}"
+    )
+
+
+def test_add_global_assignments_multiple_forloops_with_dependencies() -> None:
+    """Test that multiple for-loops with function dependencies are ordered correctly.
+
+    This tests the real-world case from standardize_quotes optimization where:
+    1. unicode_to_char function is used
+    2. Multiple for-loops build translation tables
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code with function defined after main function
+    original_code = '''def standardize_quotes(text: str) -> str:
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimized code with multiple for-loops that depend on unicode_to_char
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {"U+0022": '"', "U+201C": '"'}
+single_quotes = {"U+0027": "'", "U+2018": "'"}
+
+_translation_table = {}
+
+for unicode_val in double_quotes:
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = ord('"')
+
+for unicode_val in single_quotes:
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = ord("'")
+
+def standardize_quotes(text: str) -> str:
+    return text.translate(_translation_table)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify both for-loops are present
+    assert "for unicode_val in double_quotes" in result, "First for-loop should be transferred"
+    assert "for unicode_val in single_quotes" in result, "Second for-loop should be transferred"
+
+    # Verify correct ordering: function must come before all for-loops
+    func_pos = result.index("def unicode_to_char")
+    first_forloop_pos = result.index("for unicode_val in double_quotes")
+    second_forloop_pos = result.index("for unicode_val in single_quotes")
+
+    assert func_pos < first_forloop_pos, "Function must come before first for-loop"
+    assert func_pos < second_forloop_pos, "Function must come before second for-loop"
+
+
+def test_add_global_assignments_variable_depends_on_existing_global() -> None:
+    """Test that new global assignments depending on existing globals are inserted after them.
+
+    This tests the fix for a bug where LLM-generated optimizations that add module-level
+    cache variables like `_TRANSLATION_CACHE: dict = {None: tbl}` would fail because the
+    assignment was inserted after imports but BEFORE the `tbl` variable it depends on.
+
+    Real-world example from unstructured/cleaners/core.py optimization:
+    - Original has: `tbl = dict.fromkeys(...)`
+    - Optimized adds: `_TRANSLATION_CACHE: dict = {None: tbl}` (depends on tbl)
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original file with imports and module-level variable
+    original_code = '''from __future__ import annotations
+import sys
+import unicodedata
+
+tbl = dict.fromkeys(
+    i for i in range(sys.maxunicode) if unicodedata.category(chr(i)).startswith("P")
+)
+
+def remove_sentence_punctuation(s: str) -> str:
+    tbl_new = tbl.copy()
+    return s.translate(tbl_new)
+'''
+
+    # Optimized code adds a cache that depends on `tbl`
+    optimized_code = '''from __future__ import annotations
+import sys
+import unicodedata
+
+tbl = dict.fromkeys(
+    i for i in range(sys.maxunicode) if unicodedata.category(chr(i)).startswith("P")
+)
+
+# Cache for translation tables
+_TRANSLATION_CACHE: dict = {None: tbl}
+
+def remove_sentence_punctuation(s: str) -> str:
+    tbl_new = tbl.copy()
+    return s.translate(tbl_new)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # The result should be valid Python - no NameError when executed
+    try:
+        compile(result, "<test>", "exec")
+        exec(compile(result, "<test>", "exec"), {})
+    except NameError as e:
+        raise AssertionError(
+            f"Generated code has NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+    except SyntaxError as e:
+        raise AssertionError(f"Generated code has SyntaxError: {e}") from e
+
+    # Verify `_TRANSLATION_CACHE` is in the result
+    assert "_TRANSLATION_CACHE" in result, "_TRANSLATION_CACHE should be in the result"
+
+    # Verify correct ordering: `tbl` must come before `_TRANSLATION_CACHE`
+    tbl_pos = result.index("tbl = dict.fromkeys")
+    cache_pos = result.index("_TRANSLATION_CACHE")
+
+    assert cache_pos > tbl_pos, (
+        f"_TRANSLATION_CACHE (pos {cache_pos}) should be after "
+        f"tbl (pos {tbl_pos}) because it depends on it"
+    )
+
+
+def test_add_global_assignments_tuple_unpacking() -> None:
+    """Test that tuple unpacking assignments are properly tracked.
+
+    Verifies the fix for: a, b = 1, 2 where the target is a Tuple, not a Name.
+    Without the fix, neither 'a' nor 'b' would be tracked as defined.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with tuple unpacking that a later variable depends on
+    optimized_code = '''import sys
+
+a, b = 1, 2
+c = a + b
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Tuple unpacking test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: a, b = 1, 2 must come before c = a + b
+    unpack_pos = result.index("a, b = 1, 2")
+    c_pos = result.index("c = a + b")
+    assert unpack_pos < c_pos, "Tuple unpacking must come before dependent assignment"
+
+
+def test_add_global_assignments_chained_assignment() -> None:
+    """Test that chained assignments are properly tracked.
+
+    Verifies the fix for: a = b = c = 5 which has multiple targets.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with chained assignment that a later variable depends on
+    optimized_code = '''import sys
+
+a = b = c = 5
+d = a + b + c
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Chained assignment test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: a = b = c = 5 must come before d = a + b + c
+    chain_pos = result.index("a = b = c = 5")
+    d_pos = result.index("d = a + b + c")
+    assert chain_pos < d_pos, "Chained assignment must come before dependent assignment"
+
+
+def test_add_global_assignments_multiple_new_statements() -> None:
+    """Test that multiple new statements maintain correct order.
+
+    When inserting multiple statements with no dependencies, they should
+    maintain their relative order from the optimized code.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+def foo():
+    pass
+'''
+
+    # Optimized code with multiple independent global assignments
+    optimized_code = '''import sys
+
+FIRST = 1
+SECOND = 2
+THIRD = 3
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except (NameError, SyntaxError) as e:
+        msg = f"Multiple statements test failed: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify correct ordering: FIRST, SECOND, THIRD in order
+    first_pos = result.index("FIRST = 1")
+    second_pos = result.index("SECOND = 2")
+    third_pos = result.index("THIRD = 3")
+    assert first_pos < second_pos < third_pos, (
+        f"Statements should maintain order: FIRST ({first_pos}) < SECOND ({second_pos}) < THIRD ({third_pos})"
+    )
+
+
+def test_add_global_assignments_annotated_no_spurious_deps() -> None:
+    """Test that type annotations don't create spurious dependencies.
+
+    Verifies the fix for: x: Tuple[int, int] = value
+    Without the fix, Tuple and int would be added as spurious dependencies.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = '''import sys
+
+val = (1, 2)
+
+def foo():
+    pass
+'''
+
+    # Optimized code with type annotation - the annotation uses Tuple[int, int]
+    # but the actual value only depends on 'val'
+    optimized_code = '''import sys
+
+val = (1, 2)
+x: tuple[int, int] = val
+y = x
+
+def foo():
+    pass
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        msg = f"Annotated assignment test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+    # Verify x assignment is in the result
+    assert "x: tuple[int, int] = val" in result, "Annotated assignment should be present"
+
+    # Verify correct ordering: val must come before x, x must come before y
+    val_pos = result.index("val = (1, 2)")
+    x_pos = result.index("x: tuple[int, int] = val")
+    y_pos = result.index("y = x")
+    assert val_pos < x_pos < y_pos, "Variables should be in dependency order"
+
+
+# =============================================================================
+# Real-world standardize_quotes optimization tests
+# These tests verify the fixes work for the actual optimization scenarios
+# =============================================================================
+
+
+def test_standardize_quotes_optimization_candidate_6_pattern() -> None:
+    """Test optimization pattern from candidate 6 that caused NameError: name '_double_chars' is not defined.
+
+    This pattern uses tuple comprehensions at module level that depend on unicode_to_char,
+    then uses those tuples in for-loops to build translation tables.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original standardize_quotes code structure
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    double_quotes = {
+        '"': "U+0022",
+        '"': "U+201C",
+        '"': "U+201D",
+    }
+    single_quotes = {
+        "'": "U+0027",
+        "'": "U+2018",
+        "'": "U+2019",
+    }
+
+    double_quote_standard = '"'
+    single_quote_standard = "'"
+
+    for unicode_val in double_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, double_quote_standard)
+
+    for unicode_val in single_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, single_quote_standard)
+
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 6 pattern: precompute chars using tuple comprehension
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {
+    '"': "U+0022",
+    '"': "U+201C",
+    '"': "U+201D",
+}
+single_quotes = {
+    "'": "U+0027",
+    "'": "U+2018",
+    "'": "U+2019",
+}
+
+_double_chars = tuple(unicode_to_char(u) for u in double_quotes.values())
+_single_chars = tuple(unicode_to_char(u) for u in single_quotes.values())
+
+_QUOTE_TRANSLATION: dict[int, str] = {}
+_double_quote_standard = '"'
+_single_quote_standard = "'"
+
+for _ch in _double_chars:
+    _QUOTE_TRANSLATION[ord(_ch)] = _double_quote_standard
+
+for _ch in _single_chars:
+    _QUOTE_TRANSLATION[ord(_ch)] = _single_quote_standard
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        exec(compiled, {})
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 6 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify key elements are present
+    assert "_double_chars = tuple" in result, "_double_chars assignment should be present"
+    assert "for _ch in _double_chars" in result, "First for-loop should be present"
+    assert "for _ch in _single_chars" in result, "Second for-loop should be present"
+
+    # Verify ordering: unicode_to_char must come before _double_chars assignment
+    func_pos = result.index("def unicode_to_char")
+    double_chars_pos = result.index("_double_chars = tuple")
+    assert func_pos < double_chars_pos, "unicode_to_char must be defined before _double_chars"
+
+
+def test_standardize_quotes_optimization_candidate_7_pattern() -> None:
+    """Test optimization pattern from candidate 7 that caused NameError: name 'unicode_to_char' is not defined.
+
+    This pattern moves quote dictionaries to module level and builds translation
+    table using for-loops that call unicode_to_char.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 7 pattern: module-level for-loops calling unicode_to_char
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_UNICODE_VALUES = [
+    "U+0022",
+    "U+201C",
+    "U+201D",
+]
+
+_SINGLE_QUOTE_UNICODE_VALUES = [
+    "U+0027",
+    "U+2018",
+    "U+2019",
+]
+
+_QUOTE_TRANSLATION_TABLE = {}
+_double_replacement_ord = ord('"')
+_single_replacement_ord = ord("'")
+
+for u in _DOUBLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(u)
+    _QUOTE_TRANSLATION_TABLE[ord(ch)] = _double_replacement_ord
+
+for u in _SINGLE_QUOTE_UNICODE_VALUES:
+    ch = unicode_to_char(u)
+    _QUOTE_TRANSLATION_TABLE[ord(ch)] = _single_replacement_ord
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION_TABLE)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is correctly populated by the for-loops
+        # This verifies that the for-loops execute correctly and call unicode_to_char
+        translation_table = namespace.get("_QUOTE_TRANSLATION_TABLE")
+        assert translation_table is not None, "_QUOTE_TRANSLATION_TABLE should be defined"
+        # 8220 = U+201C (left double quote), 8221 = U+201D (right double quote)
+        # 34 = ord('"') = ASCII double quote
+        assert 8220 in translation_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in translation_table, "Right double quote (U+201D) should be in table"
+        assert translation_table[8220] == 34, "Left double quote should map to ASCII quote"
+        assert translation_table[8221] == 34, "Right double quote should map to ASCII quote"
+
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 7 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify for-loops are present and ordered correctly
+    assert "for u in _DOUBLE_QUOTE_UNICODE_VALUES" in result
+    assert "for u in _SINGLE_QUOTE_UNICODE_VALUES" in result
+
+    func_pos = result.index("def unicode_to_char")
+    first_loop_pos = result.index("for u in _DOUBLE_QUOTE_UNICODE_VALUES")
+    assert func_pos < first_loop_pos, "unicode_to_char must be defined before for-loops"
+
+
+def test_standardize_quotes_optimization_candidate_9_pattern() -> None:
+    """Test optimization pattern from candidate 9 that caused NameError: name 'unicode_to_char' is not defined.
+
+    This pattern is similar to candidate 7 but with slightly different variable names.
+    It builds a translation table at module level using for-loops.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    # Original code with unicode_to_char defined AFTER standardize_quotes
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    double_quotes = {'"': "U+0022", '"': "U+201C"}
+    single_quotes = {"'": "U+0027", "'": "U+2018"}
+
+    for unicode_val in double_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, '"')
+
+    for unicode_val in single_quotes.values():
+        unicode_char = unicode_to_char(unicode_val)
+        if unicode_char in text:
+            text = text.replace(unicode_char, "'")
+
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization candidate 9 pattern
+    # Use proper Unicode escape sequences for the curly quote characters as keys
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+double_quotes = {'"': "U+0022", '\u201c': "U+201C", '\u201d': "U+201D"}
+single_quotes = {"'": "U+0027", '\u2018': "U+2018", '\u2019': "U+2019"}
+
+_translation_table = {}
+
+_double_standard_ord = ord('"')
+for unicode_val in double_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = _double_standard_ord
+
+_single_standard_ord = ord("'")
+for unicode_val in single_quotes.values():
+    ch = unicode_to_char(unicode_val)
+    _translation_table[ord(ch)] = _single_standard_ord
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_translation_table)
+'''
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is correctly populated by the for-loops
+        # This verifies that the for-loops execute correctly and call unicode_to_char
+        translation_table = namespace.get("_translation_table")
+        assert translation_table is not None, "_translation_table should be defined"
+        # 8220 = U+201C (left double quote), 8221 = U+201D (right double quote)
+        # 8216 = U+2018 (left single quote), 8217 = U+2019 (right single quote)
+        assert 8220 in translation_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in translation_table, "Right double quote (U+201D) should be in table"
+        assert 8216 in translation_table, "Left single quote (U+2018) should be in table"
+        assert 8217 in translation_table, "Right single quote (U+2019) should be in table"
+        # Verify mappings to ASCII quotes
+        assert translation_table[8220] == 34, "Left double quote should map to ASCII double quote"
+        assert translation_table[8221] == 34, "Right double quote should map to ASCII double quote"
+        assert translation_table[8216] == 39, "Left single quote should map to ASCII single quote"
+        assert translation_table[8217] == 39, "Right single quote should map to ASCII single quote"
+
+    except NameError as e:
+        raise AssertionError(
+            f"Candidate 9 pattern failed with NameError: {e}\n\nGenerated code:\n{result}"
+        ) from e
+
+    # Verify ordering: unicode_to_char must come before module-level for-loops
+    # Use \nfor to find module-level (unindented) for-loops, not those inside functions
+    func_pos = result.index("def unicode_to_char")
+    first_loop = result.index("\nfor unicode_val in double_quotes.values()")
+    second_loop = result.index("\nfor unicode_val in single_quotes.values()")
+
+    assert func_pos < first_loop, "unicode_to_char must be defined before first for-loop"
+    assert func_pos < second_loop, "unicode_to_char must be defined before second for-loop"
+    assert first_loop < second_loop, "For-loops should maintain their relative order"
+
+
+def test_standardize_quotes_testgen_postprocessing_with_translation_table() -> None:
+    """Test end-to-end postprocessing pipeline for standardize_quotes with translation table pattern.
+
+    This simulates the testgen endpoint returning generated tests for an optimization
+    that uses module-level for-loops to build a translation table, and verifies
+    the postprocessing pipeline (add_global_assignments + test postprocessing) works correctly.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import remove_functions_from_generated_tests
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original code (what we're optimizing)
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Simulated testgen optimization response with module-level for-loops
+    # This pattern builds a translation table at module level
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_QUOTE_CODES = ["U+0022", "U+201C", "U+201D"]
+_SINGLE_QUOTE_CODES = ["U+0027", "U+2018", "U+2019"]
+
+_QUOTE_TABLE = {}
+
+for _code in _DOUBLE_QUOTE_CODES:
+    _ch = unicode_to_char(_code)
+    _QUOTE_TABLE[ord(_ch)] = ord('"')
+
+for _code in _SINGLE_QUOTE_CODES:
+    _ch = unicode_to_char(_code)
+    _QUOTE_TABLE[ord(_ch)] = ord("'")
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TABLE)
+'''
+
+    # Simulated generated test code
+    generated_test_source = '''import pytest
+from module import standardize_quotes
+
+def test_standardize_quotes_basic():
+    """Test basic quote standardization."""
+    result = standardize_quotes("Hello world")
+    assert result == "Hello world"
+
+def test_standardize_quotes_unicode_double():
+    """Test unicode double quote conversion."""
+    result = standardize_quotes("Say \\u201chello\\u201d")
+    assert '"' in result
+
+def test_standardize_quotes_empty():
+    """Test empty string."""
+    result = standardize_quotes("")
+    assert result == ""
+'''
+
+    # Step 1: Process optimization code through add_global_assignments
+    processed_optimization = add_global_assignments(optimized_code, original_code)
+
+    # Verify optimization code compiles and executes without NameError
+    try:
+        compiled = compile(processed_optimization, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        # Verify the translation table is populated
+        quote_table = namespace.get("_QUOTE_TABLE")
+        assert quote_table is not None, "_QUOTE_TABLE should be defined"
+        assert 8220 in quote_table, "Left double quote (U+201C) should be in table"
+        assert 8221 in quote_table, "Right double quote (U+201D) should be in table"
+    except NameError as e:
+        raise AssertionError(f"Optimization code failed with NameError: {e}\n\n{processed_optimization}") from e
+
+    # Step 2: Process generated tests through remove_functions_from_generated_tests
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="",
+        instrumented_perf_test_source="",
+        behavior_file_path=Path("test_standardize_quotes.py"),
+        perf_file_path=Path("test_standardize_quotes_perf.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Simulate removing a failed test
+    processed_tests = remove_functions_from_generated_tests(
+        generated_tests_list, ["test_standardize_quotes_empty"]
+    )
+
+    # Verify the test was removed and others remain
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_quotes_basic" in result_source
+    assert "test_standardize_quotes_unicode_double" in result_source
+    assert "test_standardize_quotes_empty" not in result_source
+
+
+def test_standardize_quotes_testgen_postprocessing_with_dict_comprehension() -> None:
+    """Test postprocessing pipeline for standardize_quotes with dict comprehension pattern.
+
+    This simulates an optimization that uses dict comprehension with calls to
+    a helper function, ensuring the global assignments are correctly ordered.
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import add_runtime_comments_to_generated_tests
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text
+
+
+def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+'''
+
+    # Optimization using dict comprehension (depends on unicode_to_char being defined first)
+    optimized_code = '''def unicode_to_char(unicode_val: str) -> str:
+    """Converts a Unicode value to a character."""
+    return chr(int(unicode_val.replace("U+", ""), 16))
+
+_DOUBLE_UNICODES = {"U+0022": '"', "U+201C": '"', "U+201D": '"'}
+_SINGLE_UNICODES = {"U+0027": "'", "U+2018": "'", "U+2019": "'"}
+
+# Build translation table using comprehension
+_TRANSLATION = {
+    ord(unicode_to_char(code)): ord(target)
+    for mapping in [_DOUBLE_UNICODES, _SINGLE_UNICODES]
+    for code, target in mapping.items()
+}
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_TRANSLATION)
+'''
+
+    # Process optimization code
+    processed_optimization = add_global_assignments(optimized_code, original_code)
+
+    # Verify code compiles and translation dict is built
+    try:
+        compiled = compile(processed_optimization, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+
+        translation = namespace.get("_TRANSLATION")
+        assert translation is not None, "_TRANSLATION should be defined"
+        # Verify the mapping contains unicode quote codes
+        assert len(translation) >= 4, "Translation table should have at least 4 entries"
+    except NameError as e:
+        raise AssertionError(f"Dict comprehension pattern failed with NameError: {e}") from e
+
+    # Create mock generated tests with runtime data
+    generated_test_source = '''def test_standardize_double_quotes():
+    result = standardize_quotes("\\u201chello\\u201d")
+    assert result == '"hello"'
+
+def test_standardize_single_quotes():
+    result = standardize_quotes("\\u2018world\\u2019")
+    assert result == "'world'"
+'''
+
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="",
+        instrumented_perf_test_source="",
+        behavior_file_path=Path("test_quotes.py"),
+        perf_file_path=Path("test_quotes_perf.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Mock runtime data for add_runtime_comments_to_generated_tests
+    # (Empty dicts since we don't have actual runtime data in this test)
+    original_runtimes: dict = {}
+    optimized_runtimes: dict = {}
+
+    # Process through runtime comments (should handle empty runtimes gracefully)
+    processed_tests = add_runtime_comments_to_generated_tests(
+        generated_tests_list, original_runtimes, optimized_runtimes
+    )
+
+    # Verify tests are still valid
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_double_quotes" in result_source
+    assert "test_standardize_single_quotes" in result_source
+
+
+def test_standardize_quotes_testgen_full_pipeline_integration() -> None:
+    """Test complete integration of testgen postprocessing pipeline for standardize_quotes.
+
+    This test simulates the full flow:
+    1. Original code with the function to optimize
+    2. LLM-generated optimization with module-level for-loops
+    3. Processing through add_global_assignments
+    4. Generated tests processing through remove_functions + add_runtime_comments
+    5. Final verification that everything compiles and is correct
+    """
+    from codeflash.code_utils.code_extractor import add_global_assignments
+    from codeflash.code_utils.edit_generated_tests import (
+        add_runtime_comments_to_generated_tests,
+        remove_functions_from_generated_tests,
+    )
+    from codeflash.models.models import GeneratedTests, GeneratedTestsList
+
+    # Original FTO code
+    original_code = '''def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes.
+
+    Args:
+        text: Input text that may contain unicode quotes.
+
+    Returns:
+        Text with unicode quotes replaced by ASCII quotes.
+    """
+    double_quotes = {'"': "U+0022", '\u201c': "U+201C", '\u201d': "U+201D"}
+    single_quotes = {"'": "U+0027", '\u2018': "U+2018", '\u2019': "U+2019"}
+
+    for char, unicode_val in double_quotes.items():
+        if char != '"':
+            text = text.replace(char, '"')
+
+    for char, unicode_val in single_quotes.items():
+        if char != "'":
+            text = text.replace(char, "'")
+
+    return text
+'''
+
+    # LLM-generated optimization with a NEW helper function and module-level call
+    # This tests that add_global_assignments transfers new function definitions
+    optimized_code = '''def _build_translation_table() -> dict[int, int]:
+    """Build translation table for quote standardization."""
+    table = {}
+    # Double quotes
+    for code in [0x0022, 0x201C, 0x201D]:
+        table[code] = 0x0022  # Map to ASCII double quote
+    # Single quotes
+    for code in [0x0027, 0x2018, 0x2019]:
+        table[code] = 0x0027  # Map to ASCII single quote
+    return table
+
+_QUOTE_TRANSLATION_TABLE = _build_translation_table()
+
+
+def standardize_quotes(text: str) -> str:
+    """Converts all unicode quotes to standard ASCII quotes."""
+    return text.translate(_QUOTE_TRANSLATION_TABLE)
+'''
+
+    # Step 1: Process optimization through add_global_assignments
+    processed_code = add_global_assignments(optimized_code, original_code)
+
+    # Verify optimization code structure - new function should be transferred
+    assert "_build_translation_table" in processed_code, "New helper function should be present"
+    assert "_QUOTE_TRANSLATION_TABLE = _build_translation_table()" in processed_code
+
+    # Verify code executes without errors
+    namespace = {}
+    exec(compile(processed_code, "<test>", "exec"), namespace)
+
+    # Verify the translation table is correctly built
+    table = namespace["_QUOTE_TRANSLATION_TABLE"]
+    assert table[0x201C] == 0x0022, "Left double quote should map to ASCII double quote"
+    assert table[0x201D] == 0x0022, "Right double quote should map to ASCII double quote"
+    assert table[0x2018] == 0x0027, "Left single quote should map to ASCII single quote"
+    assert table[0x2019] == 0x0027, "Right single quote should map to ASCII single quote"
+
+    # Step 2: Create mock generated tests
+    generated_test_source = '''import pytest
+
+def test_standardize_quotes_no_change():
+    """Test text without unicode quotes."""
+    result = standardize_quotes("Hello, World!")
+    assert result == "Hello, World!"
+
+def test_standardize_quotes_double_unicode():
+    """Test double quote unicode conversion."""
+    text = "She said \\u201cHello\\u201d"
+    result = standardize_quotes(text)
+    assert result == 'She said "Hello"'
+
+def test_standardize_quotes_single_unicode():
+    """Test single quote unicode conversion."""
+    text = "It\\u2019s a test"
+    result = standardize_quotes(text)
+    assert result == "It's a test"
+
+def test_standardize_quotes_mixed():
+    """Test mixed quote types."""
+    text = "\\u201cIt\\u2019s \\u2018great\\u2019\\u201d"
+    result = standardize_quotes(text)
+    assert result == '"It\\'s \\'great\\'\"'
+
+def test_standardize_quotes_failing():
+    """This test will be removed as failed."""
+    result = standardize_quotes("test")
+    assert result == "wrong"
+'''
+
+    generated_test = GeneratedTests(
+        generated_original_test_source=generated_test_source,
+        instrumented_behavior_test_source="instrumented_behavior_placeholder",
+        instrumented_perf_test_source="instrumented_perf_placeholder",
+        behavior_file_path=Path("tests/test_standardize_quotes__unit_test_0.py"),
+        perf_file_path=Path("tests/test_standardize_quotes__perf_test_0.py"),
+    )
+    generated_tests_list = GeneratedTestsList(generated_tests=[generated_test])
+
+    # Step 3: Remove failed tests
+    tests_to_remove = ["test_standardize_quotes_failing"]
+    processed_tests = remove_functions_from_generated_tests(generated_tests_list, tests_to_remove)
+
+    result_source = processed_tests.generated_tests[0].generated_original_test_source
+    assert "test_standardize_quotes_no_change" in result_source
+    assert "test_standardize_quotes_double_unicode" in result_source
+    assert "test_standardize_quotes_single_unicode" in result_source
+    assert "test_standardize_quotes_mixed" in result_source
+    assert "test_standardize_quotes_failing" not in result_source
+
+    # Step 4: Add runtime comments (with empty data to test graceful handling)
+    final_tests = add_runtime_comments_to_generated_tests(processed_tests, {}, {})
+
+    # Verify final output is still valid Python
+    final_source = final_tests.generated_tests[0].generated_original_test_source
+    compile(final_source, "<test>", "exec")  # Should not raise
+
+    # Count remaining test functions
+    test_count = final_source.count("def test_")
+    assert test_count == 4, f"Should have 4 tests after removing failed one, got {test_count}"
+
+
+def test_match_statement_pattern_names():
+    """Test that match statement patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    # Test basic match with MatchAs
+    code = """
+match value:
+    case [x, y]:
+        result = x + y
+    case {"name": name}:
+        other = name
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    # Should find x, y from first case, name from second case, result, other from bodies
+    assert "x" in defined_names, "Pattern variable 'x' should be defined"
+    assert "y" in defined_names, "Pattern variable 'y' should be defined"
+    assert "name" in defined_names, "Pattern variable 'name' should be defined"
+    assert "result" in defined_names, "Body variable 'result' should be defined"
+    assert "other" in defined_names, "Body variable 'other' should be defined"
+
+
+def test_match_statement_star_pattern():
+    """Test that match statement star patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match items:
+    case [first, *rest]:
+        total = sum(rest)
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "first" in defined_names, "Pattern variable 'first' should be defined"
+    assert "rest" in defined_names, "Star pattern variable 'rest' should be defined"
+    assert "total" in defined_names, "Body variable 'total' should be defined"
+
+
+def test_match_statement_as_pattern():
+    """Test that match statement 'as' patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match obj:
+    case [a, b] as both:
+        use = both
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "a" in defined_names, "Pattern variable 'a' should be defined"
+    assert "b" in defined_names, "Pattern variable 'b' should be defined"
+    assert "both" in defined_names, "'as' capture variable 'both' should be defined"
+
+
+def test_match_statement_mapping_rest():
+    """Test that match statement mapping rest patterns define names correctly."""
+    from codeflash.code_utils.code_extractor import get_statement_defined_names
+
+    code = """
+match config:
+    case {"known": val, **rest}:
+        extra = rest
+"""
+    module = cst.parse_module(code)
+    match_stmt = module.body[0]
+    defined_names = get_statement_defined_names(match_stmt)
+
+    assert "val" in defined_names, "Mapping value 'val' should be defined"
+    assert "rest" in defined_names, "Mapping rest '**rest' should be defined"
+
+
+def test_comprehension_variable_not_dependency():
+    """Test that comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "result = [x * 2 for x in items]"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Comprehension variable 'x' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_nested_comprehension_variables_not_dependencies():
+    """Test that nested comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "matrix = [[row[col] for col in range(n)] for row in data]"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "row" not in deps, "Outer comprehension variable 'row' should not be a dependency"
+    assert "col" not in deps, "Inner comprehension variable 'col' should not be a dependency"
+    assert "data" in deps, "Outer iterable 'data' should be a dependency"
+    assert "n" in deps, "Inner range argument 'n' should be a dependency"
+    assert "range" in deps, "Built-in 'range' should be a dependency"
+
+
+def test_dict_comprehension_variables_not_dependencies():
+    """Test that dict comprehension variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "mapping = {k: v * 2 for k, v in items.items()}"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "k" not in deps, "Dict comprehension key variable 'k' should not be a dependency"
+    assert "v" not in deps, "Dict comprehension value variable 'v' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_generator_expression_variable_not_dependency():
+    """Test that generator expression variables aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "gen = (x for x in items if x > 0)"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Generator expression variable 'x' should not be a dependency"
+    assert "items" in deps, "Iterable 'items' should be a dependency"
+
+
+def test_lambda_parameter_not_dependency():
+    """Test that lambda parameters aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "handler = lambda x, y: x + y + z"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "x" not in deps, "Lambda parameter 'x' should not be a dependency"
+    assert "y" not in deps, "Lambda parameter 'y' should not be a dependency"
+    assert "z" in deps, "Free variable 'z' should be a dependency"
+
+
+def test_lambda_star_args_not_dependency():
+    """Test that lambda *args and **kwargs aren't external dependencies."""
+    from codeflash.code_utils.code_extractor import get_statement_dependencies
+
+    code = "handler = lambda *args, **kwargs: process(args, kwargs, config)"
+    module = cst.parse_module(code)
+    deps = get_statement_dependencies(module.body[0])
+
+    assert "args" not in deps, "Lambda *args should not be a dependency"
+    assert "kwargs" not in deps, "Lambda **kwargs should not be a dependency"
+    assert "process" in deps, "Free variable 'process' should be a dependency"
+    assert "config" in deps, "Free variable 'config' should be a dependency"
+
+
+def test_circular_dependency_warning(caplog):
+    """Test that circular dependencies produce a warning."""
+    import logging
+
+    from codeflash.code_utils.code_extractor import _sort_statements_by_dependencies
+
+    code = """
+x = y + 1
+y = x + 1
+"""
+    module = cst.parse_module(code)
+
+    with caplog.at_level(logging.WARNING):
+        result = _sort_statements_by_dependencies(list(module.body))
+
+    # Should emit a warning about circular dependency
+    assert any("Circular dependency detected" in record.message for record in caplog.records), (
+        "Should log a warning about circular dependencies"
+    )
+    # Should return original order when cycle is detected
+    assert len(result) == 2, "Should return all statements"
+
+
+def test_add_global_assignments_with_match_statement():
+    """Test that match statements in optimized code are handled correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+match config:
+    case {"type": t}:
+        result = t
+    case _:
+        result = "default"
+
+use_result = result
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code contains the match statement
+    assert "match config" in result, "Match statement should be in result"
+    assert "use_result = result" in result, "Variable using match result should be in result"
+
+    # The code should be syntactically valid (but may have runtime NameErrors
+    # due to undefined 'config')
+    compiled = compile(result, "<test>", "exec")
+    assert compiled is not None
+
+
+def test_comprehension_in_global_assignment():
+    """Test that global assignments with comprehensions work correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+items = [1, 2, 3, 4, 5]
+doubled = [x * 2 for x in items]
+filtered = [x for x in doubled if x > 4]
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+        assert namespace["doubled"] == [2, 4, 6, 8, 10]
+        assert namespace["filtered"] == [6, 8, 10]
+    except NameError as e:
+        msg = f"Comprehension test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
+
+
+def test_lambda_in_global_assignment():
+    """Test that global assignments with lambdas work correctly."""
+    from codeflash.code_utils.code_extractor import add_global_assignments
+
+    original_code = """def foo():
+    pass
+"""
+
+    optimized_code = """
+multiplier = 2
+scale = lambda x: x * multiplier
+
+def foo():
+    pass
+"""
+
+    result = add_global_assignments(optimized_code, original_code)
+
+    # Verify the code is valid and executes without NameError
+    try:
+        compiled = compile(result, "<test>", "exec")
+        namespace = {}
+        exec(compiled, namespace)
+        assert namespace["scale"](5) == 10
+    except NameError as e:
+        msg = f"Lambda test failed with NameError: {e}\n\nGenerated code:\n{result}"
+        raise AssertionError(msg) from e
