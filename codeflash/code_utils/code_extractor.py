@@ -1255,11 +1255,11 @@ def add_global_assignments(src_module_code: str, dst_module_code: str) -> str:
 
     # Insert new function definitions if any
     if new_function_defs:
-        last_import_line = find_last_import_line(mod_dst_code)
+        last_import_line = find_last_import_line(dst_module_code)
         transformer = FunctionDefInserter(new_function_defs, last_import_line)
         modified_module = original_module.visit(transformer)
-        mod_dst_code = modified_module.code
-        original_module = cst.parse_module(mod_dst_code)
+        dst_module_code = modified_module.code
+        original_module = cst.parse_module(dst_module_code)
 
     # Parse the src_module_code once only (already done above: src_module)
     # Collect assignments from the new file
