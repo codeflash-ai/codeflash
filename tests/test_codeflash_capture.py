@@ -1602,7 +1602,94 @@ def calculate_portfolio_metrics(
         # now the test should match and no diffs should be found
         assert len(diffs) == 0
         assert matched
-        
+
     finally:
         test_path.unlink(missing_ok=True)
         fto_file_path.unlink(missing_ok=True)
+
+
+def test_codeflash_capture_with_slots_class() -> None:
+    """Test that codeflash_capture works with classes that use __slots__ instead of __dict__."""
+    test_code = """
+from code_to_optimize.tests.pytest.sample_code import SlotsClass
+import unittest
+
+def test_slots_class():
+    obj = SlotsClass(10, "test")
+    assert obj.x == 10
+    assert obj.y == "test"
+"""
+    test_dir = (Path(__file__).parent.parent / "code_to_optimize" / "tests" / "pytest").resolve()
+    tmp_dir_path = get_run_tmp_file(Path("test_return_values"))
+    sample_code = f"""
+from codeflash.verification.codeflash_capture import codeflash_capture
+
+class SlotsClass:
+    __slots__ = ('x', 'y')
+
+    @codeflash_capture(function_name="SlotsClass.__init__", tmp_dir_path="{tmp_dir_path.as_posix()}", tests_root="{test_dir.as_posix()}")
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+"""
+    test_file_name = "test_slots_class_temp.py"
+    test_path = test_dir / test_file_name
+    test_path_perf = test_dir / "test_slots_class_temp_perf.py"
+
+    tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
+    project_root_path = (Path(__file__).parent / "..").resolve()
+    sample_code_path = test_dir / "sample_code.py"
+
+    try:
+        with test_path.open("w") as f:
+            f.write(test_code)
+        with sample_code_path.open("w") as f:
+            f.write(sample_code)
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_LOOP_INDEX"] = "1"
+        test_type = TestType.EXISTING_UNIT_TEST
+        test_config = TestConfig(
+            tests_root=tests_root,
+            tests_project_rootdir=project_root_path,
+            project_root_path=project_root_path,
+            test_framework="pytest",
+            pytest_cmd="pytest",
+        )
+        fto = FunctionToOptimize(
+            function_name="__init__",
+            file_path=sample_code_path,
+            parents=[FunctionParent(name="SlotsClass", type="ClassDef")],
+        )
+        func_optimizer = FunctionOptimizer(function_to_optimize=fto, test_cfg=test_config)
+        func_optimizer.test_files = TestFiles(
+            test_files=[
+                TestFile(
+                    instrumented_behavior_file_path=test_path,
+                    test_type=test_type,
+                    original_file_path=test_path,
+                    benchmarking_file_path=test_path_perf,
+                )
+            ]
+        )
+        test_results, coverage_data = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # Test should pass and capture the slots values
+        assert len(test_results) == 1
+        assert test_results[0].did_pass
+        # The return value should contain the slot values
+        assert test_results[0].return_value[0]["x"] == 10
+        assert test_results[0].return_value[0]["y"] == "test"
+
+    finally:
+        test_path.unlink(missing_ok=True)
+        sample_code_path.unlink(missing_ok=True)
