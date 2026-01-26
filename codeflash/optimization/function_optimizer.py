@@ -128,7 +128,7 @@ from codeflash.verification.parse_test_output import (
 )
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
-from codeflash.verification.verifier import generate_tests
+from codeflash.verification.verifier import generate_augmented_tests, generate_tests
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -508,7 +508,12 @@ class FunctionOptimizer:
         if not data or "system_prompt" not in data or "user_prompt" not in data:
             logger.error("Augmented prompt file must contain 'system_prompt' and 'user_prompt' keys")
             return None
-        return AugmentedPrompts(system_prompt=data["system_prompt"], user_prompt=data["user_prompt"])
+        return AugmentedPrompts(
+            system_prompt=data["system_prompt"],
+            user_prompt=data["user_prompt"],
+            testgen_system_prompt=data.get("testgen_system_prompt"),
+            testgen_user_prompt=data.get("testgen_user_prompt"),
+        )
 
     def collect_phase1_candidate_result(
         self,
@@ -2733,26 +2738,53 @@ class FunctionOptimizer:
         generated_test_paths: list[Path],
         generated_perf_test_paths: list[Path],
     ) -> list[concurrent.futures.Future]:
-        return [
-            executor.submit(
-                generate_tests,
-                self.aiservice_client,
-                source_code_being_tested,
-                self.function_to_optimize,
-                helper_function_names,
-                Path(self.original_module_path),
-                self.test_cfg,
-                INDIVIDUAL_TESTCASE_TIMEOUT,
-                self.function_trace_id,
-                test_index,
-                test_path,
-                test_perf_path,
-                self.is_numerical_code,
-            )
-            for test_index, (test_path, test_perf_path) in enumerate(
-                zip(generated_test_paths, generated_perf_test_paths)
-            )
-        ]
+        # Check if augmented testgen prompts are available (Round 2+ with custom test prompts)
+        use_augmented_testgen = (
+            self.augmented_prompts is not None
+            and self.augmented_prompts.testgen_system_prompt is not None
+            and self.augmented_prompts.testgen_user_prompt is not None
+        )
+
+        futures = []
+        for test_index, (test_path, test_perf_path) in enumerate(zip(generated_test_paths, generated_perf_test_paths)):
+            if use_augmented_testgen:
+                # Use augmented test generation with custom prompts from cc-plugin
+                future = executor.submit(
+                    generate_augmented_tests,
+                    self.aiservice_client,
+                    source_code_being_tested,
+                    self.augmented_prompts.testgen_system_prompt,
+                    self.augmented_prompts.testgen_user_prompt,
+                    self.function_to_optimize,
+                    helper_function_names,
+                    Path(self.original_module_path),
+                    self.test_cfg,
+                    INDIVIDUAL_TESTCASE_TIMEOUT,
+                    self.function_trace_id,
+                    test_index,
+                    test_path,
+                    test_perf_path,
+                    self.is_numerical_code,
+                )
+            else:
+                # Use normal test generation (Round 1 or no custom prompts)
+                future = executor.submit(
+                    generate_tests,
+                    self.aiservice_client,
+                    source_code_being_tested,
+                    self.function_to_optimize,
+                    helper_function_names,
+                    Path(self.original_module_path),
+                    self.test_cfg,
+                    INDIVIDUAL_TESTCASE_TIMEOUT,
+                    self.function_trace_id,
+                    test_index,
+                    test_path,
+                    test_perf_path,
+                    self.is_numerical_code,
+                )
+            futures.append(future)
+        return futures
 
     def cleanup_generated_files(self) -> None:
         paths_to_cleanup = []

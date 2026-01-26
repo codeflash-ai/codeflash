@@ -1004,3 +1004,5 @@ class Phase1Output(BaseModel):
 class AugmentedPrompts(BaseModel):
     system_prompt: str
     user_prompt: str
+    testgen_system_prompt: str | None = None
+    testgen_user_prompt: str | None = None

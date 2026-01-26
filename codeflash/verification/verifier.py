@@ -69,6 +69,66 @@ def generate_tests(
     )
 
 
+def generate_augmented_tests(
+    aiservice_client: AiServiceClient,
+    source_code_being_tested: str,
+    system_prompt: str,
+    user_prompt: str,
+    function_to_optimize: FunctionToOptimize,
+    helper_function_names: list[str],
+    module_path: Path,
+    test_cfg: TestConfig,
+    test_timeout: int,
+    function_trace_id: str,
+    test_index: int,
+    test_path: Path,
+    test_perf_path: Path,
+    is_numerical_code: bool | None = None,  # noqa: FBT001
+) -> tuple[str, str, Path] | None:
+    """Generate tests with custom prompts for augmented mode.
+
+    This mirrors generate_tests but uses custom system/user prompts from the cc-plugin.
+    """
+    start_time = time.perf_counter()
+    test_module_path = Path(module_name_from_file_path(test_path, test_cfg.tests_project_rootdir))
+    response = aiservice_client.augmented_generate_tests(
+        source_code_being_tested=source_code_being_tested,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        function_to_optimize=function_to_optimize,
+        helper_function_names=helper_function_names,
+        module_path=module_path,
+        test_module_path=test_module_path,
+        test_framework=test_cfg.test_framework,
+        test_timeout=test_timeout,
+        trace_id=function_trace_id,
+        test_index=test_index,
+        is_numerical_code=is_numerical_code,
+    )
+    if response and isinstance(response, tuple) and len(response) == 3:
+        generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
+        temp_run_dir = get_run_tmp_file(Path()).as_posix()
+
+        instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+        instrumented_perf_test_source = instrumented_perf_test_source.replace(
+            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+        )
+    else:
+        logger.warning(f"Failed to generate augmented tests for {function_to_optimize.function_name}")
+        return None
+    end_time = time.perf_counter()
+    logger.debug(f"Generated augmented tests in {end_time - start_time:.2f} seconds")
+    return (
+        generated_test_source,
+        instrumented_behavior_test_source,
+        instrumented_perf_test_source,
+        test_path,
+        test_perf_path,
+    )
+
+
 def merge_unit_tests(unit_test_source: str, inspired_unit_tests: str, test_framework: str) -> str:
     try:
         inspired_unit_tests_ast = ast.parse(inspired_unit_tests)
