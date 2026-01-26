@@ -2,10 +2,8 @@
  * Sample performance test to verify looping mechanism.
  */
 
-const path = require('path');
-
-// Load the codeflash helper from the project root
-const codeflash = require(path.join(__dirname, '..', '..', 'codeflash-jest-helper.js'));
+// Load the codeflash helper from npm package
+const codeflash = require('@codeflash/cli');
 
 // Simple function to test
 function fibonacci(n) {
