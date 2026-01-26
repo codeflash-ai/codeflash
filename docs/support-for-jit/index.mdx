@@ -1,70 +1,14 @@
 ---
-title: "Support for Just-in-Time Compilation"
+title: "Just-in-Time Compilation"
 description: "Learn how Codeflash optimizes code using JIT compilation with Numba, PyTorch, TensorFlow, and JAX"
 icon: "bolt"
 sidebarTitle: "JIT Compilation"
-keywords: ["JIT", "just-in-time", "numba", "pytorch", "tensorflow", "jax", "GPU", "CUDA", "compilation", "performance"]
+keywords: ["JIT", "just-in-time", "numba", "pytorch", "tensorflow", "jax", "GPU", "CUDA", "MPS", "compilation", "performance"]
 ---
 
-# Support for Just-in-Time Compilation
+# Just-in-Time Compilation
 
-Codeflash supports optimizing numerical code using Just-in-Time (JIT) compilation via leveraging JIT compilers from popular frameworks including **Numba**, **PyTorch**, **TensorFlow**, and **JAX**.
-
-## Supported JIT Frameworks
-
-Each framework uses different compilation strategies to accelerate Python code:
-
-### Numba (CPU Code)
-
-Numba compiles Python functions to optimized machine code using the LLVM compiler infrastructure. Codeflash can suggest Numba optimizations that use:
-
-- **`@jit`** - General-purpose JIT compilation with optional flags.
-  - **`nopython=True`** - Compiles to machine code without falling back to the Python interpreter.
-  - **`fastmath=True`** - Uses aggressive floating-point optimizations via LLVM's fastmath flag.
-  - **`cache=True`** - cache compiled function to disk which reduces future runtimes.
-  - **`parallel=True`** - Parallelizes code inside loops.
-
-### PyTorch
-
-PyTorch provides JIT compilation through `torch.compile()`, the recommended compilation API introduced in PyTorch 2.0. It uses TorchDynamo to capture Python bytecode and TorchInductor to generate optimized kernels.
-
-- **`torch.compile()`** - Compiles a function or module for optimized execution.
-  - **`mode`** - Controls the compilation strategy:
-    - `"default"` - Balanced compilation with moderate optimization.
-    - `"reduce-overhead"` - Minimizes Python overhead using CUDA graphs, ideal for small batches.
-    - `"max-autotune"` - Spends more time autotuning to find the fastest kernels.
-  - **`fullgraph=True`** - Requires the entire function to be captured as a single graph. Raises an error if graph breaks occur, useful for ensuring complete optimization.
-  - **`dynamic=True`** - Enables dynamic shape support, allowing the compiled function to handle varying input sizes without recompilation.
-
-### TensorFlow
-
-TensorFlow uses `@tf.function` to compile Python functions into optimized TensorFlow graphs. When combined with XLA (Accelerated Linear Algebra), it can generate highly optimized machine code for both CPU and GPU.
-
-- **`@tf.function`** - Converts Python functions into TensorFlow graphs for optimized execution.
-  - **`jit_compile=True`** - Enables XLA compilation, which performs whole-function optimization including operation fusion, memory layout optimization, and target-specific code generation.
-
-### JAX
-
-JAX uses XLA to JIT compile pure functions into optimized machine code. It emphasizes functional programming patterns and captures side-effect-free operations for optimization.
-
-- **`@jax.jit`** - JIT compiles functions using XLA with automatic operation fusion.
-
-## How Codeflash Optimizes with JIT
-
-When Codeflash identifies a function that could benefit from JIT compilation, it:
-
-1. Rewrites the code in a JIT-compatible format, which may involve breaking down complex functions into separate JIT-compiled components.
-2. Generates appropriate tests that are compatible with JIT-compiled code, carefully handling data types since JIT compilers have stricter input type requirements.
-3. Disables JIT compilation while running coverage and tracer to get accurate coverage and trace information. Both of them rely on Python bytecode execution but JIT compiled code stops running as Python bytecode.
-4. Disables Line Profiler information collection whenever presented with JIT compiled code. It could be possible to disable JIT compilation and run the line profiler, but that would lead to inaccurate information which could misguide the optimization process.
-
-## Accurate Benchmarking on Non-CPU devices
-
-Since Non-CPU operations execute asynchronously, Codeflash automatically inserts synchronization barriers before measuring performance. This ensures timing measurements reflect actual computation time rather than just the time to queue operations:
-
-- **PyTorch**: Uses `torch.cuda.synchronize()` (NVIDIA GPUs) or `torch.mps.synchronize()` (MacOS Metal Performance Shaders) depending on the device.
-- **JAX**: Uses `jax.block_until_ready()` to wait for computation to complete.
-- **TensorFlow**: Uses `tf.test.experimental.sync_devices()` for device synchronization.
+Just-in-time (JIT) compilation is a runtime technique where code is compiled into machine code on the fly, right before it is executed, to improve performance.. Codeflash supports optimizing numerical code using Just-in-Time (JIT) compilation via leveraging JIT compilers from popular frameworks including **Numba**, **PyTorch**, **TensorFlow**, and **JAX**.
 
 ## When JIT Compilation Helps
 
@@ -157,7 +101,7 @@ JIT compilation may not provide speedups when:
 
 #### Function Definition
 
-```
+```python
 def adaptive_processing(x, threshold=0.5):
     """Function with data-dependent control flow - compile struggles here"""
     # Check how many values exceed threshold (data-dependent!)
@@ -177,7 +121,7 @@ def adaptive_processing(x, threshold=0.5):
 
 #### Benchmarking Snippet (replace `cuda` with `mps` to run on your Mac)
 
-```
+```python
 # Create compiled version
 adaptive_processing_compiled = torch.compile(adaptive_processing)
 
@@ -253,13 +197,60 @@ Optimized: 0.0277s
 Speedup compared to Uncompiled: 1.57x
 ```
 
-
 Key improvements:
 
 1. Eliminate `.item()` - Keep computation on GPU.
 2. Branchless execution - Compute both paths, blend results.
 3. Vectorization - Replace conditionals with masked operations.
 4. Reduce Python overhead - Minimize host-device synchronization.
+
+## Supported JIT Frameworks
+
+Each framework uses different compilation strategies to accelerate Python code:
+
+### Numba (CPU Code)
+
+Numba compiles Python functions to optimized machine code using the LLVM compiler infrastructure. Codeflash can suggest Numba optimizations that use:
+
+- **`@jit`** - General-purpose JIT compilation with optional flags.
+  - **`nopython=True`** - Compiles to machine code without falling back to the Python interpreter.
+  - **`fastmath=True`** - Uses aggressive floating-point optimizations via LLVM's fastmath flag.
+  - **`cache=True`** - cache compiled function to disk which reduces future runtimes.
+  - **`parallel=True`** - Parallelizes code inside loops.
+
+### PyTorch
+
+PyTorch provides JIT compilation through `torch.compile()`, the recommended compilation API introduced in PyTorch 2.0. It uses TorchDynamo to capture Python bytecode and TorchInductor to generate optimized kernels.
+
+- **`torch.compile()`** - Compiles a function or module for optimized execution.
+  - **`mode`** - Controls the compilation strategy:
+    - `"default"` - Balanced compilation with moderate optimization.
+    - `"reduce-overhead"` - Minimizes Python overhead using CUDA graphs, ideal for small batches.
+    - `"max-autotune"` - Spends more time auto-tuning to find the fastest kernels.
+  - **`fullgraph=True`** - Requires the entire function to be captured as a single graph. Raises an error if graph breaks occur, useful for ensuring complete optimization.
+  - **`dynamic=True`** - Enables dynamic shape support, allowing the compiled function to handle varying input sizes without recompilation.
+
+### TensorFlow
+
+TensorFlow uses `@tf.function` to compile Python functions into optimized TensorFlow graphs. When combined with XLA (Accelerated Linear Algebra), it can generate highly optimized machine code for both CPU and GPU.
+
+- **`@tf.function`** - Converts Python functions into TensorFlow graphs for optimized execution.
+  - **`jit_compile=True`** - Enables XLA compilation, which performs whole-function optimization including operation fusion, memory layout optimization, and target-specific code generation.
+
+### JAX
+
+JAX uses XLA to JIT compile pure functions into optimized machine code. It emphasizes functional programming patterns and captures side-effect-free operations for optimization.
+
+- **`@jax.jit`** - JIT compiles functions using XLA with automatic operation fusion.
+
+## How Codeflash Optimizes with JIT
+
+When Codeflash identifies a function that could benefit from JIT compilation, it:
+
+1. Rewrites the code in a JIT-compatible format, which may involve breaking down complex functions into separate JIT-compiled components.
+2. Generates appropriate tests that are compatible with JIT-compiled code, carefully handling data types since JIT compilers have stricter input type requirements.
+3. Disables JIT compilation while running coverage and tracer to get accurate coverage and trace information. Both of them rely on Python bytecode execution but JIT compiled code stops running as Python bytecode.
+4. Disables Line Profiler information collection whenever presented with JIT compiled code. It could be possible to disable JIT compilation and run the line profiler, but that would lead to inaccurate information which could misguide the optimization process.
 
 ## Configuration
 
