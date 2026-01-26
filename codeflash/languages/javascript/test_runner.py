@@ -104,13 +104,13 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     """
     # Check if package is already installed
-    node_modules_pkg = project_root / "node_modules" / "@codeflash" / "jest-runtime"
+    node_modules_pkg = project_root / "node_modules" / "@codeflash" / "cli"
     if node_modules_pkg.exists():
         logger.debug("@codeflash/cli already installed")
         return
 
     # Try to install from local package first (for development)
-    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "jest-runtime"
+    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "cli"
     if local_package_path.exists():
         try:
             result = subprocess.run(
