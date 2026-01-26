@@ -20,26 +20,28 @@ const fs = require('fs');
  * Find the uv binary
  */
 function findUv() {
-  // First, check if uv is in PATH
-  const uvInPath = spawnSync('uv', ['--version'], {
-    stdio: 'ignore',
-    shell: true,
-  });
-
-  if (uvInPath.status === 0) {
-    return 'uv';
-  }
-
-  // Check the default uv installation location
   const homeDir = os.homedir();
   const platform = os.platform();
 
+  // Check the default uv installation location first
   const uvPath = platform === 'win32'
     ? path.join(homeDir, '.local', 'bin', 'uv.exe')
     : path.join(homeDir, '.local', 'bin', 'uv');
 
   if (fs.existsSync(uvPath)) {
     return uvPath;
+  }
+
+  // Try to find uv in PATH by checking if it exists
+  try {
+    const uvInPath = spawnSync('uv', ['--version'], {
+      stdio: 'ignore',
+    });
+    if (uvInPath.status === 0) {
+      return 'uv';
+    }
+  } catch {
+    // uv not in PATH
   }
 
   return null;
@@ -65,7 +67,6 @@ function runCodeflash(args) {
   // Use uv tool run to execute codeflash
   const child = spawn(uvBin, ['tool', 'run', 'codeflash', ...args], {
     stdio: 'inherit',
-    shell: true,
   });
 
   child.on('error', (error) => {
@@ -115,7 +116,6 @@ if (args[0] === 'setup' || args[0] === '--setup') {
   if (uvBin) {
     const check = spawnSync(uvBin, ['tool', 'run', 'codeflash', '--version'], {
       stdio: 'ignore',
-      shell: true,
     });
 
     if (check.status !== 0 && args.length === 0) {
