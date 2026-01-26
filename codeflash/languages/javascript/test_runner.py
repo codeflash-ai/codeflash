@@ -96,7 +96,7 @@ def _configure_esm_environment(jest_env: dict[str, str], project_root: Path) -> 
 def _ensure_runtime_files(project_root: Path) -> None:
     """Ensure JavaScript runtime package is installed in the project.
 
-    Installs @codeflash/jest-runtime package if not already present.
+    Installs @codeflash/cli package if not already present.
     The package provides all runtime files needed for test instrumentation.
 
     Args:
@@ -106,7 +106,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
     # Check if package is already installed
     node_modules_pkg = project_root / "node_modules" / "@codeflash" / "jest-runtime"
     if node_modules_pkg.exists():
-        logger.debug("@codeflash/jest-runtime already installed")
+        logger.debug("@codeflash/cli already installed")
         return
 
     # Try to install from local package first (for development)
@@ -121,7 +121,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
                 timeout=120,
             )
             if result.returncode == 0:
-                logger.debug("Installed @codeflash/jest-runtime from local package")
+                logger.debug("Installed @codeflash/cli from local package")
                 return
             logger.warning(f"Failed to install local package: {result.stderr}")
         except Exception as e:
@@ -130,22 +130,22 @@ def _ensure_runtime_files(project_root: Path) -> None:
     # Try to install from npm registry
     try:
         result = subprocess.run(
-            ["npm", "install", "--save-dev", "@codeflash/jest-runtime"],
+            ["npm", "install", "--save-dev", "@codeflash/cli"],
             cwd=project_root,
             capture_output=True,
             text=True,
             timeout=120,
         )
         if result.returncode == 0:
-            logger.debug("Installed @codeflash/jest-runtime from npm registry")
+            logger.debug("Installed @codeflash/cli from npm registry")
             return
         logger.warning(f"Failed to install from npm: {result.stderr}")
     except Exception as e:
         logger.warning(f"Error installing from npm: {e}")
 
     logger.error(
-        "Could not install @codeflash/jest-runtime. "
-        "Please install it manually: npm install --save-dev @codeflash/jest-runtime"
+        "Could not install @codeflash/cli. "
+        "Please install it manually: npm install --save-dev @codeflash/cli"
     )
 
 

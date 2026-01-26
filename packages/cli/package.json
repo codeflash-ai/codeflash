@@ -1,0 +1,73 @@
+{
+  "name": "@codeflash/cli",
+  "version": "0.1.0",
+  "description": "Codeflash CLI - AI-powered code optimization for JavaScript and TypeScript",
+  "main": "runtime/index.js",
+  "bin": {
+    "codeflash": "./bin/codeflash.js",
+    "codeflash-setup": "./bin/codeflash-setup.js"
+  },
+  "exports": {
+    ".": {
+      "require": "./runtime/index.js",
+      "import": "./runtime/index.js"
+    },
+    "./capture": {
+      "require": "./runtime/capture.js",
+      "import": "./runtime/capture.js"
+    },
+    "./serializer": {
+      "require": "./runtime/serializer.js",
+      "import": "./runtime/serializer.js"
+    },
+    "./comparator": {
+      "require": "./runtime/comparator.js",
+      "import": "./runtime/comparator.js"
+    }
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "pack": "npm pack",
+    "prepublishOnly": "echo 'Ready to publish'"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "runtime/"
+  ],
+  "keywords": [
+    "codeflash",
+    "optimization",
+    "performance",
+    "javascript",
+    "typescript",
+    "ai",
+    "cli",
+    "jest"
+  ],
+  "author": "Codeflash AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codeflash-ai/codeflash.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflash-ai/codeflash/issues"
+  },
+  "homepage": "https://codeflash.ai",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "jest": ">=27.0.0"
+  },
+  "peerDependenciesMeta": {
+    "jest": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^9.0.0"
+  }
+}

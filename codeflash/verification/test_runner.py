@@ -73,7 +73,7 @@ def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: 
 def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> None:
     """Ensure runtime environment is set up for the project.
 
-    For JavaScript/TypeScript: Installs @codeflash/jest-runtime npm package.
+    For JavaScript/TypeScript: Installs @codeflash/cli npm package.
     Falls back to copying runtime files if package installation fails.
 
     Args:

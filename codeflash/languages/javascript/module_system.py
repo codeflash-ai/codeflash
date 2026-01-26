@@ -175,7 +175,7 @@ def convert_commonjs_to_esm(code: str) -> str:
         const foo = require('./module').default;   ->  import foo from './module';
 
     Special handling:
-        - Local codeflash helper (./codeflash-jest-helper) is converted to npm package @codeflash/jest-runtime
+        - Local codeflash helper (./codeflash-jest-helper) is converted to npm package @codeflash/cli
           because the local helper uses CommonJS exports which don't work in ESM projects
 
     Args:
@@ -202,8 +202,8 @@ def convert_commonjs_to_esm(code: str) -> str:
         # Convert local codeflash helper to npm package for ESM compatibility
         # The local helper uses CommonJS exports which don't work in ESM projects
         if "codeflash-jest-helper" in module_path:
-            logger.debug(f"Converting local codeflash helper '{module_path}' to npm package '@codeflash/jest-runtime'")
-            return "@codeflash/jest-runtime"
+            logger.debug(f"Converting local codeflash helper '{module_path}' to npm package '@codeflash/cli'")
+            return "@codeflash/cli"
         return module_path
 
     # Replace destructured requires with named imports

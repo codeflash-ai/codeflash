@@ -118,15 +118,15 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
 
     """
     # Add codeflash helper import if not already present
-    # Support both npm package (@codeflash/jest-runtime) and legacy local file (codeflash-jest-helper)
-    has_codeflash_import = "@codeflash/jest-runtime" in code or "codeflash-jest-helper" in code
+    # Support both npm package (@codeflash/cli) and legacy local file (codeflash-jest-helper)
+    has_codeflash_import = "@codeflash/cli" in code or "codeflash-jest-helper" in code
     if not has_codeflash_import:
         # Detect module system: ESM uses "import ... from", CommonJS uses "require()"
         is_esm = bool(re.search(r"^\s*import\s+.+\s+from\s+['\"]", code, re.MULTILINE))
 
         if is_esm:
             # ESM: Use import statement at the top of the file (after any other imports)
-            helper_import = "import codeflash from '@codeflash/jest-runtime';\n"
+            helper_import = "import codeflash from '@codeflash/cli';\n"
             # Find the last import statement to add after
             import_matches = list(re.finditer(
                 r"^import\s+.+\s+from\s+['\"][^'\"]+['\"]\s*;?\s*\n",
@@ -143,7 +143,7 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
                 code = helper_import + "\n" + code
         else:
             # CommonJS: Use require statement
-            helper_require = "const codeflash = require('@codeflash/jest-runtime');\n"
+            helper_require = "const codeflash = require('@codeflash/cli');\n"
             # Find the first require statement to add after
             import_match = re.search(
                 r"^((?:const|let|var)\s+.+?require\([^)]+\).*;?\s*\n)",
