@@ -1,4 +1,7 @@
 import torch
+
+
+@torch.compile()
 def complex_activation(x):
     """A custom activation with many small operations - compile makes a huge difference"""
     # Many sequential element-wise ops create kernel launch overhead
