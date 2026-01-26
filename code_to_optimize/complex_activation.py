@@ -1,4 +1,9 @@
 import torch
+
+_compile = getattr(torch, "compile", None)
+
+
+@_compile
 def complex_activation(x):
     """A custom activation with many small operations - compile makes a huge difference"""
     # Many sequential element-wise ops create kernel launch overhead
@@ -9,3 +14,7 @@ def complex_activation(x):
     x = torch.tanh(x) * torch.sigmoid(x)
     x = x - 0.5 * x.pow(3)
     return x
+
+
+def _identity_decorator(fn):
+    return fn
