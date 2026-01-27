@@ -8,7 +8,7 @@ keywords: ["JIT", "just-in-time", "numba", "pytorch", "tensorflow", "jax", "GPU"
 
 # Just-in-Time Compilation
 
-Just-in-time (JIT) compilation is a runtime technique where code is compiled into machine code on the fly, right before it is executed, to improve performance.. Codeflash supports optimizing numerical code using Just-in-Time (JIT) compilation via leveraging JIT compilers from popular frameworks including **Numba**, **PyTorch**, **TensorFlow**, and **JAX**.
+Just-in-time (JIT) compilation is a runtime technique where code is compiled into machine code on the fly, right before it is executed, to improve performance. Codeflash supports optimizing numerical code using Just-in-Time (JIT) compilation via leveraging JIT compilers from the **Numba**, **PyTorch**, **TensorFlow**, and **JAX** frameworks.
 
 ## When JIT Compilation Helps
 
@@ -17,7 +17,7 @@ JIT compilation is most effective for:
 - Numerical computations with loops that can't be easily vectorized.
 - Custom algorithms not covered by existing optimized libraries.
 - Functions that are called repeatedly with consistent input types.
-- Code that benefits from hardware-specific optimizations (SIMD, GPU acceleration).
+- Code that benefits from hardware-specific optimizations (SIMD acceleration).
 
 ### Example
 
@@ -47,7 +47,7 @@ complex_activation_compiled = torch.compile(complex_activation)
 # Benchmark
 x = torch.randn(1000, 1000, device='cuda')
 
-# Warmup
+# Warmup steps are slower as the JIT compiler is understanding the function execution to compile into machine code
 for _ in range(10):
     _ = complex_activation(x)
     _ = complex_activation_compiled(x)
@@ -83,7 +83,7 @@ Speedup: 2.80x
 
 Here, JIT compilation via `torch.compile` is the only viable option because
 1. Already vectorized - All operations are already PyTorch tensor ops.
-2. Multiple Kernel Launches - Uncompiled code launches ~10 separate kernels. torch.compile fuses them into 1-2 kernels, eliminating kernel launch overhead.
+2. Multiple Kernel Launches - Uncompiled code launches ~10 separate kernels. `torch.compile` fuses them into 1-2 kernels, eliminating kernel launch overhead.
 3. No algorithmic improvement - The computation itself is already optimal.
 4. Python overhead elimination - Removes Python interpreter overhead between operations.
 
@@ -128,7 +128,7 @@ adaptive_processing_compiled = torch.compile(adaptive_processing)
 # Test with data that causes branch variation
 x = torch.randn(500, 500, device='cuda')
 
-# Warmup
+# Warmup steps are slower as the JIT compiler is understanding the function execution to compile into machine code
 for _ in range(10):
     _ = adaptive_processing(x)
     _ = adaptive_processing_compiled(x)
@@ -249,8 +249,8 @@ When Codeflash identifies a function that could benefit from JIT compilation, it
 
 1. Rewrites the code in a JIT-compatible format, which may involve breaking down complex functions into separate JIT-compiled components.
 2. Generates appropriate tests that are compatible with JIT-compiled code, carefully handling data types since JIT compilers have stricter input type requirements.
-3. Disables JIT compilation while running coverage and tracer to get accurate coverage and trace information. Both of them rely on Python bytecode execution but JIT compiled code stops running as Python bytecode.
-4. Disables Line Profiler information collection whenever presented with JIT compiled code. It could be possible to disable JIT compilation and run the line profiler, but that would lead to inaccurate information which could misguide the optimization process.
+3. Disables JIT compilation when running coverage and tracer. This ensures accurate coverage and trace data, since both rely on Python bytecode execution. JIT-compiled code bypasses Python bytecode, so it would prevent proper tracking.
+4. Disables the Line Profiler for JIT compiled code. It could be possible to disable JIT compilation and run the line profiler, but that would lead to inaccurate information which could misguide the optimization process.
 
 ## Configuration
 

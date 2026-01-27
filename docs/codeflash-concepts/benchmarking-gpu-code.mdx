@@ -6,9 +6,9 @@ sidebarTitle: "GPU Runtime Measurement"
 keywords: ["benchmarking", "performance", "timing", "measurement", "runtime", "noise reduction", "GPU", "MPS"]
 ---
 
-## Accurate Benchmarking on GPU devices (NVIDIA GPUs and Mac Metal Performance Shaders)
+## Accurate Benchmarking on GPU devices
 
-When a GPU operation is executed, it executes **asynchronously**. This means the CPU queues up work for the GPU and immediately continues to the next line of code - it doesn't wait for the GPU to finish. Accurate measurement of code execution on GPUs involves the insertion of synchronization barriers to ensure no pending GPU tasks are executing before and after the timing measurements are made.
+When a GPU (Graphics Processing Unit) operation is executed, it executes **asynchronously**. This means the CPU (Central Processing Unit) queues up work for the GPU and immediately continues to the next line of code - it doesn't wait for the GPU to finish. Accurate measurement of code execution on GPUs involves the insertion of synchronization barriers to ensure no pending GPU tasks are executing before and after the timing measurements are made.
 
 ## Illustration
 
@@ -100,19 +100,17 @@ print(f"With synchronize: {(t1 - t0) / 1e6:.3f} ms")
 ```
 
 
-Output on NVIDIA GPU
+Expected Output on CUDA
 
 ```
 Without synchronize: 69.157 ms
 With synchronize: 152.277 ms
 ```
 
-# How codeflash measures execution time involving GPUs
+# How Codeflash measures execution time involving GPUs
 
-Codeflash automatically inserts synchronization barriers before measuring performance. It currently supports GPU code written in `Pytorch`, `Tensorflow` and `JAX`.
+Codeflash automatically inserts synchronization barriers before measuring performance. It currently supports GPU code written in `Pytorch`, `Tensorflow` and `JAX` for NVIDIA GPUs (CUDA) and MacOS Metal Performance Shaders (MPS).
 
-- **PyTorch**: Uses `torch.cuda.synchronize()` (NVIDIA GPUs) or `torch.mps.synchronize()` (MacOS Metal Performance Shaders) depending on the device.
+- **PyTorch**: Uses `torch.cuda.synchronize()` (CUDA) or `torch.mps.synchronize()` (MPS) depending on the device.
 - **JAX**: Uses `jax.block_until_ready()` to wait for computation to complete. It works for both CUDA and MPS devices.
 - **TensorFlow**: Uses `tf.test.experimental.sync_devices()` for device synchronization. It works for both CUDA and MPS devices.
-
-Codeflash would support ROCm and TPU devices in the near future.
