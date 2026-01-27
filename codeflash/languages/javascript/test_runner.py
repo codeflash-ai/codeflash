@@ -182,11 +182,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
     # Try to install from npm registry
     try:
         result = subprocess.run(
-            ["npm", "install", "--save-dev", "codeflash"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
+            ["npm", "install", "--save-dev", "codeflash"], cwd=project_root, capture_output=True, text=True, timeout=120
         )
         if result.returncode == 0:
             logger.debug("Installed codeflash from npm registry")
@@ -195,10 +191,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
     except Exception as e:
         logger.warning(f"Error installing from npm: {e}")
 
-    logger.error(
-        "Could not install codeflash. "
-        "Please install it manually: npm install --save-dev codeflash"
-    )
+    logger.error("Could not install codeflash. Please install it manually: npm install --save-dev codeflash")
 
 
 def run_jest_behavioral_tests(
