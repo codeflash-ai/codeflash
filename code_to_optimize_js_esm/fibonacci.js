@@ -23,8 +23,9 @@ export function fibonacci(n) {
  */
 export function isFibonacci(num) {
     // A number is Fibonacci if one of (5*n*n + 4) or (5*n*n - 4) is a perfect square
-    const check1 = 5 * num * num + 4;
-    const check2 = 5 * num * num - 4;
+    const n2 = num * num;
+    const check1 = 5 * n2 + 4;
+    const check2 = check1 - 8; // 5*n*n - 4 === (5*n*n + 4) - 8
     return isPerfectSquare(check1) || isPerfectSquare(check2);
 }
 
@@ -34,8 +35,8 @@ export function isFibonacci(num) {
  * @returns {boolean} True if n is a perfect square
  */
 export function isPerfectSquare(n) {
-    const sqrt = Math.sqrt(n);
-    return sqrt === Math.floor(sqrt);
+    const sqrt = Math.floor(Math.sqrt(n));
+    return sqrt * sqrt === n;
 }
 
 /**
