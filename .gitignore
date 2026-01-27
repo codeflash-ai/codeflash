@@ -261,4 +261,4 @@ WARP.MD
 tessl.json
 **/node_modules/**
 /dist-nuitka/main.dist/*
-**/cli/.npmrc
+packages/codeflash/.npmrc

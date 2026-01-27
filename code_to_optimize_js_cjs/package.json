@@ -7,7 +7,7 @@
     "test": "jest"
   },
   "devDependencies": {
-    "@codeflash/jest-runtime": "file:../packages/jest-runtime",
+    "codeflash": "file:../packages/cli",
     "jest": "^29.7.0",
     "jest-junit": "^16.0.0"
   }
