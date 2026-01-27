@@ -268,7 +268,7 @@ class AiServiceClient:
         logger.info("!lsp|Rewriting as a JIT function…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating jit rewritten candidate: {e}")
             ph("cli-jit-rewrite-error-caught", {"error": str(e)})

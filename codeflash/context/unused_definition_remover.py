@@ -295,11 +295,18 @@ class DependencyCollector(cst.CSTVisitor):
             return
 
         if name in self.definitions and name != self.current_top_level_name:
-            # skip if we are refrencing a class attribute and not a top-level definition
+            # Skip if this Name is the .attr part of an Attribute (e.g., 'x' in 'self.x')
+            # We only want to track the base/value of attribute access, not the attribute name itself
             if self.class_depth > 0:
                 parent = self.get_metadata(cst.metadata.ParentNodeProvider, node)
                 if parent is not None and isinstance(parent, cst.Attribute):
-                    return
+                    # Check if this Name is the .attr (property name), not the .value (base)
+                    # If it's the .attr, skip it - attribute names aren't references to definitions
+                    if parent.attr is node:
+                        return
+                    # If it's the .value (base), only skip if it's self/cls
+                    if name in ("self", "cls"):
+                        return
             self.definitions[self.current_top_level_name].dependencies.add(name)
 
 
@@ -553,16 +560,6 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         return code
 
 
-def print_definitions(definitions: dict[str, UsageInfo]) -> None:
-    """Print information about each definition without the complex node object, used for debugging."""
-    print(f"Found {len(definitions)} definitions:")
-    for name, info in sorted(definitions.items()):
-        print(f"  - Name: {name}")
-        print(f"    Used by qualified function: {info.used_by_qualified_function}")
-        print(f"    Dependencies: {', '.join(sorted(info.dependencies)) if info.dependencies else 'None'}")
-        print()
-
-
 def revert_unused_helper_functions(
     project_root: Path, unused_helpers: list[FunctionSource], original_helper_code: dict[Path, str]
 ) -> None:
@@ -637,43 +634,40 @@ def _analyze_imports_in_optimized_code(
             func_name = helper.only_function_name
             module_name = helper.file_path.stem
             # Cache function lookup for this (module, func)
-            file_entry = helpers_by_file_and_func[module_name]
-            if func_name in file_entry:
-                file_entry[func_name].append(helper)
-            else:
-                file_entry[func_name] = [helper]
+            helpers_by_file_and_func[module_name].setdefault(func_name, []).append(helper)
             helpers_by_file[module_name].append(helper)
-
-    # Optimize attribute lookups and method binding outside the loop
-    helpers_by_file_and_func_get = helpers_by_file_and_func.get
-    helpers_by_file_get = helpers_by_file.get
 
     for node in ast.walk(optimized_ast):
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
             module_name = node.module
             if module_name:
-                file_entry = helpers_by_file_and_func_get(module_name, None)
+                file_entry = helpers_by_file_and_func.get(module_name)
                 if file_entry:
                     for alias in node.names:
                         imported_name = alias.asname if alias.asname else alias.name
                         original_name = alias.name
-                        helpers = file_entry.get(original_name, None)
+                        helpers = file_entry.get(original_name)
                         if helpers:
+                            imported_set = imported_names_map[imported_name]
                             for helper in helpers:
-                                imported_names_map[imported_name].add(helper.qualified_name)
-                                imported_names_map[imported_name].add(helper.fully_qualified_name)
+                                imported_set.add(helper.qualified_name)
+                                imported_set.add(helper.fully_qualified_name)
 
         elif isinstance(node, ast.Import):
             # Handle "import module" statements
             for alias in node.names:
                 imported_name = alias.asname if alias.asname else alias.name
                 module_name = alias.name
-                for helper in helpers_by_file_get(module_name, []):
-                    # For "import module" statements, functions would be called as module.function
-                    full_call = f"{imported_name}.{helper.only_function_name}"
-                    imported_names_map[full_call].add(helper.qualified_name)
-                    imported_names_map[full_call].add(helper.fully_qualified_name)
+                helpers = helpers_by_file.get(module_name)
+                if helpers:
+                    imported_set = imported_names_map[f"{imported_name}.{{func}}"]
+                    for helper in helpers:
+                        # For "import module" statements, functions would be called as module.function
+                        full_call = f"{imported_name}.{helper.only_function_name}"
+                        full_call_set = imported_names_map[full_call]
+                        full_call_set.add(helper.qualified_name)
+                        full_call_set.add(helper.fully_qualified_name)
 
     return dict(imported_names_map)
 
@@ -758,27 +752,31 @@ def detect_unused_helper_functions(
                     called_name = node.func.id
                     called_function_names.add(called_name)
                     # Also add the qualified name if this is an imported function
-                    if called_name in imported_names_map:
-                        called_function_names.update(imported_names_map[called_name])
+                    mapped_names = imported_names_map.get(called_name)
+                    if mapped_names:
+                        called_function_names.update(mapped_names)
                 elif isinstance(node.func, ast.Attribute):
                     # Method call: obj.method() or self.method() or module.function()
                     if isinstance(node.func.value, ast.Name):
-                        if node.func.value.id == "self":
+                        attr_name = node.func.attr
+                        value_id = node.func.value.id
+                        if value_id == "self":
                             # self.method_name() -> add both method_name and ClassName.method_name
-                            called_function_names.add(node.func.attr)
+                            called_function_names.add(attr_name)
+                            # For class methods, also add the qualified name
                             # For class methods, also add the qualified name
                             if hasattr(function_to_optimize, "parents") and function_to_optimize.parents:
                                 class_name = function_to_optimize.parents[0].name
-                                called_function_names.add(f"{class_name}.{node.func.attr}")
+                                called_function_names.add(f"{class_name}.{attr_name}")
                         else:
-                            # obj.method() or module.function()
-                            attr_name = node.func.attr
                             called_function_names.add(attr_name)
-                            called_function_names.add(f"{node.func.value.id}.{attr_name}")
+                            full_call = f"{value_id}.{attr_name}"
+                            called_function_names.add(full_call)
                             # Check if this is a module.function call that maps to a helper
-                            full_call = f"{node.func.value.id}.{attr_name}"
-                            if full_call in imported_names_map:
-                                called_function_names.update(imported_names_map[full_call])
+                            mapped_names = imported_names_map.get(full_call)
+                            if mapped_names:
+                                called_function_names.update(mapped_names)
+                    # Handle nested attribute access like obj.attr.method()
                     # Handle nested attribute access like obj.attr.method()
                     else:
                         called_function_names.add(node.func.attr)
@@ -788,6 +786,7 @@ def detect_unused_helper_functions(
 
         # Find helper functions that are no longer called
         unused_helpers = []
+        entrypoint_file_path = function_to_optimize.file_path
         for helper_function in code_context.helper_functions:
             jedi_type = helper_function.jedi_definition.type if helper_function.jedi_definition else None
             if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
@@ -796,29 +795,30 @@ def detect_unused_helper_functions(
                 helper_simple_name = helper_function.only_function_name
                 helper_fully_qualified_name = helper_function.fully_qualified_name
 
-                # Create a set of all possible names this helper might be called by
-                possible_call_names = {helper_qualified_name, helper_simple_name, helper_fully_qualified_name}
-
+                # Check membership efficiently - exit early on first match
+                if (
+                    helper_qualified_name in called_function_names
+                    or helper_simple_name in called_function_names
+                    or helper_fully_qualified_name in called_function_names
+                ):
+                    is_called = True
                 # For cross-file helpers, also consider module-based calls
-                if helper_function.file_path != function_to_optimize.file_path:
+                elif helper_function.file_path != entrypoint_file_path:
                     # Add potential module.function combinations
                     module_name = helper_function.file_path.stem
-                    possible_call_names.add(f"{module_name}.{helper_simple_name}")
-
-                # Check if any of the possible names are in the called functions
-                is_called = bool(possible_call_names.intersection(called_function_names))
+                    module_call = f"{module_name}.{helper_simple_name}"
+                    is_called = module_call in called_function_names
+                else:
+                    is_called = False
 
                 if not is_called:
                     unused_helpers.append(helper_function)
                     logger.debug(f"Helper function {helper_qualified_name} is not called in optimized code")
-                    logger.debug(f"  Checked names: {possible_call_names}")
                 else:
                     logger.debug(f"Helper function {helper_qualified_name} is still called in optimized code")
-                    logger.debug(f"  Called via: {possible_call_names.intersection(called_function_names)}")
-
-        ret_val = unused_helpers
 
     except Exception as e:
         logger.debug(f"Error detecting unused helper functions: {e}")
-        ret_val = []
-    return ret_val
+        return []
+    else:
+        return unused_helpers

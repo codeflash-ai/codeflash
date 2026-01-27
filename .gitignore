@@ -262,3 +262,6 @@ tessl.json
 **/node_modules/**
 /dist-nuitka/main.dist/*
 packages/codeflash/.npmrc
+
+# Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
+AGENTS.md

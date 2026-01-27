@@ -5,6 +5,7 @@ import hashlib
 import os
 from collections import defaultdict
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import libcst as cst
@@ -16,6 +17,7 @@ from codeflash.code_utils.config_consts import OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
 from codeflash.context.unused_definition_remover import (
     collect_top_level_defs_with_usages,
     extract_names_from_targets,
+    get_section_names,
     remove_unused_definitions_by_function_names,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
@@ -32,12 +34,42 @@ from codeflash.models.models import (
 from codeflash.optimization.function_context import belongs_to_function_qualified
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from jedi.api.classes import Name
     from libcst import CSTNode
 
     from codeflash.context.unused_definition_remover import UsageInfo
+
+
+def build_testgen_context(
+    helpers_of_fto_dict: dict[Path, set[FunctionSource]],
+    helpers_of_helpers_dict: dict[Path, set[FunctionSource]],
+    project_root_path: Path,
+    remove_docstrings: bool,  # noqa: FBT001
+    include_imported_classes: bool,  # noqa: FBT001
+) -> CodeStringsMarkdown:
+    """Build testgen context with optional imported class definitions and external base inits."""
+    testgen_context = extract_code_markdown_context_from_files(
+        helpers_of_fto_dict,
+        helpers_of_helpers_dict,
+        project_root_path,
+        remove_docstrings=remove_docstrings,
+        code_context_type=CodeContextType.TESTGEN,
+    )
+
+    if include_imported_classes:
+        imported_class_context = get_imported_class_definitions(testgen_context, project_root_path)
+        if imported_class_context.code_strings:
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_context.code_strings + imported_class_context.code_strings
+            )
+
+        external_base_inits = get_external_base_class_inits(testgen_context, project_root_path)
+        if external_base_inits.code_strings:
+            testgen_context = CodeStringsMarkdown(
+                code_strings=testgen_context.code_strings + external_base_inits.code_strings
+            )
+
+    return testgen_context
 
 
 def get_code_optimization_context(
@@ -129,55 +161,37 @@ def get_code_optimization_context(
             logger.debug("Code context has exceeded token limit, removing read-only code")
             read_only_context_code = ""
 
-    # Extract code context for testgen
-    testgen_context = extract_code_markdown_context_from_files(
+    # Extract code context for testgen with progressive fallback for token limits
+    # Try in order: full context -> remove docstrings -> remove imported classes
+    testgen_context = build_testgen_context(
         helpers_of_fto_dict,
         helpers_of_helpers_dict,
         project_root_path,
         remove_docstrings=False,
-        code_context_type=CodeContextType.TESTGEN,
+        include_imported_classes=True,
     )
 
-    # Extract class definitions for imported types from project modules
-    # This helps the LLM understand class constructors and structure
-    imported_class_context = get_imported_class_definitions(testgen_context, project_root_path)
-    if imported_class_context.code_strings:
-        # Merge imported class definitions into testgen context
-        testgen_context = CodeStringsMarkdown(
-            code_strings=testgen_context.code_strings + imported_class_context.code_strings
-        )
-
-    testgen_markdown_code = testgen_context.markdown
-    testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
-    if testgen_code_token_length > testgen_token_limit:
-        # First try removing docstrings
-        testgen_context = extract_code_markdown_context_from_files(
+    if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
+        logger.debug("Testgen context exceeded token limit, removing docstrings")
+        testgen_context = build_testgen_context(
             helpers_of_fto_dict,
             helpers_of_helpers_dict,
             project_root_path,
             remove_docstrings=True,
-            code_context_type=CodeContextType.TESTGEN,
+            include_imported_classes=True,
         )
-        # Re-extract imported classes (they may still fit)
-        imported_class_context = get_imported_class_definitions(testgen_context, project_root_path)
-        if imported_class_context.code_strings:
-            testgen_context = CodeStringsMarkdown(
-                code_strings=testgen_context.code_strings + imported_class_context.code_strings
-            )
-        testgen_markdown_code = testgen_context.markdown
-        testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
-        if testgen_code_token_length > testgen_token_limit:
-            # If still over limit, try without imported class definitions
-            testgen_context = extract_code_markdown_context_from_files(
+
+        if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
+            logger.debug("Testgen context still exceeded token limit, removing imported class definitions")
+            testgen_context = build_testgen_context(
                 helpers_of_fto_dict,
                 helpers_of_helpers_dict,
                 project_root_path,
                 remove_docstrings=True,
-                code_context_type=CodeContextType.TESTGEN,
+                include_imported_classes=False,
             )
-            testgen_markdown_code = testgen_context.markdown
-            testgen_code_token_length = encoded_tokens_len(testgen_markdown_code)
-            if testgen_code_token_length > testgen_token_limit:
+
+            if encoded_tokens_len(testgen_context.markdown) > testgen_token_limit:
                 raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
     code_hash_context = hashing_code_context.markdown
     code_hash = hashlib.sha256(code_hash_context.encode("utf-8")).hexdigest()
@@ -191,264 +205,6 @@ def get_code_optimization_context(
         helper_functions=helpers_of_fto_list,
         preexisting_objects=preexisting_objects,
     )
-
-
-def get_code_optimization_context_for_language(
-    function_to_optimize: FunctionToOptimize,
-    project_root_path: Path,
-    optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
-    testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
-) -> CodeOptimizationContext:
-    """Extract code optimization context for non-Python languages.
-
-    Uses the language support abstraction to extract code context and converts
-    it to the CodeOptimizationContext format expected by the pipeline.
-
-    This function supports multi-file context extraction, grouping helpers by file
-    and creating proper CodeStringsMarkdown with file paths for multi-file replacement.
-
-    Args:
-        function_to_optimize: The function to extract context for.
-        project_root_path: Root of the project.
-        optim_token_limit: Token limit for optimization context.
-        testgen_token_limit: Token limit for testgen context.
-
-    Returns:
-        CodeOptimizationContext with target code and dependencies.
-
-    """
-    from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, ParentInfo
-
-    # Get language support for this function
-    language = Language(function_to_optimize.language)
-    lang_support = get_language_support(language)
-
-    # Convert FunctionToOptimize to FunctionInfo for language support
-    parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
-    func_info = FunctionInfo(
-        name=function_to_optimize.function_name,
-        file_path=function_to_optimize.file_path,
-        start_line=function_to_optimize.starting_line or 1,
-        end_line=function_to_optimize.ending_line or 1,
-        parents=parents,
-        is_async=function_to_optimize.is_async,
-        is_method=len(function_to_optimize.parents) > 0,
-        language=language,
-    )
-
-    # Extract code context using language support
-    code_context = lang_support.extract_code_context(func_info, project_root_path, project_root_path)
-
-    # Build imports string if available
-    imports_code = "\n".join(code_context.imports) if code_context.imports else ""
-
-    # Get relative path for target file
-    try:
-        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
-    except ValueError:
-        target_relative_path = function_to_optimize.file_path
-
-    # Group helpers by file path
-    helpers_by_file: dict[Path, list] = defaultdict(list)
-    helper_function_sources = []
-
-    for helper in code_context.helper_functions:
-        helpers_by_file[helper.file_path].append(helper)
-
-        # Convert to FunctionSource for pipeline compatibility
-        helper_function_sources.append(
-            FunctionSource(
-                file_path=helper.file_path,
-                qualified_name=helper.qualified_name,
-                fully_qualified_name=helper.qualified_name,
-                only_function_name=helper.name,
-                source_code=helper.source_code,
-                jedi_definition=None,
-            )
-        )
-
-    # Build read-writable code (target file + same-file helpers + global variables)
-    read_writable_code_strings = []
-
-    # Combine target code with same-file helpers
-    target_file_code = code_context.target_code
-    same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
-    if same_file_helpers:
-        helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
-        target_file_code = target_file_code + "\n\n" + helper_code
-
-    # Add global variables (module-level declarations) referenced by the function and helpers
-    # These should be included in read-writable context so AI can modify them if needed
-    if code_context.read_only_context:
-        target_file_code = code_context.read_only_context + "\n\n" + target_file_code
-
-    # Add imports to target file code
-    if imports_code:
-        target_file_code = imports_code + "\n\n" + target_file_code
-
-    read_writable_code_strings.append(
-        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
-    )
-
-    # Add helper files (cross-file helpers)
-    for file_path, file_helpers in helpers_by_file.items():
-        if file_path == function_to_optimize.file_path:
-            continue  # Already included in target file
-
-        try:
-            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
-        except ValueError:
-            helper_relative_path = file_path
-
-        # Combine all helpers from this file
-        combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
-
-        read_writable_code_strings.append(
-            CodeString(
-                code=combined_helper_code, file_path=helper_relative_path, language=function_to_optimize.language
-            )
-        )
-
-    read_writable_code = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings, language=function_to_optimize.language
-    )
-
-    # Build testgen context (same as read_writable for non-Python)
-    testgen_context = CodeStringsMarkdown(
-        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
-    )
-
-    # Check token limits
-    read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
-    if read_writable_tokens > optim_token_limit:
-        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
-
-    testgen_tokens = encoded_tokens_len(testgen_context.markdown)
-    if testgen_tokens > testgen_token_limit:
-        raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
-
-    # Generate code hash from all read-writable code
-    code_hash = hashlib.sha256(read_writable_code.flat.encode("utf-8")).hexdigest()
-
-    return CodeOptimizationContext(
-        testgen_context=testgen_context,
-        read_writable_code=read_writable_code,
-        # Global variables are now included in read-writable code, so don't duplicate in read-only
-        read_only_context_code="",
-        hashing_code_context=read_writable_code.flat,
-        hashing_code_context_hash=code_hash,
-        helper_functions=helper_function_sources,
-        preexisting_objects=set(),  # Not implemented for non-Python yet
-    )
-
-
-def extract_code_string_context_from_files(
-    helpers_of_fto: dict[Path, set[FunctionSource]],
-    helpers_of_helpers: dict[Path, set[FunctionSource]],
-    project_root_path: Path,
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
-    code_context_type: CodeContextType = CodeContextType.READ_ONLY,
-) -> CodeString:
-    """Extract code context from files containing target functions and their helpers.
-    This function processes two sets of files:
-    1. Files containing the function to optimize (fto) and their first-degree helpers
-    2. Files containing only helpers of helpers (with no overlap with the first set).
-
-    For each file, it extracts relevant code based on the specified context type, adds necessary
-    imports, and combines them.
-
-    Args:
-    ----
-        helpers_of_fto: Dictionary mapping file paths to sets of Function Sources of function to optimize and its helpers
-        helpers_of_helpers: Dictionary mapping file paths to sets of Function Sources of helpers of helper functions
-        project_root_path: Root path of the project
-        remove_docstrings: Whether to remove docstrings from the extracted code
-        code_context_type: Type of code context to extract (READ_ONLY, READ_WRITABLE, or TESTGEN)
-
-    Returns:
-    -------
-        CodeString containing the extracted code context with necessary imports
-
-    """  # noqa: D205
-    # Rearrange to remove overlaps, so we only access each file path once
-    helpers_of_helpers_no_overlap = defaultdict(set)
-    for file_path, function_sources in helpers_of_helpers.items():
-        if file_path in helpers_of_fto:
-            # Remove duplicates within the same file path, in case a helper of helper is also a helper of fto
-            helpers_of_helpers[file_path] -= helpers_of_fto[file_path]
-        else:
-            helpers_of_helpers_no_overlap[file_path] = function_sources
-
-    final_code_string_context = ""
-
-    # Extract code from file paths that contain fto and first degree helpers. helpers of helpers may also be included if they are in the same files
-    for file_path, function_sources in helpers_of_fto.items():
-        try:
-            original_code = file_path.read_text("utf8")
-        except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
-            continue
-        try:
-            qualified_function_names = {func.qualified_name for func in function_sources}
-            helpers_of_helpers_qualified_names = {
-                func.qualified_name for func in helpers_of_helpers.get(file_path, set())
-            }
-            code_without_unused_defs = remove_unused_definitions_by_function_names(
-                original_code, qualified_function_names | helpers_of_helpers_qualified_names
-            )
-            code_context = parse_code_and_prune_cst(
-                code_without_unused_defs,
-                code_context_type,
-                qualified_function_names,
-                helpers_of_helpers_qualified_names,
-                remove_docstrings,
-            )
-        except ValueError as e:
-            logger.debug(f"Error while getting read-only code: {e}")
-            continue
-        if code_context.strip():
-            final_code_string_context += f"\n{code_context}"
-            final_code_string_context = add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=final_code_string_context,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions=list(helpers_of_fto.get(file_path, set()) | helpers_of_helpers.get(file_path, set())),
-            )
-    if code_context_type == CodeContextType.READ_WRITABLE:
-        return CodeString(code=final_code_string_context)
-    # Extract code from file paths containing helpers of helpers
-    for file_path, helper_function_sources in helpers_of_helpers_no_overlap.items():
-        try:
-            original_code = file_path.read_text("utf8")
-        except Exception as e:
-            logger.exception(f"Error while parsing {file_path}: {e}")
-            continue
-        try:
-            qualified_helper_function_names = {func.qualified_name for func in helper_function_sources}
-            code_without_unused_defs = remove_unused_definitions_by_function_names(
-                original_code, qualified_helper_function_names
-            )
-            code_context = parse_code_and_prune_cst(
-                code_without_unused_defs, code_context_type, set(), qualified_helper_function_names, remove_docstrings
-            )
-        except ValueError as e:
-            logger.debug(f"Error while getting read-only code: {e}")
-            continue
-
-        if code_context.strip():
-            final_code_string_context += f"\n{code_context}"
-            final_code_string_context = add_needed_imports_from_module(
-                src_module_code=original_code,
-                dst_module_code=final_code_string_context,
-                src_path=file_path,
-                dst_path=file_path,
-                project_root=project_root_path,
-                helper_functions=list(helpers_of_helpers_no_overlap.get(file_path, set())),
-            )
-    return CodeString(code=final_code_string_context)
 
 
 def extract_code_markdown_context_from_files(
@@ -685,6 +441,10 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
     the LLM understand the actual class structure (constructors, methods, inheritance)
     rather than just seeing import statements.
 
+    Also recursively extracts base classes when a class inherits from another class
+    in the same module, ensuring the full inheritance chain is available for
+    understanding constructor signatures.
+
     Args:
         code_context: The already extracted code context containing imports
         project_root_path: Root path of the project
@@ -727,6 +487,68 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
 
     class_code_strings: list[CodeString] = []
 
+    module_cache: dict[Path, tuple[str, ast.Module]] = {}
+
+    def get_module_source_and_tree(module_path: Path) -> tuple[str, ast.Module] | None:
+        if module_path in module_cache:
+            return module_cache[module_path]
+        try:
+            module_source = module_path.read_text(encoding="utf-8")
+            module_tree = ast.parse(module_source)
+        except Exception:
+            return None
+        else:
+            module_cache[module_path] = (module_source, module_tree)
+            return module_source, module_tree
+
+    def extract_class_and_bases(
+        class_name: str, module_path: Path, module_source: str, module_tree: ast.Module
+    ) -> None:
+        """Extract a class and its base classes recursively from the same module."""
+        # Skip if already extracted
+        if (module_path, class_name) in extracted_classes:
+            return
+
+        # Find the class definition in the module
+        class_node = None
+        for node in ast.walk(module_tree):
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                class_node = node
+                break
+
+        if class_node is None:
+            return
+
+        # First, recursively extract base classes from the same module
+        for base in class_node.bases:
+            base_name = None
+            if isinstance(base, ast.Name):
+                base_name = base.id
+            elif isinstance(base, ast.Attribute):
+                # For module.ClassName, we skip (cross-module inheritance)
+                continue
+
+            if base_name and base_name not in existing_definitions:
+                # Check if base class is defined in the same module
+                extract_class_and_bases(base_name, module_path, module_source, module_tree)
+
+        # Now extract this class (after its bases, so base classes appear first)
+        if (module_path, class_name) in extracted_classes:
+            return  # Already added by another path
+
+        lines = module_source.split("\n")
+        start_line = class_node.lineno
+        if class_node.decorator_list:
+            start_line = min(d.lineno for d in class_node.decorator_list)
+        class_source = "\n".join(lines[start_line - 1 : class_node.end_lineno])
+
+        # Extract imports for the class
+        class_imports = extract_imports_for_class(module_tree, class_node, module_source)
+        full_source = class_imports + "\n\n" + class_source if class_imports else class_source
+
+        class_code_strings.append(CodeString(code=full_source, file_path=module_path))
+        extracted_classes.add((module_path, class_name))
+
     for name, module_name in imported_names.items():
         # Skip if already defined in context
         if name in existing_definitions:
@@ -752,28 +574,14 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
             if path_belongs_to_site_packages(module_path):
                 continue
 
-            # Skip if we've already extracted this class
-            if (module_path, name) in extracted_classes:
+            # Get module source and tree
+            result = get_module_source_and_tree(module_path)
+            if result is None:
                 continue
+            module_source, module_tree = result
 
-            # Parse the module to find the class definition
-            module_source = module_path.read_text(encoding="utf-8")
-            module_tree = ast.parse(module_source)
-
-            for node in ast.walk(module_tree):
-                if isinstance(node, ast.ClassDef) and node.name == name:
-                    # Extract the class source code
-                    lines = module_source.split("\n")
-                    class_source = "\n".join(lines[node.lineno - 1 : node.end_lineno])
-
-                    # Also extract any necessary imports for the class (base classes, type hints)
-                    class_imports = _extract_imports_for_class(module_tree, node, module_source)
-
-                    full_source = class_imports + "\n\n" + class_source if class_imports else class_source
-
-                    class_code_strings.append(CodeString(code=full_source, file_path=module_path))
-                    extracted_classes.add((module_path, name))
-                    break
+            # Extract the class and its base classes
+            extract_class_and_bases(name, module_path, module_source, module_tree)
 
         except Exception:
             logger.debug(f"Error extracting class definition for {name} from {module_name}")
@@ -782,10 +590,111 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
     return CodeStringsMarkdown(code_strings=class_code_strings)
 
 
-def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
+def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_root_path: Path) -> CodeStringsMarkdown:
+    """Extract __init__ methods from external library base classes.
+
+    Scans the code context for classes that inherit from external libraries and extracts
+    just their __init__ methods. This helps the LLM understand constructor signatures
+    for mocking or instantiation.
+    """
+    import importlib
+    import inspect
+    import textwrap
+
+    all_code = "\n".join(cs.code for cs in code_context.code_strings)
+
+    try:
+        tree = ast.parse(all_code)
+    except SyntaxError:
+        return CodeStringsMarkdown(code_strings=[])
+
+    imported_names: dict[str, str] = {}
+    external_bases: list[tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_names[imported_name] = node.module
+        elif isinstance(node, ast.ClassDef):
+            for base in node.bases:
+                base_name = None
+                if isinstance(base, ast.Name):
+                    base_name = base.id
+                elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+                    base_name = base.attr
+
+                if base_name and base_name in imported_names:
+                    module_name = imported_names[base_name]
+                    if not _is_project_module(module_name, project_root_path):
+                        external_bases.append((base_name, module_name))
+
+    if not external_bases:
+        return CodeStringsMarkdown(code_strings=[])
+
+    code_strings: list[CodeString] = []
+    extracted: set[tuple[str, str]] = set()
+
+    for base_name, module_name in external_bases:
+        if (module_name, base_name) in extracted:
+            continue
+
+        try:
+            module = importlib.import_module(module_name)
+            base_class = getattr(module, base_name, None)
+            if base_class is None:
+                continue
+
+            init_method = getattr(base_class, "__init__", None)
+            if init_method is None:
+                continue
+
+            try:
+                init_source = inspect.getsource(init_method)
+                init_source = textwrap.dedent(init_source)
+                class_file = Path(inspect.getfile(base_class))
+                parts = class_file.parts
+                if "site-packages" in parts:
+                    idx = parts.index("site-packages")
+                    class_file = Path(*parts[idx + 1 :])
+            except (OSError, TypeError):
+                continue
+
+            class_source = f"class {base_name}:\n" + textwrap.indent(init_source, "    ")
+            code_strings.append(CodeString(code=class_source, file_path=class_file))
+            extracted.add((module_name, base_name))
+
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            logger.debug(f"Failed to extract __init__ for {module_name}.{base_name}")
+            continue
+
+    return CodeStringsMarkdown(code_strings=code_strings)
+
+
+def _is_project_module(module_name: str, project_root_path: Path) -> bool:
+    """Check if a module is part of the project (not external/stdlib)."""
+    import importlib.util
+
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+    else:
+        if spec is None or spec.origin is None:
+            return False
+        module_path = Path(spec.origin)
+        # Check if the module is in site-packages (external dependency)
+        # This must be checked first because .venv/site-packages is under project root
+        if path_belongs_to_site_packages(module_path):
+            return False
+        # Check if the module is within the project root
+        return str(module_path).startswith(str(project_root_path) + os.sep)
+
+
+def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef, module_source: str) -> str:
     """Extract import statements needed for a class definition.
 
-    This extracts imports for base classes and commonly used type annotations.
+    This extracts imports for base classes, decorators, and type annotations.
     """
     needed_names: set[str] = set()
 
@@ -797,35 +706,139 @@ def _extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef
             # For things like abc.ABC, we need the module name
             needed_names.add(base.value.id)
 
+    # Get decorator names (e.g., dataclass, field)
+    for decorator in class_node.decorator_list:
+        if isinstance(decorator, ast.Name):
+            needed_names.add(decorator.id)
+        elif isinstance(decorator, ast.Call):
+            if isinstance(decorator.func, ast.Name):
+                needed_names.add(decorator.func.id)
+            elif isinstance(decorator.func, ast.Attribute) and isinstance(decorator.func.value, ast.Name):
+                needed_names.add(decorator.func.value.id)
+
+    # Get type annotation names from class body (for dataclass fields)
+    for item in ast.walk(class_node):
+        if isinstance(item, ast.AnnAssign) and item.annotation:
+            collect_names_from_annotation(item.annotation, needed_names)
+        # Also check for field() calls which are common in dataclasses
+        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
+            needed_names.add(item.func.id)
+
     # Find imports that provide these names
     import_lines: list[str] = []
     source_lines = module_source.split("\n")
+    added_imports: set[int] = set()  # Track line numbers to avoid duplicates
 
     for node in module_tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 name = alias.asname if alias.asname else alias.name.split(".")[0]
-                if name in needed_names:
+                if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
                     break
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
                 name = alias.asname if alias.asname else alias.name
-                if name in needed_names:
+                if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
+                    added_imports.add(node.lineno)
                     break
 
     return "\n".join(import_lines)
+
+
+def collect_names_from_annotation(node: ast.expr, names: set[str]) -> None:
+    """Recursively collect type annotation names from an AST node."""
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    elif isinstance(node, ast.Subscript):
+        collect_names_from_annotation(node.value, names)
+        collect_names_from_annotation(node.slice, names)
+    elif isinstance(node, ast.Tuple):
+        for elt in node.elts:
+            collect_names_from_annotation(elt, names)
+    elif isinstance(node, ast.BinOp):  # For Union types with | syntax
+        collect_names_from_annotation(node.left, names)
+        collect_names_from_annotation(node.right, names)
+    elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        names.add(node.value.id)
 
 
 def is_dunder_method(name: str) -> bool:
     return len(name) > 4 and name.isascii() and name.startswith("__") and name.endswith("__")
 
 
-def get_section_names(node: cst.CSTNode) -> list[str]:
-    """Returns the section attribute names (e.g., body, orelse) for a given node if they exist."""  # noqa: D401
-    possible_sections = ["body", "orelse", "finalbody", "handlers"]
-    return [sec for sec in possible_sections if hasattr(node, sec)]
+class UsedNameCollector(cst.CSTVisitor):
+    """Collects all base names referenced in code (for import preservation)."""
+
+    def __init__(self) -> None:
+        self.used_names: set[str] = set()
+        self.defined_names: set[str] = set()
+
+    def visit_Name(self, node: cst.Name) -> None:
+        self.used_names.add(node.value)
+
+    def visit_Attribute(self, node: cst.Attribute) -> bool | None:
+        base = node.value
+        while isinstance(base, cst.Attribute):
+            base = base.value
+        if isinstance(base, cst.Name):
+            self.used_names.add(base.value)
+        return True
+
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool | None:
+        self.defined_names.add(node.name.value)
+        return True
+
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool | None:
+        self.defined_names.add(node.name.value)
+        return True
+
+    def visit_Assign(self, node: cst.Assign) -> bool | None:
+        for target in node.targets:
+            names = extract_names_from_targets(target.target)
+            self.defined_names.update(names)
+        return True
+
+    def visit_AnnAssign(self, node: cst.AnnAssign) -> bool | None:
+        names = extract_names_from_targets(node.target)
+        self.defined_names.update(names)
+        return True
+
+    def get_external_names(self) -> set[str]:
+        return self.used_names - self.defined_names - {"self", "cls"}
+
+
+def get_imported_names(import_node: cst.Import | cst.ImportFrom) -> set[str]:
+    """Extract the names made available by an import statement."""
+    names: set[str] = set()
+    if isinstance(import_node, cst.Import):
+        if isinstance(import_node.names, cst.ImportStar):
+            return {"*"}
+        for alias in import_node.names:
+            if isinstance(alias, cst.ImportAlias):
+                if alias.asname and isinstance(alias.asname.name, cst.Name):
+                    names.add(alias.asname.name.value)
+                elif isinstance(alias.name, cst.Name):
+                    names.add(alias.name.value)
+                elif isinstance(alias.name, cst.Attribute):
+                    # import foo.bar -> accessible as "foo"
+                    base: cst.BaseExpression = alias.name
+                    while isinstance(base, cst.Attribute):
+                        base = base.value
+                    if isinstance(base, cst.Name):
+                        names.add(base.value)
+    elif isinstance(import_node, cst.ImportFrom):
+        if isinstance(import_node.names, cst.ImportStar):
+            return {"*"}
+        for alias in import_node.names:
+            if isinstance(alias, cst.ImportAlias):
+                if alias.asname and isinstance(alias.asname.name, cst.Name):
+                    names.add(alias.asname.name.value)
+                elif isinstance(alias.name, cst.Name):
+                    names.add(alias.name.value)
+    return names
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
@@ -852,12 +865,22 @@ def parse_code_and_prune_cst(
     if code_context_type == CodeContextType.READ_WRITABLE:
         filtered_node, found_target = prune_cst_for_read_writable_code(module, target_functions, defs_with_usages)
     elif code_context_type == CodeContextType.READ_ONLY:
-        filtered_node, found_target = prune_cst_for_read_only_code(
-            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        filtered_node, found_target = prune_cst_for_context(
+            module,
+            target_functions,
+            helpers_of_helper_functions,
+            remove_docstrings=remove_docstrings,
+            include_target_in_output=False,
+            include_init_dunder=False,
         )
     elif code_context_type == CodeContextType.TESTGEN:
-        filtered_node, found_target = prune_cst_for_testgen_code(
-            module, target_functions, helpers_of_helper_functions, remove_docstrings=remove_docstrings
+        filtered_node, found_target = prune_cst_for_context(
+            module,
+            target_functions,
+            helpers_of_helper_functions,
+            remove_docstrings=remove_docstrings,
+            include_target_in_output=True,
+            include_init_dunder=True,
         )
     elif code_context_type == CodeContextType.HASHING:
         filtered_node, found_target = prune_cst_for_code_hashing(module, target_functions)
@@ -899,10 +922,29 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
         # Do not recurse into nested classes
         if prefix:
             return None, False
+
+        class_name = node.name.value
+
         # Assuming always an IndentedBlock
         if not isinstance(node.body, cst.IndentedBlock):
             raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
-        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
+        class_prefix = f"{prefix}.{class_name}" if prefix else class_name
+
+        # Check if this class contains any target functions
+        has_target_functions = any(
+            isinstance(stmt, cst.FunctionDef) and f"{class_prefix}.{stmt.name.value}" in target_functions
+            for stmt in node.body.body
+        )
+
+        # If the class is used as a dependency (not containing target functions), keep it entirely
+        # This handles cases like enums, dataclasses, and other types used by the target function
+        if (
+            not has_target_functions
+            and class_name in defs_with_usages
+            and defs_with_usages[class_name].used_by_qualified_function
+        ):
+            return node, True
+
         new_body = []
         found_target = False
 
@@ -1062,17 +1104,29 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_read_only_code(  # noqa: PLR0911
+def prune_cst_for_context(  # noqa: PLR0911
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
     remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    include_target_in_output: bool = False,  # noqa: FBT001, FBT002
+    include_init_dunder: bool = False,  # noqa: FBT001, FBT002
 ) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for read-only context.
+    """Recursively filter the node for code context extraction.
 
-    Returns
-    -------
+    Args:
+        node: The CST node to filter
+        target_functions: Set of qualified function names that are targets
+        helpers_of_helper_functions: Set of helper function qualified names
+        prefix: Current qualified name prefix (for class methods)
+        remove_docstrings: Whether to remove docstrings from output
+        include_target_in_output: If True, include target functions in output (testgen mode)
+                                  If False, exclude target functions (read-only mode)
+        include_init_dunder: If True, include __init__ in dunder methods (testgen mode)
+                             If False, exclude __init__ from dunder methods (read-only mode)
+
+    Returns:
         (filtered_node, found_target):
           filtered_node: The modified CST node or None if it should be removed.
           found_target: True if a target function was found in this node's subtree.
@@ -1083,17 +1137,28 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
 
     if isinstance(node, cst.FunctionDef):
         qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        # If it's a target function, remove it but mark found_target = True
+
+        # Check if it's a helper of helper function
         if qualified_name in helpers_of_helper_functions:
+            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                return node.with_changes(body=remove_docstring_from_body(node.body)), True
             return node, True
+
+        # Check if it's a target function
         if qualified_name in target_functions:
+            if include_target_in_output:
+                if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
+                    return node.with_changes(body=remove_docstring_from_body(node.body)), True
+                return node, True
             return None, True
-        # Keep only dunder methods
-        if is_dunder_method(node.name.value) and node.name.value != "__init__":
+
+        # Check dunder methods
+        # For read-only mode, exclude __init__; for testgen mode, include all dunders
+        if is_dunder_method(node.name.value) and (include_init_dunder or node.name.value != "__init__"):
             if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), False
+                return node.with_changes(body=remove_docstring_from_body(node.body)), False
             return node, False
+
         return None, False
 
     if isinstance(node, cst.ClassDef):
@@ -1110,8 +1175,14 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
         found_in_class = False
         new_class_body: list[CSTNode] = []
         for stmt in node.body.body:
-            filtered, found_target = prune_cst_for_read_only_code(
-                stmt, target_functions, helpers_of_helper_functions, class_prefix, remove_docstrings=remove_docstrings
+            filtered, found_target = prune_cst_for_context(
+                stmt,
+                target_functions,
+                helpers_of_helper_functions,
+                class_prefix,
+                remove_docstrings=remove_docstrings,
+                include_target_in_output=include_target_in_output,
+                include_init_dunder=include_init_dunder,
             )
             found_in_class |= found_target
             if filtered:
@@ -1140,8 +1211,14 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
             new_children = []
             section_found_target = False
             for child in original_content:
-                filtered, found_target = prune_cst_for_read_only_code(
-                    child, target_functions, helpers_of_helper_functions, prefix, remove_docstrings=remove_docstrings
+                filtered, found_target = prune_cst_for_context(
+                    child,
+                    target_functions,
+                    helpers_of_helper_functions,
+                    prefix,
+                    remove_docstrings=remove_docstrings,
+                    include_target_in_output=include_target_in_output,
+                    include_init_dunder=include_init_dunder,
                 )
                 if filtered:
                     new_children.append(filtered)
@@ -1151,122 +1228,19 @@ def prune_cst_for_read_only_code(  # noqa: PLR0911
                 found_any_target |= section_found_target
                 updates[section] = new_children
         elif original_content is not None:
-            filtered, found_target = prune_cst_for_read_only_code(
+            filtered, found_target = prune_cst_for_context(
                 original_content,
                 target_functions,
                 helpers_of_helper_functions,
                 prefix,
                 remove_docstrings=remove_docstrings,
+                include_target_in_output=include_target_in_output,
+                include_init_dunder=include_init_dunder,
             )
             found_any_target |= found_target
             if filtered:
                 updates[section] = filtered
-    if updates:
-        return (node.with_changes(**updates), found_any_target)
 
-    return None, False
-
-
-def prune_cst_for_testgen_code(  # noqa: PLR0911
-    node: cst.CSTNode,
-    target_functions: set[str],
-    helpers_of_helper_functions: set[str],
-    prefix: str = "",
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
-) -> tuple[cst.CSTNode | None, bool]:
-    """Recursively filter the node for testgen context.
-
-    Returns
-    -------
-        (filtered_node, found_target):
-          filtered_node: The modified CST node or None if it should be removed.
-          found_target: True if a target function was found in this node's subtree.
-
-    """
-    if isinstance(node, (cst.Import, cst.ImportFrom)):
-        return None, False
-
-    if isinstance(node, cst.FunctionDef):
-        qualified_name = f"{prefix}.{node.name.value}" if prefix else node.name.value
-        # If it's a target function, remove it but mark found_target = True
-        if qualified_name in helpers_of_helper_functions or qualified_name in target_functions:
-            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), True
-            return node, True
-        # Keep all dunder methods
-        if is_dunder_method(node.name.value):
-            if remove_docstrings and isinstance(node.body, cst.IndentedBlock):
-                new_body = remove_docstring_from_body(node.body)
-                return node.with_changes(body=new_body), False
-            return node, False
-        return None, False
-
-    if isinstance(node, cst.ClassDef):
-        # Do not recurse into nested classes
-        if prefix:
-            return None, False
-        # Assuming always an IndentedBlock
-        if not isinstance(node.body, cst.IndentedBlock):
-            raise ValueError("ClassDef body is not an IndentedBlock")  # noqa: TRY004
-
-        class_prefix = f"{prefix}.{node.name.value}" if prefix else node.name.value
-
-        # First pass: detect if there is a target function in the class
-        found_in_class = False
-        new_class_body: list[CSTNode] = []
-        for stmt in node.body.body:
-            filtered, found_target = prune_cst_for_testgen_code(
-                stmt, target_functions, helpers_of_helper_functions, class_prefix, remove_docstrings=remove_docstrings
-            )
-            found_in_class |= found_target
-            if filtered:
-                new_class_body.append(filtered)
-
-        if not found_in_class:
-            return None, False
-
-        if remove_docstrings:
-            return node.with_changes(
-                body=remove_docstring_from_body(node.body.with_changes(body=new_class_body))
-            ) if new_class_body else None, True
-        return node.with_changes(body=node.body.with_changes(body=new_class_body)) if new_class_body else None, True
-
-    # For other nodes, keep the node and recursively filter children
-    section_names = get_section_names(node)
-    if not section_names:
-        return node, False
-
-    updates: dict[str, list[cst.CSTNode] | cst.CSTNode] = {}
-    found_any_target = False
-
-    for section in section_names:
-        original_content = getattr(node, section, None)
-        if isinstance(original_content, (list, tuple)):
-            new_children = []
-            section_found_target = False
-            for child in original_content:
-                filtered, found_target = prune_cst_for_testgen_code(
-                    child, target_functions, helpers_of_helper_functions, prefix, remove_docstrings=remove_docstrings
-                )
-                if filtered:
-                    new_children.append(filtered)
-                section_found_target |= found_target
-
-            if section_found_target or new_children:
-                found_any_target |= section_found_target
-                updates[section] = new_children
-        elif original_content is not None:
-            filtered, found_target = prune_cst_for_testgen_code(
-                original_content,
-                target_functions,
-                helpers_of_helper_functions,
-                prefix,
-                remove_docstrings=remove_docstrings,
-            )
-            found_any_target |= found_target
-            if filtered:
-                updates[section] = filtered
     if updates:
         return (node.with_changes(**updates), found_any_target)
 
