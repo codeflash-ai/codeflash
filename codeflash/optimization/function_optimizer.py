@@ -75,6 +75,7 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
+from codeflash.languages import is_python
 from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
@@ -445,11 +446,10 @@ class FunctionOptimizer:
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
         # Get language support for non-Python languages
-        self._is_python = function_to_optimize.language == "python"
-        self.language_support = None if self._is_python else get_language_support(function_to_optimize.language)
+        self.language_support = None if is_python() else get_language_support(function_to_optimize.language)
         if not function_to_optimize_ast:
             # Skip Python AST parsing for non-Python languages
-            if not self._is_python:
+            if not is_python():
                 self.function_to_optimize_ast = None
             else:
                 original_module_ast = ast.parse(function_to_optimize_source_code)
@@ -470,7 +470,7 @@ class FunctionOptimizer:
         self.function_trace_id: str = str(uuid.uuid4())
         # For non-Python languages, we need a relative path from the test file to the source file
         # For Python, we use dot-separated module paths
-        if not self._is_python:
+        if not is_python():
             # Compute relative path from tests directory to source file
             # e.g., for source at /project/fibonacci.js and tests at /project/tests/
             # the relative path should be ../fibonacci
@@ -572,14 +572,12 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
-        language = self.function_to_optimize.language
         generated_test_paths = [
             get_test_file_path(
                 self.test_cfg.tests_root,
                 self.function_to_optimize.function_name,
                 test_index,
                 test_type="unit",
-                language=language,
             )
             for test_index in range(n_tests)
         ]
@@ -589,7 +587,6 @@ class FunctionOptimizer:
                 self.function_to_optimize.function_name,
                 test_index,
                 test_type="perf",
-                language=language,
             )
             for test_index in range(n_tests)
         ]
@@ -611,7 +608,7 @@ class FunctionOptimizer:
         count_tests, generated_tests, function_to_concolic_tests, concolic_test_str = test_results.unwrap()
 
         # Normalize codeflash imports in JS/TS tests to use npm package
-        if not self._is_python:
+        if not is_python():
             generated_tests = normalize_generated_tests_imports(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
@@ -644,7 +641,7 @@ class FunctionOptimizer:
 
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
-            test_ext = self.language_support.get_test_file_suffix() if not self._is_python else ".py"
+            test_ext = self.language_support.get_test_file_suffix() if not is_python() else ".py"
             code_print(
                 generated_test.generated_original_test_source,
                 file_name=f"test_{i + 1}{test_ext}",
@@ -1066,7 +1063,7 @@ class FunctionOptimizer:
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
         # Use correct extension based on language
-        ext = ".py" if self._is_python else self.language_support.file_extensions[0]
+        ext = ".py" if is_python() else self.language_support.file_extensions[0]
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}{ext}",
@@ -1576,7 +1573,7 @@ class FunctionOptimizer:
         if func_qualname not in function_to_all_tests:
             logger.info(f"Did not find any pre-existing tests for '{func_qualname}', will only use generated tests.")
         # Handle non-Python existing test instrumentation
-        elif not self._is_python:
+        elif not is_python():
             test_file_invocation_positions = defaultdict(list)
             for tests_in_file in function_to_all_tests.get(func_qualname):
                 test_file_invocation_positions[
@@ -1784,7 +1781,6 @@ class FunctionOptimizer:
             self.args,
             self.function_to_optimize,
             self.function_to_optimize_ast,
-            language=self.function_to_optimize.language,
         )
 
         if not self.args.no_gen_tests:
@@ -2002,7 +1998,7 @@ class FunctionOptimizer:
             if best_optimization:
                 logger.info("h2|Best candidate 🚀")
                 # Use correct extension based on language
-                best_ext = ".py" if self._is_python else self.language_support.file_extensions[0]
+                best_ext = ".py" if is_python() else self.language_support.file_extensions[0]
                 code_print(
                     best_optimization.candidate.source_code.flat,
                     file_name=f"best_candidate{best_ext}",
@@ -2325,7 +2321,7 @@ class FunctionOptimizer:
 
         test_env = self.get_test_env(codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1)
 
-        if self.function_to_optimize.is_async and self._is_python:
+        if self.function_to_optimize.is_async and is_python():
             from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
             success = add_async_decorator_to_function(
@@ -2337,7 +2333,7 @@ class FunctionOptimizer:
             try:
                 # Only instrument Python code here - non-Python languages use their own runtime helpers
                 # which are already included in the generated/instrumented tests
-                if self._is_python:
+                if is_python():
                     instrument_codeflash_capture(
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
@@ -2369,7 +2365,7 @@ class FunctionOptimizer:
             console.rule()
             return Failure("Failed to establish a baseline for the original code - bevhavioral tests failed.")
         # Skip coverage check for non-Python languages (coverage not yet supported)
-        if self._is_python and not coverage_critic(coverage_results):
+        if is_python() and not coverage_critic(coverage_results):
             did_pass_all_tests = all(result.did_pass for result in behavioral_results)
             if not did_pass_all_tests:
                 return Failure("Tests failed to pass for the original code.")
@@ -2384,7 +2380,7 @@ class FunctionOptimizer:
             )
         console.rule()
         with progress_bar("Running performance benchmarks..."):
-            if self.function_to_optimize.is_async and self._is_python:
+            if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2566,7 +2562,7 @@ class FunctionOptimizer:
 
             try:
                 # Only instrument Python code here - non-Python languages use their own runtime helpers
-                if self._is_python:
+                if is_python():
                     instrument_codeflash_capture(
                         self.function_to_optimize, file_path_to_helper_classes, self.test_cfg.tests_root
                     )
@@ -2583,7 +2579,7 @@ class FunctionOptimizer:
             # Remove instrumentation
             finally:
                 # Only restore code for Python - non-Python tests are self-contained
-                if self._is_python:
+                if is_python():
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
@@ -2596,7 +2592,7 @@ class FunctionOptimizer:
             console.rule()
 
             # Use language-appropriate comparison
-            if not self._is_python:
+            if not is_python():
                 # Non-Python: Compare using language support with SQLite results if available
                 original_sqlite = get_run_tmp_file(Path("test_return_values_0.sqlite"))
                 candidate_sqlite = get_run_tmp_file(Path(f"test_return_values_{optimization_candidate_index}.sqlite"))
@@ -2795,8 +2791,8 @@ class FunctionOptimizer:
 
         if testing_type in {TestingMode.BEHAVIOR, TestingMode.PERFORMANCE}:
             # For non-Python behavior tests, skip SQLite cleanup - files needed for language-native comparison
-            non_python_original_code = not self._is_python and optimization_iteration == 0
-            skip_cleanup = (not self._is_python and testing_type == TestingMode.BEHAVIOR) or non_python_original_code
+            non_python_original_code = not is_python() and optimization_iteration == 0
+            skip_cleanup = (not is_python() and testing_type == TestingMode.BEHAVIOR) or non_python_original_code
 
             results, coverage_results = parse_test_results(
                 test_xml_path=result_file_path,
@@ -2816,7 +2812,7 @@ class FunctionOptimizer:
             return results, coverage_results
         # For LINE_PROFILE mode, Python uses .lprof files while JavaScript uses JSON
         # Return TestResults for JavaScript so _line_profiler_step_javascript can parse the JSON
-        if not self._is_python:
+        if not is_python():
             # Return TestResults to indicate tests ran, actual parsing happens in _line_profiler_step_javascript
             return TestResults(test_results=[]), None
         results, coverage_results = parse_line_profile_results(line_profiler_output_file=line_profiler_output_file)
@@ -2876,7 +2872,7 @@ class FunctionOptimizer:
         self, code_context: CodeOptimizationContext, original_helper_code: dict[Path, str], candidate_index: int
     ) -> dict:
         # Dispatch to language-specific implementation
-        if self._is_python:
+        if is_python():
             return self._line_profiler_step_python(code_context, original_helper_code, candidate_index)
 
         if self.language_support is not None and hasattr(self.language_support, "instrument_source_for_line_profiler"):

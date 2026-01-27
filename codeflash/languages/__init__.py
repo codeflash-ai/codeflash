@@ -28,6 +28,15 @@ from codeflash.languages.base import (
     TestInfo,
     TestResult,
 )
+from codeflash.languages.current import (
+    current_language,
+    current_language_support,
+    is_javascript,
+    is_python,
+    is_typescript,
+    reset_current_language,
+    set_current_language,
+)
 from codeflash.languages.registry import (
     detect_project_language,
     get_language_support,
@@ -43,18 +52,26 @@ from codeflash.languages.javascript import JavaScriptSupport, TypeScriptSupport 
 
 __all__ = [
     # Base types
+    "CodeContext",
+    "FunctionInfo",
+    "HelperFunction",
     "Language",
     "LanguageSupport",
-    "FunctionInfo",
     "ParentInfo",
-    "CodeContext",
-    "HelperFunction",
-    "TestResult",
     "TestInfo",
+    "TestResult",
+    # Current language singleton
+    "current_language",
+    "current_language_support",
+    "is_javascript",
+    "is_python",
+    "is_typescript",
+    "reset_current_language",
+    "set_current_language",
     # Registry functions
-    "get_language_support",
     "detect_project_language",
-    "register_language",
-    "get_supported_languages",
+    "get_language_support",
     "get_supported_extensions",
+    "get_supported_languages",
+    "register_language",
 ]

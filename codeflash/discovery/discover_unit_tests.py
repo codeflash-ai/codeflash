@@ -28,6 +28,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
+from codeflash.languages import is_javascript, is_python
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
@@ -659,10 +660,10 @@ def discover_unit_tests(
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
     # Route to language-specific test discovery for non-Python languages
-    if language and language != "python":
+    if not is_python():
         # For JavaScript/TypeScript, tests_project_rootdir should be tests_root itself
         # The Jest helper will be configured to NOT include "tests." prefix to match
-        if language in ("javascript", "typescript"):
+        if is_javascript():
             cfg.tests_project_rootdir = cfg.tests_root
         return discover_tests_for_language(cfg, language, file_to_funcs_to_optimize)
 

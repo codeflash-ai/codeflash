@@ -23,6 +23,7 @@ from codeflash.context.unused_definition_remover import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 
 # Language support imports for multi-language code context extraction
+from codeflash.languages import is_python
 from codeflash.languages.base import Language
 from codeflash.models.models import (
     CodeContextType,
@@ -79,7 +80,7 @@ def get_code_optimization_context(
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
 ) -> CodeOptimizationContext:
     # Route to language-specific implementation for non-Python languages
-    if function_to_optimize.language and function_to_optimize.language != "python":
+    if not is_python():
         return get_code_optimization_context_for_language(
             function_to_optimize, project_root_path, optim_token_limit, testgen_token_limit
         )

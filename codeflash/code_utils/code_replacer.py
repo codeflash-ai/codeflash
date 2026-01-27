@@ -18,6 +18,7 @@ from codeflash.code_utils.code_extractor import (
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
+from codeflash.languages import is_python
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
@@ -445,7 +446,7 @@ def replace_function_definitions_in_module(
     function_to_optimize: Optional[FunctionToOptimize] = None,
 ) -> bool:
     # Route to language-specific implementation for non-Python languages
-    if optimized_code.language and optimized_code.language != "python":
+    if not is_python():
         return replace_function_definitions_for_language(
             function_names, optimized_code, module_abspath, project_root_path, function_to_optimize
         )

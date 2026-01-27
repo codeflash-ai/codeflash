@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.languages import is_javascript
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ def generate_tests(
 
     # Detect module system for JavaScript/TypeScript before calling aiservice
     project_module_system = None
-    if function_to_optimize.language in ("javascript", "typescript"):
+    if is_javascript():
         from codeflash.languages.javascript.module_system import detect_module_system
 
         source_file = Path(function_to_optimize.file_path)
@@ -69,7 +70,7 @@ def generate_tests(
         )
 
         # For JavaScript/TypeScript, validate and fix import styles to match source exports
-        if function_to_optimize.language in ("javascript", "typescript"):
+        if is_javascript():
             from codeflash.languages.javascript.instrument import validate_and_fix_import_style
             from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
 

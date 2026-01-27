@@ -24,6 +24,7 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
+from codeflash.languages import is_javascript, set_current_language
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -217,7 +218,7 @@ class Optimizer:
         )
 
     def prepare_module_for_optimization(
-        self, original_module_path: Path, language: str = "python"
+        self, original_module_path: Path
     ) -> tuple[dict[Path, ValidCode], ast.Module | None] | None:
         from codeflash.code_utils.code_replacer import normalize_code, normalize_node
         from codeflash.code_utils.static_analysis import analyze_imported_modules
@@ -228,7 +229,7 @@ class Optimizer:
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
         # For JavaScript/TypeScript, skip Python-specific AST parsing
-        if language in ("javascript", "typescript"):
+        if is_javascript():
             validated_original_code: dict[Path, ValidCode] = {
                 original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
             }
@@ -455,13 +456,14 @@ class Optimizer:
         function_optimizer = None
         file_to_funcs_to_optimize, num_optimizable_functions, trace_file_path = self.get_optimizable_functions()
 
-        # Set language on TestConfig based on discovered functions
+        # Set language on TestConfig and global singleton based on discovered functions
         if file_to_funcs_to_optimize:
             for file_path, funcs in file_to_funcs_to_optimize.items():
                 if funcs and funcs[0].language:
+                    set_current_language(funcs[0].language)
                     self.test_cfg.set_language(funcs[0].language)
                     # For JavaScript, also set js_project_root for test execution
-                    if funcs[0].language in ("javascript", "typescript"):
+                    if is_javascript():
                         self.test_cfg.js_project_root = self._find_js_project_root(file_path)
                     break
 
@@ -501,9 +503,7 @@ class Optimizer:
             for i, (original_module_path, function_to_optimize) in enumerate(globally_ranked_functions):
                 # Prepare module if not already cached
                 if original_module_path not in prepared_modules:
-                    module_prep_result = self.prepare_module_for_optimization(
-                        original_module_path, language=function_to_optimize.language
-                    )
+                    module_prep_result = self.prepare_module_for_optimization(original_module_path)
                     if module_prep_result is None:
                         logger.warning(f"Skipping functions in {original_module_path} due to preparation error")
                         continue

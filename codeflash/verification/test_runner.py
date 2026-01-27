@@ -16,6 +16,7 @@ from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages import is_python
 from codeflash.languages.registry import get_language_support, get_language_support_by_framework
 from codeflash.models.models import TestFiles, TestType
 
@@ -138,7 +139,7 @@ def run_behavioral_tests(
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
         )
-    if test_framework in {"pytest", "unittest"}:
+    if is_python():
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
@@ -272,7 +273,7 @@ def run_line_profile_tests(
             project_root=js_project_root,
             line_profile_output_file=line_profiler_output_file,
         )
-    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
+    if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
@@ -336,7 +337,7 @@ def run_benchmarking_tests(
             max_loops=pytest_max_loops,
             target_duration_seconds=pytest_target_runtime_seconds,
         )
-    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
+    if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"

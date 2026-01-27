@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING
 
 from codeflash.code_utils.normalizers import get_normalizer
+from codeflash.languages import current_language, is_python
 
 if TYPE_CHECKING:
     pass
@@ -20,7 +21,7 @@ def normalize_code(
     code: str,
     remove_docstrings: bool = True,  # noqa: FBT001, FBT002
     return_ast_dump: bool = False,  # noqa: FBT001, FBT002
-    language: str = "python",
+    language: str | None = None,
 ) -> str:
     """Normalize code by parsing, cleaning, and normalizing variable names.
 
@@ -30,16 +31,19 @@ def normalize_code(
         code: Source code as string
         remove_docstrings: Whether to remove docstrings (Python only)
         return_ast_dump: Return AST dump instead of unparsed code (Python only)
-        language: Language of the code ('python', 'javascript', 'typescript')
+        language: Language of the code. If None, uses the current session language.
 
     Returns:
         Normalized code as string
     """
+    if language is None:
+        language = current_language().value
+
     try:
         normalizer = get_normalizer(language)
 
         # Python has additional options
-        if language == "python":
+        if is_python():
             if return_ast_dump:
                 return normalizer.normalize_for_hash(code)
             return normalizer.normalize(code, remove_docstrings=remove_docstrings)
@@ -51,7 +55,7 @@ def normalize_code(
         return _basic_normalize(code)
     except Exception:
         # Parsing error - try other languages or fall back
-        if language == "python":
+        if is_python():
             # Try JavaScript as fallback
             try:
                 js_normalizer = get_normalizer("javascript")
@@ -76,16 +80,19 @@ def _basic_normalize(code: str) -> str:
     return " ".join(code.split())
 
 
-def get_code_fingerprint(code: str, language: str = "python") -> str:
+def get_code_fingerprint(code: str, language: str | None = None) -> str:
     """Generate a fingerprint for normalized code.
 
     Args:
         code: Source code
-        language: Language of the code ('python', 'javascript', 'typescript')
+        language: Language of the code. If None, uses the current session language.
 
     Returns:
         SHA-256 hash of normalized code
     """
+    if language is None:
+        language = current_language().value
+
     try:
         normalizer = get_normalizer(language)
         return normalizer.get_fingerprint(code)
@@ -95,17 +102,20 @@ def get_code_fingerprint(code: str, language: str = "python") -> str:
         return hashlib.sha256(normalized.encode()).hexdigest()
 
 
-def are_codes_duplicate(code1: str, code2: str, language: str = "python") -> bool:
+def are_codes_duplicate(code1: str, code2: str, language: str | None = None) -> bool:
     """Check if two code segments are duplicates after normalization.
 
     Args:
         code1: First code segment
         code2: Second code segment
-        language: Language of the code ('python', 'javascript', 'typescript')
+        language: Language of the code. If None, uses the current session language.
 
     Returns:
         True if codes are structurally identical (ignoring local variable names)
     """
+    if language is None:
+        language = current_language().value
+
     try:
         normalizer = get_normalizer(language)
         return normalizer.are_duplicates(code1, code2)

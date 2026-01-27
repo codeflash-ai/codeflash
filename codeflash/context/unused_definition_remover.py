@@ -11,6 +11,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.languages import is_javascript
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
@@ -717,7 +718,7 @@ def detect_unused_helper_functions(
 
     """
     # Skip this analysis for non-Python languages since we use Python's ast module
-    if function_to_optimize.language in ("javascript", "typescript"):
+    if is_javascript():
         logger.debug("Skipping unused helper function detection for JavaScript/TypeScript")
         return []
 

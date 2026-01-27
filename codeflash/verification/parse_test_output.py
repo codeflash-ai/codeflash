@@ -20,6 +20,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
+from codeflash.languages import is_javascript
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -399,8 +400,8 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a Jest test (use JSON) or Python test (use pickle)
-    is_jest = test_config.test_framework == "jest"
+    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
+    is_jest = is_javascript()
 
     for val in data:
         try:
@@ -826,8 +827,8 @@ def parse_test_xml(
     test_config: TestConfig,
     run_result: subprocess.CompletedProcess | None = None,
 ) -> TestResults:
-    # Route to Jest-specific parser for Jest tests
-    if test_config.test_framework == "jest":
+    # Route to Jest-specific parser for JavaScript/TypeScript tests
+    if is_javascript():
         return parse_jest_test_xml(test_xml_file_path, test_files, test_config, run_result)
 
     test_results = TestResults()
@@ -1231,7 +1232,7 @@ def parse_test_results(
     # Also try to read legacy binary format for Python tests
     # Binary file may contain additional results (e.g., from codeflash_wrap) even if SQLite has data
     # from @codeflash_capture. We need to merge both sources.
-    if test_config.test_framework != "jest":
+    if not is_javascript():
         try:
             bin_results_file = get_run_tmp_file(Path(f"test_return_values_{optimization_iteration}.bin"))
             if bin_results_file.exists():
@@ -1264,7 +1265,7 @@ def parse_test_results(
     coverage = None
     if coverage_database_file and source_file and code_context and function_name:
         all_args = True
-        if test_config.test_framework == "jest":
+        if is_javascript():
             # Jest uses coverage-final.json (coverage_database_file points to this)
             coverage = JestCoverageUtils.load_from_jest_json(
                 coverage_json_path=coverage_database_file,

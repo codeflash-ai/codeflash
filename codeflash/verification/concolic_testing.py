@@ -12,6 +12,7 @@ from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.concolic_utils import clean_concolic_tests, is_valid_concolic_test
 from codeflash.code_utils.static_analysis import has_typed_parameters
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
+from codeflash.languages import is_python
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -28,7 +29,6 @@ def generate_concolic_tests(
     args: Namespace,
     function_to_optimize: FunctionToOptimize,
     function_to_optimize_ast: ast.AST,
-    language: str = "python",
 ) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
     """Generate concolic tests using CrossHair (Python only).
 
@@ -40,7 +40,6 @@ def generate_concolic_tests(
         args: Command line arguments
         function_to_optimize: The function being optimized
         function_to_optimize_ast: AST of the function (Python ast.FunctionDef)
-        language: Language of the code ('python', 'javascript', 'typescript')
 
     Returns:
         Tuple of (function_to_tests mapping, concolic test suite code)
@@ -50,8 +49,8 @@ def generate_concolic_tests(
     concolic_test_suite_code = ""
 
     # CrossHair is Python-only - skip for other languages
-    if language != "python":
-        logger.debug(f"Skipping concolic test generation for {language} (CrossHair is Python-only)")
+    if not is_python():
+        logger.debug("Skipping concolic test generation for non-Python languages (CrossHair is Python-only)")
         return function_to_concolic_tests, concolic_test_suite_code
 
     if is_LSP_enabled():
