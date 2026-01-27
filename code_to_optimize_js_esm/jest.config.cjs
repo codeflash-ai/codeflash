@@ -5,4 +5,7 @@ module.exports = {
   reporters: ['default', ['jest-junit', { outputDirectory: '.codeflash' }]],
   verbose: true,
   transform: {},
+  // Tell Jest to also look for modules in the project's node_modules when
+  // resolving modules from symlinked packages (like codeflash)
+  moduleDirectories: ['node_modules', '<rootDir>/node_modules'],
 };
