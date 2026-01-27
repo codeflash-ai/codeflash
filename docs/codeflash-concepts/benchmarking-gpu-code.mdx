@@ -2,7 +2,7 @@
 title: "How Codeflash Measures Code Runtime on GPUs"
 description: "Learn how Codeflash accurately measures code performance on GPUs"
 icon: "microchip"
-sidebarTitle: "GPU Runtime Measurement"
+sidebarTitle: "GPU Benchmarking"
 keywords: ["benchmarking", "performance", "timing", "measurement", "runtime", "noise reduction", "GPU", "MPS"]
 ---
 
@@ -55,14 +55,15 @@ gantt
     Launch Kernel 1         :active, cpu0, 4, 8
     Launch Kernel 2         :active, cpu1, 8, 12
     Launch Kernel 3         :active, cpu2, 12, 16
-    Device Synchronization  :done, wait, 16, 29
-    Timer End               :milestone, m2, 29, 29
+    Device Synchronization  :done, wait, 16, 33
+    Timer End               :milestone, m2, 33, 33
 
     section CUDA Stream
     Previous Work         :done, wait, 0, 4
-    Kernel 1              :active, k1, 4, 11
-    Kernel 2              :active, k2, 11, 18
-    Kernel 3              :active, k3, 18, 29
+    Waiting               :done, wait, 4, 8
+    Kernel 1              :active, k1, 8, 15
+    Kernel 2              :active, k2, 15, 22
+    Kernel 3              :active, k3, 22, 33
 ```
 
 Here you can see that a device synchronization call is made before executing the code, this ensures that the CPU waits for any pending GPU tasks to finish before starting the timer. After the launch of the final kernel, another device synchronization call is made which ensures all pending GPU tasks are finished before measuring the runtime.

@@ -67,7 +67,7 @@
             "pages": [
               "codeflash-concepts/how-codeflash-works",
               "codeflash-concepts/benchmarking",
-              "codeflash-concepts/benchmarking-gpu-code",,
+              "codeflash-concepts/benchmarking-gpu-code",
               "support-for-jit/index"
             ]
           },
