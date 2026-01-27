@@ -76,8 +76,6 @@ def generate_tests(
             source_file = Path(function_to_optimize.file_path)
             func_name = function_to_optimize.function_name
 
-            # project_module_system already detected above before calling aiservice
-
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
             instrumented_behavior_test_source = validate_and_fix_import_style(
                 instrumented_behavior_test_source, source_file, func_name
@@ -87,9 +85,7 @@ def generate_tests(
             )
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            generated_test_source = ensure_module_system_compatibility(
-                generated_test_source, project_module_system
-            )
+            generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
             instrumented_behavior_test_source = ensure_module_system_compatibility(
                 instrumented_behavior_test_source, project_module_system
             )

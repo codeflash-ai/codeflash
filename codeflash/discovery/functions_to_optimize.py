@@ -155,7 +155,7 @@ class FunctionToOptimize:
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
     starting_col: Optional[int] = None  # Column offset for precise location
-    ending_col: Optional[int] = None    # Column offset for precise location
+    ending_col: Optional[int] = None  # Column offset for precise location
     is_async: bool = False
     language: str = "python"  # Language identifier for multi-language support
 
@@ -186,11 +186,14 @@ class FunctionToOptimize:
 # =============================================================================
 
 
-def get_files_for_language(module_root_path: Path, language: Language | None = None) -> list[Path]:
+def get_files_for_language(
+    module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
+) -> list[Path]:
     """Get all source files for supported languages.
 
     Args:
         module_root_path: Root path to search for source files.
+        ignore_paths: List of paths to ignore (can be files or directories).
         language: Optional specific language to filter for. If None, includes all supported languages.
 
     Returns:
@@ -206,7 +209,10 @@ def get_files_for_language(module_root_path: Path, language: Language | None = N
     files = []
     for ext in extensions:
         pattern = f"*{ext}"
-        files.extend(module_root_path.rglob(pattern))
+        for file_path in module_root_path.rglob(pattern):
+            if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
+                continue
+            files.append(file_path)
     return files
 
 
@@ -289,7 +295,7 @@ def get_functions_to_optimize(
         if optimize_all:
             logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
             console.rule()
-            functions = get_all_files_and_functions(Path(optimize_all))
+            functions = get_all_files_and_functions(Path(optimize_all), ignore_paths)
         elif replay_test:
             functions, trace_file_path = get_all_replay_test_functions(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
@@ -452,12 +458,13 @@ def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[str
 
 
 def get_all_files_and_functions(
-    module_root_path: Path, language: Language | None = None
+    module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
 ) -> dict[str, list[FunctionToOptimize]]:
     """Get all optimizable functions from files in the module root.
 
     Args:
         module_root_path: Root path to search for source files.
+        ignore_paths: List of paths to ignore.
         language: Optional specific language to filter for. If None, includes all supported languages.
 
     Returns:
@@ -465,7 +472,7 @@ def get_all_files_and_functions(
 
     """
     functions: dict[str, list[FunctionToOptimize]] = {}
-    for file_path in get_files_for_language(module_root_path, language):
+    for file_path in get_files_for_language(module_root_path, ignore_paths, language):
         # Find all the functions in the file
         functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.

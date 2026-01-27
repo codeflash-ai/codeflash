@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,21 @@ class ModuleSystem:
     COMMONJS = "commonjs"
     ES_MODULE = "esm"
     UNKNOWN = "unknown"
+
+
+# Pattern for destructured require: const { a, b } = require('...')
+destructured_require = re.compile(
+    r"(const|let|var)\s+\{\s*([^}]+)\s*\}\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*;?"
+)
+
+# Pattern for require with property access: const foo = require('...').propertyName
+# This must come before simple_require to match first
+property_access_require = re.compile(
+    r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\.(\w+)\s*;?"
+)
+
+# Pattern for simple require: const foo = require('...')
+simple_require = re.compile(r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*;?")
 
 
 def detect_module_system(project_root: Path, file_path: Path | None = None) -> str:
@@ -166,6 +182,45 @@ def _get_relative_import_path(target_path: Path, source_path: Path) -> str:
     return rel_path_str
 
 
+def add_js_extension(module_path: str) -> str:
+    """Add .js extension to relative module paths for ESM compatibility."""
+    if module_path.startswith(("./", "../")):  # noqa: SIM102
+        if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
+            return module_path + ".js"
+    return module_path
+
+
+# Replace destructured requires with named imports
+def replace_destructured(match: re.Match) -> str:
+    names = match.group(2).strip()
+    module_path = add_js_extension(match.group(3))
+    return f"import {{ {names} }} from '{module_path}';"
+
+
+# Replace property access requires with named imports with alias
+# e.g., const foo = require('./module').bar -> import { bar as foo } from './module';
+def replace_property_access(match: re.Match) -> str:
+    alias_name = match.group(2)  # The variable name (e.g., missingAuthHeader)
+    module_path = add_js_extension(match.group(3))
+    property_name = match.group(4)  # The property being accessed (e.g., missingAuthorizationHeader)
+
+    # Special case: .default means default export
+    if property_name == "default":
+        return f"import {alias_name} from '{module_path}';"
+
+    # Named export with alias
+    if alias_name == property_name:
+        return f"import {{ {property_name} }} from '{module_path}';"
+    return f"import {{ {property_name} as {alias_name} }} from '{module_path}';"
+
+
+# Replace simple requires with default imports
+def replace_simple(match: re.Match) -> str:
+    name = match.group(2)
+    module_path = add_js_extension(match.group(3))
+    return f"import {name} from '{module_path}';"
+
+
 def convert_commonjs_to_esm(code: str) -> str:
     """Convert CommonJS require statements to ES Module imports.
 
@@ -173,6 +228,7 @@ def convert_commonjs_to_esm(code: str) -> str:
         const { foo, bar } = require('./module');  ->  import { foo, bar } from './module';
         const foo = require('./module');           ->  import foo from './module';
         const foo = require('./module').default;   ->  import foo from './module';
+        const foo = require('./module').bar;       ->  import { bar as foo } from './module';
 
     Special handling:
         - Local codeflash helper (./codeflash-jest-helper) is converted to npm package @codeflash/jest-runtime
@@ -185,52 +241,10 @@ def convert_commonjs_to_esm(code: str) -> str:
         Code with ES Module import statements.
 
     """
-    import re
-
-    # Pattern for destructured require: const { a, b } = require('...')
-    destructured_require = re.compile(
-        r"(const|let|var)\s+\{\s*([^}]+)\s*\}\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)\s*;?"
-    )
-
-    # Pattern for simple require: const foo = require('...')
-    simple_require = re.compile(
-        r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)(?:\.default)?\s*;?"
-    )
-
-    def normalize_module_path(module_path: str) -> str:
-        """Normalize module path, converting local codeflash helper to npm package."""
-        # Convert local codeflash helper to npm package for ESM compatibility
-        # The local helper uses CommonJS exports which don't work in ESM projects
-        if "codeflash-jest-helper" in module_path:
-            logger.debug(f"Converting local codeflash helper '{module_path}' to npm package '@codeflash/jest-runtime'")
-            return "@codeflash/jest-runtime"
-        return module_path
-
-    # Replace destructured requires with named imports
-    def replace_destructured(match):
-        names = match.group(2).strip()
-        module_path = normalize_module_path(match.group(3))
-        # ESM needs .js extension for relative imports in Node.js
-        if module_path.startswith("./") or module_path.startswith("../"):
-            if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
-                module_path = module_path + ".js"
-        return f"import {{ {names} }} from '{module_path}';"
-
-    # Replace simple requires with default imports
-    def replace_simple(match):
-        name = match.group(2)
-        module_path = normalize_module_path(match.group(3))
-        # ESM needs .js extension for relative imports in Node.js
-        if module_path.startswith("./") or module_path.startswith("../"):
-            if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
-                module_path = module_path + ".js"
-        return f"import {name} from '{module_path}';"
-
-    # Apply conversions (destructured first as it's more specific)
+    # Apply conversions (most specific patterns first)
     code = destructured_require.sub(replace_destructured, code)
-    code = simple_require.sub(replace_simple, code)
-
-    return code
+    code = property_access_require.sub(replace_property_access, code)
+    return simple_require.sub(replace_simple, code)
 
 
 def convert_esm_to_commonjs(code: str) -> str:
@@ -250,14 +264,10 @@ def convert_esm_to_commonjs(code: str) -> str:
     import re
 
     # Pattern for named import: import { a, b } from '...'
-    named_import = re.compile(
-        r"import\s+\{\s*([^}]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"]"
-    )
+    named_import = re.compile(r"import\s+\{\s*([^}]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"]")
 
     # Pattern for default import: import foo from '...'
-    default_import = re.compile(
-        r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]"
-    )
+    default_import = re.compile(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
 
     # Replace named imports with destructured requires
     def replace_named(match):
