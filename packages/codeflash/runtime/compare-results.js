@@ -32,19 +32,20 @@ const path = require('path');
 const { deserialize } = require('./serializer');
 const { comparator } = require('./comparator');
 
-// Try to load better-sqlite3
-let Database;
-try {
-    Database = require('better-sqlite3');
-} catch (e) {
-    // Use console.log (stdout) for JSON output, not console.error (stderr)
-    // Exit code 2 indicates a setup error (distinct from 1 = "not equivalent")
-    console.log(JSON.stringify({
-        equivalent: false,
-        diffs: [],
-        error: 'better-sqlite3 not installed. Run: npm install better-sqlite3'
-    }));
-    process.exit(2);
+// Lazy-load better-sqlite3 to avoid process.exit during module require
+// This prevents crashes when this module is imported by test files that don't use it
+let Database = null;
+let databaseLoadError = null;
+
+function getDatabase() {
+    if (Database === null && databaseLoadError === null) {
+        try {
+            Database = require('better-sqlite3');
+        } catch (e) {
+            databaseLoadError = 'better-sqlite3 not installed. Run: npm install better-sqlite3';
+        }
+    }
+    return { Database, error: databaseLoadError };
 }
 
 /**
@@ -60,7 +61,13 @@ function readTestResults(dbPath) {
         throw new Error(`Database not found: ${dbPath}`);
     }
 
-    const db = new Database(dbPath, { readonly: true });
+    // Get Database lazily - throws if not available
+    const { Database: DB, error } = getDatabase();
+    if (error) {
+        throw new Error(error);
+    }
+
+    const db = new DB(dbPath, { readonly: true });
 
     try {
         const stmt = db.prepare(`
