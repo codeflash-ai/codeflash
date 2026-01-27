@@ -33,6 +33,7 @@
     ]
   },
   "dependencies": {
+    "@msgpack/msgpack": "^3.1.3",
     "better-sqlite3": "^12.6.2",
     "codeflash": "^0.1.0"
   }
