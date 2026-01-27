@@ -55,7 +55,9 @@
             "group": "🧠 Core Concepts",
             "pages": [
               "codeflash-concepts/how-codeflash-works",
-              "codeflash-concepts/benchmarking"
+              "codeflash-concepts/benchmarking",
+              "codeflash-concepts/benchmarking-gpu-code",
+              "support-for-jit/index"
             ]
           },
           {
