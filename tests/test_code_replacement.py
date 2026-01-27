@@ -2119,7 +2119,6 @@ print("Hello world")
     expected_code = """import numpy as np
 
 a = 6
-
 if 2<3:
     a=4
 else:

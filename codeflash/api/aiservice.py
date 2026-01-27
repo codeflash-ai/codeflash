@@ -224,7 +224,7 @@ class AiServiceClient:
         logger.info("!lsp|Rewriting as a JIT function…")
         console.rule()
         try:
-            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=60)
+            response = self.make_ai_service_request("/rewrite_jit", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error generating jit rewritten candidate: {e}")
             ph("cli-jit-rewrite-error-caught", {"error": str(e)})
@@ -460,6 +460,10 @@ class AiServiceClient:
         optimized_throughput: str | None = None,
         throughput_improvement: str | None = None,
         function_references: str | None = None,
+        acceptance_reason: str | None = None,
+        original_concurrency_ratio: str | None = None,
+        optimized_concurrency_ratio: str | None = None,
+        concurrency_improvement: str | None = None,
         codeflash_version: str = codeflash_version,
     ) -> str:
         """Optimize the given python code for performance by making a request to the Django endpoint.
@@ -480,8 +484,12 @@ class AiServiceClient:
         - original_throughput: str | None - throughput for the baseline code (operations per second)
         - optimized_throughput: str | None - throughput for the optimized code (operations per second)
         - throughput_improvement: str | None - throughput improvement percentage
-        - current codeflash version
         - function_references: str | None - where the function is called in the codebase
+        - acceptance_reason: str | None - why the optimization was accepted (runtime, throughput, or concurrency)
+        - original_concurrency_ratio: str | None - concurrency ratio for the baseline code
+        - optimized_concurrency_ratio: str | None - concurrency ratio for the optimized code
+        - concurrency_improvement: str | None - concurrency improvement percentage
+        - codeflash_version: str - current codeflash version
 
         Returns
         -------
@@ -505,6 +513,10 @@ class AiServiceClient:
             "optimized_throughput": optimized_throughput,
             "throughput_improvement": throughput_improvement,
             "function_references": function_references,
+            "acceptance_reason": acceptance_reason,
+            "original_concurrency_ratio": original_concurrency_ratio,
+            "optimized_concurrency_ratio": optimized_concurrency_ratio,
+            "concurrency_improvement": concurrency_improvement,
             "codeflash_version": codeflash_version,
             "call_sequence": self.get_next_sequence(),
         }

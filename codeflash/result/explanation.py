@@ -11,8 +11,8 @@ from rich.table import Table
 
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.models.models import BenchmarkDetail, TestResults
-from codeflash.result.critic import throughput_gain
+from codeflash.models.models import BenchmarkDetail, ConcurrencyMetrics, TestResults
+from codeflash.result.critic import AcceptanceReason, concurrency_gain, throughput_gain
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
@@ -27,31 +27,44 @@ class Explanation:
     benchmark_details: Optional[list[BenchmarkDetail]] = None
     original_async_throughput: Optional[int] = None
     best_async_throughput: Optional[int] = None
+    original_concurrency_metrics: Optional[ConcurrencyMetrics] = None
+    best_concurrency_metrics: Optional[ConcurrencyMetrics] = None
+    acceptance_reason: AcceptanceReason = AcceptanceReason.RUNTIME
 
     @property
     def perf_improvement_line(self) -> str:
-        # speedup property already handles choosing between runtime and throughput
+        improvement_type = {
+            AcceptanceReason.RUNTIME: "runtime",
+            AcceptanceReason.THROUGHPUT: "throughput",
+            AcceptanceReason.CONCURRENCY: "concurrency",
+            AcceptanceReason.NONE: "",
+        }.get(self.acceptance_reason, "")
+
+        if improvement_type:
+            return f"{self.speedup_pct} {improvement_type} improvement ({self.speedup_x} faster)."
         return f"{self.speedup_pct} improvement ({self.speedup_x} faster)."
 
     @property
     def speedup(self) -> float:
-        runtime_improvement = (self.original_runtime_ns / self.best_runtime_ns) - 1
-
-        # Use throughput improvement if we have async metrics and throughput is better
+        """Returns the improvement value for the metric that caused acceptance."""
         if (
-            self.original_async_throughput is not None
+            self.acceptance_reason == AcceptanceReason.CONCURRENCY
+            and self.original_concurrency_metrics
+            and self.best_concurrency_metrics
+        ):
+            return concurrency_gain(self.original_concurrency_metrics, self.best_concurrency_metrics)
+
+        if (
+            self.acceptance_reason == AcceptanceReason.THROUGHPUT
+            and self.original_async_throughput is not None
             and self.best_async_throughput is not None
             and self.original_async_throughput > 0
         ):
-            throughput_improvement = throughput_gain(
+            return throughput_gain(
                 original_throughput=self.original_async_throughput, optimized_throughput=self.best_async_throughput
             )
 
-            # Use throughput metrics if throughput improvement is better or runtime got worse
-            if throughput_improvement > runtime_improvement or runtime_improvement <= 0:
-                return throughput_improvement
-
-        return runtime_improvement
+        return (self.original_runtime_ns / self.best_runtime_ns) - 1
 
     @property
     def speedup_x(self) -> str:
@@ -108,7 +121,22 @@ class Explanation:
             console.print(table)
             benchmark_info = cast("StringIO", console.file).getvalue() + "\n"  # Cast for mypy
 
-        if self.original_async_throughput is not None and self.best_async_throughput is not None:
+        if (
+            self.acceptance_reason == AcceptanceReason.CONCURRENCY
+            and self.original_concurrency_metrics
+            and self.best_concurrency_metrics
+        ):
+            orig_ratio = self.original_concurrency_metrics.concurrency_ratio
+            best_ratio = self.best_concurrency_metrics.concurrency_ratio
+            performance_description = (
+                f"Concurrency ratio improved from {orig_ratio:.2f}x to {best_ratio:.2f}x "
+                f"(concurrent execution now {best_ratio:.2f}x faster than sequential)\n\n"
+            )
+        elif (
+            self.acceptance_reason == AcceptanceReason.THROUGHPUT
+            and self.original_async_throughput is not None
+            and self.best_async_throughput is not None
+        ):
             performance_description = (
                 f"Throughput improved from {self.original_async_throughput} to {self.best_async_throughput} operations/second "
                 f"(runtime: {original_runtime_human} → {best_runtime_human})\n\n"

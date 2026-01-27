@@ -19,32 +19,12 @@
         "tab": "Documentation",
         "groups": [
           {
-            "group": "🚀 Quickstart",
-            "pages": ["getting-started/local-installation"]
-          },
-          {
             "group": "🏠 Overview",
             "pages": ["index"]
           },
           {
-            "group": "📖 Codeflash CLI",
-            "pages": [
-              "cli-reference/index",
-              "cli-reference/setup",
-              "cli-reference/optimization",
-              "cli-reference/tracing",
-              "cli-reference/flags",
-              "cli-reference/troubleshooting"
-            ]
-          },
-          {
-            "group": "🛠 IDE Extension",
-            "pages": [
-              "editor-plugins/vscode/index",
-              "editor-plugins/vscode/features",
-              "editor-plugins/vscode/configuration",
-              "editor-plugins/vscode/troubleshooting"
-            ]
+            "group": "🚀 Quickstart",
+            "pages": ["getting-started/local-installation"]
           },
           {
             "group": "⚡ Optimizing with Codeflash",
@@ -60,6 +40,15 @@
               "optimizing-with-codeflash/codeflash-github-actions",
               "optimizing-with-codeflash/benchmarking",
               "optimizing-with-codeflash/review-optimizations"
+            ]
+          },
+          {
+            "group": "🛠 IDE Extension",
+            "pages": [
+              "editor-plugins/vscode/index",
+              "editor-plugins/vscode/features",
+              "editor-plugins/vscode/configuration",
+              "editor-plugins/vscode/troubleshooting"
             ]
           },
           {
