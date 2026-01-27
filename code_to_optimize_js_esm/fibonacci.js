@@ -13,7 +13,38 @@ export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // For very special numeric values (NaN, Infinity) the original implementation
+    // would recurse indefinitely. To preserve that behavior exactly, fall back
+    // to a direct recursion in those cases.
+    const m = Math.ceil(n - 1);
+    if (!Number.isFinite(m)) {
+        function _rec(x) {
+            if (x <= 1) {
+                return x;
+            }
+            return _rec(x - 1) + _rec(x - 2);
+        }
+        return _rec(n);
+    }
+
+    // start is the smallest value <= 1 encountered when stepping down by 1's from n
+    const start = n - m;
+
+    // Use the recurrence in the forward direction:
+    // Let F_k = fibonacci(start + k). We need F_{-1} and F_0 as seeds:
+    // F_{-1} = start - 1 (<= 1) and F_0 = start (<= 1)
+    let a = start - 1; // F_{-1}
+    let b = start;     // F_0
+
+    // Advance m steps to reach F_m = fibonacci(n)
+    for (let i = 1; i <= m; i++) {
+        const next = b + a;
+        a = b;
+        b = next;
+    }
+
+    return b;
 }
 
 /**
