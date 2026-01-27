@@ -7,7 +7,6 @@ including adding runtime comments and removing test functions.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.time_utils import format_perf, format_time
@@ -23,6 +22,7 @@ def format_runtime_comment(original_time: int, optimized_time: int) -> str:
 
     Returns:
         Formatted comment string with // prefix.
+
     """
     perf_gain = format_perf(
         abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
@@ -31,11 +31,7 @@ def format_runtime_comment(original_time: int, optimized_time: int) -> str:
     return f"// {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
 
 
-def add_runtime_comments(
-    source: str,
-    original_runtimes: dict[str, int],
-    optimized_runtimes: dict[str, int],
-) -> str:
+def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
     """Add runtime comments to JavaScript test source code.
 
     For JavaScript, we match timing data by test function name and add comments
@@ -48,6 +44,7 @@ def add_runtime_comments(
 
     Returns:
         Source code with runtime comments added.
+
     """
     logger.debug(f"[js-annotations] original_runtimes has {len(original_runtimes)} entries")
     logger.debug(f"[js-annotations] optimized_runtimes has {len(optimized_runtimes)} entries")
@@ -144,6 +141,7 @@ def remove_test_functions(source: str, functions_to_remove: list[str]) -> str:
 
     Returns:
         Source code with specified functions removed.
+
     """
     if not functions_to_remove:
         return source
@@ -152,8 +150,7 @@ def remove_test_functions(source: str, functions_to_remove: list[str]) -> str:
         # Pattern to match test('name', ...) or it('name', ...) blocks
         # This handles nested callbacks and multi-line test bodies
         test_pattern = re.compile(
-            rf"(?:test|it)\s*\(\s*['\"]" + re.escape(func_name) + rf"['\"].*?\)\s*;?\s*\n?",
-            re.DOTALL,
+            r"(?:test|it)\s*\(\s*['\"]" + re.escape(func_name) + r"['\"].*?\)\s*;?\s*\n?", re.DOTALL
         )
 
         # Try to find and remove matching test blocks
@@ -180,6 +177,7 @@ def _find_block_end(source: str, start: int) -> int:
 
     Returns:
         Position after the closing brace, or start if not found.
+
     """
     # Find the opening brace
     brace_pos = source.find("{", start)
@@ -230,21 +228,3 @@ def _find_block_end(source: str, start: int) -> int:
         i += 1
 
     return start
-
-
-def get_comment_prefix() -> str:
-    """Get the comment prefix for JavaScript.
-
-    Returns:
-        The JavaScript single-line comment prefix.
-    """
-    return "//"
-
-
-def get_test_file_suffix() -> str:
-    """Get the test file suffix for JavaScript.
-
-    Returns:
-        The Jest test file suffix.
-    """
-    return ".test.js"

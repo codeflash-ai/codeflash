@@ -6,7 +6,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,6 +43,7 @@ def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: 
         stdout: The stdout from the test subprocess containing timing markers.
         wall_clock_ns: Total wall clock time for the subprocess in nanoseconds.
         test_type: Type of test for logging context (e.g., "behavioral", "performance").
+
     """
     if not stdout or wall_clock_ns <= 0:
         return
@@ -80,6 +80,7 @@ def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> N
     Args:
         project_root: The project root directory.
         language: The programming language (e.g., "javascript", "typescript").
+
     """
     try:
         language_support = get_language_support(language)

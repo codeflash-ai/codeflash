@@ -74,11 +74,56 @@ def _is_esm_project(project_root: Path) -> bool:
     return False
 
 
+def _uses_ts_jest(project_root: Path) -> bool:
+    """Check if the project uses ts-jest for TypeScript transformation.
+
+    ts-jest handles ESM transformation internally, so we don't need the
+    --experimental-vm-modules flag when it's being used. Adding that flag
+    can actually break Jest's module resolution for jest.mock() with relative paths.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if ts-jest is being used, False otherwise.
+
+    """
+    # Check for ts-jest in devDependencies
+    package_json = project_root / "package.json"
+    if package_json.exists():
+        try:
+            with package_json.open("r") as f:
+                pkg = json.load(f)
+                dev_deps = pkg.get("devDependencies", {})
+                deps = pkg.get("dependencies", {})
+                if "ts-jest" in dev_deps or "ts-jest" in deps:
+                    return True
+        except Exception as e:
+            logger.debug(f"Failed to read package.json for ts-jest detection: {e}")
+
+    # Also check for jest.config with ts-jest preset
+    for config_file in ["jest.config.js", "jest.config.cjs", "jest.config.ts", "jest.config.mjs"]:
+        config_path = project_root / config_file
+        if config_path.exists():
+            try:
+                content = config_path.read_text()
+                if "ts-jest" in content:
+                    return True
+            except Exception as e:
+                logger.debug(f"Failed to read {config_file}: {e}")
+
+    return False
+
+
 def _configure_esm_environment(jest_env: dict[str, str], project_root: Path) -> None:
     """Configure environment variables for ES Module support in Jest.
 
     Jest requires --experimental-vm-modules flag for ESM support.
     This is passed via NODE_OPTIONS environment variable.
+
+    IMPORTANT: When ts-jest is being used, we skip adding --experimental-vm-modules
+    because ts-jest handles ESM transformation internally. Adding this flag can
+    break Jest's module resolution for jest.mock() calls with relative paths.
 
     Args:
         jest_env: Environment variables dictionary to modify.
@@ -86,6 +131,12 @@ def _configure_esm_environment(jest_env: dict[str, str], project_root: Path) -> 
 
     """
     if _is_esm_project(project_root):
+        # Skip if ts-jest is being used - it handles ESM internally and
+        # --experimental-vm-modules breaks module resolution for relative mocks
+        if _uses_ts_jest(project_root):
+            logger.debug("Skipping --experimental-vm-modules: ts-jest handles ESM transformation")
+            return
+
         logger.debug("Configuring Jest for ES Module support")
         existing_node_options = jest_env.get("NODE_OPTIONS", "")
         esm_flag = "--experimental-vm-modules"
@@ -115,6 +166,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
         try:
             result = subprocess.run(
                 ["npm", "install", "--save-dev", str(local_package_path)],
+                check=False,
                 cwd=project_root,
                 capture_output=True,
                 text=True,
