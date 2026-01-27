@@ -37,6 +37,11 @@ If you want to optimize a function locally, you can add a `--no-pr` argument as 
 codeflash --file path/to/your/file.py --function function_name --no-pr
 ```
 
+<Note>
+  If you see **"Functions outside module-root"**, make sure the file lives
+  under the `module-root` directory configured in your `pyproject.toml`.
+</Note>
+
 ### Optimizing class methods
 
 To optimize a method `method_name` in a class `ClassName`, you can run the following command:
