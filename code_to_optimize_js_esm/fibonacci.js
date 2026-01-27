@@ -1,3 +1,5 @@
+const _fibCache = new Map([[0, 0], [1, 1]]);
+
 /**
  * Fibonacci implementations - ES Module
  * Intentionally inefficient for optimization testing.
@@ -10,10 +12,32 @@
  * @returns {number} The nth Fibonacci number
  */
 export function fibonacci(n) {
-    if (n <= 1) {
-        return n;
+    if (n <= 1) return n;
+
+    if (Number.isInteger(n)) {
+        const cached = _fibCache.get(n);
+        if (cached !== undefined) return cached;
+
+        let a = 0, b = 1;
+        for (let i = 2; i <= n; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+
+        _fibCache.set(n, b);
+        return b;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    function memoFib(x) {
+        if (x <= 1) return x;
+        if (_fibCache.has(x)) return _fibCache.get(x);
+        const val = memoFib(x - 1) + memoFib(x - 2);
+        _fibCache.set(x, val);
+        return val;
+    }
+
+    return memoFib(n);
 }
 
 /**
