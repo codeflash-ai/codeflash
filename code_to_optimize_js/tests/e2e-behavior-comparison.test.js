@@ -16,9 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
 
-// Import our modules directly for the comparison phase
-const { serialize, deserialize, getSerializerType } = require('../codeflash-serializer');
-const { comparator } = require('../codeflash-comparator');
+// Import our modules from npm package
+const { serialize, deserialize, getSerializerType, comparator } = require('codeflash');
 
 // Test output directory
 const TEST_OUTPUT_DIR = '/tmp/codeflash_e2e_test';

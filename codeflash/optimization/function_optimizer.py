@@ -594,7 +594,7 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
-        # Note: JavaScript/TypeScript runtime is provided by @codeflash/jest-runtime npm package
+        # Note: JavaScript/TypeScript runtime is provided by codeflash npm package
         # which is installed automatically by test_runner.py._ensure_runtime_files()
         # No manual file copying is needed here.
 
@@ -700,7 +700,9 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if self.is_numerical_code:  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
+            if (
+                self.is_numerical_code and not self.args.no_jit_opts
+            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
                 jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
                     code_context.read_writable_code.markdown, self.function_trace_id
                 )
@@ -729,7 +731,7 @@ class FunctionOptimizer:
                 read_writable_code=code_context.read_writable_code,
                 read_only_context_code=code_context.read_only_context_code,
                 run_experiment=should_run_experiment,
-                is_numerical_code=self.is_numerical_code,
+                is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             )
 
             concurrent.futures.wait([future_tests, future_optimizations])
@@ -1251,7 +1253,7 @@ class FunctionOptimizer:
             )
             if self.experiment_id
             else None,
-            is_numerical_code=self.is_numerical_code,
+            is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
             language=self.function_to_optimize.language,
         )
 

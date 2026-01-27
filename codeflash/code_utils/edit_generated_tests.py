@@ -334,7 +334,7 @@ def normalize_codeflash_imports(source: str) -> str:
         import codeflash from './codeflash-jest-helper'
 
     With npm package imports:
-        const codeflash = require('@codeflash/jest-runtime')
+        const codeflash = require('codeflash')
 
     Args:
         source: JavaScript/TypeScript source code.
@@ -345,12 +345,12 @@ def normalize_codeflash_imports(source: str) -> str:
     """
     # Replace CommonJS require
     source = _CODEFLASH_REQUIRE_PATTERN.sub(
-        r"\1 \2 = require('@codeflash/jest-runtime')",
+        r"\1 \2 = require('codeflash')",
         source,
     )
     # Replace ES module import
     source = _CODEFLASH_IMPORT_PATTERN.sub(
-        r"import \1 from '@codeflash/jest-runtime'",
+        r"import \1 from 'codeflash'",
         source,
     )
     return source

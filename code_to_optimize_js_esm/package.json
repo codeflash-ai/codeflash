@@ -8,8 +8,18 @@
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
   },
   "devDependencies": {
-    "@codeflash/jest-runtime": "file:../packages/jest-runtime",
+    "@eslint/js": "^9.39.2",
+    "codeflash": "file:../packages/codeflash",
     "jest": "^29.7.0",
+    "globals": "^17.1.0",
+    "eslint": "^9.39.2",
     "jest-junit": "^16.0.0"
+  },
+  "codeflash": {
+    "moduleRoot": ".",
+    "formatterCmds": [
+      "npx eslint --fix $file"
+    ],
+    "language": "javascript"
   }
 }

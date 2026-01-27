@@ -84,6 +84,9 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
     )
+    parser.add_argument(
+        "--no-jit-opts", action="store_true", help="Do not generate JIT-compiled optimizations for numerical code."
+    )
     parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
@@ -203,7 +206,21 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
-    assert args.tests_root is not None, "--tests-root must be specified"
+
+    # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
+    # Default to module_root if not specified
+    is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+    if args.tests_root is None:
+        if is_js_ts_project:
+            # Try common JS test directories, or default to module_root
+            for test_dir in ["test", "tests", "__tests__"]:
+                if Path(test_dir).is_dir():
+                    args.tests_root = test_dir
+                    break
+            if args.tests_root is None:
+                args.tests_root = args.module_root
+        else:
+            raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"

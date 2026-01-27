@@ -18,6 +18,12 @@ reprlib_repr = reprlib.Repr()
 reprlib_repr.maxstring = 1500
 test_diff_repr = reprlib_repr.repr
 
+def safe_repr(obj: object) -> str:
+    """Safely get repr of an object, handling Mock objects with corrupted state."""
+    try:
+        return repr(obj)
+    except (AttributeError, TypeError, RecursionError) as e:
+        return f"<repr failed: {type(e).__name__}: {e}>"
 
 def compare_test_results(
     original_results: TestResults,
@@ -102,8 +108,8 @@ def compare_test_results(
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.RETURN_VALUE,
-                    original_value=test_diff_repr(repr(original_test_result.return_value)),
-                    candidate_value=test_diff_repr(repr(cdd_test_result.return_value)),
+                    original_value=test_diff_repr(safe_repr(original_test_result.return_value)),
+                    candidate_value=test_diff_repr(safe_repr(cdd_test_result.return_value)),
                     test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
                     candidate_pytest_error=cdd_pytest_error,
                     original_pass=original_test_result.did_pass,

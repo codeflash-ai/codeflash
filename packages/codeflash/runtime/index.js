@@ -1,7 +1,7 @@
 /**
- * @codeflash/jest-runtime
+ * codeflash
  *
- * Codeflash Jest runtime helpers for test instrumentation and behavior verification.
+ * Codeflash CLI runtime helpers for test instrumentation and behavior verification.
  *
  * Main exports:
  * - capture: Capture function return values for behavior verification
@@ -10,25 +10,25 @@
  * - comparator: Deep equality comparison
  *
  * Usage (CommonJS):
- *   const { capture, capturePerf } = require('@codeflash/jest-runtime');
+ *   const { capture, capturePerf } = require('codeflash');
  *
  * Usage (ES Modules):
- *   import { capture, capturePerf } from '@codeflash/jest-runtime';
+ *   import { capture, capturePerf } from 'codeflash';
  */
 
 'use strict';
 
 // Main capture functions (instrumentation)
-const capture = require('./src/capture');
+const capture = require('./capture');
 
 // Serialization utilities
-const serializer = require('./src/serializer');
+const serializer = require('./serializer');
 
 // Comparison utilities
-const comparator = require('./src/comparator');
+const comparator = require('./comparator');
 
 // Result comparison (used by CLI)
-const compareResults = require('./src/compare-results');
+const compareResults = require('./compare-results');
 
 // Re-export all public APIs
 module.exports = {

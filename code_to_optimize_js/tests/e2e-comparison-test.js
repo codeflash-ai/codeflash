@@ -11,9 +11,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Import our modules
-const { serialize } = require('../codeflash-serializer');
-const { readTestResults, compareResults } = require('../codeflash-compare-results');
+// Import our modules from npm package
+const { serialize, readTestResults, compareResults } = require('codeflash');
 
 // Try to load better-sqlite3
 let Database;
