@@ -28,30 +28,23 @@
 
 const fs = require('fs');
 const path = require('path');
+const Database = require('better-sqlite3');
 
 // Load the codeflash serializer for robust value serialization
 const serializer = require('./serializer');
 
 // Try to load better-sqlite3, fall back to JSON if not available
-let Database;
 let useSqlite = false;
-try {
-    Database = require('better-sqlite3');
-    useSqlite = true;
-} catch (e) {
-    // better-sqlite3 not available, will use JSON fallback
-    console.warn('[codeflash] better-sqlite3 not found, using JSON fallback');
-}
 
 // Configuration from environment
-const OUTPUT_FILE = process.env.CODEFLASH_OUTPUT_FILE || '/tmp/codeflash_results.sqlite';
-const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX || '1', 10);
-const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION || '0';
-const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE || '';
+const OUTPUT_FILE = process.env.CODEFLASH_OUTPUT_FILE;
+const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX , 10);
+const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION;
+const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE;
 
 // Random seed for reproducible test runs
 // Both original and optimized runs use the same seed to get identical "random" values
-const RANDOM_SEED = parseInt(process.env.CODEFLASH_RANDOM_SEED || '0', 10);
+const RANDOM_SEED = parseInt(process.env.CODEFLASH_RANDOM_SEED, 10);
 
 /**
  * Seeded random number generator using mulberry32 algorithm.
