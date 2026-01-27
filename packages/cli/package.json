@@ -1,11 +1,14 @@
 {
-  "name": "@codeflash/cli",
+  "name": "codeflash",
   "version": "0.1.0",
-  "description": "Codeflash CLI - AI-powered code optimization for JavaScript and TypeScript",
+  "description": "Codeflash - AI-powered code optimization for JavaScript and TypeScript",
   "main": "runtime/index.js",
   "bin": {
     "codeflash": "./bin/codeflash.js",
     "codeflash-setup": "./bin/codeflash-setup.js"
+  },
+  "publishConfig": {
+  "access": "public"
   },
   "exports": {
     ".": {

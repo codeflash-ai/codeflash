@@ -3,7 +3,7 @@
 /**
  * Codeflash CLI Postinstall Script
  *
- * This script runs after `npm install @codeflash/cli` and:
+ * This script runs after `npm install codeflash` and:
  * 1. Checks if uv (Python package manager) is installed
  * 2. If not, installs uv automatically
  * 3. Uses uv to install the Python codeflash CLI

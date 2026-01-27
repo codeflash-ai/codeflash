@@ -1,4 +1,4 @@
-# @codeflash/cli
+# codeflash
 
 AI-powered code optimization for JavaScript and TypeScript.
 
@@ -7,11 +7,11 @@ Codeflash automatically optimizes your code for better performance while maintai
 ## Installation
 
 ```bash
-npm install -D @codeflash/cli
+npm install -D codeflash
 # or
-yarn add -D @codeflash/cli
+yarn add -D codeflash
 # or
-pnpm add -D @codeflash/cli
+pnpm add -D codeflash
 ```
 
 The installation automatically sets up:

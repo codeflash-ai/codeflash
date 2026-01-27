@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Import our modules from npm package
-const { serialize, readTestResults, compareResults } = require('@codeflash/cli');
+const { serialize, readTestResults, compareResults } = require('codeflash');
 
 // Try to load better-sqlite3
 let Database;

@@ -990,7 +990,7 @@ class JavaScriptSupport:
         return get_all_runtime_files()
 
     def ensure_runtime_environment(self, project_root: Path) -> bool:
-        """Ensure @codeflash/cli npm package is installed.
+        """Ensure codeflash npm package is installed.
 
         Attempts to install the npm package for test instrumentation.
         Falls back to copying files if npm install fails.
@@ -1007,9 +1007,9 @@ class JavaScriptSupport:
         from codeflash.cli_cmds.console import logger
 
         # Check if package is already installed
-        node_modules_pkg = project_root / "node_modules" / "@codeflash" / "cli"
+        node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
-            logger.debug("@codeflash/cli already installed")
+            logger.debug("codeflash already installed")
             return True
 
         # Try to install from local package first (for development)
@@ -1024,14 +1024,14 @@ class JavaScriptSupport:
                     timeout=120,
                 )
                 if result.returncode == 0:
-                    logger.debug("Installed @codeflash/cli from local package")
+                    logger.debug("Installed codeflash from local package")
                     return True
                 logger.warning(f"Failed to install local package: {result.stderr}")
             except Exception as e:
                 logger.warning(f"Error installing local package: {e}")
 
         # Could try npm registry here in the future:
-        # subprocess.run(["npm", "install", "--save-dev", "@codeflash/cli"], ...)
+        # subprocess.run(["npm", "install", "--save-dev", "codeflash"], ...)
 
         return False
 

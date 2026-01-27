@@ -16,7 +16,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 // Import our modules from npm package
-const { serialize, deserialize, getSerializerType, comparator } = require('@codeflash/cli');
+const { serialize, deserialize, getSerializerType, comparator } = require('codeflash');
 
 // Test configuration
 const TEST_DIR = '/tmp/codeflash_integration_test';

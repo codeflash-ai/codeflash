@@ -1,5 +1,5 @@
 /**
- * @codeflash/cli
+ * codeflash
  *
  * Codeflash CLI runtime helpers for test instrumentation and behavior verification.
  *
@@ -10,10 +10,10 @@
  * - comparator: Deep equality comparison
  *
  * Usage (CommonJS):
- *   const { capture, capturePerf } = require('@codeflash/cli');
+ *   const { capture, capturePerf } = require('codeflash');
  *
  * Usage (ES Modules):
- *   import { capture, capturePerf } from '@codeflash/cli';
+ *   import { capture, capturePerf } from 'codeflash';
  */
 
 'use strict';

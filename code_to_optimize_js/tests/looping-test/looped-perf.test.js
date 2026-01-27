@@ -7,7 +7,7 @@
  */
 
 // Load the codeflash helper from npm package
-const codeflash = require('@codeflash/cli');
+const codeflash = require('codeflash');
 
 // Simple function to test
 function fibonacci(n) {

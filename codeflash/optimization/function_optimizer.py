@@ -594,7 +594,7 @@ class FunctionOptimizer:
             for test_index in range(n_tests)
         ]
 
-        # Note: JavaScript/TypeScript runtime is provided by @codeflash/cli npm package
+        # Note: JavaScript/TypeScript runtime is provided by codeflash npm package
         # which is installed automatically by test_runner.py._ensure_runtime_files()
         # No manual file copying is needed here.
 
