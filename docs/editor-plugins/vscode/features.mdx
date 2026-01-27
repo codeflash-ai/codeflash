@@ -65,20 +65,11 @@ The **Optimization** tab is your main interface for selecting code to optimize. 
 
 ![Optimization tab with file and function selectors](../../images/optimization-tab.png)
 
-At the top of the Optimization tab, you'll find two dropdown selectors:
+At the top of the Optimization tab, you'll find:
 
-1. **FILE** — Select a Python file from your workspace
-
-   - Click the dropdown to browse and select a Python file
-   - The placeholder shows "Select a Python file" until you make a selection
-
-2. **FUNCTION/METHOD** — Select a specific function to optimize
-
-   - This dropdown is disabled until you select a file first
-   - Once a file is selected, it populates with all optimizable functions (qualified names)
-   - Functions are displayed with their fully qualified names (e.g., `MyClass.my_method` or `module.function_name`)
-
-3. **Optimize Button** — Click the **Optimize** button (with lightning bolt icon) to queue the selected function for optimization
+1. **FILE** — pick a Python file from your workspace.
+2. **FUNCTION/METHOD** — pick a specific function or method in that file.
+3. **Optimize** — click the lightning button to queue that function for optimization.
 
 <Info>
   **Qualified Names** — Functions are displayed with their fully qualified
@@ -123,93 +114,16 @@ When you first open the Optimization tab, you'll see a "Ready to Optimize" secti
 
 ---
 
-## Tasks Tab
+## Tasks Tab and reviewing optimizations
 
-The **Tasks** tab shows your optimization queue and completed optimizations. Switch to this tab to:
+The **Tasks** tab shows your optimization queue and completed optimizations. You can:
 
-- View all queued optimizations
-- Track progress of running optimizations
-- Review completed optimizations
+- See which functions are queued or running
+- Inspect completed optimizations, including speedup and quality
+- Open the related PR (when the optimization was created via PR)
 
-### Empty State
-
-When you haven't started any optimizations yet, the Tasks tab shows:
-
-- A rocket icon
-- "No optimizations yet" message
-- Instructions: "Add functions to the queue by clicking the small optimize button above a function"
-
-### Completed Optimizations
-
-Once optimizations complete, you'll see a list showing:
-
-![Completed optimizations list in Tasks tab](../../images/optimized-function-tab-tasks.png)
-- **Function Name** — The name of the optimized function
-- **Status Badge** — Shows completion status with speedup information:
-  - "Completed (Xx Faster)" — Displays the performance improvement
-  - Example: "Completed (2.5x Faster)" or "Completed (Speedup: 338.66x Faster)"
-- **Optimization Quality** — Some optimizations show quality ratings (e.g., "Optimization Quality: High")
-- **Actions:**
-  - **View Optimization** button — Opens the diff view to see changes and apply them
-  - **View PR** button — Opens the associated pull request (if optimization was created via PR)
-
-<Info>
-  The Tasks tab shows a badge count (e.g., "Tasks 19") indicating how many
-  optimization tasks you have in total.
-</Info>
-
----
-
-## Optimization Workflow
-
-Once you've selected functions to optimize (via any method above), here's what happens:
-
-<Steps>
-  <Step title="Queue Optimization">
-    Selected functions are added to the optimization queue. You can see them in
-    the Tasks tab.
-  </Step>
-  <Step title="Track Progress">
-    Watch the Tasks tab for real-time updates: - Generating optimization
-    candidates - Running tests to verify correctness - Benchmarking performance
-  </Step>
-  <Step title="Review Results">
-    When complete, you'll see the optimization in the Tasks tab with: - Speedup
-    information (e.g., "2.5x Faster") - Optimization quality rating - **View
-    Optimization** button to see the diff
-  </Step>
-  <Step title="Apply Changes">
-    Click **View Optimization** to see the full diff, then **Accept** to apply
-    the optimization, or **Reject** to dismiss it.
-  </Step>
-</Steps>
-
----
-
-## Reviewing Optimizations
-
-After an optimization completes, you can review it in the Tasks tab or via inline comments.
-
-![Detailed optimization explanation view](../../images/optimization-details-explaination.png)
-
-### In the Tasks Tab
-
-Click **View Optimization** on any completed optimization to see:
-
-- Side-by-side comparison of original vs. optimized code
-- Performance improvement percentage (speedup)
-- Runtime comparison (original vs. optimized)
-- Optimization quality rating
-- Detailed explanation of what changed and why
-- **Apply Optimization** button to accept the changes
-
-### Inline Comments
-
-The extension also shows inline comments on the optimized function in your editor with options to:
-
-- **View Patch** — See the full diff of changes
-- **Accept** — Apply the optimization to your code
-- **Reject** — Dismiss the suggestion without changes
+Click **View Optimization** on any completed item to see the diff and explanation, then apply or reject the changes.  
+You will also see inline comments on optimized functions in the editor with actions to **View Patch**, **Accept**, or **Reject**.
 
 ---
 
