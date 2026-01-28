@@ -10,10 +10,20 @@
  * @returns {number} The nth Fibonacci number
  */
 export function fibonacci(n) {
-    if (n <= 1) {
-        return n;
+    const cache = new Map();
+    function fib(k) {
+        if (k <= 1) {
+            return k;
+        }
+        const cached = cache.get(k);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const result = fib(k - 1) + fib(k - 2);
+        cache.set(k, result);
+        return result;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    return fib(n);
 }
 
 /**
