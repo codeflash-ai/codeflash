@@ -12,7 +12,31 @@ export function fibonacci(n: number): number {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Fast iterative path for integer n (preserves original results)
+    if (Number.isInteger(n)) {
+        let a = 0;
+        let b = 1;
+        for (let i = 2; i <= n; i++) {
+            const c = a + b;
+            a = b;
+            b = c;
+        }
+        return b;
+    }
+
+    // For non-integer n, preserve original recursion semantics but memoize to avoid exponential blowup
+    const cache = new Map<number, number>();
+    const compute = (x: number): number => {
+        if (x <= 1) return x;
+        const cached = cache.get(x);
+        if (cached !== undefined) return cached;
+        const result = compute(x - 1) + compute(x - 2);
+        cache.set(x, result);
+        return result;
+    };
+
+    return compute(n);
 }
 
 /**
