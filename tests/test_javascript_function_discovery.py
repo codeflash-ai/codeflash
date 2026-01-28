@@ -337,7 +337,6 @@ function capitalize(str) {
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
             project_root_path=str(tmp_path),
-            test_framework="jest",
             tests_project_rootdir=tmp_path / "tests",
         )
 
@@ -372,7 +371,6 @@ function subtract(a, b) {
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
             project_root_path=str(tmp_path),
-            test_framework="jest",
             tests_project_rootdir=tmp_path / "tests",
         )
 
@@ -411,7 +409,6 @@ function standaloneFunc() {
         test_config = TestConfig(
             tests_root=str(tmp_path / "tests"),
             project_root_path=str(tmp_path),
-            test_framework="jest",
             tests_project_rootdir=tmp_path / "tests",
         )
 
@@ -451,7 +448,7 @@ function reverse(str) {
         # Create a non-JS file that should be ignored
         (tmp_path / "readme.txt").write_text("This is not code")
 
-        functions = get_all_files_and_functions(tmp_path, language=Language.JAVASCRIPT)
+        functions = get_all_files_and_functions(tmp_path, ignore_paths=[], language=Language.JAVASCRIPT)
 
         assert len(functions) == 2
         all_names = set()
@@ -473,7 +470,7 @@ function jsFunc() {
 }
 """)
 
-        functions = get_all_files_and_functions(tmp_path, language=None)
+        functions = get_all_files_and_functions(tmp_path, ignore_paths=[], language=None)
 
         assert len(functions) == 2
 

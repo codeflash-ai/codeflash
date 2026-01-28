@@ -1,10 +1,6 @@
-"""Tests for JavaScript/TypeScript code extractor with multi-file dependencies.
+"""Tests for JavaScript/TypeScript code extractor.
 
-These tests verify that code context extraction correctly handles:
-- Class method optimization with helper dependencies
-- Multi-file import resolution (CJS and ESM)
-- Recursive helper function discovery
-- TypeScript-specific type handling
+Uses strict string equality to verify extraction results.
 """
 
 import shutil
@@ -20,6 +16,122 @@ from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+# =============================================================================
+# EXPECTED CODE STRINGS - Define exact expected outputs for strict comparison
+# =============================================================================
+
+# Expected code for the permutation method (with JSDoc)
+EXPECTED_PERMUTATION_CODE = """\
+    /**
+     * Calculate permutation using factorial helper.
+     * @param n - Total items
+     * @param r - Items to choose
+     * @returns Permutation result
+     */
+    permutation(n, r) {
+        if (n < r) return 0;
+        // Inefficient: calculates factorial(n) fully even when not needed
+        return factorial(n) / factorial(n - r);
+    }"""
+
+# Expected code for the calculateCompoundInterest method (with JSDoc)
+EXPECTED_COMPOUND_INTEREST_CODE = """\
+    /**
+     * Calculate compound interest with multiple helper dependencies.
+     * @param principal - Initial amount
+     * @param rate - Interest rate (as decimal)
+     * @param time - Time in years
+     * @param n - Compounding frequency per year
+     * @returns Compound interest result
+     */
+    calculateCompoundInterest(principal, rate, time, n) {
+        validateInput(principal, 'principal');
+        validateInput(rate, 'rate');
+
+        // Inefficient: recalculates power multiple times
+        let result = principal;
+        for (let i = 0; i < n * time; i++) {
+            result = multiply(result, add(1, rate / n));
+        }
+
+        const interest = result - principal;
+        this.history.push({ type: 'compound', result: interest });
+        return formatNumber(interest, this.precision);
+    }"""
+
+# Expected code for the factorial helper function
+EXPECTED_FACTORIAL_CODE = """\
+/**
+ * Calculate factorial recursively.
+ * @param n - Non-negative integer
+ * @returns Factorial of n
+ */
+function factorial(n) {
+    // Intentionally inefficient recursive implementation
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}"""
+
+# Expected code for the add helper function
+EXPECTED_ADD_CODE = """\
+/**
+ * Add two numbers.
+ * @param a - First number
+ * @param b - Second number
+ * @returns Sum of a and b
+ */
+function add(a, b) {
+    return a + b;
+}"""
+
+# Expected code for the multiply helper function
+EXPECTED_MULTIPLY_CODE = """\
+/**
+ * Multiply two numbers.
+ * @param a - First number
+ * @param b - Second number
+ * @returns Product of a and b
+ */
+function multiply(a, b) {
+    return a * b;
+}"""
+
+# Expected code for the formatNumber helper function
+EXPECTED_FORMAT_NUMBER_CODE = """\
+/**
+ * Format a number to specified decimal places.
+ * @param num - Number to format
+ * @param decimals - Number of decimal places
+ * @returns Formatted number
+ */
+function formatNumber(num, decimals) {
+    return Number(num.toFixed(decimals));
+}"""
+
+# Expected code for the validateInput helper function
+EXPECTED_VALIDATE_INPUT_CODE = """\
+/**
+ * Validate that input is a valid number.
+ * @param value - Value to validate
+ * @param name - Parameter name for error message
+ * @throws Error if value is not a valid number
+ */
+function validateInput(value, name) {
+    if (typeof value !== 'number' || isNaN(value)) {
+        throw new Error(`Invalid ${name}: must be a number`);
+    }
+}"""
+
+# Expected code for quickAdd static method
+EXPECTED_QUICK_ADD_CODE = """\
+    /**
+     * Static method for quick calculations.
+     */
+    static quickAdd(a, b) {
+        return add(a, b);
+    }"""
 
 
 class TestCodeExtractorCJS:
@@ -38,67 +150,129 @@ class TestCodeExtractorCJS:
         return JavaScriptSupport()
 
     def test_discover_class_methods(self, js_support, cjs_project):
-        """Test discovering class methods in CJS module."""
+        """Test that class methods are discovered correctly."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        # Should find class methods
         method_names = {f.name for f in functions}
-        assert "calculateCompoundInterest" in method_names
-        assert "permutation" in method_names
-        assert "quickAdd" in method_names
+
+        expected_methods = {"calculateCompoundInterest", "permutation", "quickAdd"}
+        assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
 
     def test_class_method_has_correct_parent(self, js_support, cjs_project):
-        """Test that class methods have correct parent class info."""
+        """Test parent class information for methods."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        compound_interest = next(f for f in functions if f.name == "calculateCompoundInterest")
-        assert compound_interest.is_method is True
-        assert compound_interest.class_name == "Calculator"
+        for func in functions:
+            # All methods should belong to Calculator class
+            assert func.is_method is True, f"{func.name} should be a method"
+            assert func.class_name == "Calculator", f"{func.name} should belong to Calculator, got {func.class_name}"
+
+    def test_extract_permutation_code(self, js_support, cjs_project):
+        """Test permutation method code extraction."""
+        calculator_file = cjs_project / "calculator.js"
+        functions = js_support.discover_functions(calculator_file)
+
+        permutation_func = next(f for f in functions if f.name == "permutation")
+
+        context = js_support.extract_code_context(
+            function=permutation_func, project_root=cjs_project, module_root=cjs_project
+        )
+
+        assert context.target_code is not None, "target_code should not be None"
+        assert context.target_code.strip() == EXPECTED_PERMUTATION_CODE.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{EXPECTED_PERMUTATION_CODE}\n\n"
+            f"Got:\n{context.target_code}"
+        )
 
     def test_extract_context_includes_direct_helpers(self, js_support, cjs_project):
         """Test that direct helper functions are included in context."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        # Find the permutation method
         permutation_func = next(f for f in functions if f.name == "permutation")
 
-        # Extract code context
         context = js_support.extract_code_context(
             function=permutation_func, project_root=cjs_project, module_root=cjs_project
         )
-        breakpoint()
-        # Should include the factorial helper from math_utils.js
-        helper_names = {h.name for h in context.helper_functions}
-        assert "factorial" in helper_names
 
-    def test_extract_context_includes_nested_helpers(self, js_support, cjs_project):
-        """Test that nested helper dependencies are included."""
+        # Find factorial helper
+        helper_dict = {h.name: h for h in context.helper_functions}
+
+        assert "factorial" in helper_dict, f"factorial helper not found. Found helpers: {list(helper_dict.keys())}"
+
+        factorial_helper = helper_dict["factorial"]
+
+        assert factorial_helper.source_code.strip() == EXPECTED_FACTORIAL_CODE.strip(), (
+            f"Factorial helper code does not match expected.\n"
+            f"Expected:\n{EXPECTED_FACTORIAL_CODE}\n\n"
+            f"Got:\n{factorial_helper.source_code}"
+        )
+
+        # STRICT: Verify file path ends with expected filename
+        assert str(factorial_helper.file_path).endswith("math_utils.js"), (
+            f"Expected factorial to be from math_utils.js, got {factorial_helper.file_path}"
+        )
+
+    def test_extract_compound_interest_code(self, js_support, cjs_project):
+        """Test calculateCompoundInterest code extraction."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        # Find calculateCompoundInterest which uses add, multiply from math_utils
-        # and formatNumber, validateInput from helpers/format
         compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
 
         context = js_support.extract_code_context(
             function=compound_func, project_root=cjs_project, module_root=cjs_project
         )
 
-        helper_names = {h.name for h in context.helper_functions}
+        assert context.target_code.strip() == EXPECTED_COMPOUND_INTEREST_CODE.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{EXPECTED_COMPOUND_INTEREST_CODE}\n\n"
+            f"Got:\n{context.target_code}"
+        )
 
-        # Direct helpers from math_utils
-        assert "add" in helper_names
-        assert "multiply" in helper_names
+    def test_extract_compound_interest_helpers(self, js_support, cjs_project):
+        """Test helper extraction for calculateCompoundInterest."""
+        calculator_file = cjs_project / "calculator.js"
+        functions = js_support.discover_functions(calculator_file)
 
-        # Direct helpers from helpers/format
-        assert "formatNumber" in helper_names
-        assert "validateInput" in helper_names
+        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+
+        context = js_support.extract_code_context(
+            function=compound_func, project_root=cjs_project, module_root=cjs_project
+        )
+
+        helper_dict = {h.name: h for h in context.helper_functions}
+
+        expected_helpers = {"add", "multiply", "formatNumber", "validateInput"}
+        actual_helpers = set(helper_dict.keys())
+        assert actual_helpers == expected_helpers, f"Expected helpers {expected_helpers}, got {actual_helpers}"
+
+        # STRICT: Verify each helper's code exactly
+        helper_expectations = {
+            "add": (EXPECTED_ADD_CODE, "math_utils.js"),
+            "multiply": (EXPECTED_MULTIPLY_CODE, "math_utils.js"),
+            "formatNumber": (EXPECTED_FORMAT_NUMBER_CODE, "format.js"),
+            "validateInput": (EXPECTED_VALIDATE_INPUT_CODE, "format.js"),
+        }
+
+        for helper_name, (expected_code, expected_file) in helper_expectations.items():
+            helper = helper_dict[helper_name]
+
+            assert helper.source_code.strip() == expected_code.strip(), (
+                f"{helper_name} helper code does not match expected.\n"
+                f"Expected:\n{expected_code}\n\n"
+                f"Got:\n{helper.source_code}"
+            )
+
+            assert str(helper.file_path).endswith(expected_file), (
+                f"Expected {helper_name} to be from {expected_file}, got {helper.file_path}"
+            )
 
     def test_extract_context_includes_imports(self, js_support, cjs_project):
-        """Test that import statements are included in context."""
+        """Test import statement extraction."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
@@ -108,36 +282,36 @@ class TestCodeExtractorCJS:
             function=compound_func, project_root=cjs_project, module_root=cjs_project
         )
 
-        # Imports should be captured as strings
         imports_str = "\n".join(context.imports)
-        assert "require('./math_utils')" in imports_str or "math_utils" in imports_str
 
-    def test_helper_functions_have_correct_file_paths(self, js_support, cjs_project):
-        """Test that helper functions have correct source file paths."""
-        calculator_file = cjs_project / "calculator.js"
-        functions = js_support.discover_functions(calculator_file)
-
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
-
-        context = js_support.extract_code_context(
-            function=compound_func, project_root=cjs_project, module_root=cjs_project
+        # Should contain both require statements
+        assert "require('./math_utils')" in imports_str or "math_utils" in imports_str, (
+            f"math_utils import not found in imports:\n{imports_str}"
+        )
+        assert "require('./helpers/format')" in imports_str or "format" in imports_str, (
+            f"helpers/format import not found in imports:\n{imports_str}"
         )
 
-        # Find the factorial helper and check its file path
-        for helper in context.helper_functions:
-            if helper.name == "add":
-                assert "math_utils.js" in str(helper.file_path)
-            elif helper.name == "formatNumber":
-                assert "format.js" in str(helper.file_path)
-
-    def test_static_method_discovery(self, js_support, cjs_project):
-        """Test that static methods are discovered correctly."""
+    def test_extract_static_method(self, js_support, cjs_project):
+        """Test static method extraction (quickAdd)."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        quick_add = next((f for f in functions if f.name == "quickAdd"), None)
-        assert quick_add is not None
-        assert quick_add.is_method is True
+        quick_add_func = next(f for f in functions if f.name == "quickAdd")
+
+        context = js_support.extract_code_context(
+            function=quick_add_func, project_root=cjs_project, module_root=cjs_project
+        )
+
+        assert context.target_code.strip() == EXPECTED_QUICK_ADD_CODE.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{EXPECTED_QUICK_ADD_CODE}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+        # quickAdd uses add helper
+        helper_names = {h.name for h in context.helper_functions}
+        assert "add" in helper_names, f"add helper not found. Found: {helper_names}"
 
 
 class TestCodeExtractorESM:
@@ -155,17 +329,19 @@ class TestCodeExtractorESM:
         """Create JavaScriptSupport instance."""
         return JavaScriptSupport()
 
-    def test_discover_class_methods_esm(self, js_support, esm_project):
-        """Test discovering class methods in ESM module."""
+    def test_discover_esm_methods(self, js_support, esm_project):
+        """Test method discovery in ESM project."""
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
         method_names = {f.name for f in functions}
-        assert "calculateCompoundInterest" in method_names
-        assert "permutation" in method_names
 
-    def test_extract_context_with_esm_imports(self, js_support, esm_project):
-        """Test context extraction with ES Module imports."""
+        # Should find same methods as CJS version
+        expected_methods = {"calculateCompoundInterest", "permutation", "quickAdd"}
+        assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
+
+    def test_esm_factorial_helper(self, js_support, esm_project):
+        """Test factorial helper extraction in ESM."""
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
@@ -175,12 +351,13 @@ class TestCodeExtractorESM:
             function=permutation_func, project_root=esm_project, module_root=esm_project
         )
 
-        # Should include helpers from ESM imports
         helper_names = {h.name for h in context.helper_functions}
-        assert "factorial" in helper_names
 
-    def test_esm_imports_captured_in_context(self, js_support, esm_project):
-        """Test that ESM import statements are captured."""
+        # STRICT: factorial must be present
+        assert "factorial" in helper_names, f"factorial helper not found. Found helpers: {helper_names}"
+
+    def test_esm_import_syntax(self, js_support, esm_project):
+        """Test ESM uses import syntax, not require."""
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
@@ -191,8 +368,13 @@ class TestCodeExtractorESM:
         )
 
         imports_str = "\n".join(context.imports)
-        # ESM uses import syntax
-        assert "import" in imports_str or len(context.imports) > 0
+
+        # ESM should use import syntax
+        if context.imports:
+            # If imports are captured, they should be ESM style
+            assert "import" in imports_str or len(context.imports) > 0, (
+                f"ESM imports should use import syntax. Got:\n{imports_str}"
+            )
 
 
 class TestCodeExtractorTypeScript:
@@ -211,23 +393,29 @@ class TestCodeExtractorTypeScript:
         return TypeScriptSupport()
 
     def test_typescript_support_properties(self, ts_support):
-        """Test TypeScriptSupport has correct properties."""
+        """Test TypeScriptSupport properties."""
         assert ts_support.language == Language.TYPESCRIPT
-        assert ".ts" in ts_support.file_extensions
-        assert ".tsx" in ts_support.file_extensions
 
-    def test_discover_typed_class_methods(self, ts_support, ts_project):
-        """Test discovering class methods in TypeScript file."""
+        # STRICT: Verify exact file extensions
+        expected_extensions = {".ts", ".tsx"}
+        actual_extensions = set(ts_support.file_extensions)
+        assert expected_extensions.issubset(actual_extensions), (
+            f"Expected extensions {expected_extensions} to be subset of {actual_extensions}"
+        )
+
+    def test_discover_ts_methods(self, ts_support, ts_project):
+        """Test method discovery in TypeScript."""
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
         method_names = {f.name for f in functions}
-        assert "calculateCompoundInterest" in method_names
-        assert "permutation" in method_names
-        assert "getHistory" in method_names
 
-    def test_extract_context_typescript(self, ts_support, ts_project):
-        """Test context extraction for TypeScript methods."""
+        # TypeScript has additional getHistory method
+        expected_methods = {"calculateCompoundInterest", "permutation", "getHistory", "quickAdd"}
+        assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
+
+    def test_ts_factorial_helper(self, ts_support, ts_project):
+        """Test factorial helper extraction in TypeScript."""
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
@@ -237,12 +425,13 @@ class TestCodeExtractorTypeScript:
             function=permutation_func, project_root=ts_project, module_root=ts_project
         )
 
-        # Should include typed helper functions
         helper_names = {h.name for h in context.helper_functions}
-        assert "factorial" in helper_names
 
-    def test_typescript_imports_resolved(self, ts_support, ts_project):
-        """Test that TypeScript imports without extensions are resolved."""
+        # STRICT: factorial must be present
+        assert "factorial" in helper_names, f"factorial helper not found. Found helpers: {helper_names}"
+
+    def test_ts_compound_interest_helpers(self, ts_support, ts_project):
+        """Test helper extraction in TypeScript."""
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
@@ -252,23 +441,24 @@ class TestCodeExtractorTypeScript:
             function=compound_func, project_root=ts_project, module_root=ts_project
         )
 
-        # Helpers should be resolved even with extension-less imports
         helper_names = {h.name for h in context.helper_functions}
-        assert "add" in helper_names
-        assert "multiply" in helper_names
+
+        # STRICT: Verify exact set of helpers
+        expected_helpers = {"add", "multiply", "formatNumber", "validateInput"}
+        assert helper_names == expected_helpers, f"Expected helpers {expected_helpers}, got {helper_names}"
 
 
 class TestCodeExtractorEdgeCases:
-    """Tests for edge cases in code extraction."""
+    """Tests for edge cases."""
 
     @pytest.fixture
     def js_support(self):
         """Create JavaScriptSupport instance."""
         return JavaScriptSupport()
 
-    def test_function_without_helpers(self, js_support, tmp_path):
-        """Test extracting context for function with no helper calls."""
-        source = """
+    def test_standalone_function(self, js_support, tmp_path):
+        """Test standalone function with no helpers."""
+        source = """\
 function standalone(x) {
     return x * 2;
 }
@@ -283,12 +473,23 @@ module.exports = { standalone };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
-        assert context.target_code is not None
-        assert len(context.helper_functions) == 0
+        # STRICT: Exact code comparison
+        expected_code = """\
+function standalone(x) {
+    return x * 2;
+}"""
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
+        )
 
-    def test_function_with_external_package_imports(self, js_support, tmp_path):
-        """Test that external package imports are not resolved as helpers."""
-        source = """
+        # STRICT: Exactly zero helpers
+        assert len(context.helper_functions) == 0, (
+            f"Expected 0 helpers, got {len(context.helper_functions)}: {[h.name for h in context.helper_functions]}"
+        )
+
+    def test_external_package_excluded(self, js_support, tmp_path):
+        """Test external packages are not resolved as helpers."""
+        source = """\
 const _ = require('lodash');
 
 function processArray(arr) {
@@ -305,13 +506,13 @@ module.exports = { processArray };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
-        # External package helpers should not be included
+        # STRICT: No helpers from external packages
         helper_names = {h.name for h in context.helper_functions}
-        assert "map" not in helper_names
+        assert len(helper_names) == 0, f"Expected no helpers for external package usage, got: {helper_names}"
 
-    def test_recursive_function_self_reference(self, js_support, tmp_path):
-        """Test extracting context for recursive function."""
-        source = """
+    def test_recursive_function(self, js_support, tmp_path):
+        """Test recursive function doesn't list itself as helper."""
+        source = """\
 function fibonacci(n) {
     if (n <= 1) return n;
     return fibonacci(n - 1) + fibonacci(n - 2);
@@ -327,15 +528,23 @@ module.exports = { fibonacci };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
-        # Self-reference should not cause infinite loop or errors
-        assert context.target_code is not None
-        # Function should not be listed as its own helper
-        helper_names = {h.name for h in context.helper_functions}
-        assert "fibonacci" not in helper_names
+        # STRICT: Exact code comparison
+        expected_code = """\
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}"""
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
+        )
 
-    def test_arrow_function_context_extraction(self, js_support, tmp_path):
-        """Test context extraction for arrow functions."""
-        source = """
+        # STRICT: Function should NOT be its own helper
+        helper_names = {h.name for h in context.helper_functions}
+        assert "fibonacci" not in helper_names, f"Recursive function listed itself as helper. Helpers: {helper_names}"
+
+    def test_arrow_function_helper(self, js_support, tmp_path):
+        """Test arrow function helper extraction."""
+        source = """\
 const helper = (x) => x * 2;
 
 const processValue = (value) => {
@@ -352,12 +561,18 @@ module.exports = { processValue };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
-        helper_names = {h.name for h in context.helper_functions}
-        assert "helper" in helper_names
+        helper_dict = {h.name: h for h in context.helper_functions}
+        assert "helper" in helper_dict, f"helper function not found. Found: {list(helper_dict.keys())}"
+
+        expected_helper_code = "const helper = (x) => x * 2;"
+        actual_helper_code = helper_dict["helper"].source_code.strip()
+        assert actual_helper_code == expected_helper_code, (
+            f"Helper code does not match.\nExpected:\n{expected_helper_code}\n\nGot:\n{actual_helper_code}"
+        )
 
 
 class TestCodeExtractorIntegration:
-    """Integration tests using FunctionOptimizer workflow."""
+    """Integration tests with FunctionOptimizer."""
 
     @pytest.fixture
     def cjs_project(self, tmp_path):
@@ -366,15 +581,14 @@ class TestCodeExtractorIntegration:
         shutil.copytree(FIXTURES_DIR / "js_cjs", project_dir)
         return project_dir
 
-    def test_full_context_extraction_workflow(self, cjs_project):
-        """Test the full context extraction workflow via FunctionOptimizer."""
+    def test_function_optimizer_workflow(self, cjs_project):
+        """Test full FunctionOptimizer workflow."""
         js_support = get_language_support("javascript")
         calculator_file = cjs_project / "calculator.js"
 
         functions = js_support.discover_functions(calculator_file)
         target = next(f for f in functions if f.name == "permutation")
 
-        # Convert ParentInfo to FunctionParent for compatibility
         parents = [FunctionParent(name=p.name, type=p.type) for p in target.parents]
 
         func = FunctionToOptimize(
@@ -393,25 +607,22 @@ class TestCodeExtractorIntegration:
             tests_root=cjs_project / "tests",
             tests_project_rootdir=cjs_project,
             project_root_path=cjs_project,
-            test_framework="jest",
             pytest_cmd="jest",
         )
 
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         result = func_optimizer.get_code_optimization_context()
 
-        # Should successfully extract context
         from codeflash.either import is_successful
 
         if not is_successful(result):
             error_msg = result.failure() if hasattr(result, "failure") else str(result)
             pytest.skip(f"Context extraction not fully implemented: {error_msg}")
+
         context = result.unwrap()
 
-        # Verify context has expected properties
-        assert context.code_to_optimize is not None
-        assert len(context.helper_functions) > 0
+        assert context.read_writable_code is not None, "read_writable_code should not be None"
 
-        # factorial should be in helpers
-        helper_names = {h.name for h in context.helper_functions}
-        assert "factorial" in helper_names
+        # FunctionSource uses only_function_name, not name
+        helper_names = {h.only_function_name for h in context.helper_functions}
+        assert "factorial" in helper_names, f"factorial helper not found. Found: {helper_names}"

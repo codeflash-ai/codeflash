@@ -263,11 +263,11 @@ def convert_esm_to_commonjs(code: str) -> str:
     """
     import re
 
-    # Pattern for named import: import { a, b } from '...'
-    named_import = re.compile(r"import\s+\{\s*([^}]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"]")
+    # Pattern for named import: import { a, b } from '...'; (semicolon optional)
+    named_import = re.compile(r"import\s+\{\s*([^}]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"];?")
 
-    # Pattern for default import: import foo from '...'
-    default_import = re.compile(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]")
+    # Pattern for default import: import foo from '...'; (semicolon optional)
+    default_import = re.compile(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];?")
 
     # Replace named imports with destructured requires
     def replace_named(match):

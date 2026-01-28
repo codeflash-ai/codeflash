@@ -123,7 +123,6 @@ def test_js_replcement() -> None:
             tests_root=root_dir / "code_to_optimize/js/code_to_optimize_js/tests",
             tests_project_rootdir=root_dir,
             project_root_path=root_dir,
-            test_framework="jest",
             pytest_cmd="jest",
         )
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
