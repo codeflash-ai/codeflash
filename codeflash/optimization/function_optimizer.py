@@ -61,6 +61,8 @@ from codeflash.code_utils.config_consts import (
 from codeflash.code_utils.deduplicate_code import normalize_code
 from codeflash.code_utils.edit_generated_tests import (
     add_runtime_comments_to_generated_tests,
+    disable_ts_check,
+    inject_test_globals,
     normalize_generated_tests_imports,
     remove_functions_from_generated_tests,
 )
@@ -77,6 +79,8 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
 from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.current import is_typescript
+from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
@@ -574,19 +578,13 @@ class FunctionOptimizer:
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root,
-                self.function_to_optimize.function_name,
-                test_index,
-                test_type="unit",
+                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root,
-                self.function_to_optimize.function_name,
-                test_index,
-                test_type="perf",
+                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
             )
             for test_index in range(n_tests)
         ]
@@ -609,6 +607,13 @@ class FunctionOptimizer:
 
         # Normalize codeflash imports in JS/TS tests to use npm package
         if not is_python():
+            module_system = detect_module_system(self.project_root)
+            if module_system == "esm":
+                generated_tests = inject_test_globals(generated_tests)
+            if is_typescript():
+                # disable ts check for typescript tests
+                generated_tests = disable_ts_check(generated_tests)
+
             generated_tests = normalize_generated_tests_imports(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
@@ -1776,11 +1781,7 @@ class FunctionOptimizer:
             )
 
         future_concolic_tests = self.executor.submit(
-            generate_concolic_tests,
-            self.test_cfg,
-            self.args,
-            self.function_to_optimize,
-            self.function_to_optimize_ast,
+            generate_concolic_tests, self.test_cfg, self.args, self.function_to_optimize, self.function_to_optimize_ast
         )
 
         if not self.args.no_gen_tests:
@@ -2140,6 +2141,7 @@ class FunctionOptimizer:
 
         if (
             self.function_to_optimize.is_async
+            and is_python()
             and original_code_baseline.async_throughput is not None
             and best_optimization.async_throughput is not None
         ):
@@ -2438,7 +2440,7 @@ class FunctionOptimizer:
 
         async_throughput = None
         concurrency_metrics = None
-        if self.function_to_optimize.is_async:
+        if self.function_to_optimize.is_async and is_python():
             async_throughput = calculate_function_throughput_from_test_results(
                 benchmarking_results, self.function_to_optimize.function_name
             )
@@ -2553,7 +2555,7 @@ class FunctionOptimizer:
             candidate_helper_code = {}
             for module_abspath in original_helper_code:
                 candidate_helper_code[module_abspath] = Path(module_abspath).read_text("utf-8")
-            if self.function_to_optimize.is_async:
+            if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2629,7 +2631,7 @@ class FunctionOptimizer:
             console.rule()
 
             # For async functions, instrument at definition site for performance benchmarking
-            if self.function_to_optimize.is_async:
+            if self.function_to_optimize.is_async and is_python():
                 from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
                 add_async_decorator_to_function(
@@ -2647,7 +2649,7 @@ class FunctionOptimizer:
                 )
             finally:
                 # Restore original source if we instrumented it
-                if self.function_to_optimize.is_async:
+                if self.function_to_optimize.is_async and is_python():
                     self.write_code_and_helpers(
                         candidate_fto_code, candidate_helper_code, self.function_to_optimize.file_path
                     )
@@ -2665,7 +2667,7 @@ class FunctionOptimizer:
 
             candidate_async_throughput = None
             candidate_concurrency_metrics = None
-            if self.function_to_optimize.is_async:
+            if self.function_to_optimize.is_async and is_python():
                 candidate_async_throughput = calculate_function_throughput_from_test_results(
                     candidate_benchmarking_results, self.function_to_optimize.function_name
                 )

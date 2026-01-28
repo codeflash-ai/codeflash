@@ -37,6 +37,218 @@ class ExpectCallMatch:
     has_trailing_semicolon: bool
 
 
+@dataclass
+class StandaloneCallMatch:
+    """Represents a matched standalone func(...) call."""
+
+    start_pos: int
+    end_pos: int
+    leading_whitespace: str
+    func_args: str
+    prefix: str  # Everything between whitespace and func name (e.g., "await ", "")
+    has_trailing_semicolon: bool
+
+
+class StandaloneCallTransformer:
+    """Transforms standalone func(...) calls in JavaScript test code.
+
+    This class handles the transformation of standalone function calls that are NOT
+    inside expect() wrappers. These calls need to be wrapped with codeflash.capture()
+    or codeflash.capturePerf() for instrumentation.
+
+    Examples:
+    - await func(args) -> await codeflash.capturePerf('name', 'id', func, args)
+    - func(args) -> codeflash.capturePerf('name', 'id', func, args)
+    - const result = func(args) -> const result = codeflash.capturePerf(...)
+    - arr.map(() => func(args)) -> arr.map(() => codeflash.capturePerf(..., func, args))
+
+    """
+
+    def __init__(self, func_name: str, qualified_name: str, capture_func: str) -> None:
+        self.func_name = func_name
+        self.qualified_name = qualified_name
+        self.capture_func = capture_func
+        self.invocation_counter = 0
+        # Pattern to match func_name( with optional leading await
+        # We'll filter out expect() and codeflash. cases in the transform loop
+        self._call_pattern = re.compile(rf"(\s*)(await\s+)?{re.escape(func_name)}\s*\(")
+
+    def transform(self, code: str) -> str:
+        """Transform all standalone calls in the code."""
+        result: list[str] = []
+        pos = 0
+
+        while pos < len(code):
+            match = self._call_pattern.search(code, pos)
+            if not match:
+                result.append(code[pos:])
+                break
+
+            match_start = match.start()
+
+            # Check if this call is inside an expect() or already transformed
+            if self._should_skip_match(code, match_start, match):
+                result.append(code[pos : match.end()])
+                pos = match.end()
+                continue
+
+            # Add everything before the match
+            result.append(code[pos:match_start])
+
+            # Try to parse the full standalone call
+            standalone_match = self._parse_standalone_call(code, match)
+            if standalone_match is None:
+                # Couldn't parse, skip this match
+                result.append(code[match_start : match.end()])
+                pos = match.end()
+                continue
+
+            # Generate the transformed code
+            self.invocation_counter += 1
+            transformed = self._generate_transformed_call(standalone_match)
+            result.append(transformed)
+            pos = standalone_match.end_pos
+
+        return "".join(result)
+
+    def _should_skip_match(self, code: str, start: int, match: re.Match) -> bool:
+        """Check if the match should be skipped (inside expect, already transformed, etc.)."""
+        # Look backwards to check context
+        lookback_start = max(0, start - 200)
+        lookback = code[lookback_start:start]
+
+        # Skip if already transformed with codeflash.capture
+        if f"codeflash.{self.capture_func}(" in lookback[-60:]:
+            return True
+
+        # Skip if inside expect() - look for 'expect(' with unmatched parens
+        # Find the last 'expect(' and check if it's still open
+        expect_search_start = max(0, start - 100)
+        expect_lookback = code[expect_search_start:start]
+
+        # Find all expect( positions
+        expect_pos = expect_lookback.rfind("expect(")
+        if expect_pos != -1:
+            # Count parens from expect( to our match position
+            between = expect_lookback[expect_pos:]
+            open_parens = between.count("(") - between.count(")")
+            if open_parens > 0:
+                # We're inside an unclosed expect()
+                return True
+
+        return False
+
+    def _parse_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
+        """Parse a complete standalone func(...) call."""
+        leading_ws = match.group(1)
+        prefix = match.group(2) or ""  # "await " or ""
+
+        # Find the opening paren position
+        match_text = match.group(0)
+        paren_offset = match_text.rfind("(")
+        open_paren_pos = match.start() + paren_offset
+
+        # Find the arguments (content inside parens)
+        func_args, close_pos = self._find_balanced_parens(code, open_paren_pos)
+        if func_args is None:
+            return None
+
+        # Check for trailing semicolon
+        end_pos = close_pos
+        # Skip whitespace
+        while end_pos < len(code) and code[end_pos] in " \t":
+            end_pos += 1
+
+        has_trailing_semicolon = end_pos < len(code) and code[end_pos] == ";"
+        if has_trailing_semicolon:
+            end_pos += 1
+
+        return StandaloneCallMatch(
+            start_pos=match.start(),
+            end_pos=end_pos,
+            leading_whitespace=leading_ws,
+            func_args=func_args,
+            prefix=prefix,
+            has_trailing_semicolon=has_trailing_semicolon,
+        )
+
+    def _find_balanced_parens(self, code: str, open_paren_pos: int) -> tuple[str | None, int]:
+        """Find content within balanced parentheses."""
+        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+            return None, -1
+
+        depth = 1
+        pos = open_paren_pos + 1
+        in_string = False
+        string_char = None
+
+        while pos < len(code) and depth > 0:
+            char = code[pos]
+
+            # Handle string literals
+            if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            elif not in_string:
+                if char == "(":
+                    depth += 1
+                elif char == ")":
+                    depth -= 1
+
+            pos += 1
+
+        if depth != 0:
+            return None, -1
+
+        return code[open_paren_pos + 1 : pos - 1], pos
+
+    def _generate_transformed_call(self, match: StandaloneCallMatch) -> str:
+        """Generate the transformed code for a standalone call."""
+        line_id = str(self.invocation_counter)
+        args_str = match.func_args.strip()
+        semicolon = ";" if match.has_trailing_semicolon else ""
+
+        if args_str:
+            return (
+                f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', {self.func_name}, {args_str}){semicolon}"
+            )
+        return (
+            f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+            f"'{line_id}', {self.func_name}){semicolon}"
+        )
+
+
+def transform_standalone_calls(
+    code: str, func_name: str, qualified_name: str, capture_func: str, start_counter: int = 0
+) -> tuple[str, int]:
+    """Transform standalone func(...) calls in JavaScript test code.
+
+    This transforms function calls that are NOT inside expect() wrappers.
+
+    Args:
+        code: The test code to transform.
+        func_name: Name of the function being tested.
+        qualified_name: Fully qualified function name.
+        capture_func: The capture function to use ('capture' or 'capturePerf').
+        start_counter: Starting value for the invocation counter.
+
+    Returns:
+        Tuple of (transformed code, final counter value).
+
+    """
+    transformer = StandaloneCallTransformer(
+        func_name=func_name, qualified_name=qualified_name, capture_func=capture_func
+    )
+    transformer.invocation_counter = start_counter
+    result = transformer.transform(code)
+    return result, transformer.invocation_counter
+
+
 class ExpectCallTransformer:
     """Transforms expect(func(...)).assertion() calls in JavaScript test code.
 
@@ -50,13 +262,7 @@ class ExpectCallTransformer:
     - Multi-arg assertions: expect(func(args)).toBeCloseTo(0.5, 2)
     """
 
-    def __init__(
-        self,
-        func_name: str,
-        qualified_name: str,
-        capture_func: str,
-        remove_assertions: bool = False,
-    ) -> None:
+    def __init__(self, func_name: str, qualified_name: str, capture_func: str, remove_assertions: bool = False) -> None:
         self.func_name = func_name
         self.qualified_name = qualified_name
         self.capture_func = capture_func
@@ -77,13 +283,13 @@ class ExpectCallTransformer:
                 break
 
             # Add everything before the match
-            result.append(code[pos:match.start()])
+            result.append(code[pos : match.start()])
 
             # Try to parse the full expect call
             expect_match = self._parse_expect_call(code, match)
             if expect_match is None:
                 # Couldn't parse, skip this match
-                result.append(code[match.start():match.end()])
+                result.append(code[match.start() : match.end()])
                 pos = match.end()
                 continue
 
@@ -146,6 +352,7 @@ class ExpectCallTransformer:
 
         Returns:
             Tuple of (content inside parens, position after closing paren) or (None, -1)
+
         """
         if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
             return None, -1
@@ -178,7 +385,7 @@ class ExpectCallTransformer:
             return None, -1
 
         # Return content (excluding parens) and position after closing paren
-        return code[open_paren_pos + 1:pos - 1], pos
+        return code[open_paren_pos + 1 : pos - 1], pos
 
     def _parse_assertion_chain(self, code: str, start_pos: int) -> tuple[str | None, int]:
         """Parse assertion chain like .not.resolves.toBe(value).
@@ -194,6 +401,7 @@ class ExpectCallTransformer:
 
         Returns:
             Tuple of (assertion chain string, end position) or (None, -1)
+
         """
         pos = start_pos
         chain_parts: list[str] = []
@@ -291,12 +499,8 @@ class ExpectCallTransformer:
 
 
 def transform_expect_calls(
-    code: str,
-    func_name: str,
-    qualified_name: str,
-    capture_func: str,
-    remove_assertions: bool = False,
-) -> str:
+    code: str, func_name: str, qualified_name: str, capture_func: str, remove_assertions: bool = False
+) -> tuple[str, int]:
     """Transform expect(func(...)).assertion() calls in JavaScript test code.
 
     This is the main entry point for expect call transformation.
@@ -309,7 +513,8 @@ def transform_expect_calls(
         remove_assertions: If True, remove assertions entirely (for generated tests).
 
     Returns:
-        Transformed code.
+        Tuple of (transformed code, final invocation counter value).
+
     """
     transformer = ExpectCallTransformer(
         func_name=func_name,
@@ -317,7 +522,8 @@ def transform_expect_calls(
         capture_func=capture_func,
         remove_assertions=remove_assertions,
     )
-    return transformer.transform(code)
+    result = transformer.transform(code)
+    return result, transformer.invocation_counter
 
 
 def inject_profiling_into_existing_js_test(
@@ -400,12 +606,7 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
 
 
 def _instrument_js_test_code(
-    code: str,
-    func_name: str,
-    test_file_path: str,
-    mode: str,
-    qualified_name: str,
-    remove_assertions: bool = False,
+    code: str, func_name: str, test_file_path: str, mode: str, qualified_name: str, remove_assertions: bool = False
 ) -> str:
     """Instrument JavaScript test code with profiling capture calls.
 
@@ -458,12 +659,22 @@ def _instrument_js_test_code(
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"
 
     # Transform expect calls using the refactored transformer
-    code = transform_expect_calls(
+    code, expect_counter = transform_expect_calls(
         code=code,
         func_name=func_name,
         qualified_name=qualified_name,
         capture_func=capture_func,
         remove_assertions=remove_assertions,
+    )
+
+    # Transform standalone calls (not inside expect wrappers)
+    # Continue counter from expect transformer to ensure unique IDs
+    code, _final_counter = transform_standalone_calls(
+        code=code,
+        func_name=func_name,
+        qualified_name=qualified_name,
+        capture_func=capture_func,
+        start_counter=expect_counter,
     )
 
     return code
@@ -620,10 +831,7 @@ def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
 
 
 def instrument_generated_js_test(
-    test_code: str,
-    function_name: str,
-    qualified_name: str,
-    mode: str = TestingMode.BEHAVIOR,
+    test_code: str, function_name: str, qualified_name: str, mode: str = TestingMode.BEHAVIOR
 ) -> str:
     """Instrument generated JavaScript/TypeScript test code.
 

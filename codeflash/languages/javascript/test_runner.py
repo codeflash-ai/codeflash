@@ -14,11 +14,7 @@ from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import get_run_tmp_file
-from codeflash.code_utils.config_consts import (
-    STABILITY_CENTER_TOLERANCE,
-    STABILITY_SPREAD_TOLERANCE,
-    STABILITY_WINDOW_SIZE,
-)
+from codeflash.code_utils.config_consts import STABILITY_CENTER_TOLERANCE, STABILITY_SPREAD_TOLERANCE
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
 if TYPE_CHECKING:
@@ -182,7 +178,12 @@ def _ensure_runtime_files(project_root: Path) -> None:
     # Try to install from npm registry
     try:
         result = subprocess.run(
-            ["npm", "install", "--save-dev", "codeflash"], cwd=project_root, capture_output=True, text=True, timeout=120
+            ["npm", "install", "--save-dev", "codeflash"],
+            check=False,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if result.returncode == 0:
             logger.debug("Installed codeflash from npm registry")
@@ -521,15 +522,11 @@ def run_jest_benchmarking_tests(
             stdout = stdout + "\n" + result.stderr if stdout else result.stderr
 
         # Create result with combined stdout
-        result = subprocess.CompletedProcess(
-            args=result.args, returncode=result.returncode, stdout=stdout, stderr=""
-        )
+        result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
 
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest benchmarking timed out after {total_timeout}s")
-        result = subprocess.CompletedProcess(
-            args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking timed out"
-        )
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking timed out")
     except FileNotFoundError:
         logger.error("Jest not found for benchmarking")
         result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")

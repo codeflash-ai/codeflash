@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from codeflash.languages.base import LanguageSupport
 
 # Module-level singleton for the current language
-_current_language: Language = Language.PYTHON
+_current_language: Language | None = None
 
 
 def current_language() -> Language:
@@ -42,6 +42,7 @@ def current_language() -> Language:
 
     Returns:
         The current Language enum value.
+
     """
     return _current_language
 
@@ -54,13 +55,13 @@ def set_current_language(language: Language | str) -> None:
 
     Args:
         language: Either a Language enum value or a string like "python", "javascript", "typescript".
+
     """
     global _current_language
 
-    if isinstance(language, str):
-        _current_language = Language(language)
-    else:
-        _current_language = language
+    if _current_language is not None:
+        return
+    _current_language = Language(language) if isinstance(language, str) else language
 
 
 def reset_current_language() -> None:
@@ -77,6 +78,7 @@ def is_python() -> bool:
 
     Returns:
         True if the current language is Python.
+
     """
     return _current_language == Language.PYTHON
 
@@ -89,6 +91,7 @@ def is_javascript() -> bool:
 
     Returns:
         True if the current language is JavaScript or TypeScript.
+
     """
     return _current_language in (Language.JAVASCRIPT, Language.TYPESCRIPT)
 
@@ -98,6 +101,7 @@ def is_typescript() -> bool:
 
     Returns:
         True if the current language is TypeScript.
+
     """
     return _current_language == Language.TYPESCRIPT
 
@@ -107,6 +111,7 @@ def current_language_support() -> LanguageSupport:
 
     Returns:
         The LanguageSupport instance for the current language.
+
     """
     from codeflash.languages.registry import get_language_support
 

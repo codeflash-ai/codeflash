@@ -154,6 +154,7 @@ def _is_python_file(file_path: Path) -> bool:
     """Check if a file is a Python file."""
     return file_path.suffix == ".py"
 
+
 # TODO:{self} Needs cleanup for jest logic in else block
 def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_rootdir: Path) -> dict[str, int]:
     unique_inv_ids: dict[str, int] = {}
@@ -174,9 +175,22 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
         else:
             # Check for Jest test file extensions (e.g., tests.fibonacci.test.ts)
             # These need special handling to avoid converting .test.ts -> /test/ts
-            jest_test_extensions = (".test.ts", ".test.js", ".test.tsx", ".test.jsx",
-                                    ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
-                                    ".ts", ".js", ".tsx", ".jsx", ".mjs", ".mts")
+            jest_test_extensions = (
+                ".test.ts",
+                ".test.js",
+                ".test.tsx",
+                ".test.jsx",
+                ".spec.ts",
+                ".spec.js",
+                ".spec.tsx",
+                ".spec.jsx",
+                ".ts",
+                ".js",
+                ".tsx",
+                ".jsx",
+                ".mjs",
+                ".mts",
+            )
             matched_ext = None
             for ext in jest_test_extensions:
                 if test_module_path.endswith(ext):
@@ -186,7 +200,7 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
             if matched_ext:
                 # JavaScript/TypeScript: convert module-style path to file path
                 # "tests.fibonacci__perfonlyinstrumented.test.ts" -> "tests/fibonacci__perfonlyinstrumented.test.ts"
-                base_path = test_module_path[:-len(matched_ext)]
+                base_path = test_module_path[: -len(matched_ext)]
                 file_path = base_path.replace(".", os.sep) + matched_ext
                 # Check if the module path includes the tests directory name
                 tests_dir_name = tests_project_rootdir.name
@@ -321,9 +335,7 @@ def _compile_function_patterns(test_functions_to_remove: list[str]) -> list[re.P
 _CODEFLASH_REQUIRE_PATTERN = re.compile(
     r"(const|let|var)\s+(\w+)\s*=\s*require\s*\(\s*['\"]\.?/?codeflash-jest-helper['\"]\s*\)"
 )
-_CODEFLASH_IMPORT_PATTERN = re.compile(
-    r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]"
-)
+_CODEFLASH_IMPORT_PATTERN = re.compile(r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]")
 
 
 def normalize_codeflash_imports(source: str) -> str:
@@ -344,16 +356,53 @@ def normalize_codeflash_imports(source: str) -> str:
 
     """
     # Replace CommonJS require
-    source = _CODEFLASH_REQUIRE_PATTERN.sub(
-        r"\1 \2 = require('codeflash')",
-        source,
-    )
+    source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
     # Replace ES module import
-    source = _CODEFLASH_IMPORT_PATTERN.sub(
-        r"import \1 from 'codeflash'",
-        source,
-    )
+    source = _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
     return source
+
+
+def inject_test_globals(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+    # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
+    """Inject test globals into all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+
+    Returns:
+        Generated tests with test globals injected.
+
+    """
+    # we only inject test globals for esm modules
+    global_import = (
+        "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
+    )
+
+    for test in generated_tests.generated_tests:
+        test.generated_original_test_source = global_import + test.generated_original_test_source
+        test.instrumented_behavior_test_source = global_import + test.instrumented_behavior_test_source
+        test.instrumented_perf_test_source = global_import + test.instrumented_perf_test_source
+    return generated_tests
+
+
+def disable_ts_check(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+    """Disable TypeScript type checking in all generated tests.
+
+    Args:
+        generated_tests: List of generated tests.
+
+    Returns:
+        Generated tests with TypeScript type checking disabled.
+
+    """
+    # we only inject test globals for esm modules
+    ts_nocheck = "// @ts-nocheck\n"
+
+    for test in generated_tests.generated_tests:
+        test.generated_original_test_source = ts_nocheck + test.generated_original_test_source
+        test.instrumented_behavior_test_source = ts_nocheck + test.instrumented_behavior_test_source
+        test.instrumented_perf_test_source = ts_nocheck + test.instrumented_perf_test_source
+    return generated_tests
 
 
 def normalize_generated_tests_imports(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
