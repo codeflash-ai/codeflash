@@ -7,6 +7,7 @@ test files, similar to Python's inject_profiling_into_existing_test.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,6 +23,301 @@ class TestingMode:
 
     BEHAVIOR = "behavior"
     PERFORMANCE = "performance"
+
+
+@dataclass
+class ExpectCallMatch:
+    """Represents a matched expect(func(...)).toXXX() call."""
+
+    start_pos: int
+    end_pos: int
+    leading_whitespace: str
+    func_args: str
+    assertion_chain: str
+    has_trailing_semicolon: bool
+
+
+class ExpectCallTransformer:
+    """Transforms expect(func(...)).assertion() calls in JavaScript test code.
+
+    This class handles the parsing and transformation of Jest/Vitest expect calls,
+    supporting various assertion patterns including:
+    - Basic: expect(func(args)).toBe(value)
+    - Negated: expect(func(args)).not.toBe(value)
+    - Async: expect(func(args)).resolves.toBe(value)
+    - Chained: expect(func(args)).not.resolves.toBe(value)
+    - No-arg assertions: expect(func(args)).toBeTruthy()
+    - Multi-arg assertions: expect(func(args)).toBeCloseTo(0.5, 2)
+    """
+
+    def __init__(
+        self,
+        func_name: str,
+        qualified_name: str,
+        capture_func: str,
+        remove_assertions: bool = False,
+    ) -> None:
+        self.func_name = func_name
+        self.qualified_name = qualified_name
+        self.capture_func = capture_func
+        self.remove_assertions = remove_assertions
+        self.invocation_counter = 0
+        # Pattern to match start of expect(func_name(
+        self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*{re.escape(func_name)}\s*\(")
+
+    def transform(self, code: str) -> str:
+        """Transform all expect calls in the code."""
+        result: list[str] = []
+        pos = 0
+
+        while pos < len(code):
+            match = self._expect_pattern.search(code, pos)
+            if not match:
+                result.append(code[pos:])
+                break
+
+            # Add everything before the match
+            result.append(code[pos:match.start()])
+
+            # Try to parse the full expect call
+            expect_match = self._parse_expect_call(code, match)
+            if expect_match is None:
+                # Couldn't parse, skip this match
+                result.append(code[match.start():match.end()])
+                pos = match.end()
+                continue
+
+            # Generate the transformed code
+            self.invocation_counter += 1
+            transformed = self._generate_transformed_call(expect_match)
+            result.append(transformed)
+            pos = expect_match.end_pos
+
+        return "".join(result)
+
+    def _parse_expect_call(self, code: str, match: re.Match) -> ExpectCallMatch | None:
+        """Parse a complete expect(func(...)).assertion() call.
+
+        Returns None if the pattern doesn't match expected structure.
+        """
+        leading_ws = match.group(1)
+
+        # Find the arguments of the function call (handling nested parens)
+        args_start = match.end()
+        func_args, func_close_pos = self._find_balanced_parens(code, args_start - 1)
+        if func_args is None:
+            return None
+
+        # Skip whitespace and find closing ) of expect(
+        expect_close_pos = func_close_pos
+        while expect_close_pos < len(code) and code[expect_close_pos].isspace():
+            expect_close_pos += 1
+
+        if expect_close_pos >= len(code) or code[expect_close_pos] != ")":
+            return None
+
+        expect_close_pos += 1  # Move past )
+
+        # Parse the assertion chain (e.g., .not.resolves.toBe(value))
+        assertion_chain, chain_end_pos = self._parse_assertion_chain(code, expect_close_pos)
+        if assertion_chain is None:
+            return None
+
+        # Check for trailing semicolon
+        has_trailing_semicolon = chain_end_pos < len(code) and code[chain_end_pos] == ";"
+        if has_trailing_semicolon:
+            chain_end_pos += 1
+
+        return ExpectCallMatch(
+            start_pos=match.start(),
+            end_pos=chain_end_pos,
+            leading_whitespace=leading_ws,
+            func_args=func_args,
+            assertion_chain=assertion_chain,
+            has_trailing_semicolon=has_trailing_semicolon,
+        )
+
+    def _find_balanced_parens(self, code: str, open_paren_pos: int) -> tuple[str | None, int]:
+        """Find content within balanced parentheses.
+
+        Args:
+            code: The source code
+            open_paren_pos: Position of the opening parenthesis
+
+        Returns:
+            Tuple of (content inside parens, position after closing paren) or (None, -1)
+        """
+        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+            return None, -1
+
+        depth = 1
+        pos = open_paren_pos + 1
+        in_string = False
+        string_char = None
+
+        while pos < len(code) and depth > 0:
+            char = code[pos]
+
+            # Handle string literals
+            if char in "\"'`" and (pos == 0 or code[pos - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+            elif not in_string:
+                if char == "(":
+                    depth += 1
+                elif char == ")":
+                    depth -= 1
+
+            pos += 1
+
+        if depth != 0:
+            return None, -1
+
+        # Return content (excluding parens) and position after closing paren
+        return code[open_paren_pos + 1:pos - 1], pos
+
+    def _parse_assertion_chain(self, code: str, start_pos: int) -> tuple[str | None, int]:
+        """Parse assertion chain like .not.resolves.toBe(value).
+
+        Handles:
+        - .toBe(value)
+        - .not.toBe(value)
+        - .resolves.toBe(value)
+        - .rejects.toThrow()
+        - .not.resolves.toBe(value)
+        - .toBeTruthy() (no args)
+        - .toBeCloseTo(0.5, 2) (multiple args with nested parens)
+
+        Returns:
+            Tuple of (assertion chain string, end position) or (None, -1)
+        """
+        pos = start_pos
+        chain_parts: list[str] = []
+
+        # Skip any leading whitespace (for multi-line)
+        while pos < len(code) and code[pos] in " \t\n\r":
+            pos += 1
+
+        # Must start with a dot
+        if pos >= len(code) or code[pos] != ".":
+            return None, -1
+
+        while pos < len(code):
+            # Skip whitespace between chain elements
+            while pos < len(code) and code[pos] in " \t\n\r":
+                pos += 1
+
+            if pos >= len(code) or code[pos] != ".":
+                break
+
+            pos += 1  # Skip the dot
+
+            # Skip whitespace after dot
+            while pos < len(code) and code[pos] in " \t\n\r":
+                pos += 1
+
+            # Parse the method name
+            method_start = pos
+            while pos < len(code) and (code[pos].isalnum() or code[pos] == "_"):
+                pos += 1
+
+            if pos == method_start:
+                return None, -1
+
+            method_name = code[method_start:pos]
+
+            # Skip whitespace before potential parens
+            while pos < len(code) and code[pos] in " \t\n\r":
+                pos += 1
+
+            # Check for parentheses (method call)
+            if pos < len(code) and code[pos] == "(":
+                args_content, after_paren = self._find_balanced_parens(code, pos)
+                if args_content is None:
+                    return None, -1
+                chain_parts.append(f".{method_name}({args_content})")
+                pos = after_paren
+            else:
+                # Method without parens (like .not, .resolves, .rejects)
+                # Or assertion without args like .toBeTruthy
+                chain_parts.append(f".{method_name}")
+
+            # If this is a terminal assertion (starts with 'to'), we're done
+            if method_name.startswith("to"):
+                break
+
+        if not chain_parts:
+            return None, -1
+
+        # Verify we have a terminal assertion (should end with .toXXX)
+        last_part = chain_parts[-1]
+        if not last_part.startswith(".to"):
+            return None, -1
+
+        return "".join(chain_parts), pos
+
+    def _generate_transformed_call(self, match: ExpectCallMatch) -> str:
+        """Generate the transformed code for an expect call."""
+        line_id = str(self.invocation_counter)
+        args_str = match.func_args.strip()
+
+        if self.remove_assertions:
+            # For generated/regression tests: remove expect wrapper and assertion
+            if args_str:
+                return (
+                    f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
+                    f"'{line_id}', {self.func_name}, {args_str});"
+                )
+            return (
+                f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', {self.func_name});"
+            )
+
+        # For existing tests: keep the expect wrapper
+        semicolon = ";" if match.has_trailing_semicolon else ""
+        if args_str:
+            return (
+                f"{match.leading_whitespace}expect(codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', {self.func_name}, {args_str})){match.assertion_chain}{semicolon}"
+            )
+        return (
+            f"{match.leading_whitespace}expect(codeflash.{self.capture_func}('{self.qualified_name}', "
+            f"'{line_id}', {self.func_name})){match.assertion_chain}{semicolon}"
+        )
+
+
+def transform_expect_calls(
+    code: str,
+    func_name: str,
+    qualified_name: str,
+    capture_func: str,
+    remove_assertions: bool = False,
+) -> str:
+    """Transform expect(func(...)).assertion() calls in JavaScript test code.
+
+    This is the main entry point for expect call transformation.
+
+    Args:
+        code: The test code to transform.
+        func_name: Name of the function being tested.
+        qualified_name: Fully qualified function name.
+        capture_func: The capture function to use ('capture' or 'capturePerf').
+        remove_assertions: If True, remove assertions entirely (for generated tests).
+
+    Returns:
+        Transformed code.
+    """
+    transformer = ExpectCallTransformer(
+        func_name=func_name,
+        qualified_name=qualified_name,
+        capture_func=capture_func,
+        remove_assertions=remove_assertions,
+    )
+    return transformer.transform(code)
 
 
 def inject_profiling_into_existing_js_test(
@@ -103,7 +399,14 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
     return False
 
 
-def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mode: str, qualified_name: str) -> str:
+def _instrument_js_test_code(
+    code: str,
+    func_name: str,
+    test_file_path: str,
+    mode: str,
+    qualified_name: str,
+    remove_assertions: bool = False,
+) -> str:
     """Instrument JavaScript test code with profiling capture calls.
 
     Args:
@@ -112,6 +415,8 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
         test_file_path: Relative path to test file.
         mode: Testing mode (behavior or performance).
         qualified_name: Fully qualified function name.
+        remove_assertions: If True, remove expect assertions entirely (for generated/regression tests).
+                          If False, keep the expect wrapper (for existing user-written tests).
 
     Returns:
         Instrumented code.
@@ -152,110 +457,14 @@ def _instrument_js_test_code(code: str, func_name: str, test_file_path: str, mod
     # Choose capture function based on mode
     capture_func = "capturePerf" if mode == TestingMode.PERFORMANCE else "capture"
 
-    # Track invocations for unique IDs
-    invocation_counter = [0]
-
-    def get_test_context(code_before: str) -> str:
-        """Extract the current test name from preceding code."""
-        # Look for ALL test('name', ...) or it('name', ...) patterns and get the LAST one
-        # This ensures we get the most recent test context
-        test_matches = list(re.finditer(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]", code_before))
-        if test_matches:
-            last_match = test_matches[-1]
-            return last_match.group(1).replace(" ", "_").replace("'", "")[:50]
-        return "test"
-
-    # Use a function-based approach to handle nested parentheses properly
-    # The simple regex [^)]* fails for nested parens like func(getN(5))
-
-    def find_and_replace_expect_calls(code: str) -> str:
-        """Find expect(func(...)) patterns and replace them, handling nested parens."""
-        result = []
-        i = 0
-        pattern = re.compile(rf"(\s*)expect\s*\(\s*{re.escape(func_name)}\s*\(")
-
-        while i < len(code):
-            match = pattern.search(code, i)
-            if not match:
-                result.append(code[i:])
-                break
-
-            # Add everything before the match
-            result.append(code[i : match.start()])
-
-            leading_ws = match.group(1)
-
-            # Find the matching closing paren of func_name(
-            func_call_start = match.end() - 1  # Position of ( after func_name
-            args_start = match.end()
-
-            # Count parentheses to find matching close
-            paren_depth = 1
-            pos = args_start
-            while pos < len(code) and paren_depth > 0:
-                if code[pos] == "(":
-                    paren_depth += 1
-                elif code[pos] == ")":
-                    paren_depth -= 1
-                pos += 1
-
-            if paren_depth != 0:
-                # Unmatched parens, skip this match
-                result.append(code[match.start() : match.end()])
-                i = match.end()
-                continue
-
-            # pos is now right after the closing ) of func_name(args)
-            args = code[args_start : pos - 1]
-
-            # Skip whitespace and find the closing ) of expect(
-            expect_close_pos = pos
-            while expect_close_pos < len(code) and code[expect_close_pos].isspace():
-                expect_close_pos += 1
-
-            if expect_close_pos >= len(code) or code[expect_close_pos] != ")":
-                # No closing ) for expect, skip
-                result.append(code[match.start() : match.end()])
-                i = match.end()
-                continue
-
-            expect_close_pos += 1  # Move past )
-
-            # Now look for .toXXX(value)
-            assertion_match = re.match(r"(\.to\w+\([^)]*\))", code[expect_close_pos:])
-            if not assertion_match:
-                # No assertion found, skip
-                result.append(code[match.start() : match.end()])
-                i = match.end()
-                continue
-
-            assertion = assertion_match.group(1)
-            end_pos = expect_close_pos + assertion_match.end()
-
-            # Generate the wrapped call
-            # The capture function signature is: capture(funcName, lineId, fn, ...args)
-            invocation_counter[0] += 1
-            line_id = str(invocation_counter[0])
-
-            # Build args list - need to handle empty args case
-            args_str = args.strip()
-            if args_str:
-                wrapped = (
-                    f"{leading_ws}expect(codeflash.{capture_func}('{qualified_name}', "
-                    f"'{line_id}', {func_name}, {args_str})){assertion}"
-                )
-            else:
-                wrapped = (
-                    f"{leading_ws}expect(codeflash.{capture_func}('{qualified_name}', "
-                    f"'{line_id}', {func_name})){assertion}"
-                )
-
-            result.append(wrapped)
-            i = end_pos
-
-        return "".join(result)
-
-    code = find_and_replace_expect_calls(code)
+    # Transform expect calls using the refactored transformer
+    code = transform_expect_calls(
+        code=code,
+        func_name=func_name,
+        qualified_name=qualified_name,
+        capture_func=capture_func,
+        remove_assertions=remove_assertions,
+    )
 
     return code
 
@@ -408,3 +617,47 @@ def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
         new_stem = f"{stem}{suffix}"
 
     return original_path.parent / f"{new_stem}{original_path.suffix}"
+
+
+def instrument_generated_js_test(
+    test_code: str,
+    function_name: str,
+    qualified_name: str,
+    mode: str = TestingMode.BEHAVIOR,
+) -> str:
+    """Instrument generated JavaScript/TypeScript test code.
+
+    This function is used to instrument tests generated by the aiservice.
+    Unlike inject_profiling_into_existing_js_test, this takes the test code
+    as a string rather than reading from a file.
+
+    For generated tests, we remove the expect() assertions entirely because:
+    1. LLM-generated expected values may be incorrect
+    2. These are treated as regression tests where correctness is verified
+       by comparing outputs between original and optimized code
+
+    Args:
+        test_code: The generated test code to instrument.
+        function_name: Name of the function being tested.
+        qualified_name: Fully qualified function name (e.g., 'module.funcName').
+        mode: Testing mode - "behavior" or "performance".
+
+    Returns:
+        Instrumented test code with assertions removed.
+
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    # Use the internal instrumentation function with assertion removal enabled
+    # Generated tests are treated as regression tests, so we remove LLM-generated assertions
+    instrumented_code = _instrument_js_test_code(
+        code=test_code,
+        func_name=function_name,
+        test_file_path="generated_test",
+        mode=mode,
+        qualified_name=qualified_name,
+        remove_assertions=True,
+    )
+
+    return instrumented_code
