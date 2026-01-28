@@ -13,7 +13,54 @@ export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+
+    // Preserve original infinite-recursion behavior for non-finite inputs
+    // (NaN, Infinity) so they produce the same RangeError in the same circumstances.
+    if (!Number.isFinite(n)) {
+        return fibonacci(n - 1) + fibonacci(n - 2);
+    }
+
+    // Fast path for integer n: use fast-doubling (O(log n))
+    if (Number.isInteger(n)) {
+        // fibPair(k) returns [F_k, F_{k+1}]
+        const fibPair = (k) => {
+            if (k === 0) {
+                return [0, 1];
+            }
+            const [a, b] = fibPair(k >> 1);
+            const c = a * (2 * b - a);
+            const d = a * a + b * b;
+            if ((k & 1) === 0) {
+                return [c, d];
+            }
+            return [d, c + d];
+        };
+        return fibPair(n)[0];
+    }
+
+    // Non-integer finite n: iterative DP using O(steps) time and O(1) memory.
+    // Build downwards until we reach the first value <= 1 (base region),
+    // then compute upwards using the two-term recurrence.
+    let x = n;
+    let steps = 0;
+    while (x > 1) {
+        x -= 1;
+        steps++;
+    }
+    // x <= 1 is the smallest value (base case)
+    // values[0] = f(x) = x
+    let prev2 = x;
+    // values[1] = f(x+1) = f(x) + f(x-1) where f(x-1) <= 1 so it's (x - 1)
+    let prev1 = prev2 + (x - 1);
+    if (steps === 1) {
+        return prev1;
+    }
+    for (let i = 2; i <= steps; i++) {
+        const cur = prev1 + prev2;
+        prev2 = prev1;
+        prev1 = cur;
+    }
+    return prev1;
 }
 
 /**
