@@ -71,6 +71,7 @@
     }
   },
   "dependencies": {
-    "better-sqlite3": "^9.0.0"
+    "better-sqlite3": "^12.0.0",
+    "@msgpack/msgpack": "^3.0.0"
   }
 }

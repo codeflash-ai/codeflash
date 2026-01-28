@@ -38,9 +38,97 @@ let useSqlite = false;
 
 // Configuration from environment
 const OUTPUT_FILE = process.env.CODEFLASH_OUTPUT_FILE;
-const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX , 10);
+const LOOP_INDEX = parseInt(process.env.CODEFLASH_LOOP_INDEX || '1', 10);
 const TEST_ITERATION = process.env.CODEFLASH_TEST_ITERATION;
 const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE;
+
+// Performance loop configuration - controls batched looping in capturePerf
+// Batched looping ensures fair distribution across all test invocations:
+//   Batch 1: Test1(5 loops) → Test2(5 loops) → Test3(5 loops)
+//   Batch 2: Test1(5 loops) → Test2(5 loops) → Test3(5 loops)
+//   ...until time budget exhausted
+const PERF_LOOP_COUNT = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '1', 10);
+const PERF_MIN_LOOPS = parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
+const PERF_TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
+const PERF_BATCH_SIZE = parseInt(process.env.CODEFLASH_PERF_BATCH_SIZE || '10', 10);
+const PERF_STABILITY_CHECK = (process.env.CODEFLASH_PERF_STABILITY_CHECK || 'false').toLowerCase() === 'true';
+// Current batch number - set by loop-runner before each batch
+// This allows continuous loop indices even when Jest resets module state
+const PERF_CURRENT_BATCH = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '0', 10);
+
+// Stability constants (matching Python's config_consts.py)
+const STABILITY_WINDOW_SIZE = 0.35;
+const STABILITY_CENTER_TOLERANCE = 0.0025;
+const STABILITY_SPREAD_TOLERANCE = 0.0025;
+
+// Shared state for coordinating batched looping across all capturePerf calls
+// Uses process object to persist across Jest's module reloads per test file
+const PERF_STATE_KEY = '__codeflash_perf_state__';
+if (!process[PERF_STATE_KEY]) {
+    process[PERF_STATE_KEY] = {
+        startTime: null,           // When benchmarking started
+        totalLoopsCompleted: 0,    // Total loops across all invocations
+        shouldStop: false,         // Flag to stop all further looping
+        currentBatch: 0,           // Current batch number (incremented by runner)
+        invocationLoopCounts: {},  // Track loops per invocation: {invocationKey: loopCount}
+    };
+}
+const sharedPerfState = process[PERF_STATE_KEY];
+
+/**
+ * Check if the shared time budget has been exceeded.
+ * @returns {boolean} True if we should stop looping
+ */
+function checkSharedTimeLimit() {
+    if (sharedPerfState.shouldStop) return true;
+    if (sharedPerfState.startTime === null) {
+        sharedPerfState.startTime = Date.now();
+        return false;
+    }
+    const elapsed = Date.now() - sharedPerfState.startTime;
+    if (elapsed >= PERF_TARGET_DURATION_MS && sharedPerfState.totalLoopsCompleted >= PERF_MIN_LOOPS) {
+        sharedPerfState.shouldStop = true;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Get the current loop index for a specific invocation.
+ * Each invocation tracks its own loop count independently within a batch.
+ * The actual loop index is computed as: (batch - 1) * BATCH_SIZE + localIndex
+ * This ensures continuous loop indices even when Jest resets module state.
+ * @param {string} invocationKey - Unique key for this test invocation
+ * @returns {number} The next global loop index for this invocation
+ */
+function getInvocationLoopIndex(invocationKey) {
+    // Track local loop count within this batch (starts at 0)
+    if (!sharedPerfState.invocationLoopCounts[invocationKey]) {
+        sharedPerfState.invocationLoopCounts[invocationKey] = 0;
+    }
+    const localIndex = ++sharedPerfState.invocationLoopCounts[invocationKey];
+
+    // Calculate global loop index using batch number from environment
+    // PERF_CURRENT_BATCH is 1-based (set by loop-runner before each batch)
+    const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+    const globalIndex = (currentBatch - 1) * PERF_BATCH_SIZE + localIndex;
+
+    return globalIndex;
+}
+
+/**
+ * Increment the batch counter. Called by loop-runner between test file runs.
+ */
+function incrementBatch() {
+    sharedPerfState.currentBatch++;
+}
+
+/**
+ * Get current batch number.
+ */
+function getCurrentBatch() {
+    return sharedPerfState.currentBatch;
+}
 
 // Random seed for reproducible test runs
 // Both original and optimized runs use the same seed to get identical "random" values
@@ -159,6 +247,30 @@ const results = [];
 
 // SQLite database (lazy initialized)
 let db = null;
+
+/**
+ * Check if performance has stabilized (for internal looping).
+ * Matches Python's pytest_plugin.should_stop() logic.
+ */
+function shouldStopStability(runtimes, window, minWindowSize) {
+    if (runtimes.length < window || runtimes.length < minWindowSize) {
+        return false;
+    }
+    const recent = runtimes.slice(-window);
+    const recentSorted = [...recent].sort((a, b) => a - b);
+    const mid = Math.floor(window / 2);
+    const median = window % 2 ? recentSorted[mid] : (recentSorted[mid - 1] + recentSorted[mid]) / 2;
+
+    for (const r of recent) {
+        if (Math.abs(r - median) / median > STABILITY_CENTER_TOLERANCE) {
+            return false;
+        }
+    }
+    const rMin = recentSorted[0];
+    const rMax = recentSorted[recentSorted.length - 1];
+    if (rMin === 0) return false;
+    return (rMax - rMin) / rMin <= STABILITY_SPREAD_TOLERANCE;
+}
 
 /**
  * Get high-resolution time in nanoseconds.
@@ -477,7 +589,9 @@ function capture(funcName, lineId, fn, ...args) {
  * It prints start/end tags to stdout (no SQLite writes, no serialization overhead).
  * Used when we've already verified behavior and just need accurate timing.
  *
- * The timing measurement is done exactly around the function call for accuracy.
+ * When CODEFLASH_PERF_LOOP_COUNT > 1, this function loops internally to avoid
+ * Jest environment overhead per iteration. This dramatically improves utilization
+ * (time spent in actual function execution vs overhead).
  *
  * Output format matches Python's codeflash_performance wrapper:
  * Start: !$######test_module:test_class.test_name:func_name:loop_index:invocation_id######$!
@@ -491,16 +605,16 @@ function capture(funcName, lineId, fn, ...args) {
  * @throws {Error} - Re-throws any error from the function
  */
 function capturePerf(funcName, lineId, fn, ...args) {
-    // Get test context
-    // Use TEST_MODULE env var if set, otherwise derive from test file path
+    // Check if we should skip looping entirely (shared time budget exceeded)
+    const shouldLoop = PERF_LOOP_COUNT > 1 && !checkSharedTimeLimit();
+
+    // Get test context (computed once, reused across batch)
     let testModulePath;
     if (TEST_MODULE) {
         testModulePath = TEST_MODULE;
     } else if (currentTestPath) {
-        // Get relative path from cwd and convert to module-style path
         const path = require('path');
         const relativePath = path.relative(process.cwd(), currentTestPath);
-        // Convert to Python module-style path (e.g., "tests/test_foo.test.js" -> "tests.test_foo.test")
         testModulePath = relativePath
             .replace(/\\/g, '/')
             .replace(/\.js$/, '')
@@ -509,70 +623,109 @@ function capturePerf(funcName, lineId, fn, ...args) {
     } else {
         testModulePath = currentTestName || 'unknown';
     }
-    const testClassName = null;  // Jest doesn't use classes like Python
+    const testClassName = null;
     const testFunctionName = currentTestName || 'unknown';
 
-    // Sanitized versions for stdout tags (avoid regex conflicts)
     const safeModulePath = sanitizeTestId(testModulePath);
     const safeTestFunctionName = sanitizeTestId(testFunctionName);
 
-    // Create testId for invocation tracking (matches Python format)
-    const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${LOOP_INDEX}`;
+    // Create unique key for this invocation (identifies this specific capturePerf call site)
+    const invocationKey = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${funcName}:${lineId}`;
 
-    // Get invocation index (increments if same testId seen again)
-    const invocationIndex = getInvocationIndex(testId);
-    const invocationId = `${lineId}_${invocationIndex}`;
+    // Check if we've already completed all loops for this invocation
+    // If so, just execute the function once without timing (for test assertions)
+    const peekLoopIndex = (sharedPerfState.invocationLoopCounts[invocationKey] || 0);
+    const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
+    const nextGlobalIndex = (currentBatch - 1) * PERF_BATCH_SIZE + peekLoopIndex + 1;
 
-    // Format stdout tag (matches Python format, uses sanitized names)
-    const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${LOOP_INDEX}:${invocationId}`;
-
-    // Print start tag
-    console.log(`!$######${testStdoutTag}######$!`);
-
-    // Timing with nanosecond precision - exactly around the function call
-    let returnValue;
-    let error = null;
-    let durationNs;
-
-    try {
-        const startTime = getTimeNs();
-        returnValue = fn(...args);
-        const endTime = getTimeNs();
-        durationNs = getDurationNs(startTime, endTime);
-
-        // Handle promises (async functions)
-        if (returnValue instanceof Promise) {
-            return returnValue.then(
-                (resolved) => {
-                    // For async, we measure until resolution
-                    const asyncEndTime = getTimeNs();
-                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                    // Print end tag with timing
-                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                    return resolved;
-                },
-                (err) => {
-                    const asyncEndTime = getTimeNs();
-                    const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                    // Print end tag with timing even on error
-                    console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                    throw err;
-                }
-            );
-        }
-    } catch (e) {
-        const endTime = getTimeNs();
-        // For sync errors, we still need to calculate duration
-        // Use a fallback if we didn't capture startTime yet
-        durationNs = 0;
-        error = e;
+    if (shouldLoop && nextGlobalIndex > PERF_LOOP_COUNT) {
+        // All loops completed, just execute once for test assertion
+        return fn(...args);
     }
 
-    // Print end tag with timing (no rounding)
-    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+    let lastReturnValue;
+    let lastError = null;
 
-    if (error) throw error;
-    return returnValue;
+    // Batched looping: run BATCH_SIZE loops per capturePerf call
+    // This ensures fair distribution across all test invocations
+    const batchSize = shouldLoop ? PERF_BATCH_SIZE : 1;
+
+    for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
+        // Check shared time limit BEFORE each iteration
+        if (shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+
+        // Get the global loop index for this invocation (increments across batches)
+        const loopIndex = getInvocationLoopIndex(invocationKey);
+
+        // Check if we've exceeded max loops for this invocation
+        if (loopIndex > PERF_LOOP_COUNT) {
+            break;
+        }
+
+        // Get invocation index for the timing marker
+        const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
+        const invocationIndex = getInvocationIndex(testId);
+        const invocationId = `${lineId}_${invocationIndex}`;
+
+        // Format stdout tag with current loop index
+        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
+
+        // Timing with nanosecond precision
+        let durationNs;
+        try {
+            const startTime = getTimeNs();
+            lastReturnValue = fn(...args);
+            const endTime = getTimeNs();
+            durationNs = getDurationNs(startTime, endTime);
+
+            // Handle promises - for async functions, run once and return
+            if (lastReturnValue instanceof Promise) {
+                return lastReturnValue.then(
+                    (resolved) => {
+                        const asyncEndTime = getTimeNs();
+                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
+                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                        sharedPerfState.totalLoopsCompleted++;
+                        return resolved;
+                    },
+                    (err) => {
+                        const asyncEndTime = getTimeNs();
+                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
+                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                        sharedPerfState.totalLoopsCompleted++;
+                        throw err;
+                    }
+                );
+            }
+
+            lastError = null;
+        } catch (e) {
+            durationNs = 0;
+            lastError = e;
+        }
+
+        // Print end tag with timing
+        console.log(`!######${testStdoutTag}:${durationNs}######!`);
+
+        // Update shared loop counter
+        sharedPerfState.totalLoopsCompleted++;
+
+        // If we had an error, stop looping
+        if (lastError) {
+            break;
+        }
+    }
+
+    if (lastError) throw lastError;
+
+    // If we never executed (e.g., hit loop limit on first iteration), run once for assertion
+    if (lastReturnValue === undefined && !lastError) {
+        return fn(...args);
+    }
+
+    return lastReturnValue;
 }
 
 /**
@@ -623,12 +776,23 @@ function writeResults() {
 }
 
 /**
+ * Reset shared performance state.
+ * Should be called at the start of each test file to reset timing.
+ */
+function resetPerfState() {
+    sharedPerfState.startTime = null;
+    sharedPerfState.totalLoopsCompleted = 0;
+    sharedPerfState.shouldStop = false;
+}
+
+/**
  * Clear all recorded results.
  * Useful for resetting between test files.
  */
 function clearResults() {
     results.length = 0;
     resetInvocationCounters();
+    resetPerfState();
 }
 
 /**
@@ -691,10 +855,17 @@ module.exports = {
     resetInvocationCounters,
     getInvocationIndex,
     sanitizeTestId,    // Sanitize test names for stdout tags
+    // Batch looping control (used by loop-runner)
+    incrementBatch,
+    getCurrentBatch,
+    checkSharedTimeLimit,
     // Serializer info
     getSerializerType: serializer.getSerializerType,
     // Constants
     LOOP_INDEX,
     OUTPUT_FILE,
-    TEST_ITERATION
+    TEST_ITERATION,
+    // Batch configuration
+    PERF_BATCH_SIZE,
+    PERF_LOOP_COUNT,
 };

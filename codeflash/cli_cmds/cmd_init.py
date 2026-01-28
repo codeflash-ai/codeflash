@@ -26,16 +26,13 @@ from codeflash.api.cfapi import get_user_id, is_github_app_installed_on_repo, se
 from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
+
 # Import JS/TS init module
 from codeflash.cli_cmds.init_javascript import (
-    JsPackageManager,
-    JSSetupInfo,
     ProjectLanguage,
     detect_project_language,
     determine_js_package_manager,
-    get_js_codeflash_command,
     get_js_dependency_installation_commands,
-    get_js_runtime_setup_string,
     init_js_project,
 )
 from codeflash.code_utils.code_utils import validate_relative_directory_path
@@ -798,8 +795,16 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
 
         # Generate workflow content AFTER user confirmation
         logger.info("[cmd_init.py:install_github_actions] User confirmed, generating workflow content...")
+
+        # Select the appropriate workflow template based on project language
+        project_language = detect_project_language_for_workflow(Path.cwd())
+        if project_language in ("javascript", "typescript"):
+            workflow_template = "codeflash-optimize-js.yaml"
+        else:
+            workflow_template = "codeflash-optimize.yaml"
+
         optimize_yml_content = (
-            files("codeflash").joinpath("cli_cmds", "workflows", "codeflash-optimize.yaml").read_text(encoding="utf-8")
+            files("codeflash").joinpath("cli_cmds", "workflows", workflow_template).read_text(encoding="utf-8")
         )
         materialized_optimize_yml_content = generate_dynamic_workflow_content(
             optimize_yml_content, config, git_root, benchmark_mode
@@ -1337,7 +1342,15 @@ def generate_dynamic_workflow_content(
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)
 
-    # Get working directory
+    # Detect project language
+    project_language = detect_project_language_for_workflow(Path.cwd())
+
+    # For JavaScript/TypeScript projects, use static template customization
+    # (AI-generated steps are currently Python-only)
+    if project_language in ("javascript", "typescript"):
+        return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
+
+    # Python project - try AI-generated steps
     toml_path = Path.cwd() / "pyproject.toml"
     try:
         with toml_path.open(encoding="utf8") as pyproject_file:
@@ -1503,13 +1516,20 @@ def _customize_python_workflow_content(
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
-# TODO:{claude} Refactor and move to support for language specific 
+# TODO:{claude} Refactor and move to support for language specific
 def _customize_js_workflow_content(
     optimize_yml_content: str,
     git_root: Path,
     benchmark_mode: bool = False,  # noqa: FBT001, FBT002
 ) -> str:
     """Customize workflow content for JavaScript/TypeScript projects."""
+    from codeflash.cli_cmds.init_javascript import (
+        get_js_codeflash_install_step,
+        get_js_codeflash_run_command,
+        get_js_runtime_setup_steps,
+        is_codeflash_dependency,
+    )
+
     project_root = Path.cwd()
     package_json_path = project_root / "package.json"
 
@@ -1531,19 +1551,24 @@ def _customize_js_workflow_content(
 
     optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
 
-    # Determine package manager
+    # Determine package manager and codeflash dependency status
     pkg_manager = determine_js_package_manager(project_root)
+    codeflash_is_dep = is_codeflash_dependency(project_root)
 
-    # Setup runtime environment
-    runtime_setup = get_js_runtime_setup_string(pkg_manager)
-    optimize_yml_content = optimize_yml_content.replace("{{ setup_runtime_environment }}", runtime_setup)
+    # Setup runtime environment (Node.js/Bun)
+    runtime_setup = get_js_runtime_setup_steps(pkg_manager)
+    optimize_yml_content = optimize_yml_content.replace("{{ setup_runtime_steps }}", runtime_setup)
 
     # Install dependencies
     install_deps_cmd = get_js_dependency_installation_commands(pkg_manager)
     optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
 
-    # Codeflash command
-    codeflash_cmd = get_js_codeflash_command(pkg_manager)
+    # Install codeflash step (only if not a dependency)
+    install_codeflash = get_js_codeflash_install_step(pkg_manager, is_dependency=codeflash_is_dep)
+    optimize_yml_content = optimize_yml_content.replace("{{ install_codeflash_step }}", install_codeflash)
+
+    # Codeflash run command
+    codeflash_cmd = get_js_codeflash_run_command(pkg_manager, is_dependency=codeflash_is_dep)
     if benchmark_mode:
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)

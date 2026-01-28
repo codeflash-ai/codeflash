@@ -4,14 +4,21 @@
 
 /**
  * Reverse a string character by character.
- * This is intentionally inefficient - uses string concatenation in a loop.
+ * This is intentionally inefficient O(n²) - rebuilds result string each iteration.
  * @param str - The string to reverse
  * @returns The reversed string
  */
 export function reverseString(str: string): string {
+    // Intentionally inefficient O(n²) implementation for testing
     let result = '';
     for (let i = str.length - 1; i >= 0; i--) {
-        result += str[i];
+        // Rebuild the entire result string each iteration (very inefficient)
+        let temp = '';
+        for (let j = 0; j < result.length; j++) {
+            temp += result[j];
+        }
+        temp += str[i];
+        result = temp;
     }
     return result;
 }

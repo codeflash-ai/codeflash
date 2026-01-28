@@ -12,8 +12,29 @@ import subprocess
 from pathlib import Path
 
 from codeflash.cli_cmds.console import logger
-from codeflash.languages.javascript.runtime import get_compare_results_path
 from codeflash.models.models import TestDiff, TestDiffScope
+
+
+def _get_compare_results_script(project_root: Path | None = None) -> Path | None:
+    """Find the compare-results.js script from the installed codeflash npm package.
+
+    Args:
+        project_root: Project root directory where node_modules is installed.
+
+    Returns:
+        Path to compare-results.js if found, None otherwise.
+    """
+    search_dirs = []
+    if project_root:
+        search_dirs.append(project_root)
+    search_dirs.append(Path.cwd())
+
+    for base_dir in search_dirs:
+        script_path = base_dir / "node_modules" / "codeflash" / "runtime" / "compare-results.js"
+        if script_path.exists():
+            return script_path
+
+    return None
 
 
 def compare_test_results(
@@ -26,8 +47,8 @@ def compare_test_results(
 
     This function calls a Node.js script that:
     1. Reads serialized behavior data from both SQLite databases
-    2. Deserializes using codeflash-serializer.js
-    3. Compares using codeflash-comparator.js (handles Map, Set, Date, etc. natively)
+    2. Deserializes using the codeflash serializer module
+    3. Compares using the codeflash comparator module (handles Map, Set, Date, etc. natively)
     4. Returns comparison results as JSON
 
     Args:
@@ -39,10 +60,13 @@ def compare_test_results(
     Returns:
         Tuple of (all_equivalent, list of TestDiff objects).
     """
-    script_path = comparator_script or get_compare_results_path()
+    script_path = comparator_script or _get_compare_results_script(project_root)
 
-    if not script_path.exists():
-        logger.error(f"JavaScript comparator script not found: {script_path}")
+    if not script_path or not script_path.exists():
+        logger.error(
+            "JavaScript comparator script not found. "
+            "Please ensure the 'codeflash' npm package is installed in your project."
+        )
         return False, []
 
     if not original_sqlite_path.exists():

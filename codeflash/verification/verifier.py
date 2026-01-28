@@ -62,36 +62,49 @@ def generate_tests(
         generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source = response
         temp_run_dir = get_run_tmp_file(Path()).as_posix()
 
-        instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
-            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
-        )
-        instrumented_perf_test_source = instrumented_perf_test_source.replace(
-            "{codeflash_run_tmp_dir_client_side}", temp_run_dir
-        )
-
-        # For JavaScript/TypeScript, validate and fix import styles to match source exports
+        # For JavaScript/TypeScript, instrumentation is done locally (aiservice returns uninstrumented code)
         if is_javascript():
-            from codeflash.languages.javascript.instrument import validate_and_fix_import_style
+            from codeflash.languages.javascript.instrument import (
+                TestingMode,
+                instrument_generated_js_test,
+                validate_and_fix_import_style,
+            )
             from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
 
             source_file = Path(function_to_optimize.file_path)
             func_name = function_to_optimize.function_name
+            qualified_name = function_to_optimize.qualified_name
 
+            # First validate and fix import styles
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
-            instrumented_behavior_test_source = validate_and_fix_import_style(
-                instrumented_behavior_test_source, source_file, func_name
-            )
-            instrumented_perf_test_source = validate_and_fix_import_style(
-                instrumented_perf_test_source, source_file, func_name
-            )
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
             generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
-            instrumented_behavior_test_source = ensure_module_system_compatibility(
-                instrumented_behavior_test_source, project_module_system
+
+            # Instrument for behavior verification (writes to SQLite)
+            instrumented_behavior_test_source = instrument_generated_js_test(
+                test_code=generated_test_source,
+                function_name=func_name,
+                qualified_name=qualified_name,
+                mode=TestingMode.BEHAVIOR,
             )
-            instrumented_perf_test_source = ensure_module_system_compatibility(
-                instrumented_perf_test_source, project_module_system
+
+            # Instrument for performance measurement (prints to stdout)
+            instrumented_perf_test_source = instrument_generated_js_test(
+                test_code=generated_test_source,
+                function_name=func_name,
+                qualified_name=qualified_name,
+                mode=TestingMode.PERFORMANCE,
+            )
+
+            logger.debug(f"Instrumented JS/TS tests locally for {func_name}")
+        else:
+            # Python: instrumentation is done by aiservice, just replace temp dir placeholders
+            instrumented_behavior_test_source = instrumented_behavior_test_source.replace(
+                "{codeflash_run_tmp_dir_client_side}", temp_run_dir
+            )
+            instrumented_perf_test_source = instrumented_perf_test_source.replace(
+                "{codeflash_run_tmp_dir_client_side}", temp_run_dir
             )
     else:
         logger.warning(f"Failed to generate and instrument tests for {function_to_optimize.function_name}")

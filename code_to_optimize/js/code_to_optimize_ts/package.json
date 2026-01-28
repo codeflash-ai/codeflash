@@ -8,6 +8,10 @@
     "test:coverage": "jest --coverage",
     "build": "tsc"
   },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests"
+  },
   "keywords": [
     "codeflash",
     "optimization",
@@ -19,14 +23,11 @@
   "devDependencies": {
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
+    "codeflash": "file:../../../packages/codeflash",
     "jest": "^29.7.0",
     "jest-junit": "^16.0.0",
     "ts-jest": "^29.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "@msgpack/msgpack": "^3.1.3",
-    "better-sqlite3": "^12.6.0"
   }
 }

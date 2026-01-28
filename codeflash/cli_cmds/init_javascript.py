@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
 import click
 import inquirer
@@ -25,9 +25,6 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
-
-if TYPE_CHECKING:
-    pass
 
 
 class ProjectLanguage(Enum):
@@ -52,15 +49,19 @@ class JsPackageManager(Enum):
 class JSSetupInfo:
     """Setup info for JavaScript/TypeScript projects.
 
-    tests_root is optional because Jest auto-discovers tests.
+    Only stores values that override auto-detection or user preferences.
+    Most config is auto-detected from package.json and project structure.
     """
 
-    module_root: str
-    tests_root: Union[str, None]  # Optional - Jest auto-discovers
-    formatter: Union[str, list[str]]
-    git_remote: str
-    enable_telemetry: bool
-    language: ProjectLanguage = ProjectLanguage.JAVASCRIPT
+    # Override values (None means use auto-detected value)
+    module_root_override: Union[str, None] = None
+    formatter_override: Union[list[str], None] = None
+
+    # User preferences (stored in config only if non-default)
+    git_remote: str = "origin"
+    disable_telemetry: bool = False
+    ignore_paths: list[str] | None = None
+    benchmarks_root: Union[str, None] = None
 
 
 # Import theme from cmd_init to avoid duplication
@@ -79,6 +80,7 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
 
     Returns:
         ProjectLanguage enum value
+
     """
     root = project_root or Path.cwd()
 
@@ -117,13 +119,7 @@ def determine_js_package_manager(project_root: Path) -> JsPackageManager:
 
 def init_js_project(language: ProjectLanguage) -> None:
     """Initialize Codeflash for a JavaScript/TypeScript project."""
-    from codeflash.cli_cmds.cmd_init import (
-        ask_for_telemetry,
-        get_valid_subdirs,
-        install_github_actions,
-        install_github_app,
-        prompt_api_key,
-    )
+    from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key
 
     lang_name = "TypeScript" if language == ProjectLanguage.TYPESCRIPT else "JavaScript"
 
@@ -142,13 +138,14 @@ def init_js_project(language: ProjectLanguage) -> None:
 
     did_add_new_key = prompt_api_key()
 
-    should_modify, config = should_modify_package_json_config()
+    should_modify, _config = should_modify_package_json_config()
 
-    git_remote = config.get("gitRemote", "origin") if config else "origin"
+    # Default git remote
+    git_remote = "origin"
 
     if should_modify:
         setup_info = collect_js_setup_info(language)
-        git_remote = setup_info.git_remote
+        git_remote = setup_info.git_remote or "origin"
         configured = configure_package_json(setup_info)
         if not configured:
             apologize_and_exit()
@@ -227,8 +224,19 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
 
 
 def collect_js_setup_info(language: ProjectLanguage) -> JSSetupInfo:
-    """Collect setup information for JavaScript/TypeScript projects."""
+    """Collect setup information for JavaScript/TypeScript projects.
+
+    Uses auto-detection for most settings and only asks for overrides if needed.
+    """
+    from rich.prompt import Confirm
+
     from codeflash.cli_cmds.cmd_init import ask_for_telemetry, get_valid_subdirs
+    from codeflash.code_utils.config_js import (
+        detect_formatter,
+        detect_module_root,
+        detect_test_runner,
+        get_package_json_data,
+    )
 
     curdir = Path.cwd()
 
@@ -238,143 +246,117 @@ def collect_js_setup_info(language: ProjectLanguage) -> JSSetupInfo:
 
     lang_name = "TypeScript" if language == ProjectLanguage.TYPESCRIPT else "JavaScript"
 
-    # Module root selection
-    valid_subdirs = get_valid_subdirs()
-    curdir_option = f"current directory ({curdir})"
-    custom_dir_option = "enter a custom directory…"
-    module_options = [
-        *[d for d in valid_subdirs if d not in ("tests", "__tests__", "node_modules")],
-        curdir_option,
-        custom_dir_option,
-    ]
+    # Load package.json data for detection
+    package_json_path = curdir / "package.json"
+    package_data = get_package_json_data(package_json_path) or {}
 
-    # Try to detect src directory
-    default_module = "src" if "src" in valid_subdirs else module_options[0] if module_options else curdir_option
+    # Auto-detect values
+    detected_module_root = detect_module_root(curdir, package_data)
+    detected_test_runner = detect_test_runner(curdir, package_data)
+    detected_formatter = detect_formatter(curdir, package_data)
 
-    info_panel = Panel(
-        Text(
-            f"📁 Let's identify your {lang_name} source directory.\n\n"
-            "This is usually 'src' or the root directory containing your source code.\n",
-            style="cyan",
+    # Build detection summary
+    formatter_display = detected_formatter[0] if detected_formatter else "none detected"
+    detection_table = Table(show_header=False, box=None, padding=(0, 2))
+    detection_table.add_column("Setting", style="cyan")
+    detection_table.add_column("Value", style="green")
+    detection_table.add_row("Module root", detected_module_root)
+    detection_table.add_row("Test runner", detected_test_runner)
+    detection_table.add_row("Formatter", formatter_display)
+
+    detection_panel = Panel(
+        Group(
+            Text(f"Auto-detected settings for your {lang_name} project:\n", style="cyan"),
+            detection_table,
         ),
-        title="🔍 Source Discovery",
+        title="🔍 Auto-Detection Results",
         border_style="bright_blue",
     )
-    console.print(info_panel)
+    console.print(detection_panel)
     console.print()
 
-    questions = [
-        inquirer.List(
-            "module_root",
-            message=f"Which directory contains your {lang_name} source code?",
-            choices=module_options,
-            default=default_module,
-            carousel=True,
-        )
-    ]
+    # Ask if user wants to change any settings
+    module_root_override = None
+    formatter_override = None
 
-    answers = inquirer.prompt(questions, theme=_get_theme())
-    if not answers:
-        apologize_and_exit()
+    if Confirm.ask("Would you like to change any of these settings?", default=False):
+        # Module root override
+        valid_subdirs = get_valid_subdirs()
+        curdir_option = f"current directory ({curdir})"
+        custom_dir_option = "enter a custom directory…"
+        keep_detected_option = f"✓ keep detected ({detected_module_root})"
 
-    module_root_answer = answers["module_root"]
-    if module_root_answer == curdir_option:
-        module_root = "."
-    elif module_root_answer == custom_dir_option:
-        module_root = _prompt_custom_directory("module")
-    else:
-        module_root = module_root_answer
+        module_options = [
+            keep_detected_option,
+            *[d for d in valid_subdirs if d not in ("tests", "__tests__", "node_modules", detected_module_root)],
+            curdir_option,
+            custom_dir_option,
+        ]
 
-    ph("cli-js-module-root-provided")
+        module_questions = [
+            inquirer.List(
+                "module_root",
+                message=f"Which directory contains your {lang_name} source code?",
+                choices=module_options,
+                default=keep_detected_option,
+                carousel=True,
+            )
+        ]
 
-    # Tests root - OPTIONAL for Jest
-    tests_panel = Panel(
-        Text(
-            "🧪 Test Directory (Optional)\n\n"
-            "Jest auto-discovers tests from patterns like *.test.js and __tests__/.\n"
-            "You can specify a tests directory or skip this step.",
-            style="green",
-        ),
-        title="🧪 Test Discovery",
-        border_style="bright_green",
-    )
-    console.print(tests_panel)
-    console.print()
+        module_answers = inquirer.prompt(module_questions, theme=_get_theme())
+        if not module_answers:
+            apologize_and_exit()
 
-    skip_option = "⏭️  Skip (Jest will auto-discover tests)"
-    test_suggestions = [d for d in valid_subdirs if d in ("tests", "__tests__", "test", "spec")]
-    test_options = [skip_option, *test_suggestions, custom_dir_option]
+        module_root_answer = module_answers["module_root"]
+        if module_root_answer == keep_detected_option:
+            pass  # Keep auto-detected value
+        elif module_root_answer == curdir_option:
+            module_root_override = "."
+        elif module_root_answer == custom_dir_option:
+            module_root_override = _prompt_custom_directory("module")
+        else:
+            module_root_override = module_root_answer
 
-    tests_questions = [
-        inquirer.List(
-            "tests_root",
-            message="Where are your tests located?",
-            choices=test_options,
-            default=skip_option,
-            carousel=True,
-        )
-    ]
+        ph("cli-js-module-root-provided", {"overridden": module_root_override is not None})
 
-    tests_answers = inquirer.prompt(tests_questions, theme=_get_theme())
-    if not tests_answers:
-        apologize_and_exit()
+        # Formatter override
+        formatter_questions = [
+            inquirer.List(
+                "formatter",
+                message="Which code formatter do you use?",
+                choices=[
+                    (f"✓ keep detected ({formatter_display})", "keep"),
+                    ("💅 prettier", "prettier"),
+                    ("📐 eslint --fix", "eslint"),
+                    ("🔧 other", "other"),
+                    ("❌ don't use a formatter", "disabled"),
+                ],
+                default="keep",
+                carousel=True,
+            )
+        ]
 
-    tests_root_answer = tests_answers["tests_root"]
-    if tests_root_answer == skip_option:
-        tests_root = None
-    elif tests_root_answer == custom_dir_option:
-        tests_root = _prompt_custom_directory("tests")
-    else:
-        tests_root = tests_root_answer
+        formatter_answers = inquirer.prompt(formatter_questions, theme=_get_theme())
+        if not formatter_answers:
+            apologize_and_exit()
 
-    ph("cli-js-tests-root-provided", {"skipped": tests_root is None})
+        formatter_choice = formatter_answers["formatter"]
+        if formatter_choice != "keep":
+            formatter_override = get_js_formatter_cmd(formatter_choice)
 
-    # Formatter selection
-    formatter_panel = Panel(
-        Text(
-            "🎨 Let's configure your code formatter.\n\n" "Codeflash will use this to format optimized code.",
-            style="magenta",
-        ),
-        title="🎨 Code Formatter",
-        border_style="bright_magenta",
-    )
-    console.print(formatter_panel)
-    console.print()
-
-    formatter_questions = [
-        inquirer.List(
-            "formatter",
-            message="Which code formatter do you use?",
-            choices=[
-                ("💅 prettier (Recommended)", "prettier"),
-                ("📐 eslint --fix", "eslint"),
-                ("🔧 other", "other"),
-                ("❌ don't use a formatter", "disabled"),
-            ],
-            default="prettier",
-            carousel=True,
-        )
-    ]
-
-    formatter_answers = inquirer.prompt(formatter_questions, theme=_get_theme())
-    if not formatter_answers:
-        apologize_and_exit()
-
-    formatter = formatter_answers["formatter"]
+        ph("cli-js-formatter-provided", {"overridden": formatter_override is not None})
 
     # Git remote
-    git_remote = _get_git_remote_for_setup(module_root)
+    git_remote = _get_git_remote_for_setup()
 
     # Telemetry
-    enable_telemetry = ask_for_telemetry()
+    disable_telemetry = not ask_for_telemetry()
 
     return JSSetupInfo(
-        module_root=str(module_root),
-        tests_root=str(tests_root) if tests_root else None,
-        formatter=get_js_formatter_cmd(formatter),
-        git_remote=str(git_remote),
-        enable_telemetry=enable_telemetry,
-        language=language,
+        module_root_override=module_root_override,
+        formatter_override=formatter_override,
+        git_remote=git_remote,
+        disable_telemetry=disable_telemetry,
     )
 
 
@@ -404,10 +386,10 @@ def _prompt_custom_directory(dir_type: str) -> str:
         console.print()
 
 
-def _get_git_remote_for_setup(module_root: str) -> str:
+def _get_git_remote_for_setup() -> str:
     """Get git remote for project setup."""
     try:
-        repo = Repo(str(module_root), search_parent_directories=True)
+        repo = Repo(Path.cwd(), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
         if not git_remotes:
             return ""
@@ -456,7 +438,12 @@ def get_js_formatter_cmd(formatter: str) -> list[str]:
 
 
 def configure_package_json(setup_info: JSSetupInfo) -> bool:
-    """Configure codeflash section in package.json for JavaScript/TypeScript projects."""
+    """Configure codeflash section in package.json for JavaScript/TypeScript projects.
+
+    Only writes minimal config - values that override auto-detection or user preferences.
+    Auto-detected values (language, moduleRoot, testRunner, formatter) are NOT stored
+    unless explicitly overridden by the user.
+    """
     package_json_path = Path.cwd() / "package.json"
 
     try:
@@ -469,44 +456,59 @@ def configure_package_json(setup_info: JSSetupInfo) -> bool:
         click.echo(f"❌ Invalid package.json: {e}")
         return False
 
-    # Build codeflash config using camelCase (JS convention)
-    codeflash_config: dict[str, Any] = {
-        "moduleRoot": setup_info.module_root,
-    }
+    # Build minimal codeflash config using camelCase (JS convention)
+    # Only include values that override auto-detection or are user preferences
+    codeflash_config: dict[str, Any] = {}
 
-    # testsRoot is optional - Jest auto-discovers tests
-    if setup_info.tests_root:
-        codeflash_config["testsRoot"] = setup_info.tests_root
+    # Module root override (only if user changed from auto-detected)
+    if setup_info.module_root_override is not None:
+        codeflash_config["moduleRoot"] = setup_info.module_root_override
 
-    # Formatter
-    if setup_info.formatter != ["disabled"]:
-        codeflash_config["formatterCmds"] = setup_info.formatter
+    # Formatter override (only if user changed from auto-detected)
+    if setup_info.formatter_override is not None:
+        if setup_info.formatter_override != ["disabled"]:
+            codeflash_config["formatterCmds"] = setup_info.formatter_override
+        else:
+            codeflash_config["formatterCmds"] = []
 
-    # Git remote (only if not default)
+    # Git remote (only if not default "origin")
     if setup_info.git_remote and setup_info.git_remote not in ("", "origin"):
         codeflash_config["gitRemote"] = setup_info.git_remote
 
-    # Telemetry
-    if not setup_info.enable_telemetry:
+    # User preferences
+    if setup_info.disable_telemetry:
         codeflash_config["disableTelemetry"] = True
 
-    # Language
-    codeflash_config["language"] = "typescript" if setup_info.language == ProjectLanguage.TYPESCRIPT else "javascript"
+    if setup_info.ignore_paths:
+        codeflash_config["ignorePaths"] = setup_info.ignore_paths
 
-    # Add/update codeflash section
-    package_data["codeflash"] = codeflash_config
+    if setup_info.benchmarks_root:
+        codeflash_config["benchmarksRoot"] = setup_info.benchmarks_root
+
+    # Only write codeflash section if there's something to write
+    if codeflash_config:
+        package_data["codeflash"] = codeflash_config
+        action = "Updated"
+    else:
+        # Remove codeflash section if empty (all auto-detected)
+        if "codeflash" in package_data:
+            del package_data["codeflash"]
+        action = "Configured"
 
     try:
         with package_json_path.open("w", encoding="utf8") as f:
             json.dump(package_data, f, indent=2)
             f.write("\n")  # Trailing newline
-
-        click.echo(f"✅ Added Codeflash configuration to {package_json_path}")
-        click.echo()
-        return True
     except OSError as e:
         click.echo(f"❌ Failed to update package.json: {e}")
         return False
+    else:
+        if codeflash_config:
+            click.echo(f"✅ {action} Codeflash configuration in {package_json_path}")
+        else:
+            click.echo("✅ Using auto-detected configuration (no overrides needed)")
+        click.echo()
+        return True
 
 
 # ============================================================================
@@ -514,35 +516,125 @@ def configure_package_json(setup_info: JSSetupInfo) -> bool:
 # ============================================================================
 
 
-def get_js_runtime_setup_string(pkg_manager: JsPackageManager) -> str:
-    """Generate the appropriate Node.js setup step for GitHub Actions."""
+def is_codeflash_dependency(project_root: Path) -> bool:
+    """Check if codeflash is listed as a dependency in package.json."""
+    package_json_path = project_root / "package.json"
+    if not package_json_path.exists():
+        return False
+
+    try:
+        with package_json_path.open(encoding="utf8") as f:
+            package_data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+
+    deps = package_data.get("dependencies", {})
+    dev_deps = package_data.get("devDependencies", {})
+    return "codeflash" in deps or "codeflash" in dev_deps
+
+
+def get_js_runtime_setup_steps(pkg_manager: JsPackageManager) -> str:
+    """Generate the appropriate Node.js/Bun setup steps for GitHub Actions.
+
+    Returns properly indented YAML steps for the workflow template.
+    """
     if pkg_manager == JsPackageManager.BUN:
-        return """name: 🥟 Setup Bun
+        return """- name: 🥟 Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest"""
+
     if pkg_manager == JsPackageManager.PNPM:
-        return """name: 📦 Setup pnpm
+        return """- name: 📦 Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'"""
+
     if pkg_manager == JsPackageManager.YARN:
-        return """name: 🟢 Setup Node.js
+        return """- name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'yarn'"""
+
     # NPM or UNKNOWN
-    return """name: 🟢 Setup Node.js
+    return """- name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'"""
+
+
+def get_js_codeflash_install_step(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:
+    """Generate the codeflash installation step if not already a dependency.
+
+    Args:
+        pkg_manager: The package manager being used.
+        is_dependency: Whether codeflash is already in package.json dependencies.
+
+    Returns:
+        YAML step string for installing codeflash, or empty string if not needed.
+
+    """
+    if is_dependency:
+        # Codeflash will be installed with other dependencies
+        return ""
+
+    # Need to install codeflash separately
+    if pkg_manager == JsPackageManager.BUN:
+        return """- name: 📥 Install Codeflash
+        run: bun add -g codeflash"""
+
+    if pkg_manager == JsPackageManager.PNPM:
+        return """- name: 📥 Install Codeflash
+        run: pnpm add -g codeflash"""
+
+    if pkg_manager == JsPackageManager.YARN:
+        return """- name: 📥 Install Codeflash
+        run: yarn global add codeflash"""
+
+    # NPM or UNKNOWN
+    return """- name: 📥 Install Codeflash
+        run: npm install -g codeflash"""
+
+
+def get_js_codeflash_run_command(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:
+    """Generate the codeflash run command for GitHub Actions.
+
+    Args:
+        pkg_manager: The package manager being used.
+        is_dependency: Whether codeflash is in package.json dependencies.
+
+    Returns:
+        Command string to run codeflash.
+
+    """
+    if is_dependency:
+        # Use package manager's run command for local dependency
+        if pkg_manager == JsPackageManager.BUN:
+            return "bun run codeflash"
+        if pkg_manager == JsPackageManager.PNPM:
+            return "pnpm exec codeflash"
+        if pkg_manager == JsPackageManager.YARN:
+            return "yarn codeflash"
+        # NPM
+        return "npx codeflash"
+
+    # Globally installed - just run directly
+    return "codeflash"
+
+
+def get_js_runtime_setup_string(pkg_manager: JsPackageManager) -> str:
+    """Generate the appropriate Node.js setup step for GitHub Actions.
+
+    Deprecated: Use get_js_runtime_setup_steps instead.
+    """
+    return get_js_runtime_setup_steps(pkg_manager)
 
 
 def get_js_dependency_installation_commands(pkg_manager: JsPackageManager) -> str:
