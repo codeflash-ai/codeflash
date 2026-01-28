@@ -172,7 +172,7 @@ def suggest_changes(
     concolic_tests: str = "",
     optimization_review: str = "",
     original_line_profiler: str | None = None,
-    optimized_line_profiler: str = "",
+    optimized_line_profiler: str | None = None,
 ) -> Response:
     """Suggest changes to a pull request.
 
@@ -225,8 +225,8 @@ def create_pr(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
-    original_line_profiler: str = "",
-    optimized_line_profiler: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
 ) -> Response:
     """Create a pull request, targeting the specified branch. (usually 'main').
 
@@ -291,8 +291,8 @@ def create_staging(
     concolic_tests: str,
     root_dir: Path,
     optimization_review: str = "",
-    original_line_profiler: str = "",
-    optimized_line_profiler: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
