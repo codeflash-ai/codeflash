@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Codeflash - AI-powered code optimization for JavaScript and TypeScript",
   "main": "runtime/index.js",
+  "types": "runtime/index.d.ts",
   "bin": {
     "codeflash": "./bin/codeflash.js",
     "codeflash-setup": "./bin/codeflash-setup.js"
@@ -12,6 +13,7 @@
   },
   "exports": {
     ".": {
+      "types": "./runtime/index.d.ts",
       "require": "./runtime/index.js",
       "import": "./runtime/index.js"
     },
@@ -26,6 +28,10 @@
     "./comparator": {
       "require": "./runtime/comparator.js",
       "import": "./runtime/comparator.js"
+    },
+    "./loop-runner": {
+      "require": "./runtime/loop-runner.js",
+      "import": "./runtime/loop-runner.js"
     }
   },
   "scripts": {
@@ -63,15 +69,21 @@
     "node": ">=18.0.0"
   },
   "peerDependencies": {
-    "jest": ">=27.0.0"
+    "jest": ">=27.0.0",
+    "jest-runner": ">=27.0.0"
   },
   "peerDependenciesMeta": {
     "jest": {
+      "optional": true
+    },
+    "jest-runner": {
       "optional": true
     }
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",
-    "@msgpack/msgpack": "^3.0.0"
+    "@msgpack/msgpack": "^3.0.0",
+    "jest-runner": "^29.7.0",
+    "jest-junit": "^16.0.0"
   }
 }
