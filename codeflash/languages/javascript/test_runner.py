@@ -161,7 +161,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
         return
 
     # Try to install from local package first (for development)
-    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "cli"
+    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "codeflash"
     if local_package_path.exists():
         try:
             result = subprocess.run(
@@ -240,7 +240,7 @@ def run_jest_behavioral_tests(
     effective_cwd = project_root if project_root else cwd
     logger.debug(f"Jest working directory: {effective_cwd}")
 
-    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
     # Coverage output directory
@@ -455,7 +455,7 @@ def run_jest_benchmarking_tests(
     effective_cwd = project_root if project_root else cwd
     logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
 
-    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
     # Build Jest command for performance tests
@@ -641,7 +641,7 @@ def run_jest_line_profile_tests(
     effective_cwd = project_root if project_root else cwd
     logger.debug(f"Jest line profiling working directory: {effective_cwd}")
 
-    # Ensure runtime files (codeflash-jest-helper.js, etc.) are present
+    # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
     # Build Jest command for line profiling - simple run without benchmarking loops

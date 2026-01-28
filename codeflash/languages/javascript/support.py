@@ -978,16 +978,6 @@ class JavaScriptSupport:
 
         return None
 
-    def get_runtime_files(self) -> list[Path]:
-        """Get paths to JavaScript runtime files.
-
-        Returns:
-            List of paths to runtime files that need to be available.
-
-        """
-        from codeflash.languages.javascript.runtime import get_all_runtime_files
-
-        return get_all_runtime_files()
 
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
