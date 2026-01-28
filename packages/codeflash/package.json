@@ -1,6 +1,6 @@
 {
   "name": "codeflash",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Codeflash - AI-powered code optimization for JavaScript and TypeScript",
   "main": "runtime/index.js",
   "types": "runtime/index.d.ts",
