@@ -101,6 +101,9 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--no-gen-tests", action="store_true", help="Do not generate tests, use only existing tests for optimization."
     )
+    parser.add_argument(
+        "--no-jit-opts", action="store_true", help="Do not generate JIT-compiled optimizations for numerical code."
+    )
     parser.add_argument("--staging-review", action="store_true", help="Upload optimizations to staging for review")
     parser.add_argument(
         "--verify-setup",
