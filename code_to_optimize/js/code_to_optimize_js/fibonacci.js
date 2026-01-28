@@ -1,18 +1,20 @@
+const fibCache = new Map();
+
 /**
  * Fibonacci implementations - intentionally inefficient for optimization testing.
  */
 
-/**
- * Calculate the nth Fibonacci number using naive recursion.
- * This is intentionally slow to demonstrate optimization potential.
- * @param {number} n - The index of the Fibonacci number to calculate
- * @returns {number} - The nth Fibonacci number
- */
 function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
-    return fibonacci(n - 1) + fibonacci(n - 2);
+    // Use has/get for clarity (avoids introducing a micro-optimization of localizing the lookup)
+    if (fibCache.has(n)) {
+        return fibCache.get(n);
+    }
+    const result = fibonacci(n - 1) + fibonacci(n - 2);
+    fibCache.set(n, result);
+    return result;
 }
 
 /**
