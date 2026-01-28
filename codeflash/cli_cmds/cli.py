@@ -68,6 +68,12 @@ def parse_args() -> Namespace:
         default=SUPPRESS,
     )
     parser.add_argument(
+        "--dir",
+        type=str,
+        help="Subdirectory of module-root to optimize. Only functions within this directory will be optimized."
+        " The path can be absolute or relative to the current working directory, but must be within module-root.",
+    )
+    parser.add_argument(
         "--module-root",
         type=str,
         help="Path to the project's Python module that you want to optimize."
@@ -157,6 +163,13 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
         args.no_pr = True
     if args.function and not args.file:
         exit_with_message("If you specify a --function, you must specify the --file it is in", error_on_exit=True)
+    if args.dir:
+        if hasattr(args, "all"):
+            exit_with_message("Cannot use --dir with --all. Use one or the other.", error_on_exit=True)
+        if args.file:
+            exit_with_message("Cannot use --dir with --file. Use one or the other.", error_on_exit=True)
+        if args.replay_test:
+            exit_with_message("Cannot use --dir with --replay-test. Use one or the other.", error_on_exit=True)
     if args.file:
         if not Path(args.file).exists():
             exit_with_message(f"File {args.file} does not exist", error_on_exit=True)
@@ -263,7 +276,22 @@ def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) 
 
 
 def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
-    if hasattr(args, "all") or (hasattr(args, "file") and args.file):
+    # Handle --dir argument: validate and convert to args.all
+    if args.dir:
+        dir_path = Path(args.dir).resolve()
+        if not dir_path.is_dir():
+            exit_with_message(f"--dir path '{args.dir}' does not exist or is not a directory", error_on_exit=True)
+        # Validate that the directory is within module_root
+        try:
+            dir_path.relative_to(args.module_root)
+        except ValueError:
+            exit_with_message(
+                f"--dir path '{dir_path}' must be within module-root '{args.module_root}'", error_on_exit=True
+            )
+        # Set args.all to the dir path so the discovery logic scans that directory
+        args.all = dir_path
+
+    if hasattr(args, "all") or args.dir or (hasattr(args, "file") and args.file):
         no_pr = getattr(args, "no_pr", False)
 
         if not no_pr:
@@ -276,7 +304,7 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
             try:
                 git_repo = git.Repo(search_parent_directories=True)
             except git.exc.InvalidGitRepositoryError:
-                mode = "--all" if hasattr(args, "all") else "--file"
+                mode = "--all" if hasattr(args, "all") else ("--dir" if args.dir else "--file")
                 logger.exception(
                     f"I couldn't find a git repository in the current directory. "
                     f"I need a git repository to run {mode} and open PRs for optimizations. Exiting..."
@@ -287,11 +315,12 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
                 exit_with_message("Branch is not pushed...", error_on_exit=True)
             owner, repo = get_repo_owner_and_name(git_repo)
             require_github_app_or_exit(owner, repo)
-    if not hasattr(args, "all"):
+    if not hasattr(args, "all") and not args.dir:
         args.all = None
-    elif args.all == "":
+    elif hasattr(args, "all") and args.all == "":
         # The default behavior of --all is to optimize everything in args.module_root
         args.all = args.module_root
-    else:
+    elif hasattr(args, "all") and args.all != "":
         args.all = Path(args.all).resolve()
+    # Note: if args.dir was set, args.all is already set above
     return args
