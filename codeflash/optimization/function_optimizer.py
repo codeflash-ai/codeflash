@@ -2001,6 +2001,8 @@ class FunctionOptimizer:
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
+            "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+            "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
         }
 
         raise_pr = not self.args.no_pr

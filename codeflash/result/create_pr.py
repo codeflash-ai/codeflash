@@ -186,6 +186,8 @@ def check_create_pr(
     root_dir: Path,
     git_remote: Optional[str] = None,
     optimization_review: str = "",
+    original_line_profiler: str | None = None,
+    optimized_line_profiler: str | None = None,
 ) -> None:
     pr_number: Optional[int] = env_utils.get_pr_number()
     git_repo = git.Repo(search_parent_directories=True)
@@ -230,6 +232,8 @@ def check_create_pr(
             replay_tests=replay_tests,
             concolic_tests=concolic_tests,
             optimization_review=optimization_review,
+            original_line_profiler=original_line_profiler,
+            optimized_line_profiler=optimized_line_profiler,
         )
         if response.ok:
             logger.info(f"Suggestions were successfully made to PR #{pr_number}")
@@ -282,6 +286,8 @@ def check_create_pr(
             replay_tests=replay_tests,
             concolic_tests=concolic_tests,
             optimization_review=optimization_review,
+            original_line_profiler=original_line_profiler,
+            optimized_line_profiler=optimized_line_profiler,
         )
         if response.ok:
             pr_id = response.text
