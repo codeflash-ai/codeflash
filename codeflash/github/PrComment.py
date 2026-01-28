@@ -1,5 +1,6 @@
 from __future__ import annotations  # noqa: N999
 
+from functools import lru_cache
 from typing import Optional, Union
 
 from pydantic import BaseModel
@@ -25,16 +26,16 @@ class PrComment:
     best_async_throughput: Optional[int] = None
 
     def to_json(self) -> dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]]:
-        report_table = {
-            test_type.to_name(): result
-            for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items()
-            if test_type.to_name()
-        }
+        report_table = {}
+        for test_type, result in self.winning_behavior_test_results.get_test_pass_fail_report_by_type().items():
+            name = test_type.to_name()
+            if name:
+                report_table[name] = result
 
         result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
             "optimization_explanation": self.optimization_explanation,
-            "best_runtime": humanize_runtime(self.best_runtime),
-            "original_runtime": humanize_runtime(self.original_runtime),
+            "best_runtime": _humanize_runtime_cached(self.best_runtime),
+            "original_runtime": _humanize_runtime_cached(self.original_runtime),
             "function_name": self.function_name,
             "file_path": self.relative_file_path,
             "speedup_x": self.speedup_x,
@@ -54,3 +55,13 @@ class PrComment:
 class FileDiffContent(BaseModel):
     oldContent: str  # noqa: N815
     newContent: str  # noqa: N815
+
+
+@lru_cache(maxsize=128)
+def _humanize_runtime_cached(time_in_ns: int) -> str:
+    return humanize_runtime(time_in_ns)
+
+
+@lru_cache(maxsize=128)
+def _humanize_runtime_cached(time_in_ns: int) -> str:
+    return humanize_runtime(time_in_ns)
