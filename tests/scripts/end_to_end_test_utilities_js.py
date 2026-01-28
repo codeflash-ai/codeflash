@@ -59,10 +59,9 @@ def build_js_command(
     config: JSTestConfig,
 ) -> list[str]:
     """Build the codeflash CLI command for JS/TS optimization."""
-    # Use relative path for python to find the main module
-    python_path = "../../codeflash/main.py"
-    if "code_to_optimize_js" in str(cwd):
-        python_path = "../../../../codeflash/main.py"
+    # JS projects are at code_to_optimize/js/code_to_optimize_*, which is 3 levels deep
+    # So we need ../../../codeflash/main.py to get to the root
+    python_path = "../../../codeflash/main.py"
 
     base_command = [
         "uv",
