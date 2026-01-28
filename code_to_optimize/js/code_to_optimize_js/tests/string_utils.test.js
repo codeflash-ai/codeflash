@@ -26,6 +26,20 @@ describe('reverseString', () => {
     test('handles spaces', () => {
         expect(reverseString('hello world')).toBe('dlrow olleh');
     });
+
+    test('reverses a longer string for performance', () => {
+        const input = 'abcdefghijklmnopqrstuvwxyz'.repeat(20);
+        const result = reverseString(input);
+        expect(result.length).toBe(input.length);
+        expect(result[0]).toBe('z');
+        expect(result[result.length - 1]).toBe('a');
+    });
+
+    test('reverses a medium string', () => {
+        const input = 'The quick brown fox jumps over the lazy dog';
+        const expected = 'god yzal eht revo spmuj xof nworb kciuq ehT';
+        expect(reverseString(input)).toBe(expected);
+    });
 });
 
 describe('isPalindrome', () => {

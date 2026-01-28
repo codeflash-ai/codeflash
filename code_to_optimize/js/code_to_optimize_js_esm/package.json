@@ -9,17 +9,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "codeflash": "file:../packages/codeflash",
-    "jest": "^29.7.0",
-    "globals": "^17.1.0",
+    "codeflash": "file:../../../packages/codeflash",
     "eslint": "^9.39.2",
+    "globals": "^17.1.0",
+    "jest": "^29.7.0",
     "jest-junit": "^16.0.0"
   },
   "codeflash": {
     "moduleRoot": ".",
-    "formatterCmds": [
-      "npx eslint --fix $file"
-    ],
-    "language": "javascript"
+    "testsRoot": "tests",
+    "disableTelemetry": true
   }
 }

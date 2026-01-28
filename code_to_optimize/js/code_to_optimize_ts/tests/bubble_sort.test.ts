@@ -34,6 +34,29 @@ describe('bubbleSort', () => {
         bubbleSort(original);
         expect(original).toEqual([3, 1, 2]);
     });
+
+    test('sorts a larger reverse sorted array for performance', () => {
+        const input: number[] = [];
+        for (let i = 500; i >= 0; i--) {
+            input.push(i);
+        }
+        const result = bubbleSort(input);
+        expect(result[0]).toBe(0);
+        expect(result[result.length - 1]).toBe(500);
+    });
+
+    test('sorts a larger random array for performance', () => {
+        const input = [
+            42, 17, 93, 8, 67, 31, 55, 22, 89, 4,
+            76, 12, 39, 58, 95, 26, 71, 48, 83, 19,
+            64, 3, 88, 37, 52, 11, 79, 46, 91, 28,
+            63, 7, 84, 33, 57, 14, 72, 41, 96, 24,
+            69, 6, 81, 36, 54, 16, 77, 44, 90, 29
+        ];
+        const result = bubbleSort(input);
+        expect(result[0]).toBe(3);
+        expect(result[result.length - 1]).toBe(96);
+    });
 });
 
 describe('bubbleSortDescending', () => {
