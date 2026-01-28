@@ -259,3 +259,6 @@ WARP.MD
 .mcp.json
 .tessl/
 tessl.json
+
+# Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
+AGENTS.md
