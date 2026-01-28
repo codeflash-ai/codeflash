@@ -737,9 +737,10 @@ def parse_jest_test_xml(
 
             # Find matching timing markers for this test
             # Jest test names in markers are sanitized by codeflash-jest-helper's sanitizeTestId()
-            # which replaces: !#:$ and whitespace with underscores
+            # which replaces: !#: (space) ()[]{}|\/*?^$.+- with underscores
             # IMPORTANT: Must match Jest helper's sanitization exactly for marker matching to work
-            sanitized_test_name = re.sub(r"[!#:$\s]+", "_", test_name)
+            # Pattern from capture.js: /[!#: ()\[\]{}|\\/*?^$.+\-]/g
+            sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
             # For performance tests (capturePerf), there are no START markers - only END markers with duration
@@ -1108,12 +1109,15 @@ def merge_test_results(
             # This means that we only have one FunctionTestInvocation for this test xml. Match them to the bin results
             # Either a whole test function fails or passes.
             for result_bin in bin_results:
+                # Prefer XML runtime (from stdout markers) if bin runtime is None/0
+                # This is important for Jest perf tests which output timing to stdout, not SQLite
+                merged_runtime = result_bin.runtime if result_bin.runtime else xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=xml_result.loop_index,
                         id=result_bin.id,
                         file_name=xml_result.file_name,
-                        runtime=result_bin.runtime,
+                        runtime=merged_runtime,
                         test_framework=xml_result.test_framework,
                         did_pass=xml_result.did_pass,
                         test_type=xml_result.test_type,
@@ -1136,19 +1140,22 @@ def merge_test_results(
                 if bin_result is None:
                     merged_test_results.add(xml_result)
                     continue
+                # Prefer XML runtime (from stdout markers) if bin runtime is None/0
+                # This is important for Jest perf tests which output timing to stdout, not SQLite
+                merged_runtime = bin_result.runtime if bin_result.runtime else xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=xml_result.loop_index,
                         id=xml_result.id,
                         file_name=xml_result.file_name,
-                        runtime=bin_result.runtime,
+                        runtime=merged_runtime,
                         test_framework=xml_result.test_framework,
                         did_pass=bin_result.did_pass,
                         test_type=xml_result.test_type,
                         return_value=bin_result.return_value,
                         timed_out=xml_result.timed_out
-                        if bin_result.runtime is None
-                        else False,  # If runtime was measured in the bin file, then the testcase did not time out
+                        if merged_runtime is None
+                        else False,  # If runtime was measured, then the testcase did not time out
                         verification_type=VerificationType(bin_result.verification_type)
                         if bin_result.verification_type
                         else None,
@@ -1165,12 +1172,15 @@ def merge_test_results(
                 if xml_result is None:
                     merged_test_results.add(bin_result)
                     continue
+                # Prefer XML runtime (from stdout markers) if bin runtime is None/0
+                # This is important for Jest perf tests which output timing to stdout, not SQLite
+                merged_runtime = bin_result.runtime if bin_result.runtime else xml_result.runtime
                 merged_test_results.add(
                     FunctionTestInvocation(
                         loop_index=bin_result.loop_index,
                         id=bin_result.id,
                         file_name=bin_result.file_name,
-                        runtime=bin_result.runtime,
+                        runtime=merged_runtime,
                         test_framework=bin_result.test_framework,
                         did_pass=bin_result.did_pass,
                         test_type=bin_result.test_type,
