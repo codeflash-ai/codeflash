@@ -20,6 +20,20 @@ describe('reverseString', () => {
     test('handles special characters', () => {
         expect(reverseString('a!b@c#')).toBe('#c@b!a');
     });
+
+    test('reverses a longer string for performance', () => {
+        const input = 'abcdefghijklmnopqrstuvwxyz'.repeat(20);
+        const result = reverseString(input);
+        expect(result.length).toBe(input.length);
+        expect(result[0]).toBe('z');
+        expect(result[result.length - 1]).toBe('a');
+    });
+
+    test('reverses a medium string', () => {
+        const input = 'The quick brown fox jumps over the lazy dog';
+        const expected = 'god yzal eht revo spmuj xof nworb kciuq ehT';
+        expect(reverseString(input)).toBe(expected);
+    });
 });
 
 describe('isPalindrome', () => {

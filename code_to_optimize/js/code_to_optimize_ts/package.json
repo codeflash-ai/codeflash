@@ -8,6 +8,10 @@
     "test:coverage": "jest --coverage",
     "build": "tsc"
   },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests"
+  },
   "keywords": [
     "codeflash",
     "optimization",
