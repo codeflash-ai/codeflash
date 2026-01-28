@@ -171,7 +171,7 @@ def suggest_changes(
     replay_tests: str = "",
     concolic_tests: str = "",
     optimization_review: str = "",
-    original_line_profiler: str = "",
+    original_line_profiler: str | None = None,
     optimized_line_profiler: str = "",
 ) -> Response:
     """Suggest changes to a pull request.
