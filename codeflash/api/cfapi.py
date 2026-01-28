@@ -201,13 +201,9 @@ def suggest_changes(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # impact keyword left for legacy reasons, touches js/ts code
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
-
-    # Add line profiler data if available
-    if original_line_profiler:
-        payload["originalLineProfiler"] = original_line_profiler
-    if optimized_line_profiler:
-        payload["optimizedLineProfiler"] = optimized_line_profiler
 
     return make_cfapi_request(endpoint="/suggest-pr-changes", method="POST", payload=payload)
 
@@ -254,13 +250,9 @@ def create_pr(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
-
-    # Add line profiler data if available
-    if original_line_profiler:
-        payload["originalLineProfiler"] = original_line_profiler
-    if optimized_line_profiler:
-        payload["optimizedLineProfiler"] = optimized_line_profiler
 
     return make_cfapi_request(endpoint="/create-pr", method="POST", payload=payload)
 
@@ -336,13 +328,9 @@ def create_staging(
         "replayTests": replay_tests,
         "concolicTests": concolic_tests,
         "optimizationReview": optimization_review,  # Impact keyword left for legacy reasons, it touches js/ts codebase
+        "originalLineProfiler": original_line_profiler,
+        "optimizedLineProfiler": optimized_line_profiler,
     }
-
-    # Add line profiler data if available
-    if original_line_profiler:
-        payload["originalLineProfiler"] = original_line_profiler
-    if optimized_line_profiler:
-        payload["optimizedLineProfiler"] = optimized_line_profiler
 
     return make_cfapi_request(endpoint="/create-staging", method="POST", payload=payload)
 
