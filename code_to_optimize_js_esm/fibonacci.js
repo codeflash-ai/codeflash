@@ -1,3 +1,5 @@
+const _fibArray = [0, 1];
+
 /**
  * Fibonacci implementations - ES Module
  * Intentionally inefficient for optimization testing.
@@ -13,6 +15,26 @@ export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
+
+    if (typeof n === 'number' && Number.isInteger(n) && n >= 0) {
+        const arr = _fibArray;
+        let len = arr.length;
+        if (n < len) {
+            return arr[n];
+        }
+        // Use local references and index assignment to avoid push() overhead
+        let a = arr[len - 2];
+        let b = arr[len - 1];
+        let i = len;
+        while (i <= n) {
+            const c = a + b;
+            arr[i++] = c;
+            a = b;
+            b = c;
+        }
+        return arr[n];
+    }
+
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
