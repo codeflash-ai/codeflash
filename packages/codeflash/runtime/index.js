@@ -73,6 +73,13 @@ module.exports = {
     OUTPUT_FILE: capture.OUTPUT_FILE,
     TEST_ITERATION: capture.TEST_ITERATION,
 
+    // === Batch Looping Control (used by loop-runner) ===
+    incrementBatch: capture.incrementBatch,
+    getCurrentBatch: capture.getCurrentBatch,
+    checkSharedTimeLimit: capture.checkSharedTimeLimit,
+    PERF_BATCH_SIZE: capture.PERF_BATCH_SIZE,
+    PERF_LOOP_COUNT: capture.PERF_LOOP_COUNT,
+
     // === Feature Detection ===
     hasV8: serializer.hasV8,
     hasMsgpack: serializer.hasMsgpack,

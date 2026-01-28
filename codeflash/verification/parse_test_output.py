@@ -742,7 +742,18 @@ def parse_jest_test_xml(
             sanitized_test_name = re.sub(r"[!#:$\s]+", "_", test_name)
             matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
 
+            # For performance tests (capturePerf), there are no START markers - only END markers with duration
+            # Check for END markers directly if no START markers found
+            matching_ends_direct = []
             if not matching_starts:
+                # Look for END markers that match this test (performance test format)
+                # END marker format: !######module:testName:funcName:loopIndex:invocationId:durationNs######!
+                for end_key, end_match in end_matches_dict.items():
+                    # end_key is (module, testName, funcName, loopIndex, invocationId)
+                    if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
+                        matching_ends_direct.append(end_match)
+
+            if not matching_starts and not matching_ends_direct:
                 # No timing markers found - add basic result
                 test_results.add(
                     FunctionTestInvocation(
@@ -764,6 +775,38 @@ def parse_jest_test_xml(
                         stdout="",
                     )
                 )
+            elif matching_ends_direct:
+                # Performance test format: process END markers directly (no START markers)
+                for end_match in matching_ends_direct:
+                    groups = end_match.groups()
+                    # groups: (module, testName, funcName, loopIndex, invocationId, durationNs)
+                    func_name = groups[2]
+                    loop_index = int(groups[3]) if groups[3].isdigit() else 1
+                    line_id = groups[4]
+                    try:
+                        runtime = int(groups[5])
+                    except (ValueError, IndexError):
+                        runtime = None
+                    test_results.add(
+                        FunctionTestInvocation(
+                            loop_index=loop_index,
+                            id=InvocationId(
+                                test_module_path=test_module_path,
+                                test_class_name=None,
+                                test_function_name=test_name,
+                                function_getting_tested=func_name,
+                                iteration_id=line_id,
+                            ),
+                            file_name=test_file_path,
+                            runtime=runtime,
+                            test_framework=test_config.test_framework,
+                            did_pass=result,
+                            test_type=test_type,
+                            return_value=None,
+                            timed_out=timed_out,
+                            stdout="",
+                        )
+                    )
             else:
                 # Process each timing marker
                 for match in matching_starts:

@@ -493,12 +493,13 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_MODE"] = "performance"
     jest_env["CODEFLASH_RANDOM_SEED"] = "42"
 
-    # Loop runner configuration (passed via environment variables)
-    jest_env["CODEFLASH_LOOP_COUNT"] = str(max_loops)
-    jest_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
-    jest_env["CODEFLASH_TARGET_DURATION_MS"] = str(target_duration_ms)
-    jest_env["CODEFLASH_STABILITY_CHECK"] = "true" if stability_check else "false"
-    jest_env["CODEFLASH_LOOP_INDEX"] = "1"  # Initial value, updated by runner
+    # Internal loop configuration for capturePerf (eliminates Jest environment overhead)
+    # Looping happens inside capturePerf() for maximum efficiency
+    jest_env["CODEFLASH_PERF_LOOP_COUNT"] = str(max_loops)
+    jest_env["CODEFLASH_PERF_MIN_LOOPS"] = str(min_loops)
+    jest_env["CODEFLASH_PERF_TARGET_DURATION_MS"] = str(target_duration_ms)
+    jest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
+    jest_env["CODEFLASH_LOOP_INDEX"] = "1"  # Initial value for compatibility
 
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)

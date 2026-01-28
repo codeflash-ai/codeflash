@@ -1,54 +1,43 @@
 /**
  * Codeflash Loop Runner - Custom Jest Test Runner for Performance Benchmarking
  *
- * This runner executes all tests multiple times within a single Jest process
- * to eliminate process startup overhead. It implements session-level looping
- * similar to Python's pytest_plugin behavior.
+ * Implements BATCHED LOOPING for fair distribution across all test invocations:
+ *
+ *   Batch 1: Test1(5 loops) → Test2(5 loops) → Test3(5 loops) → ...
+ *   Batch 2: Test1(5 loops) → Test2(5 loops) → Test3(5 loops) → ...
+ *   ...until time budget exhausted
+ *
+ * This ensures:
+ *   - Fair distribution: All test invocations get equal loop counts
+ *   - Batched overhead: Console.log overhead amortized over batches
+ *   - Good utilization: Time budget shared across all tests
  *
  * Configuration via environment variables:
- *   CODEFLASH_LOOP_COUNT - Maximum number of loop iterations (default: 100)
- *   CODEFLASH_MIN_LOOPS - Minimum loops before stopping (default: 5)
- *   CODEFLASH_TARGET_DURATION_MS - Target total duration in ms (default: 10000)
- *   CODEFLASH_STABILITY_CHECK - Enable stability-based early stopping (default: true)
+ *   CODEFLASH_PERF_LOOP_COUNT - Max loops per invocation (default: 10000)
+ *   CODEFLASH_PERF_BATCH_SIZE - Loops per batch (default: 5)
+ *   CODEFLASH_PERF_MIN_LOOPS - Min loops before stopping (default: 5)
+ *   CODEFLASH_PERF_TARGET_DURATION_MS - Target total duration (default: 10000)
  *
- * Usage in jest.config.js:
- *   module.exports = {
- *     runner: 'codeflash/loop-runner',
- *   };
- *
- * Or via CLI:
+ * Usage:
  *   npx jest --runner=codeflash/loop-runner
  */
 
 'use strict';
 
-// Import runTest from jest-runner using createRequire to bypass exports restriction
-// jest-runner doesn't export ./build/runTest in its package.json exports field
 const { createRequire } = require('module');
 const path = require('path');
 
-// Create a require function that can access jest-runner's internals
 const jestRunnerPath = require.resolve('jest-runner');
-const jestRunnerDir = path.dirname(jestRunnerPath);
 const internalRequire = createRequire(jestRunnerPath);
-
-// Load the internal runTest module
 const runTest = internalRequire('./runTest').default;
 
-// Configuration from environment
-const LOOP_COUNT = parseInt(process.env.CODEFLASH_LOOP_COUNT || '200', 10);
-const MIN_LOOPS = parseInt(process.env.CODEFLASH_MIN_LOOPS || '5', 10);
-const TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_TARGET_DURATION_MS || '10000', 10);
-const STABILITY_CHECK = (process.env.CODEFLASH_STABILITY_CHECK || 'true').toLowerCase() === 'true';
-
-// Stability constants (matching Python's config_consts.py)
-const STABILITY_WINDOW_SIZE = 0.35;  // 35% of estimated total loops
-const STABILITY_CENTER_TOLERANCE = 0.0025;  // +/-0.25% around median
-const STABILITY_SPREAD_TOLERANCE = 0.0025;  // 0.25% (max-min)/min spread
+// Configuration
+const MAX_BATCHES = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '10000', 10);
+const TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
+const MIN_BATCHES = parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
 
 /**
  * Simple event emitter for Jest compatibility.
- * Jest runners need to emit events for test-file-start, test-file-success, test-file-failure.
  */
 class SimpleEventEmitter {
     constructor() {
@@ -60,12 +49,9 @@ class SimpleEventEmitter {
             this.listeners.set(eventName, new Set());
         }
         this.listeners.get(eventName).add(listener);
-        // Return unsubscribe function
         return () => {
             const set = this.listeners.get(eventName);
-            if (set) {
-                set.delete(listener);
-            }
+            if (set) set.delete(listener);
         };
     }
 
@@ -80,101 +66,27 @@ class SimpleEventEmitter {
 }
 
 /**
- * Deep copy utility to avoid memory leaks from shared references.
- * Simplified version of jest-util's deepCyclicCopy.
+ * Deep copy utility.
  */
 function deepCopy(obj, seen = new WeakMap()) {
-    if (obj === null || typeof obj !== 'object') {
-        return obj;
-    }
-    if (seen.has(obj)) {
-        return seen.get(obj);
-    }
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (seen.has(obj)) return seen.get(obj);
     if (Array.isArray(obj)) {
         const copy = [];
         seen.set(obj, copy);
-        for (let i = 0; i < obj.length; i++) {
-            copy[i] = deepCopy(obj[i], seen);
-        }
+        for (let i = 0; i < obj.length; i++) copy[i] = deepCopy(obj[i], seen);
         return copy;
     }
-    if (obj instanceof Date) {
-        return new Date(obj.getTime());
-    }
-    if (obj instanceof RegExp) {
-        return new RegExp(obj.source, obj.flags);
-    }
+    if (obj instanceof Date) return new Date(obj.getTime());
+    if (obj instanceof RegExp) return new RegExp(obj.source, obj.flags);
     const copy = {};
     seen.set(obj, copy);
-    for (const key of Object.keys(obj)) {
-        copy[key] = deepCopy(obj[key], seen);
-    }
+    for (const key of Object.keys(obj)) copy[key] = deepCopy(obj[key], seen);
     return copy;
 }
 
 /**
- * Check if performance has stabilized.
- * Matches Python's pytest_plugin.should_stop() exactly.
- *
- * @param {number[]} runtimes - List of aggregate runtimes
- * @param {number} window - Size of the window to check
- * @param {number} minWindowSize - Minimum data points required
- * @returns {boolean} - True if performance has stabilized
- */
-function shouldStopStability(runtimes, window, minWindowSize) {
-    if (runtimes.length < window || runtimes.length < minWindowSize) {
-        return false;
-    }
-
-    const recent = runtimes.slice(-window);
-    const recentSorted = [...recent].sort((a, b) => a - b);
-    const mid = Math.floor(window / 2);
-    const median = window % 2 ? recentSorted[mid] : (recentSorted[mid - 1] + recentSorted[mid]) / 2;
-
-    // 1) All recent points close to the median
-    for (const r of recent) {
-        if (Math.abs(r - median) / median > STABILITY_CENTER_TOLERANCE) {
-            return false;
-        }
-    }
-
-    // 2) Window spread is small
-    const rMin = recentSorted[0];
-    const rMax = recentSorted[recentSorted.length - 1];
-    if (rMin === 0) {
-        return false;
-    }
-    const spreadOk = (rMax - rMin) / rMin <= STABILITY_SPREAD_TOLERANCE;
-
-    return spreadOk;
-}
-
-/**
- * Parse timing data from test console output.
- * Extracts timing markers printed by capturePerf.
- *
- * @param {string} stdout - Console output containing timing markers
- * @returns {Map<string, number>} - Map of test IDs to duration in nanoseconds
- */
-function parseTimingFromOutput(stdout) {
-    const pattern = /!######([^:]+):([^:]*):([^:]+):([^:]+):([^:]+):(\d+)######!/g;
-    const timings = new Map();
-
-    let match;
-    while ((match = pattern.exec(stdout)) !== null) {
-        const [, module, testClass, funcName, _loopIndex, invocationId, durationNs] = match;
-        const testId = `${module}:${testClass}:${funcName}:${invocationId}`;
-        timings.set(testId, parseInt(durationNs, 10));
-    }
-
-    return timings;
-}
-
-/**
- * Codeflash Loop Runner
- *
- * Custom Jest test runner that implements session-level looping
- * for performance benchmarking within a single Jest process.
+ * Codeflash Loop Runner with Batched Looping
  */
 class CodeflashLoopRunner {
     constructor(globalConfig, context) {
@@ -183,132 +95,98 @@ class CodeflashLoopRunner {
         this._eventEmitter = new SimpleEventEmitter();
     }
 
-    // Required: Tell Jest this runner supports event emitters
     get supportsEventEmitters() {
         return true;
     }
 
-    // Force serial execution for consistent timing
     get isSerial() {
         return true;
     }
 
-    /**
-     * Subscribe to test events.
-     * Required by Jest's EmittingTestRunner interface.
-     *
-     * @param {string} eventName - Event name
-     * @param {Function} listener - Event listener
-     * @returns {Function} - Unsubscribe function
-     */
     on(eventName, listener) {
         return this._eventEmitter.on(eventName, listener);
     }
 
     /**
-     * Run tests with session-level looping.
-     *
-     * @param {Array} tests - Array of test objects
-     * @param {TestWatcher} watcher - Jest test watcher
-     * @param {Object} options - Test runner options
+     * Run tests with batched looping for fair distribution.
      */
     async runTests(tests, watcher, options) {
         const startTime = Date.now();
-        const runtimeDataByTest = new Map();
-        const aggregateRuntimes = [];
+        let batchCount = 0;
+        let hasFailure = false;
+        let allConsoleOutput = '';
 
-        let loopCount = 0;
+        // Import shared state functions from capture module
+        // We need to do this dynamically since the module may be reloaded
+        let checkSharedTimeLimit;
+        let incrementBatch;
+        try {
+            const capture = require('codeflash');
+            checkSharedTimeLimit = capture.checkSharedTimeLimit;
+            incrementBatch = capture.incrementBatch;
+        } catch (e) {
+            // Fallback if codeflash module not available
+            checkSharedTimeLimit = () => {
+                const elapsed = Date.now() - startTime;
+                return elapsed >= TARGET_DURATION_MS && batchCount >= MIN_BATCHES;
+            };
+            incrementBatch = () => {};
+        }
 
-        // Session-level looping: run ALL tests multiple times
-        while (loopCount < LOOP_COUNT) {
-            loopCount++;
+        // Batched looping: run all test files multiple times
+        while (batchCount < MAX_BATCHES) {
+            batchCount++;
 
-            // Update loop index for timing markers
-            process.env.CODEFLASH_LOOP_INDEX = String(loopCount);
-
-            // Run all test files in this iteration
-            const { consoleOutput, hasFailure } = await this._runAllTestsOnce(tests, watcher);
-
-            // Parse timing data from this iteration
-            const timingData = parseTimingFromOutput(consoleOutput || '');
-            for (const [testId, durationNs] of timingData) {
-                if (!runtimeDataByTest.has(testId)) {
-                    runtimeDataByTest.set(testId, []);
-                }
-                runtimeDataByTest.get(testId).push(durationNs);
-            }
-
-            // Stop if tests failed
-            if (hasFailure) {
-                console.log(`[codeflash] Stopping at loop ${loopCount}: test failure detected`);
+            // Check time limit BEFORE each batch
+            if (batchCount > MIN_BATCHES && checkSharedTimeLimit()) {
                 break;
             }
 
             // Check if interrupted
             if (watcher.isInterrupted()) {
-                console.log(`[codeflash] Stopping at loop ${loopCount}: interrupted`);
                 break;
             }
 
-            // Check stopping conditions
-            const elapsedMs = Date.now() - startTime;
+            // Increment batch counter in shared state and set env var
+            // The env var persists across Jest module resets, ensuring continuous loop indices
+            incrementBatch();
+            process.env.CODEFLASH_PERF_CURRENT_BATCH = String(batchCount);
 
-            // Stop if reached min loops AND exceeded time limit
-            if (loopCount >= MIN_LOOPS && elapsedMs >= TARGET_DURATION_MS) {
-                console.log(`[codeflash] Stopping at loop ${loopCount}: time limit reached (${elapsedMs}ms >= ${TARGET_DURATION_MS}ms)`);
+            // Run all test files in this batch
+            const batchResult = await this._runAllTestsOnce(tests, watcher);
+            allConsoleOutput += batchResult.consoleOutput;
+
+            if (batchResult.hasFailure) {
+                hasFailure = true;
                 break;
             }
 
-            // Stability check
-            if (STABILITY_CHECK && runtimeDataByTest.size > 0) {
-                // Calculate best runtime (sum of min per test case)
-                let bestRuntime = 0;
-                for (const data of runtimeDataByTest.values()) {
-                    if (data.length > 0) {
-                        bestRuntime += Math.min(...data);
-                    }
-                }
-
-                if (bestRuntime > 0) {
-                    aggregateRuntimes.push(bestRuntime);
-
-                    // Estimate window size based on loop rate
-                    const elapsedNs = elapsedMs * 1e6;
-                    if (elapsedNs > 0) {
-                        const rate = loopCount / elapsedNs;
-                        const totalTimeNs = TARGET_DURATION_MS * 1e6;
-                        const estimatedTotalLoops = Math.floor(rate * totalTimeNs);
-                        const windowSize = Math.round(STABILITY_WINDOW_SIZE * estimatedTotalLoops);
-
-                        if (shouldStopStability(aggregateRuntimes, windowSize, MIN_LOOPS)) {
-                            console.log(`[codeflash] Stopping at loop ${loopCount}: stability reached`);
-                            break;
-                        }
-                    }
-                }
+            // Check time limit AFTER each batch
+            if (checkSharedTimeLimit()) {
+                break;
             }
         }
 
-        // Log summary
         const totalTimeMs = Date.now() - startTime;
-        console.log(`[codeflash] Loop runner completed: ${loopCount} loops in ${totalTimeMs}ms, ${runtimeDataByTest.size} test cases tracked`);
+
+        // Output all collected console logs - this is critical for timing marker extraction
+        // The console output contains the !######...######! timing markers from capturePerf
+        if (allConsoleOutput) {
+            process.stdout.write(allConsoleOutput);
+        }
+
+        console.log(`[codeflash] Batched runner completed: ${batchCount} batches, ${tests.length} test files, ${totalTimeMs}ms total`);
     }
 
     /**
-     * Run all tests once.
-     *
-     * @param {Array} tests - Array of test objects
-     * @param {TestWatcher} watcher - Jest test watcher
-     * @returns {Object} - { consoleOutput, hasFailure }
+     * Run all test files once (one batch).
      */
     async _runAllTestsOnce(tests, watcher) {
         let hasFailure = false;
         let allConsoleOutput = '';
 
         for (const test of tests) {
-            if (watcher.isInterrupted()) {
-                break;
-            }
+            if (watcher.isInterrupted()) break;
 
             const sendMessageToJest = (eventName, args) => {
                 this._eventEmitter.emit(eventName, deepCopy(args));
@@ -326,15 +204,10 @@ class CodeflashLoopRunner {
                     sendMessageToJest
                 );
 
-                // Collect console output for timing marker parsing
                 if (result.console && Array.isArray(result.console)) {
-                    const output = result.console
-                        .map(entry => entry.message || '')
-                        .join('\n');
-                    allConsoleOutput += output + '\n';
+                    allConsoleOutput += result.console.map(e => e.message || '').join('\n') + '\n';
                 }
 
-                // Check for test failures
                 if (result.numFailingTests > 0) {
                     hasFailure = true;
                 }
