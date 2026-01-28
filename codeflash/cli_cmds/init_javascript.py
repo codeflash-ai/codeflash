@@ -516,35 +516,125 @@ def configure_package_json(setup_info: JSSetupInfo) -> bool:
 # ============================================================================
 
 
-def get_js_runtime_setup_string(pkg_manager: JsPackageManager) -> str:
-    """Generate the appropriate Node.js setup step for GitHub Actions."""
+def is_codeflash_dependency(project_root: Path) -> bool:
+    """Check if codeflash is listed as a dependency in package.json."""
+    package_json_path = project_root / "package.json"
+    if not package_json_path.exists():
+        return False
+
+    try:
+        with package_json_path.open(encoding="utf8") as f:
+            package_data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+
+    deps = package_data.get("dependencies", {})
+    dev_deps = package_data.get("devDependencies", {})
+    return "codeflash" in deps or "codeflash" in dev_deps
+
+
+def get_js_runtime_setup_steps(pkg_manager: JsPackageManager) -> str:
+    """Generate the appropriate Node.js/Bun setup steps for GitHub Actions.
+
+    Returns properly indented YAML steps for the workflow template.
+    """
     if pkg_manager == JsPackageManager.BUN:
-        return """name: 🥟 Setup Bun
+        return """- name: 🥟 Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest"""
+
     if pkg_manager == JsPackageManager.PNPM:
-        return """name: 📦 Setup pnpm
+        return """- name: 📦 Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'"""
+
     if pkg_manager == JsPackageManager.YARN:
-        return """name: 🟢 Setup Node.js
+        return """- name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'yarn'"""
+
     # NPM or UNKNOWN
-    return """name: 🟢 Setup Node.js
+    return """- name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'"""
+
+
+def get_js_codeflash_install_step(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:
+    """Generate the codeflash installation step if not already a dependency.
+
+    Args:
+        pkg_manager: The package manager being used.
+        is_dependency: Whether codeflash is already in package.json dependencies.
+
+    Returns:
+        YAML step string for installing codeflash, or empty string if not needed.
+
+    """
+    if is_dependency:
+        # Codeflash will be installed with other dependencies
+        return ""
+
+    # Need to install codeflash separately
+    if pkg_manager == JsPackageManager.BUN:
+        return """- name: 📥 Install Codeflash
+        run: bun add -g codeflash"""
+
+    if pkg_manager == JsPackageManager.PNPM:
+        return """- name: 📥 Install Codeflash
+        run: pnpm add -g codeflash"""
+
+    if pkg_manager == JsPackageManager.YARN:
+        return """- name: 📥 Install Codeflash
+        run: yarn global add codeflash"""
+
+    # NPM or UNKNOWN
+    return """- name: 📥 Install Codeflash
+        run: npm install -g codeflash"""
+
+
+def get_js_codeflash_run_command(pkg_manager: JsPackageManager, *, is_dependency: bool) -> str:
+    """Generate the codeflash run command for GitHub Actions.
+
+    Args:
+        pkg_manager: The package manager being used.
+        is_dependency: Whether codeflash is in package.json dependencies.
+
+    Returns:
+        Command string to run codeflash.
+
+    """
+    if is_dependency:
+        # Use package manager's run command for local dependency
+        if pkg_manager == JsPackageManager.BUN:
+            return "bun run codeflash"
+        if pkg_manager == JsPackageManager.PNPM:
+            return "pnpm exec codeflash"
+        if pkg_manager == JsPackageManager.YARN:
+            return "yarn codeflash"
+        # NPM
+        return "npx codeflash"
+
+    # Globally installed - just run directly
+    return "codeflash"
+
+
+def get_js_runtime_setup_string(pkg_manager: JsPackageManager) -> str:
+    """Generate the appropriate Node.js setup step for GitHub Actions.
+
+    Deprecated: Use get_js_runtime_setup_steps instead.
+    """
+    return get_js_runtime_setup_steps(pkg_manager)
 
 
 def get_js_dependency_installation_commands(pkg_manager: JsPackageManager) -> str:
