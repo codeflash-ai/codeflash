@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codeflash.cli_cmds import logging_config
 from codeflash.cli_cmds.cli_common import apologize_and_exit
+from codeflash.cli_cmds.cmd_create_pr import create_pr as cmd_create_pr
 from codeflash.cli_cmds.cmd_init import init_codeflash, install_github_actions
 from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.extension import install_vscode_extension
@@ -55,6 +56,22 @@ def parse_args() -> Namespace:
         "--config-file-path",
         type=str,
         help="The path to the pyproject.toml file which stores the Codeflash config. This is auto-discovered by default.",
+    )
+
+    # create-pr subcommand for creating PRs from augmented optimization results
+    create_pr_parser = subparsers.add_parser("create-pr", help="Create a PR from previously applied optimizations")
+    create_pr_parser.set_defaults(func=cmd_create_pr)
+    create_pr_parser.add_argument(
+        "--results-file",
+        type=str,
+        default="codeflash_phase1_results.json",
+        help="Path to augmented output JSON file (default: codeflash_phase1_results.json)",
+    )
+    create_pr_parser.add_argument(
+        "--function", type=str, help="Function name (required if multiple functions in results)"
+    )
+    create_pr_parser.add_argument(
+        "--git-remote", type=str, default="origin", help="Git remote to use for PR creation (default: origin)"
     )
 
     parser.add_argument("--file", help="Try to optimize only this file")
@@ -120,6 +137,22 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
     )
+    parser.add_argument(
+        "--augmented",
+        action="store_true",
+        help="Enable augmented optimization mode for two-phase optimization workflow",
+    )
+    parser.add_argument(
+        "--augmented-prompt-file",
+        type=str,
+        help="Path to YAML file with custom system_prompt and user_prompt for Phase 2",
+    )
+    parser.add_argument(
+        "--augmented-output",
+        type=str,
+        default="codeflash_phase1_results.json",
+        help="Path to write Phase 1 results JSON (default: codeflash_phase1_results.json)",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
@@ -177,6 +210,15 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
             "The --async flag is deprecated and will be removed in a future version. "
             "Async function optimization is now enabled by default."
         )
+
+    if args.augmented_prompt_file and not args.augmented:
+        exit_with_message("--augmented-prompt-file requires --augmented flag", error_on_exit=True)
+
+    if args.augmented_prompt_file:
+        prompt_file = Path(args.augmented_prompt_file)
+        if not prompt_file.exists():
+            exit_with_message(f"Augmented prompt file {args.augmented_prompt_file} does not exist", error_on_exit=True)
+        args.augmented_prompt_file = prompt_file.resolve()
 
     return args
 

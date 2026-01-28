@@ -193,6 +193,75 @@ class AiServiceClient:
         console.rule()
         return []
 
+    def augmented_optimize(  # noqa: D417
+        self,
+        source_code: str,
+        system_prompt: str,
+        user_prompt: str,
+        trace_id: str,
+        dependency_code: str | None = None,
+        n_candidates: int = 3,
+    ) -> list[OptimizedCandidate]:
+        """Optimize code with custom prompts via /ai/augmented-optimize endpoint.
+
+        Parameters
+        ----------
+        - source_code (str): The python code to optimize (markdown format).
+        - system_prompt (str): Custom system prompt for the LLM.
+        - user_prompt (str): Custom user prompt for the LLM.
+        - trace_id (str): Trace id of optimization run.
+        - dependency_code (str | None): Optional dependency code context.
+        - n_candidates (int): Number of candidates to generate (max 3).
+
+        Returns
+        -------
+        - list[OptimizedCandidate]: A list of Optimization Candidates.
+
+        """
+        logger.info("Generating augmented optimization candidates…")
+        console.rule()
+        start_time = time.perf_counter()
+        git_repo_owner, git_repo_name = safe_get_repo_owner_and_name()
+
+        payload = {
+            "source_code": source_code,
+            "dependency_code": dependency_code,
+            "trace_id": trace_id,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "n_candidates": min(n_candidates, 3),
+            "python_version": platform.python_version(),
+            "codeflash_version": codeflash_version,
+            "current_username": get_last_commit_author_if_pr_exists(None),
+            "repo_owner": git_repo_owner,
+            "repo_name": git_repo_name,
+        }
+        logger.debug(f"Sending augmented optimize request: trace_id={trace_id}, n_candidates={payload['n_candidates']}")
+
+        try:
+            response = self.make_ai_service_request("/augmented-optimize", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating augmented optimization candidates: {e}")
+            ph("cli-augmented-optimize-error-caught", {"error": str(e)})
+            console.rule()
+            return []
+
+        if response.status_code == 200:
+            optimizations_json = response.json()["optimizations"]
+            end_time = time.perf_counter()
+            logger.debug(f"!lsp|Generating augmented optimizations took {end_time - start_time:.2f} seconds.")
+            logger.info(f"!lsp|Received {len(optimizations_json)} augmented optimization candidates.")
+            console.rule()
+            return self._get_valid_candidates(optimizations_json, OptimizedCandidateSource.AUGMENTED)
+        try:
+            error = response.json()["error"]
+        except Exception:
+            error = response.text
+        logger.error(f"Error generating augmented optimization candidates: {response.status_code} - {error}")
+        ph("cli-augmented-optimize-error-response", {"response_status_code": response.status_code, "error": error})
+        console.rule()
+        return []
+
     def get_jit_rewritten_code(  # noqa: D417
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
@@ -634,6 +703,92 @@ class AiServiceClient:
             self.make_ai_service_request("/log_features", payload=payload, timeout=self.timeout)
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error logging features: {e}")
+
+    def augmented_generate_tests(  # noqa: D417
+        self,
+        source_code_being_tested: str,
+        system_prompt: str,
+        user_prompt: str,
+        function_to_optimize: FunctionToOptimize,
+        helper_function_names: list[str],
+        module_path: Path,
+        test_module_path: Path,
+        test_framework: str,
+        test_timeout: int,
+        trace_id: str,
+        test_index: int,
+        is_numerical_code: bool | None = None,  # noqa: FBT001
+    ) -> tuple[str, str, str] | None:
+        """Generate tests with custom prompts via /ai/augmented-testgen.
+
+        Parameters
+        ----------
+        - source_code_being_tested (str): The source code of the function being tested.
+        - system_prompt (str): Custom system prompt for test generation.
+        - user_prompt (str): Custom user prompt for test generation.
+        - function_to_optimize (FunctionToOptimize): The function to optimize.
+        - helper_function_names (list[str]): List of helper function names.
+        - module_path (Path): The module path where the function is located.
+        - test_module_path (Path): The module path for the test code.
+        - test_framework (str): The test framework to use, e.g., "pytest".
+        - test_timeout (int): The timeout for each test in seconds.
+        - trace_id (str): Trace id of optimization run.
+        - test_index (int): The index from 0-(n-1) if n tests are generated for a single trace_id.
+        - is_numerical_code (bool | None): Whether the code is numerical.
+
+        Returns
+        -------
+        - tuple[str, str, str] | None: The generated regression tests and instrumented tests, or None if an error occurred.
+
+        """
+        assert test_framework in ["pytest", "unittest"], (
+            f"Invalid test framework, got {test_framework} but expected 'pytest' or 'unittest'"
+        )
+        payload = {
+            "source_code_being_tested": source_code_being_tested,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "function_to_optimize": function_to_optimize,
+            "helper_function_names": helper_function_names,
+            "module_path": module_path,
+            "test_module_path": test_module_path,
+            "test_framework": test_framework,
+            "test_timeout": test_timeout,
+            "trace_id": trace_id,
+            "test_index": test_index,
+            "python_version": platform.python_version(),
+            "codeflash_version": codeflash_version,
+            "is_async": function_to_optimize.is_async,
+            "call_sequence": self.get_next_sequence(),
+            "is_numerical_code": is_numerical_code,
+        }
+        try:
+            response = self.make_ai_service_request("/augmented-testgen", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating augmented tests: {e}")
+            ph("cli-augmented-testgen-error-caught", {"error": str(e)})
+            return None
+
+        if response.status_code == 200:
+            response_json = response.json()
+            logger.debug(f"Generated augmented tests for function {function_to_optimize.function_name}")
+            return (
+                response_json["generated_tests"],
+                response_json["instrumented_behavior_tests"],
+                response_json["instrumented_perf_tests"],
+            )
+        try:
+            error = response.json()["error"]
+            logger.error(f"Error generating augmented tests: {response.status_code} - {error}")
+            ph("cli-augmented-testgen-error-response", {"response_status_code": response.status_code, "error": error})
+            return None  # noqa: TRY300
+        except Exception:
+            logger.error(f"Error generating augmented tests: {response.status_code} - {response.text}")
+            ph(
+                "cli-augmented-testgen-error-response",
+                {"response_status_code": response.status_code, "error": response.text},
+            )
+            return None
 
     def generate_regression_tests(  # noqa: D417
         self,
