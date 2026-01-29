@@ -1679,7 +1679,7 @@ export class DataProcessor<T> {
 
     /**
      * Find duplicates in the data array.
-     * Intentionally inefficient O(n²) implementation.
+     * Intentionally inefficient implementation.
      * @returns Array of duplicate values
      */
     findDuplicates(): T[] {
@@ -1698,7 +1698,7 @@ export class DataProcessor<T> {
 
     /**
      * Sort the data using bubble sort.
-     * Intentionally inefficient O(n²) implementation.
+     * Intentionally inefficient implementation.
      * @returns Sorted copy of the data
      */
     sortData(): T[] {
@@ -1718,7 +1718,7 @@ export class DataProcessor<T> {
 
     /**
      * Get unique values from the data.
-     * Intentionally inefficient O(n²) implementation.
+     * Intentionally inefficient implementation.
      * @returns Array of unique values
      */
     getUnique(): T[] {
@@ -1843,7 +1843,7 @@ export class DataProcessor<T> {
 
     /**
      * Sort the data using bubble sort.
-     * Intentionally inefficient O(n²) implementation.
+     * Intentionally inefficient implementation.
      * @returns Sorted copy of the data
      */
     sortData(): T[] {
@@ -1863,7 +1863,7 @@ export class DataProcessor<T> {
 
     /**
      * Get unique values from the data.
-     * Intentionally inefficient O(n²) implementation.
+     * Intentionally inefficient implementation.
      * @returns Array of unique values
      */
     getUnique(): T[] {

@@ -1790,8 +1790,8 @@ class FunctionOptimizer:
         self,
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
-        run_experiment: bool = False,  # noqa: FBT001, FBT002
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        run_experiment: bool = False,
+        is_numerical_code: bool | None = None,
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
@@ -2174,6 +2174,8 @@ class FunctionOptimizer:
             "replay_tests": replay_tests,
             "concolic_tests": concolic_tests,
             "language": self.function_to_optimize.language,
+            "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+            "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
         }
 
         raise_pr = not self.args.no_pr
