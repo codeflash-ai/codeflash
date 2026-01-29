@@ -9,9 +9,7 @@ from pydantic.dataclasses import dataclass
 from codeflash.languages import current_language_support, is_javascript
 
 
-def get_test_file_path(
-    test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit"
-) -> Path:
+def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
     # Use appropriate file extension based on language

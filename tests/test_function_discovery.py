@@ -1,18 +1,16 @@
 import tempfile
-from pathlib import Path
-import os
 import unittest.mock
+from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import (
     filter_files_optimized,
+    filter_functions,
     find_all_functions_in_file,
+    get_all_files_and_functions,
     get_functions_to_optimize,
     inspect_top_level_functions_or_methods,
-    filter_functions,
-    get_all_files_and_functions
 )
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.code_utils.compat import codeflash_temp_dir
 
 
 def test_function_eligible_for_optimization() -> None:
@@ -24,10 +22,10 @@ def test_function_eligible_for_optimization() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(function)
-        
+
         functions_found = find_all_functions_in_file(file_path)
     assert functions_found[file_path][0].function_name == "test_function_eligible_for_optimization"
 
@@ -40,34 +38,31 @@ def test_function_eligible_for_optimization() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(function)
-        
+
         functions_found = find_all_functions_in_file(file_path)
     assert len(functions_found[file_path]) == 0
-
 
     # we want to trigger an error in the function discovery
     function = """def test_invalid_code():"""
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(function)
-        
+
         functions_found = find_all_functions_in_file(file_path)
     assert functions_found == {}
-
-
 
 
 def test_find_top_level_function_or_method():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
                 """def functionA():
@@ -93,7 +88,7 @@ def non_classmethod_function(cls, name):
     return cls.name
     """
             )
-        
+
         assert inspect_top_level_functions_or_methods(file_path, "functionA").is_top_level
         assert not inspect_top_level_functions_or_methods(file_path, "functionB").is_top_level
         assert inspect_top_level_functions_or_methods(file_path, "functionC", class_name="A").is_top_level
@@ -117,20 +112,21 @@ def non_classmethod_function(cls, name):
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
                 """def functionA():
 """
             )
-        
+
         assert not inspect_top_level_functions_or_methods(file_path, "functionA")
+
 
 def test_class_method_discovery():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
                 """class A:
@@ -146,7 +142,7 @@ class X:
 def functionA():
     return True"""
             )
-        
+
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
@@ -202,10 +198,10 @@ def test_nested_function():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
-"""
+                """
 import copy 
 
 def propagate_attributes(
@@ -249,7 +245,7 @@ def propagate_attributes(
     return modified_nodes
 """
             )
-        
+
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
@@ -270,10 +266,10 @@ def propagate_attributes(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
-"""
+                """
 def outer_function():
     def inner_function():
         pass
@@ -281,7 +277,7 @@ def outer_function():
     return inner_function
 """
             )
-        
+
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
@@ -302,10 +298,10 @@ def outer_function():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         file_path = temp_dir_path / "test_function.py"
-        
+
         with file_path.open("w") as f:
             f.write(
-"""
+                """
 def outer_function():
     def inner_function():
         pass
@@ -315,7 +311,7 @@ def outer_function():
     return inner_function, another_inner_function
 """
             )
-        
+
         test_config = TestConfig(
             tests_root="tests", project_root_path=".", test_framework="pytest", tests_project_rootdir=Path()
         )
@@ -349,15 +345,16 @@ def test_filter_files_optimized():
     assert filter_files_optimized(file_path_different_level, tests_root, ignore_paths, module_root)
     assert not filter_files_optimized(file_path_above_level, tests_root, ignore_paths, module_root)
 
+
 def test_filter_functions():
     with tempfile.TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        
+
         # Create a test file in the temporary directory
         test_file_path = temp_dir.joinpath("test_get_functions_to_optimize.py")
         with test_file_path.open("w") as f:
             f.write(
-"""
+                """
 import copy 
 
 def propagate_attributes(
@@ -407,14 +404,15 @@ def not_in_checkpoint_function():
     return "This function is not in the checkpoint."
 """
             )
-        
 
         discovered = find_all_functions_in_file(test_file_path)
         modified_functions = {test_file_path: discovered[test_file_path]}
         # Use an absolute path for tests_root that won't match the temp directory
         # This avoids path resolution issues in CI where the working directory might differ
         tests_root_absolute = (temp_dir.parent / "nonexistent_tests_dir").resolve()
-        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}):
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
             filtered, count = filter_functions(
                 modified_functions,
                 tests_root=tests_root_absolute,
@@ -429,19 +427,19 @@ def not_in_checkpoint_function():
         # Create a tests directory inside our temp directory
         tests_root_dir = temp_dir.joinpath("tests")
         tests_root_dir.mkdir(exist_ok=True)
-        
+
         test_file_path = tests_root_dir.joinpath("test_functions.py")
         with test_file_path.open("w") as f:
             f.write(
-"""
+                """
 def test_function_in_tests_dir():
     return "This function is in a test directory and should be filtered out."
 """
             )
-        
+
         discovered_test_file = find_all_functions_in_file(test_file_path)
         modified_functions_test = {test_file_path: discovered_test_file.get(test_file_path, [])}
-        
+
         filtered_test_file, count_test_file = filter_functions(
             modified_functions_test,
             tests_root=tests_root_dir,
@@ -449,7 +447,7 @@ def test_function_in_tests_dir():
             project_root=temp_dir,
             module_root=temp_dir,
         )
-        
+
         assert not filtered_test_file
         assert count_test_file == 0
 
@@ -459,7 +457,7 @@ def test_function_in_tests_dir():
         ignored_file_path = ignored_dir.joinpath("ignored_file.py")
         with ignored_file_path.open("w") as f:
             f.write("def ignored_func(): return 1")
-        
+
         discovered_ignored = find_all_functions_in_file(ignored_file_path)
         modified_functions_ignored = {ignored_file_path: discovered_ignored.get(ignored_file_path, [])}
 
@@ -474,17 +472,19 @@ def test_function_in_tests_dir():
         assert count_ignored == 0
 
         # Test submodule paths
-        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.ignored_submodule_paths", 
-                                return_value=[str(temp_dir.joinpath("submodule_dir"))]):
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.ignored_submodule_paths",
+            return_value=[str(temp_dir.joinpath("submodule_dir"))],
+        ):
             submodule_dir = temp_dir.joinpath("submodule_dir")
             submodule_dir.mkdir(exist_ok=True)
             submodule_file_path = submodule_dir.joinpath("submodule_file.py")
             with submodule_file_path.open("w") as f:
                 f.write("def submodule_func(): return 1")
-            
+
             discovered_submodule = find_all_functions_in_file(submodule_file_path)
             modified_functions_submodule = {submodule_file_path: discovered_submodule.get(submodule_file_path, [])}
-            
+
             filtered_submodule, count_submodule = filter_functions(
                 modified_functions_submodule,
                 tests_root=Path("tests"),
@@ -496,14 +496,17 @@ def test_function_in_tests_dir():
             assert count_submodule == 0
 
         # Test site packages
-        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.path_belongs_to_site_packages", 
-                                return_value=True):
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.path_belongs_to_site_packages", return_value=True
+        ):
             site_package_file_path = temp_dir.joinpath("site_package_file.py")
             with site_package_file_path.open("w") as f:
                 f.write("def site_package_func(): return 1")
 
             discovered_site_package = find_all_functions_in_file(site_package_file_path)
-            modified_functions_site_package = {site_package_file_path: discovered_site_package.get(site_package_file_path, [])}
+            modified_functions_site_package = {
+                site_package_file_path: discovered_site_package.get(site_package_file_path, [])
+            }
 
             filtered_site_package, count_site_package = filter_functions(
                 modified_functions_site_package,
@@ -514,16 +517,18 @@ def test_function_in_tests_dir():
             )
             assert not filtered_site_package
             assert count_site_package == 0
-        
+
         # Test outside module root
         parent_dir = temp_dir.parent
         outside_module_root_path = parent_dir.joinpath("outside_module_root_file.py")
         try:
             with outside_module_root_path.open("w") as f:
                 f.write("def func_outside_module_root(): return 1")
-            
+
             discovered_outside_module = find_all_functions_in_file(outside_module_root_path)
-            modified_functions_outside_module = {outside_module_root_path: discovered_outside_module.get(outside_module_root_path, [])}
+            modified_functions_outside_module = {
+                outside_module_root_path: discovered_outside_module.get(outside_module_root_path, [])
+            }
 
             filtered_outside_module, count_outside_module = filter_functions(
                 modified_functions_outside_module,
@@ -543,8 +548,10 @@ def test_function_in_tests_dir():
             f.write("def func_in_invalid_module(): return 1")
 
         discovered_invalid_module = find_all_functions_in_file(invalid_module_file_path)
-        modified_functions_invalid_module = {invalid_module_file_path: discovered_invalid_module.get(invalid_module_file_path, [])}
-        
+        modified_functions_invalid_module = {
+            invalid_module_file_path: discovered_invalid_module.get(invalid_module_file_path, [])
+        }
+
         filtered_invalid_module, count_invalid_module = filter_functions(
             modified_functions_invalid_module,
             tests_root=Path("tests"),
@@ -556,8 +563,10 @@ def test_function_in_tests_dir():
         assert count_invalid_module == 0
 
         original_file_path = temp_dir.joinpath("test_get_functions_to_optimize.py")
-        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.get_blocklisted_functions", 
-                                return_value={original_file_path.name: {"propagate_attributes", "other_blocklisted_function"}}):
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions",
+            return_value={original_file_path.name: {"propagate_attributes", "other_blocklisted_function"}},
+        ):
             filtered_funcs, count = filter_functions(
                 modified_functions,
                 tests_root=Path("tests"),
@@ -571,15 +580,20 @@ def test_function_in_tests_dir():
         module_name = "test_get_functions_to_optimize"
         qualified_name_for_checkpoint = f"{module_name}.propagate_attributes"
         other_qualified_name_for_checkpoint = f"{module_name}.vanilla_function"
-        
-        with unittest.mock.patch("codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}):
+
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
             filtered_checkpoint, count_checkpoint = filter_functions(
                 modified_functions,
                 tests_root=Path("tests"),
                 ignore_paths=[],
                 project_root=temp_dir,
                 module_root=temp_dir,
-                previous_checkpoint_functions={qualified_name_for_checkpoint: {"status": "optimized"}, other_qualified_name_for_checkpoint: {}}
+                previous_checkpoint_functions={
+                    qualified_name_for_checkpoint: {"status": "optimized"},
+                    other_qualified_name_for_checkpoint: {},
+                },
             )
             assert filtered_checkpoint.get(original_file_path)
             assert count_checkpoint == 1

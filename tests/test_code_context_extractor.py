@@ -3969,7 +3969,7 @@ def test_dependency_classes_kept_in_read_writable_context(tmp_path: Path) -> Non
     as types or in match statements, those classes are included in the optimization
     context, even though they don't contain any target functions.
     """
-    code = '''
+    code = """
 import dataclasses
 import enum
 import typing as t
@@ -4013,20 +4013,13 @@ def reify_channel_message(data: dict) -> MessageIn:
             return MessageInBeginExfiltration()
         case _:
             raise ValueError(f"Unknown message kind: '{kind}'")
-'''
+"""
     code_path = tmp_path / "message.py"
     code_path.write_text(code, encoding="utf-8")
 
-    func_to_optimize = FunctionToOptimize(
-        function_name="reify_channel_message",
-        file_path=code_path,
-        parents=[],
-    )
+    func_to_optimize = FunctionToOptimize(function_name="reify_channel_message", file_path=code_path, parents=[])
 
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize=func_to_optimize, project_root_path=tmp_path)
 
     expected_read_writable = """
 ```python:message.py
@@ -4098,10 +4091,7 @@ class MyCustomDict(UserDict):
         parents=[FunctionParent(name="MyCustomDict", type="ClassDef")],
     )
 
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize=func_to_optimize, project_root_path=tmp_path)
 
     # The testgen context should include the UserDict __init__ method
     testgen_context = code_ctx.testgen_context.markdown
@@ -4146,9 +4136,7 @@ def second_helper():
     file_path.write_text(code, encoding="utf-8")
 
     func_to_optimize = FunctionToOptimize(
-        function_name="target_method",
-        file_path=file_path,
-        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        function_name="target_method", file_path=file_path, parents=[FunctionParent(name="MyClass", type="ClassDef")]
     )
 
     # Use a small optim_token_limit that allows read-writable but not read-only
@@ -4203,11 +4191,7 @@ def target_function(obj: TypeClass) -> int:
     main_path = package_dir / "main.py"
     main_path.write_text(main_code, encoding="utf-8")
 
-    func_to_optimize = FunctionToOptimize(
-        function_name="target_function",
-        file_path=main_path,
-        parents=[],
-    )
+    func_to_optimize = FunctionToOptimize(function_name="target_function", file_path=main_path, parents=[])
 
     # Use a testgen_token_limit that:
     # - Is exceeded by full context with imported class (~1500 tokens)
@@ -4251,11 +4235,7 @@ def target_function():
     file_path = tmp_path / "test_code.py"
     file_path.write_text(code, encoding="utf-8")
 
-    func_to_optimize = FunctionToOptimize(
-        function_name="target_function",
-        file_path=file_path,
-        parents=[],
-    )
+    func_to_optimize = FunctionToOptimize(function_name="target_function", file_path=file_path, parents=[])
 
     # Use a very small testgen_token_limit that cannot fit even the base function
     with pytest.raises(ValueError, match="Testgen code context has exceeded token limit"):
@@ -4383,15 +4363,10 @@ class MyClass:
     file_path.write_text(code, encoding="utf-8")
 
     func_to_optimize = FunctionToOptimize(
-        function_name="target_method",
-        file_path=file_path,
-        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        function_name="target_method", file_path=file_path, parents=[FunctionParent(name="MyClass", type="ClassDef")]
     )
 
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize=func_to_optimize, project_root_path=tmp_path)
 
     # CONFIG_VALUE should be in read-writable context since it's used by __init__
     read_writable = code_ctx.read_writable_code.markdown
@@ -4637,15 +4612,10 @@ class MyClass:
     file_path.write_text(code, encoding="utf-8")
 
     func_to_optimize = FunctionToOptimize(
-        function_name="target_method",
-        file_path=file_path,
-        parents=[FunctionParent(name="MyClass", type="ClassDef")],
+        function_name="target_method", file_path=file_path, parents=[FunctionParent(name="MyClass", type="ClassDef")]
     )
 
-    code_ctx = get_code_optimization_context(
-        function_to_optimize=func_to_optimize,
-        project_root_path=tmp_path,
-    )
+    code_ctx = get_code_optimization_context(function_to_optimize=func_to_optimize, project_root_path=tmp_path)
 
     # counter should be in context since __init__ uses it
     read_writable = code_ctx.read_writable_code.markdown

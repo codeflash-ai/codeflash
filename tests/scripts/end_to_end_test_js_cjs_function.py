@@ -18,12 +18,7 @@ def run_test() -> bool:
         expected_test_files=1,  # At least one test file should be instrumented
     )
 
-    cwd = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "code_to_optimize"
-        / "js"
-        / "code_to_optimize_js"
-    ).resolve()
+    cwd = (pathlib.Path(__file__).parent.parent.parent / "code_to_optimize" / "js" / "code_to_optimize_js").resolve()
 
     return run_js_codeflash_command(cwd, config)
 

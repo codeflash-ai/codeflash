@@ -10,7 +10,8 @@ from codeflash.code_utils.normalizers.base import CodeNormalizer
 if TYPE_CHECKING:
     from tree_sitter import Node
 
-# TODO:{claude} move to language support directory to keep the directory structure clean 
+
+# TODO:{claude} move to language support directory to keep the directory structure clean
 class JavaScriptVariableNormalizer:
     """Normalizes JavaScript/TypeScript code for duplicate detection using tree-sitter.
 
@@ -24,13 +25,49 @@ class JavaScriptVariableNormalizer:
         self.preserved_names: set[str] = set()
         # Common JavaScript builtins
         self.builtins = {
-            "console", "window", "document", "Math", "JSON", "Object", "Array",
-            "String", "Number", "Boolean", "Date", "RegExp", "Error", "Promise",
-            "Map", "Set", "WeakMap", "WeakSet", "Symbol", "Proxy", "Reflect",
-            "undefined", "null", "NaN", "Infinity", "globalThis", "parseInt",
-            "parseFloat", "isNaN", "isFinite", "eval", "setTimeout", "setInterval",
-            "clearTimeout", "clearInterval", "fetch", "require", "module", "exports",
-            "process", "__dirname", "__filename", "Buffer",
+            "console",
+            "window",
+            "document",
+            "Math",
+            "JSON",
+            "Object",
+            "Array",
+            "String",
+            "Number",
+            "Boolean",
+            "Date",
+            "RegExp",
+            "Error",
+            "Promise",
+            "Map",
+            "Set",
+            "WeakMap",
+            "WeakSet",
+            "Symbol",
+            "Proxy",
+            "Reflect",
+            "undefined",
+            "null",
+            "NaN",
+            "Infinity",
+            "globalThis",
+            "parseInt",
+            "parseFloat",
+            "isNaN",
+            "isFinite",
+            "eval",
+            "setTimeout",
+            "setInterval",
+            "clearTimeout",
+            "clearInterval",
+            "fetch",
+            "require",
+            "module",
+            "exports",
+            "process",
+            "__dirname",
+            "__filename",
+            "Buffer",
         }
 
     def get_normalized_name(self, name: str) -> str:
@@ -48,7 +85,7 @@ class JavaScriptVariableNormalizer:
         if node.type in ("function_declaration", "function_expression", "method_definition", "arrow_function"):
             name_node = node.child_by_field_name("name")
             if name_node:
-                self.preserved_names.add(source_code[name_node.start_byte:name_node.end_byte].decode("utf-8"))
+                self.preserved_names.add(source_code[name_node.start_byte : name_node.end_byte].decode("utf-8"))
             # Preserve parameters
             params_node = node.child_by_field_name("parameters") or node.child_by_field_name("parameter")
             if params_node:
@@ -58,7 +95,7 @@ class JavaScriptVariableNormalizer:
         elif node.type == "class_declaration":
             name_node = node.child_by_field_name("name")
             if name_node:
-                self.preserved_names.add(source_code[name_node.start_byte:name_node.end_byte].decode("utf-8"))
+                self.preserved_names.add(source_code[name_node.start_byte : name_node.end_byte].decode("utf-8"))
 
         # Import declarations
         elif node.type in ("import_statement", "import_declaration"):
@@ -66,7 +103,7 @@ class JavaScriptVariableNormalizer:
                 if child.type == "import_clause":
                     self._collect_import_names(child, source_code)
                 elif child.type == "identifier":
-                    self.preserved_names.add(source_code[child.start_byte:child.end_byte].decode("utf-8"))
+                    self.preserved_names.add(source_code[child.start_byte : child.end_byte].decode("utf-8"))
 
         # Recurse
         for child in node.children:
@@ -76,11 +113,13 @@ class JavaScriptVariableNormalizer:
         """Collect parameter names from a parameters node."""
         for child in node.children:
             if child.type == "identifier":
-                self.preserved_names.add(source_code[child.start_byte:child.end_byte].decode("utf-8"))
+                self.preserved_names.add(source_code[child.start_byte : child.end_byte].decode("utf-8"))
             elif child.type in ("required_parameter", "optional_parameter", "rest_parameter"):
                 pattern_node = child.child_by_field_name("pattern")
                 if pattern_node and pattern_node.type == "identifier":
-                    self.preserved_names.add(source_code[pattern_node.start_byte:pattern_node.end_byte].decode("utf-8"))
+                    self.preserved_names.add(
+                        source_code[pattern_node.start_byte : pattern_node.end_byte].decode("utf-8")
+                    )
             # Recurse for nested patterns
             self._collect_parameter_names(child, source_code)
 
@@ -88,15 +127,15 @@ class JavaScriptVariableNormalizer:
         """Collect imported names from import clause."""
         for child in node.children:
             if child.type == "identifier":
-                self.preserved_names.add(source_code[child.start_byte:child.end_byte].decode("utf-8"))
+                self.preserved_names.add(source_code[child.start_byte : child.end_byte].decode("utf-8"))
             elif child.type == "import_specifier":
                 # Get the local name (alias or original)
                 alias_node = child.child_by_field_name("alias")
                 name_node = child.child_by_field_name("name")
                 if alias_node:
-                    self.preserved_names.add(source_code[alias_node.start_byte:alias_node.end_byte].decode("utf-8"))
+                    self.preserved_names.add(source_code[alias_node.start_byte : alias_node.end_byte].decode("utf-8"))
                 elif name_node:
-                    self.preserved_names.add(source_code[name_node.start_byte:name_node.end_byte].decode("utf-8"))
+                    self.preserved_names.add(source_code[name_node.start_byte : name_node.end_byte].decode("utf-8"))
             self._collect_import_names(child, source_code)
 
     def normalize_tree(self, node: Node, source_code: bytes) -> str:
@@ -113,14 +152,14 @@ class JavaScriptVariableNormalizer:
 
         # Handle identifiers - normalize variable names
         if node.type == "identifier":
-            name = source_code[node.start_byte:node.end_byte].decode("utf-8")
+            name = source_code[node.start_byte : node.end_byte].decode("utf-8")
             normalized = self.get_normalized_name(name)
             parts.append(normalized)
             return
 
         # Handle type identifiers (TypeScript) - preserve as-is
         if node.type == "type_identifier":
-            parts.append(source_code[node.start_byte:node.end_byte].decode("utf-8"))
+            parts.append(source_code[node.start_byte : node.end_byte].decode("utf-8"))
             return
 
         # Handle string literals - normalize to placeholder
@@ -135,7 +174,7 @@ class JavaScriptVariableNormalizer:
 
         # For leaf nodes, output the node type
         if len(node.children) == 0:
-            text = source_code[node.start_byte:node.end_byte].decode("utf-8")
+            text = source_code[node.start_byte : node.end_byte].decode("utf-8")
             parts.append(text)
             return
 
@@ -191,14 +230,12 @@ class JavaScriptNormalizer(CodeNormalizer):
 
         Returns:
             Normalized representation of the code
+
         """
         try:
             from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
 
-            lang_map = {
-                "javascript": TreeSitterLanguage.JAVASCRIPT,
-                "typescript": TreeSitterLanguage.TYPESCRIPT,
-            }
+            lang_map = {"javascript": TreeSitterLanguage.JAVASCRIPT, "typescript": TreeSitterLanguage.TYPESCRIPT}
             lang = lang_map.get(self._get_tree_sitter_language(), TreeSitterLanguage.JAVASCRIPT)
             analyzer = TreeSitterAnalyzer(lang)
             tree = analyzer.parse(code)
@@ -227,6 +264,7 @@ class JavaScriptNormalizer(CodeNormalizer):
 
         Returns:
             Normalized representation suitable for hashing
+
         """
         return self.normalize(code)
 

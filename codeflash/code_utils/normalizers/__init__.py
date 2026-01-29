@@ -22,13 +22,10 @@ from codeflash.code_utils.normalizers.base import CodeNormalizer
 from codeflash.code_utils.normalizers.javascript import JavaScriptNormalizer, TypeScriptNormalizer
 from codeflash.code_utils.normalizers.python import PythonNormalizer
 
-if TYPE_CHECKING:
-    pass
-
 __all__ = [
     "CodeNormalizer",
-    "PythonNormalizer",
     "JavaScriptNormalizer",
+    "PythonNormalizer",
     "TypeScriptNormalizer",
     "get_normalizer",
     "get_normalizer_for_extension",
@@ -56,6 +53,7 @@ def get_normalizer(language: str) -> CodeNormalizer:
 
     Raises:
         ValueError: If no normalizer exists for the language
+
     """
     language = language.lower()
 
@@ -83,6 +81,7 @@ def get_normalizer_for_extension(extension: str) -> CodeNormalizer | None:
 
     Returns:
         CodeNormalizer instance if found, None otherwise
+
     """
     extension = extension.lower()
     if not extension.startswith("."):
@@ -102,6 +101,7 @@ def register_normalizer(language: str, normalizer_class: type[CodeNormalizer]) -
     Args:
         language: Language name
         normalizer_class: CodeNormalizer subclass
+
     """
     _NORMALIZERS[language.lower()] = normalizer_class
     # Clear cached instance if it exists

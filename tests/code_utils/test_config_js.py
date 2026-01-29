@@ -106,10 +106,7 @@ class TestDetectLanguage:
 
     def test_detects_typescript_with_complex_tsconfig(self, tmp_path: Path) -> None:
         """Should detect TypeScript even with complex tsconfig."""
-        tsconfig = {
-            "compilerOptions": {"target": "ES2020", "module": "commonjs"},
-            "include": ["src/**/*"],
-        }
+        tsconfig = {"compilerOptions": {"target": "ES2020", "module": "commonjs"}, "include": ["src/**/*"]}
         (tmp_path / "tsconfig.json").write_text(json.dumps(tsconfig))
 
         result = detect_language(tmp_path)
@@ -784,11 +781,7 @@ class TestRealWorldPackageJsonExamples:
         package_json = tmp_path / "package.json"
         package_json.write_text(
             json.dumps(
-                {
-                    "name": "@myorg/core",
-                    "main": "./packages/core/src/index.js",
-                    "devDependencies": {"jest": "^29.0.0"},
-                }
+                {"name": "@myorg/core", "main": "./packages/core/src/index.js", "devDependencies": {"jest": "^29.0.0"}}
             )
         )
 

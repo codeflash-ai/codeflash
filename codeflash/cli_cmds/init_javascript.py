@@ -1,4 +1,5 @@
 """JavaScript/TypeScript project initialization for Codeflash."""
+
 # TODO:{claude} move to language support directory
 from __future__ import annotations
 
@@ -125,8 +126,7 @@ def init_js_project(language: ProjectLanguage) -> None:
 
     lang_panel = Panel(
         Text(
-            f"📦 Detected {lang_name} project!\n\n"
-            "I'll help you set up Codeflash for your project.",
+            f"📦 Detected {lang_name} project!\n\nI'll help you set up Codeflash for your project.",
             style="cyan",
             justify="center",
         ),
@@ -159,13 +159,13 @@ def init_js_project(language: ProjectLanguage) -> None:
     usage_table.add_column("Command", style="cyan")
     usage_table.add_column("Description", style="white")
 
-    usage_table.add_row(
-        "codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function"
-    )
+    usage_table.add_row("codeflash --file <path-to-file> --function <function-name>", "Optimize a specific function")
     usage_table.add_row("codeflash --all", "Optimize all functions in all files")
     usage_table.add_row("codeflash --help", "See all available options")
 
-    completion_message = f"⚡️ Codeflash is now set up for your {lang_name} project!\n\nYou can now run any of these commands:"
+    completion_message = (
+        f"⚡️ Codeflash is now set up for your {lang_name} project!\n\nYou can now run any of these commands:"
+    )
 
     if did_add_new_key:
         completion_message += (
@@ -265,10 +265,7 @@ def collect_js_setup_info(language: ProjectLanguage) -> JSSetupInfo:
     detection_table.add_row("Formatter", formatter_display)
 
     detection_panel = Panel(
-        Group(
-            Text(f"Auto-detected settings for your {lang_name} project:\n", style="cyan"),
-            detection_table,
-        ),
+        Group(Text(f"Auto-detected settings for your {lang_name} project:\n", style="cyan"), detection_table),
         title="🔍 Auto-Detection Results",
         border_style="bright_blue",
     )
@@ -399,8 +396,7 @@ def _get_git_remote_for_setup() -> str:
 
         git_panel = Panel(
             Text(
-                "🔗 Configure Git Remote for Pull Requests.\n\n"
-                "Codeflash will use this remote to create pull requests.",
+                "🔗 Configure Git Remote for Pull Requests.\n\nCodeflash will use this remote to create pull requests.",
                 style="blue",
             ),
             title="🔗 Git Remote Setup",

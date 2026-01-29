@@ -3,10 +3,13 @@ from __future__ import annotations
 import ast
 import math
 import os
+import platform
 import sys
 import tempfile
 from pathlib import Path
+
 import pytest
+
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.instrument_existing_tests import (
     FunctionImportedAsVisitor,
@@ -24,8 +27,6 @@ from codeflash.models.models import (
     TestsInFile,
     TestType,
 )
-import platform
-
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -114,11 +115,14 @@ import pytest"""
     if extra_imports:
         imports += "\n" + extra_imports
     return imports
+
+
 # create a temporary directory for the test results
 @pytest.fixture
 def tmp_dir():
     with tempfile.TemporaryDirectory() as tmpdirname:
         yield Path(tmpdirname)
+
 
 def test_perfinjector_bubble_sort(tmp_dir) -> None:
     code = """import unittest
@@ -150,12 +154,12 @@ import dill as pickle"""
     # timeout_decorator no longer used since pytest handles timeouts
 
     imports += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     wrapper_func = codeflash_wrap_string
-    
+
     test_class_header = "class TestPigLatin(unittest.TestCase):"
     test_decorator = ""  # pytest-timeout handles timeouts now, not timeout_decorator
-    
+
     expected = imports + "\n\n\n" + wrapper_func + "\n" + test_class_header + "\n\n"
     if test_decorator:
         expected += test_decorator + "\n"
@@ -190,10 +194,7 @@ import dill as pickle"""
         run_cwd = Path(__file__).parent.parent.resolve()
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            Path(f.name),
-            [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)],
-            func,
-            Path(f.name).parent,
+            Path(f.name), [CodePosition(9, 17), CodePosition(13, 17), CodePosition(17, 17)], func, Path(f.name).parent
         )
         os.chdir(original_cwd)
     assert success
@@ -397,18 +398,14 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(8, 14), CodePosition(12, 14)],
-            func,
-            project_root_path,
-            mode=TestingMode.BEHAVIOR,
+            test_path, [CodePosition(8, 14), CodePosition(12, 14)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         success, new_perf_test = inject_profiling_into_existing_test(
@@ -422,7 +419,7 @@ tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
         assert new_perf_test is not None
         assert new_perf_test.replace('"', "'") == expected_perfonly.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         with test_path.open("w") as f:
@@ -942,7 +939,7 @@ def test_sort_parametrized_loop(input, expected_output):
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -951,7 +948,7 @@ tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_parametrized_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1301,12 +1298,12 @@ def test_sort():
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.pytest.test_perfinjector_bubble_sort_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         # Overwrite old test with new instrumented test
@@ -1477,7 +1474,6 @@ result: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2
 
 
 def test_perfinjector_bubble_sort_unittest_results() -> None:
-    
     code = """import unittest
 
 from code_to_optimize.bubble_sort import sorter
@@ -1499,7 +1495,7 @@ class TestPigLatin(unittest.TestCase):
 """
 
     is_windows = platform.system() == "Windows"
-    
+
     if is_windows:
         expected = (
             """import gc
@@ -1685,11 +1681,11 @@ class TestPigLatin(unittest.TestCase):
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -1852,7 +1848,7 @@ class TestPigLatin(unittest.TestCase):
     # Build expected behavior output with platform-aware imports
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
@@ -1872,7 +1868,7 @@ class TestPigLatin(unittest.TestCase):
         self.assertEqual(output, expected_output)
         codeflash_con.close()
 """
-    
+
     expected_behavior = imports_behavior + "\n\n\n" + codeflash_wrap_string + "\n" + test_class_behavior
     # Build expected perf output with platform-aware imports
     imports_perf = """import gc
@@ -1882,7 +1878,7 @@ import unittest
 """
     # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
@@ -1895,7 +1891,7 @@ import unittest
         output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0', codeflash_loop_index, input)
         self.assertEqual(output, expected_output)
 """
-    
+
     expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
@@ -1933,13 +1929,13 @@ import unittest
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         assert new_test_perf is not None
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
 
         #
@@ -2099,10 +2095,10 @@ class TestPigLatin(unittest.TestCase):
             output = sorter(input)
             self.assertEqual(output, expected_output)"""
 
-    # Build expected behavior output with platform-aware imports  
+    # Build expected behavior output with platform-aware imports
     imports_behavior = build_expected_unittest_imports()
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
@@ -2137,7 +2133,7 @@ import unittest
 """
     # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
@@ -2154,7 +2150,7 @@ import unittest
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '2_2', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    
+
     expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
@@ -2192,11 +2188,11 @@ import unittest
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # # Overwrite old test with new instrumented test
@@ -2361,7 +2357,7 @@ class TestPigLatin(unittest.TestCase):
     # Build expected behavior output with platform-aware imports
     imports_behavior = build_expected_unittest_imports("from parameterized import parameterized")
     imports_behavior += "\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_behavior = ""  # pytest-timeout handles timeouts now
     test_class_behavior = """class TestPigLatin(unittest.TestCase):
 
@@ -2392,7 +2388,7 @@ import unittest
 """
     # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports_perf += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.bubble_sort import sorter"
-    
+
     test_decorator_perf = ""  # pytest-timeout handles timeouts now
     test_class_perf = """class TestPigLatin(unittest.TestCase):
 
@@ -2406,7 +2402,7 @@ import unittest
             output = codeflash_wrap(sorter, '{module_path}', 'TestPigLatin', 'test_sort', 'sorter', '0_0', codeflash_loop_index, input)
             self.assertEqual(output, expected_output)
 """
-    
+
     expected_perf = imports_perf + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class_perf
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
     test_path = (
@@ -2442,11 +2438,11 @@ import unittest
         assert new_test_behavior is not None
         assert new_test_behavior.replace('"', "'") == expected_behavior.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         assert new_test_perf.replace('"', "'") == expected_perf.format(
             module_path="code_to_optimize.tests.unittest.test_perfinjector_bubble_sort_unittest_parametrized_loop_results_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
         #
         # Overwrite old test with new instrumented test
@@ -2888,7 +2884,7 @@ def test_sort():
         assert new_test is not None
         assert new_test.replace('"', "'") == expected.format(
             module_path="tests.pytest.test_conditional_instrumentation_temp",
-tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         ).replace('"', "'")
     finally:
         test_path.unlink(missing_ok=True)
@@ -2970,7 +2966,7 @@ def test_sort():
         assert success
         formatted_expected = expected.format(
             module_path="tests.pytest.test_perfinjector_bubble_sort_results_temp",
-            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix()
+            tmp_dir_path=get_run_tmp_file(Path("test_return_values")).as_posix(),
         )
         assert new_test is not None
         assert new_test.replace('"', "'") == formatted_expected.replace('"', "'")
@@ -3055,7 +3051,7 @@ def test_code_replacement10() -> None:
 
     test_file_path = tmp_path / "test_class_method_instrumentation.py"
     test_file_path.write_text(code, encoding="utf-8")
-    
+
     func = FunctionToOptimize(
         function_name="get_code_optimization_context",
         parents=[FunctionParent("Optimizer", "ClassDef")],
@@ -3210,7 +3206,7 @@ import unittest
 """
     # pytest-timeout handles timeouts now, no timeout_decorator needed
     imports += "\nfrom parameterized import parameterized\n\nfrom code_to_optimize.sleeptime import accurate_sleepfunc"
-    
+
     test_decorator = ""  # pytest-timeout handles timeouts now
     test_class = """class TestPigLatin(unittest.TestCase):
 
@@ -3222,7 +3218,7 @@ import unittest
         codeflash_loop_index = int(os.environ['CODEFLASH_LOOP_INDEX'])
         output = codeflash_wrap(accurate_sleepfunc, '{module_path}', 'TestPigLatin', 'test_sleepfunc_sequence_short', 'accurate_sleepfunc', '0', codeflash_loop_index, n)
 """
-    
+
     expected = imports + "\n\n\n" + codeflash_wrap_perfonly_string + "\n" + test_class
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/sleeptime.py").resolve()
     test_path = (

@@ -25,10 +25,7 @@ if TYPE_CHECKING:
 
 
 def generate_concolic_tests(
-    test_cfg: TestConfig,
-    args: Namespace,
-    function_to_optimize: FunctionToOptimize,
-    function_to_optimize_ast: ast.AST,
+    test_cfg: TestConfig, args: Namespace, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: ast.AST
 ) -> tuple[dict[str, set[FunctionCalledInTest]], str]:
     """Generate concolic tests using CrossHair (Python only).
 
@@ -43,6 +40,7 @@ def generate_concolic_tests(
 
     Returns:
         Tuple of (function_to_tests mapping, concolic test suite code)
+
     """
     start_time = time.perf_counter()
     function_to_concolic_tests = {}

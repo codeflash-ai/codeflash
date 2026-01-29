@@ -1516,6 +1516,7 @@ def _customize_python_workflow_content(
         codeflash_cmd += " --benchmark"
     return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)
 
+
 # TODO:{claude} Refactor and move to support for language specific
 def _customize_js_workflow_content(
     optimize_yml_content: str,

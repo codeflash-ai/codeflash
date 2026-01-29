@@ -129,7 +129,8 @@ class AiServiceClient:
         experiment_metadata: ExperimentMetadata | None = None,
         *,
         language: str = "python",
-        language_version: str | None = None, # TODO:{claude} add language version to the language support and it should be cached
+        language_version: str
+        | None = None,  # TODO:{claude} add language version to the language support and it should be cached
         module_system: str | None = None,
         is_async: bool = False,
         n_candidates: int = 5,
@@ -238,6 +239,7 @@ class AiServiceClient:
             is_async=is_async,
             n_candidates=n_candidates,
         )
+
     def get_jit_rewritten_code(  # noqa: D417
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
@@ -410,6 +412,7 @@ class AiServiceClient:
 
         Returns:
             List of refined optimization candidates
+
         """
         payload = []
         for opt in request:
@@ -727,7 +730,7 @@ class AiServiceClient:
         language: str = "python",
         language_version: str | None = None,
         module_system: str | None = None,
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        is_numerical_code: bool | None = None,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 

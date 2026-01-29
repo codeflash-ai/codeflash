@@ -1239,9 +1239,16 @@ class TreeSitterAnalyzer:
 
         return type_names
 
-    def _find_function_node(self, node: Node, source_bytes: bytes, function_name: str, function_line: int) -> Node | None:
+    def _find_function_node(
+        self, node: Node, source_bytes: bytes, function_name: str, function_line: int
+    ) -> Node | None:
         """Find a function/method node by name and line number."""
-        if node.type in ("function_declaration", "method_definition", "function_expression", "generator_function_declaration"):
+        if node.type in (
+            "function_declaration",
+            "method_definition",
+            "function_expression",
+            "generator_function_declaration",
+        ):
             name_node = node.child_by_field_name("name")
             if name_node:
                 name = self.get_node_text(name_node, source_bytes)
@@ -1306,14 +1313,40 @@ class TreeSitterAnalyzer:
         if node.type == "type_identifier":
             type_name = self.get_node_text(node, source_bytes)
             # Skip primitive types
-            if type_name not in ("number", "string", "boolean", "void", "null", "undefined", "any", "never", "unknown", "object", "symbol", "bigint"):
+            if type_name not in (
+                "number",
+                "string",
+                "boolean",
+                "void",
+                "null",
+                "undefined",
+                "any",
+                "never",
+                "unknown",
+                "object",
+                "symbol",
+                "bigint",
+            ):
                 type_names.add(type_name)
             return
 
         # Handle regular identifiers in type position (can happen in some contexts)
         if node.type == "identifier" and node.parent and node.parent.type in ("type_annotation", "generic_type"):
             type_name = self.get_node_text(node, source_bytes)
-            if type_name not in ("number", "string", "boolean", "void", "null", "undefined", "any", "never", "unknown", "object", "symbol", "bigint"):
+            if type_name not in (
+                "number",
+                "string",
+                "boolean",
+                "void",
+                "null",
+                "undefined",
+                "any",
+                "never",
+                "unknown",
+                "object",
+                "symbol",
+                "bigint",
+            ):
                 type_names.add(type_name)
             return
 
@@ -1360,7 +1393,12 @@ class TreeSitterAnalyzer:
         # Handle export statements - unwrap to get the actual definition
         if node.type == "export_statement":
             for child in node.children:
-                if child.type in ("interface_declaration", "type_alias_declaration", "class_declaration", "enum_declaration"):
+                if child.type in (
+                    "interface_declaration",
+                    "type_alias_declaration",
+                    "class_declaration",
+                    "enum_declaration",
+                ):
                     self._extract_type_definition(child, source_bytes, definitions, is_exported=True)
             return
 

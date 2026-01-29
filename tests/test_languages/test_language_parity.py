@@ -1,5 +1,4 @@
-"""
-Regression tests for Python/JavaScript language support parity.
+"""Regression tests for Python/JavaScript language support parity.
 
 These tests ensure that the JavaScript implementation maintains feature parity
 with the Python implementation. Each test class tests equivalent functionality
@@ -15,12 +14,7 @@ from typing import NamedTuple
 
 import pytest
 
-from codeflash.languages.base import (
-    FunctionFilterCriteria,
-    FunctionInfo,
-    Language,
-    ParentInfo,
-)
+from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
 from codeflash.languages.javascript.support import JavaScriptSupport
 from codeflash.languages.python.support import PythonSupport
 
@@ -732,8 +726,8 @@ function other() {
         js_method_line = next(l for l in js_lines if "add(a, b)" in l)
 
         # Both should have indentation (4 spaces)
-        assert py_method_line.startswith("    "), f"Python method should be indented: {repr(py_method_line)}"
-        assert js_method_line.startswith("    "), f"JavaScript method should be indented: {repr(js_method_line)}"
+        assert py_method_line.startswith("    "), f"Python method should be indented: {py_method_line!r}"
+        assert js_method_line.startswith("    "), f"JavaScript method should be indented: {js_method_line!r}"
 
 
 # ============================================================================

@@ -6,14 +6,7 @@ covering all patterns that might be seen in the wild.
 
 from __future__ import annotations
 
-import pytest
-
-from codeflash.languages.javascript.instrument import (
-    ExpectCallTransformer,
-    TestingMode,
-    instrument_generated_js_test,
-    transform_expect_calls,
-)
+from codeflash.languages.javascript.instrument import TestingMode, instrument_generated_js_test, transform_expect_calls
 
 
 class TestExpectCallTransformer:

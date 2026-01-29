@@ -11,6 +11,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.tracing.tracing_new_process import FakeCode, FakeFrame, Tracer
 
@@ -68,14 +69,17 @@ class TestTracer:
         current_dir = Path.cwd()
 
         config_path = tmp_path / "pyproject.toml"
-        config_path.write_text(f"""
+        config_path.write_text(
+            f"""
 [tool.codeflash]
 module-root = "{current_dir.as_posix()}"
 tests-root = "{tests_dir.as_posix()}"
 test-framework = "pytest"
 ignore-paths = []
-""", encoding="utf-8")
-        
+""",
+            encoding="utf-8",
+        )
+
         trace_path = tmp_path / "trace_file.trace"
         replay_test_pkl_path = tmp_path / "replay_test.pkl"
         config, found_config_path = parse_config_file(config_path)
@@ -87,7 +91,7 @@ ignore-paths = []
             command="pytest random",
         )
 
-        yield trace_config
+        return trace_config
 
     @pytest.fixture(autouse=True)
     def reset_tracer_state(self) -> Generator[None, None, None]:

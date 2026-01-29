@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -42,36 +42,20 @@ def install_npm_dependencies(cwd: pathlib.Path) -> bool:
     node_modules = cwd / "node_modules"
     if not node_modules.exists():
         logging.info(f"Installing npm dependencies in {cwd}")
-        result = subprocess.run(
-            ["npm", "install"],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-        )
+        result = subprocess.run(["npm", "install"], cwd=str(cwd), capture_output=True, text=True)
         if result.returncode != 0:
             logging.error(f"npm install failed: {result.stderr}")
             return False
     return True
 
 
-def build_js_command(
-    cwd: pathlib.Path,
-    config: JSTestConfig,
-) -> list[str]:
+def build_js_command(cwd: pathlib.Path, config: JSTestConfig) -> list[str]:
     """Build the codeflash CLI command for JS/TS optimization."""
     # JS projects are at code_to_optimize/js/code_to_optimize_*, which is 3 levels deep
     # So we need ../../../codeflash/main.py to get to the root
     python_path = "../../../codeflash/main.py"
 
-    base_command = [
-        "uv",
-        "run",
-        "--no-project",
-        python_path,
-        "--file",
-        str(config.file_path),
-        "--no-pr",
-    ]
+    base_command = ["uv", "run", "--no-project", python_path, "--file", str(config.file_path), "--no-pr"]
 
     if config.function_name:
         base_command.extend(["--function", config.function_name])
@@ -79,11 +63,7 @@ def build_js_command(
     return base_command
 
 
-def validate_js_output(
-    stdout: str,
-    return_code: int,
-    config: JSTestConfig,
-) -> bool:
+def validate_js_output(stdout: str, return_code: int, config: JSTestConfig) -> bool:
     """Validate the output of a JS/TS optimization run."""
     if return_code != 0:
         logging.error(f"Command returned exit code {return_code} instead of 0")
@@ -104,15 +84,11 @@ def validate_js_output(
     logging.info(f"Performance improvement: {improvement_pct}%; Rate: {improvement_x}x")
 
     if improvement_pct <= config.expected_improvement_pct:
-        logging.error(
-            f"Performance improvement {improvement_pct}% not above {config.expected_improvement_pct}%"
-        )
+        logging.error(f"Performance improvement {improvement_pct}% not above {config.expected_improvement_pct}%")
         return False
 
     if improvement_x <= config.min_improvement_x:
-        logging.error(
-            f"Performance improvement rate {improvement_x}x not above {config.min_improvement_x}x"
-        )
+        logging.error(f"Performance improvement rate {improvement_x}x not above {config.min_improvement_x}x")
         return False
 
     if config.expected_test_files is not None:
@@ -124,19 +100,14 @@ def validate_js_output(
 
         num_test_files = int(test_files_match.group(1))
         if num_test_files < config.expected_test_files:
-            logging.error(
-                f"Expected at least {config.expected_test_files} test files, found {num_test_files}"
-            )
+            logging.error(f"Expected at least {config.expected_test_files} test files, found {num_test_files}")
             return False
 
     logging.info(f"Success: Performance improvement is {improvement_pct}%")
     return True
 
 
-def run_js_codeflash_command(
-    cwd: pathlib.Path,
-    config: JSTestConfig,
-) -> bool:
+def run_js_codeflash_command(cwd: pathlib.Path, config: JSTestConfig) -> bool:
     """Run codeflash optimization on a JavaScript/TypeScript project."""
     logging.basicConfig(level=logging.INFO)
 
@@ -159,13 +130,7 @@ def run_js_codeflash_command(
     logging.info(f"Running: {' '.join(command)}")
 
     process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        cwd=str(cwd),
-        env=env,
-        encoding="utf-8",
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding="utf-8"
     )
 
     output = []

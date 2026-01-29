@@ -23,7 +23,12 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, TypeDefinition, get_analyzer_for_file
+from codeflash.languages.treesitter_utils import (
+    TreeSitterAnalyzer,
+    TreeSitterLanguage,
+    TypeDefinition,
+    get_analyzer_for_file,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -346,7 +351,9 @@ class JavaScriptSupport:
 
                     # Wrap the method in a class definition with context
                     if class_jsdoc:
-                        target_code = f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                        target_code = (
+                            f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
+                        )
                     else:
                         target_code = f"{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
                 else:
@@ -366,11 +373,7 @@ class JavaScriptSupport:
 
         # Extract type definitions for function parameters and class fields
         type_definitions_context, type_definition_names = self._extract_type_definitions_context(
-            function=function,
-            source=source,
-            analyzer=analyzer,
-            imports=imports,
-            module_root=module_root,
+            function=function, source=source, analyzer=analyzer, imports=imports, module_root=module_root
         )
 
         # Find module-level declarations (global variables/constants) referenced by the function
@@ -715,12 +718,7 @@ class JavaScriptSupport:
         return "\n".join(global_lines)
 
     def _extract_type_definitions_context(
-        self,
-        function: FunctionInfo,
-        source: str,
-        analyzer: TreeSitterAnalyzer,
-        imports: list[Any],
-        module_root: Path,
+        self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
     ) -> tuple[str, set[str]]:
         """Extract type definitions used by the function for read-only context.
 
@@ -805,11 +803,7 @@ class JavaScriptSupport:
         return "\n\n".join(type_def_parts), found_type_names
 
     def _find_imported_type_definitions(
-        self,
-        type_names: set[str],
-        imports: list[Any],
-        module_root: Path,
-        source_file_path: Path,
+        self, type_names: set[str], imports: list[Any], module_root: Path, source_file_path: Path
     ) -> list[TypeDefinition]:
         """Find type definitions in imported files.
 
@@ -1583,9 +1577,7 @@ class JavaScriptSupport:
 
         return None
 
-    def get_module_path(
-        self, source_file: Path, project_root: Path, tests_root: Path | None = None
-    ) -> str:
+    def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         """Get the module path for importing a JavaScript source file from tests.
 
         For JavaScript, this returns a relative path from the tests directory to the source file

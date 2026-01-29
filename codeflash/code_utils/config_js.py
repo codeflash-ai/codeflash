@@ -206,6 +206,7 @@ def find_package_json(config_file: Path | None = None) -> Path | None:
 
     return None
 
+
 def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], Path] | None:
     """Parse codeflash config from package.json with auto-detection.
 

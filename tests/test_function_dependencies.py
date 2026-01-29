@@ -1,5 +1,4 @@
 import pathlib
-from dataclasses import dataclass
 
 import pytest
 
@@ -89,6 +88,7 @@ def recursive_dependency_1(num):
         return 0
     num_1 = calculate_something(num)
     return recursive_dependency_1(num) + num_1
+
 
 from collections import defaultdict
 
@@ -189,6 +189,7 @@ class Graph:
         # Print contents of stack
         return stack"""
     )
+
 
 def test_recursive_function_context() -> None:
     file_path = pathlib.Path(__file__).resolve()

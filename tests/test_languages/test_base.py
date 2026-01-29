@@ -1,5 +1,4 @@
-"""
-Extensive tests for the language abstraction base types.
+"""Extensive tests for the language abstraction base types.
 
 These tests verify that the core data structures work correctly
 and maintain their contracts.
@@ -92,12 +91,7 @@ class TestFunctionInfo:
 
     def test_function_info_creation_minimal(self):
         """Test creating FunctionInfo with minimal args."""
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
         assert func.name == "add"
         assert func.file_path == Path("/test/example.py")
         assert func.start_line == 1
@@ -131,23 +125,13 @@ class TestFunctionInfo:
 
     def test_function_info_frozen(self):
         """Test that FunctionInfo is immutable."""
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
         with pytest.raises(AttributeError):
             func.name = "new_name"
 
     def test_qualified_name_no_parents(self):
         """Test qualified_name without parents."""
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
         assert func.qualified_name == "add"
 
     def test_qualified_name_with_class(self):
@@ -168,10 +152,7 @@ class TestFunctionInfo:
             file_path=Path("/test/example.py"),
             start_line=1,
             end_line=3,
-            parents=(
-                ParentInfo(name="Outer", type="ClassDef"),
-                ParentInfo(name="Inner", type="ClassDef"),
-            ),
+            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
         )
         assert func.qualified_name == "Outer.Inner.inner"
 
@@ -188,12 +169,7 @@ class TestFunctionInfo:
 
     def test_class_name_without_class(self):
         """Test class_name property without class parent."""
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
         assert func.class_name is None
 
     def test_class_name_nested_function(self):
@@ -214,22 +190,14 @@ class TestFunctionInfo:
             file_path=Path("/test/example.py"),
             start_line=1,
             end_line=3,
-            parents=(
-                ParentInfo(name="Outer", type="ClassDef"),
-                ParentInfo(name="Inner", type="ClassDef"),
-            ),
+            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
         )
         # Should return the immediate parent class
         assert func.class_name == "Inner"
 
     def test_top_level_parent_name_no_parents(self):
         """Test top_level_parent_name without parents."""
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
         assert func.top_level_parent_name == "add"
 
     def test_top_level_parent_name_with_parents(self):
@@ -239,10 +207,7 @@ class TestFunctionInfo:
             file_path=Path("/test/example.py"),
             start_line=1,
             end_line=3,
-            parents=(
-                ParentInfo(name="Outer", type="ClassDef"),
-                ParentInfo(name="Inner", type="ClassDef"),
-            ),
+            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
         )
         assert func.top_level_parent_name == "Outer"
 
@@ -285,10 +250,7 @@ class TestCodeContext:
 
     def test_code_context_creation_minimal(self):
         """Test creating CodeContext with minimal args."""
-        ctx = CodeContext(
-            target_code="def add(a, b): return a + b",
-            target_file=Path("/test/example.py"),
-        )
+        ctx = CodeContext(target_code="def add(a, b): return a + b", target_file=Path("/test/example.py"))
         assert ctx.target_code == "def add(a, b): return a + b"
         assert ctx.target_file == Path("/test/example.py")
         assert ctx.helper_functions == []
@@ -325,38 +287,24 @@ class TestTestInfo:
 
     def test_test_info_creation(self):
         """Test creating TestInfo."""
-        info = TestInfo(
-            test_name="test_add",
-            test_file=Path("/tests/test_calc.py"),
-            test_class="TestCalculator",
-        )
+        info = TestInfo(test_name="test_add", test_file=Path("/tests/test_calc.py"), test_class="TestCalculator")
         assert info.test_name == "test_add"
         assert info.test_file == Path("/tests/test_calc.py")
         assert info.test_class == "TestCalculator"
 
     def test_test_info_without_class(self):
         """Test TestInfo without test class."""
-        info = TestInfo(
-            test_name="test_add",
-            test_file=Path("/tests/test_calc.py"),
-        )
+        info = TestInfo(test_name="test_add", test_file=Path("/tests/test_calc.py"))
         assert info.test_class is None
 
     def test_full_test_path_with_class(self):
         """Test full_test_path with class."""
-        info = TestInfo(
-            test_name="test_add",
-            test_file=Path("/tests/test_calc.py"),
-            test_class="TestCalculator",
-        )
+        info = TestInfo(test_name="test_add", test_file=Path("/tests/test_calc.py"), test_class="TestCalculator")
         assert info.full_test_path == "/tests/test_calc.py::TestCalculator::test_add"
 
     def test_full_test_path_without_class(self):
         """Test full_test_path without class."""
-        info = TestInfo(
-            test_name="test_add",
-            test_file=Path("/tests/test_calc.py"),
-        )
+        info = TestInfo(test_name="test_add", test_file=Path("/tests/test_calc.py"))
         assert info.full_test_path == "/tests/test_calc.py::test_add"
 
 
@@ -448,10 +396,7 @@ class TestConvertParentsToTuple:
                 self.name = name
                 self.type = type_
 
-        parents = [
-            MockParent("Outer", "ClassDef"),
-            MockParent("inner", "FunctionDef"),
-        ]
+        parents = [MockParent("Outer", "ClassDef"), MockParent("inner", "FunctionDef")]
         result = convert_parents_to_tuple(parents)
 
         assert len(result) == 2

@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
@@ -86,9 +87,7 @@ class Calculator {
 
         assert context.target_code is not None, "target_code should not be None"
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_extract_context_includes_direct_helpers(self, js_support, cjs_project):
@@ -175,9 +174,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_extract_compound_interest_helpers(self, js_support, cjs_project):
@@ -282,9 +279,7 @@ function validateInput(value, name) {
 
         assert len(context.imports) == 2, f"Expected 2 imports, got {len(context.imports)}: {context.imports}"
         assert context.imports == expected_imports, (
-            f"Imports do not match expected.\n"
-            f"Expected:\n{expected_imports}\n\n"
-            f"Got:\n{context.imports}"
+            f"Imports do not match expected.\nExpected:\n{expected_imports}\n\nGot:\n{context.imports}"
         )
 
     def test_extract_static_method(self, js_support, cjs_project):
@@ -314,9 +309,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
         # quickAdd uses add helper from math_utils
@@ -397,9 +390,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
         # ESM permutation uses factorial helper
@@ -460,9 +451,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
         expected_imports = [
@@ -472,9 +461,7 @@ class Calculator {
 
         assert len(context.imports) == 2, f"Expected 2 imports, got {len(context.imports)}: {context.imports}"
         assert context.imports == expected_imports, (
-            f"Imports do not match expected.\n"
-            f"Expected:\n{expected_imports}\n\n"
-            f"Got:\n{context.imports}"
+            f"Imports do not match expected.\nExpected:\n{expected_imports}\n\nGot:\n{context.imports}"
         )
 
         # ESM compound interest uses 4 helpers
@@ -593,9 +580,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
         # TypeScript permutation uses factorial helper
@@ -659,9 +644,7 @@ class Calculator {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
         # TypeScript compound interest uses 4 helpers
@@ -890,9 +873,7 @@ module.exports = { Counter };
         functions = js_support.discover_functions(test_file)
         increment_func = next(f for f in functions if f.name == "increment")
 
-        context = js_support.extract_code_context(
-            function=increment_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = js_support.extract_code_context(function=increment_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class Counter {
@@ -907,9 +888,7 @@ class Counter {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_method_extraction_class_without_constructor(self, js_support, tmp_path):
@@ -933,9 +912,7 @@ module.exports = { MathUtils };
         functions = js_support.discover_functions(test_file)
         add_func = next(f for f in functions if f.name == "add")
 
-        context = js_support.extract_code_context(
-            function=add_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = js_support.extract_code_context(function=add_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class MathUtils {
@@ -945,9 +922,7 @@ class MathUtils {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_typescript_method_extraction_includes_fields(self, ts_support, tmp_path):
@@ -975,9 +950,7 @@ export { User };
         functions = ts_support.discover_functions(test_file)
         get_name_func = next(f for f in functions if f.name == "getName")
 
-        context = ts_support.extract_code_context(
-            function=get_name_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=get_name_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class User {
@@ -995,9 +968,7 @@ class User {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_typescript_fields_only_no_constructor(self, ts_support, tmp_path):
@@ -1020,9 +991,7 @@ export { Config };
         functions = ts_support.discover_functions(test_file)
         get_url_func = next(f for f in functions if f.name == "getUrl")
 
-        context = ts_support.extract_code_context(
-            function=get_url_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=get_url_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class Config {
@@ -1035,9 +1004,7 @@ class Config {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_constructor_with_jsdoc(self, js_support, tmp_path):
@@ -1065,9 +1032,7 @@ module.exports = { Logger };
         functions = js_support.discover_functions(test_file)
         get_prefix_func = next(f for f in functions if f.name == "getPrefix")
 
-        context = js_support.extract_code_context(
-            function=get_prefix_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = js_support.extract_code_context(function=get_prefix_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class Logger {
@@ -1085,9 +1050,7 @@ class Logger {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
     def test_static_method_includes_constructor(self, js_support, tmp_path):
@@ -1111,9 +1074,7 @@ module.exports = { Factory };
         functions = js_support.discover_functions(test_file)
         create_func = next(f for f in functions if f.name == "create")
 
-        context = js_support.extract_code_context(
-            function=create_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = js_support.extract_code_context(function=create_func, project_root=tmp_path, module_root=tmp_path)
 
         expected_code = """\
 class Factory {
@@ -1127,9 +1088,7 @@ class Factory {
 }"""
 
         assert context.target_code.strip() == expected_code.strip(), (
-            f"Extracted code does not match expected.\n"
-            f"Expected:\n{expected_code}\n\n"
-            f"Got:\n{context.target_code}"
+            f"Extracted code does not match expected.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
         )
 
 
@@ -1264,9 +1223,7 @@ export { distance };
         functions = ts_support.discover_functions(test_file)
         distance_func = next(f for f in functions if f.name == "distance")
 
-        context = ts_support.extract_code_context(
-            function=distance_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=distance_func, project_root=tmp_path, module_root=tmp_path)
 
         # Type definition should be in read-only context with exact match
         expected_read_only = """\
@@ -1310,9 +1267,7 @@ export { processStatus };
         functions = ts_support.discover_functions(test_file)
         process_func = next(f for f in functions if f.name == "processStatus")
 
-        context = ts_support.extract_code_context(
-            function=process_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=process_func, project_root=tmp_path, module_root=tmp_path)
 
         # Enum should be in read-only context with exact match
         expected_read_only = """\
@@ -1349,9 +1304,7 @@ export { compute };
         functions = ts_support.discover_functions(test_file)
         compute_func = next(f for f in functions if f.name == "compute")
 
-        context = ts_support.extract_code_context(
-            function=compute_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=compute_func, project_root=tmp_path, module_root=tmp_path)
 
         # Type alias should be in read-only context with exact match
         expected_read_only = """\
@@ -1428,9 +1381,7 @@ export { add };
         functions = ts_support.discover_functions(test_file)
         add_func = next(f for f in functions if f.name == "add")
 
-        context = ts_support.extract_code_context(
-            function=add_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=add_func, project_root=tmp_path, module_root=tmp_path)
 
         # No type definitions should be extracted for primitives - exact empty match
         assert context.read_only_context == "", (
@@ -1564,9 +1515,7 @@ export { greetUser };
         functions = ts_support.discover_functions(test_file)
         greet_func = next(f for f in functions if f.name == "greetUser")
 
-        context = ts_support.extract_code_context(
-            function=greet_func, project_root=tmp_path, module_root=tmp_path
-        )
+        context = ts_support.extract_code_context(function=greet_func, project_root=tmp_path, module_root=tmp_path)
 
         # JSDoc should be included with the interface - exact match
         expected_read_only = """\

@@ -9,8 +9,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 from codeflash.code_utils.instrument_existing_tests import (
     detect_frameworks_from_code,
     inject_profiling_into_existing_test,
@@ -28,19 +26,11 @@ def normalize_instrumented_code(code: str) -> str:
     generates double-quoted f-strings for compatibility with older versions).
     """
     # Normalize database path
-    code = re.sub(
-        r"sqlite3\.connect\(f'[^']+'",
-        "sqlite3.connect(f'{CODEFLASH_DB_PATH}'",
-        code
-    )
+    code = re.sub(r"sqlite3\.connect\(f'[^']+'", "sqlite3.connect(f'{CODEFLASH_DB_PATH}'", code)
     # Normalize f-string that contains the test_stdout_tag assignment
     # This specific f-string has internal single quotes, so libcst uses double quotes
     # on Python < 3.12, but single quotes on Python 3.12+
-    code = re.sub(
-        r'test_stdout_tag = f"([^"]+)"',
-        r"test_stdout_tag = f'\1'",
-        code
-    )
+    code = re.sub(r'test_stdout_tag = f"([^"]+)"', r"test_stdout_tag = f'\1'", code)
     return code
 
 
@@ -1112,11 +1102,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1142,11 +1128,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1172,11 +1154,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1202,11 +1180,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1232,11 +1206,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1262,11 +1232,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1292,11 +1258,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1322,11 +1284,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1353,11 +1311,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1385,11 +1339,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1423,11 +1373,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1453,11 +1399,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1483,11 +1425,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1513,11 +1451,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,
@@ -1545,11 +1479,7 @@ def test_my_function():
         test_file = tmp_path / "test_example.py"
         test_file.write_text(code)
 
-        func = FunctionToOptimize(
-            function_name="my_function",
-            parents=[],
-            file_path=Path("mymodule.py"),
-        )
+        func = FunctionToOptimize(function_name="my_function", parents=[], file_path=Path("mymodule.py"))
 
         success, instrumented_code = inject_profiling_into_existing_test(
             test_path=test_file,

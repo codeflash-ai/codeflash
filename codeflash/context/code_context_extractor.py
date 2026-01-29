@@ -207,6 +207,7 @@ def get_code_optimization_context(
         preexisting_objects=preexisting_objects,
     )
 
+
 def get_code_optimization_context_for_language(
     function_to_optimize: FunctionToOptimize,
     project_root_path: Path,
@@ -355,6 +356,7 @@ def get_code_optimization_context_for_language(
         helper_functions=helper_function_sources,
         preexisting_objects=set(),  # Not implemented for non-Python yet
     )
+
 
 def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],

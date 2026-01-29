@@ -1,18 +1,12 @@
-"""
-Tests for JavaScript function discovery in get_functions_to_optimize.
+"""Tests for JavaScript function discovery in get_functions_to_optimize.
 
 These tests verify that JavaScript functions are correctly discovered,
 filtered, and returned from the function discovery pipeline.
 """
 
-import tempfile
 import unittest.mock
-from pathlib import Path
-
-import pytest
 
 from codeflash.discovery.functions_to_optimize import (
-    FunctionToOptimize,
     filter_functions,
     find_all_functions_in_file,
     get_all_files_and_functions,
@@ -233,11 +227,7 @@ function add(a, b) {
             "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
         ):
             filtered, count = filter_functions(
-                functions,
-                tests_root=tmp_path / "tests",
-                ignore_paths=[],
-                project_root=tmp_path,
-                module_root=tmp_path,
+                functions, tests_root=tmp_path / "tests", ignore_paths=[], project_root=tmp_path, module_root=tmp_path
             )
 
         assert js_file in filtered
@@ -258,11 +248,7 @@ function testHelper() {
         modified_functions = {test_file: functions.get(test_file, [])}
 
         filtered, count = filter_functions(
-            modified_functions,
-            tests_root=tests_dir,
-            ignore_paths=[],
-            project_root=tmp_path,
-            module_root=tmp_path,
+            modified_functions, tests_root=tests_dir, ignore_paths=[], project_root=tmp_path, module_root=tmp_path
         )
 
         assert test_file not in filtered

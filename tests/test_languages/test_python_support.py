@@ -1,5 +1,4 @@
-"""
-Extensive tests for the Python language support implementation.
+"""Extensive tests for the Python language support implementation.
 
 These tests verify that PythonSupport correctly discovers functions,
 replaces code, and integrates with existing codeflash functionality.
@@ -10,12 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import (
-    FunctionFilterCriteria,
-    FunctionInfo,
-    Language,
-    ParentInfo,
-)
+from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
 from codeflash.languages.python.support import PythonSupport
 
 
@@ -269,12 +263,7 @@ class TestReplaceFunction:
 def multiply(a, b):
     return a * b
 """
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test.py"),
-            start_line=1,
-            end_line=2,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test.py"), start_line=1, end_line=2)
         new_code = """def add(a, b):
     # Optimized
     return (a + b) | 0
@@ -298,12 +287,7 @@ def other():
 
 # Footer
 """
-        func = FunctionInfo(
-            name="target",
-            file_path=Path("/test.py"),
-            start_line=4,
-            end_line=5,
-        )
+        func = FunctionInfo(name="target", file_path=Path("/test.py"), start_line=4, end_line=5)
         new_code = """def target():
     return 42
 """
@@ -347,12 +331,7 @@ def other():
 def second():
     return 2
 """
-        func = FunctionInfo(
-            name="first",
-            file_path=Path("/test.py"),
-            start_line=1,
-            end_line=2,
-        )
+        func = FunctionInfo(name="first", file_path=Path("/test.py"), start_line=1, end_line=2)
         new_code = """def first():
     return 100
 """
@@ -369,12 +348,7 @@ def second():
 def last():
     return 999
 """
-        func = FunctionInfo(
-            name="last",
-            file_path=Path("/test.py"),
-            start_line=4,
-            end_line=5,
-        )
+        func = FunctionInfo(name="last", file_path=Path("/test.py"), start_line=4, end_line=5)
         new_code = """def last():
     return 1000
 """
@@ -388,12 +362,7 @@ def last():
         source = """def only():
     return 42
 """
-        func = FunctionInfo(
-            name="only",
-            file_path=Path("/test.py"),
-            start_line=1,
-            end_line=2,
-        )
+        func = FunctionInfo(name="only", file_path=Path("/test.py"), start_line=1, end_line=2)
         new_code = """def only():
     return 100
 """
@@ -505,18 +474,9 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(
-                name="add",
-                file_path=file_path,
-                start_line=1,
-                end_line=2,
-            )
+            func = FunctionInfo(name="add", file_path=file_path, start_line=1, end_line=2)
 
-            context = python_support.extract_code_context(
-                func,
-                file_path.parent,
-                file_path.parent,
-            )
+            context = python_support.extract_code_context(func, file_path.parent, file_path.parent)
 
             assert "def add" in context.target_code
             assert "return a + b" in context.target_code

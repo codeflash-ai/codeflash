@@ -41,7 +41,6 @@ from codeflash.code_utils.code_utils import (
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
-    module_name_from_file_path,
     normalize_by_max,
     restore_conftest,
     unified_diff_strings,
@@ -81,7 +80,6 @@ from codeflash.languages import is_python
 from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
-from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
 from codeflash.lsp.lsp_message import LspCodeMessage, LspMarkdownMessage, LSPMessageId
 from codeflash.models.ExperimentMetadata import ExperimentMetadata

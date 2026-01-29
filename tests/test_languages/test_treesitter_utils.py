@@ -1,20 +1,14 @@
-"""
-Extensive tests for the tree-sitter utilities module.
+"""Extensive tests for the tree-sitter utilities module.
 
 These tests verify that the TreeSitterAnalyzer correctly parses and
 analyzes JavaScript/TypeScript code.
 """
 
+from pathlib import Path
+
 import pytest
 
-from codeflash.languages.treesitter_utils import (
-    FunctionNode,
-    ImportInfo,
-    TreeSitterAnalyzer,
-    TreeSitterLanguage,
-    get_analyzer_for_file,
-)
-from pathlib import Path
+from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 
 
 class TestTreeSitterLanguage:

@@ -4,16 +4,10 @@ These tests verify that the ImportResolver correctly resolves import paths
 to actual file paths, enabling multi-file context extraction.
 """
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from codeflash.languages.javascript.import_resolver import (
-    ImportResolver,
-    ResolvedImport,
-    MultiFileHelperFinder,
-    HelperSearchContext,
-)
+import pytest
+
+from codeflash.languages.javascript.import_resolver import HelperSearchContext, ImportResolver, MultiFileHelperFinder
 from codeflash.languages.treesitter_utils import ImportInfo
 
 
@@ -246,16 +240,16 @@ class TestMultiFileHelperFinder:
         src_dir.mkdir()
 
         # Main file that imports helper
-        (src_dir / "main.ts").write_text('''
+        (src_dir / "main.ts").write_text("""
 import { helperFunc } from './helper';
 
 export function mainFunc() {
     return helperFunc() + 1;
 }
-''')
+""")
 
         # Helper file
-        (src_dir / "helper.ts").write_text('''
+        (src_dir / "helper.ts").write_text("""
 export function helperFunc() {
     return 42;
 }
@@ -263,7 +257,7 @@ export function helperFunc() {
 export function unusedHelper() {
     return 0;
 }
-''')
+""")
 
         return tmp_path
 
@@ -293,6 +287,7 @@ class TestExportInfo:
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
         from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
     def test_find_named_export_function(self, js_analyzer):
@@ -394,6 +389,7 @@ class TestCommonJSRequire:
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
         from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
     def test_require_default_import(self, js_analyzer):
@@ -475,6 +471,7 @@ class TestCommonJSExports:
     def js_analyzer(self):
         """Create a JavaScript analyzer."""
         from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
     def test_module_exports_function(self, js_analyzer):

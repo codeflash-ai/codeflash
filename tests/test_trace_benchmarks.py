@@ -1,6 +1,6 @@
-import multiprocessing
 import shutil
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -9,7 +9,6 @@ from codeflash.benchmarking.plugin.plugin import codeflash_benchmark_plugin
 from codeflash.benchmarking.replay_test import generate_replay_test
 from codeflash.benchmarking.trace_benchmarks import trace_benchmarks_pytest
 from codeflash.benchmarking.utils import validate_and_format_benchmark_table
-import time
 
 
 def test_trace_benchmarks() -> None:
@@ -30,7 +29,8 @@ def test_trace_benchmarks() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+        )
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
@@ -40,37 +40,78 @@ def test_trace_benchmarks() -> None:
         process_and_bubble_sort_path = (project_root / "process_and_bubble_sort_codeflash_trace.py").as_posix()
         # Expected function calls
         expected_calls = [
-            ("sorter", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 17),
-
-            ("sort_class", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort2", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 20),
-
-            ("sort_static", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort3", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 23),
-
-            ("__init__", "Sorter", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_class_sort4", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 26),
-
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_sort", "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example", 7),
-
-            ("compute_and_sort", "", "code_to_optimize.process_and_bubble_sort_codeflash_trace",
-             f"{process_and_bubble_sort_path}",
-             "test_compute_and_sort", "tests.pytest.benchmarks_test.test_process_and_sort_example", 4),
-
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_no_func", "tests.pytest.benchmarks_test.test_process_and_sort_example", 8),
-
-            ("recursive_bubble_sort", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_recursive_sort", "tests.pytest.benchmarks_test.test_recursive_example", 5),
+            (
+                "sorter",
+                "Sorter",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_class_sort",
+                "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example",
+                17,
+            ),
+            (
+                "sort_class",
+                "Sorter",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_class_sort2",
+                "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example",
+                20,
+            ),
+            (
+                "sort_static",
+                "Sorter",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_class_sort3",
+                "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example",
+                23,
+            ),
+            (
+                "__init__",
+                "Sorter",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_class_sort4",
+                "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example",
+                26,
+            ),
+            (
+                "sorter",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_sort",
+                "tests.pytest.benchmarks_test.test_benchmark_bubble_sort_example",
+                7,
+            ),
+            (
+                "compute_and_sort",
+                "",
+                "code_to_optimize.process_and_bubble_sort_codeflash_trace",
+                f"{process_and_bubble_sort_path}",
+                "test_compute_and_sort",
+                "tests.pytest.benchmarks_test.test_process_and_sort_example",
+                4,
+            ),
+            (
+                "sorter",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_no_func",
+                "tests.pytest.benchmarks_test.test_process_and_sort_example",
+                8,
+            ),
+            (
+                "recursive_bubble_sort",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_recursive_sort",
+                "tests.pytest.benchmarks_test.test_recursive_example",
+                5,
+            ),
         ]
         for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
             assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
@@ -83,7 +124,9 @@ def test_trace_benchmarks() -> None:
         # Close connection
         conn.close()
         generate_replay_test(output_file, replay_tests_dir)
-        test_class_sort_path = replay_tests_dir/ Path("test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py")
+        test_class_sort_path = replay_tests_dir / Path(
+            "test_tests_pytest_benchmarks_test_test_benchmark_bubble_sort_example__replay_test_0.py"
+        )
         assert test_class_sort_path.exists()
         test_class_sort_code = f"""
 from code_to_optimize.bubble_sort_codeflash_trace import \\
@@ -141,9 +184,11 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_Sorter___init___test_class
             ret = code_to_optimize_bubble_sort_codeflash_trace_Sorter(*args, **kwargs)
 
 """
-        assert test_class_sort_path.read_text("utf-8").strip()==test_class_sort_code.strip()
+        assert test_class_sort_path.read_text("utf-8").strip() == test_class_sort_code.strip()
 
-        test_sort_path = replay_tests_dir / Path("test_tests_pytest_benchmarks_test_test_process_and_sort_example__replay_test_0.py")
+        test_sort_path = replay_tests_dir / Path(
+            "test_tests_pytest_benchmarks_test_test_process_and_sort_example__replay_test_0.py"
+        )
         assert test_sort_path.exists()
         test_sort_code = f"""
 from code_to_optimize.bubble_sort_codeflash_trace import \\
@@ -170,11 +215,12 @@ def test_code_to_optimize_bubble_sort_codeflash_trace_sorter_test_no_func():
         ret = code_to_optimize_bubble_sort_codeflash_trace_sorter(*args, **kwargs)
 
 """
-        assert test_sort_path.read_text("utf-8").strip()==test_sort_code.strip()
+        assert test_sort_path.read_text("utf-8").strip() == test_sort_code.strip()
     finally:
         # cleanup
         output_file.unlink(missing_ok=True)
         shutil.rmtree(replay_tests_dir)
+
 
 # Skip the test in CI as the machine may not be multithreaded
 @pytest.mark.ci_skip
@@ -194,7 +240,8 @@ def test_trace_multithreaded_benchmark() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+        )
         function_calls = cursor.fetchall()
 
         conn.close()
@@ -206,7 +253,9 @@ def test_trace_multithreaded_benchmark() -> None:
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
-        test_name, total_time, function_time, percent = function_to_results["code_to_optimize.bubble_sort_codeflash_trace.sorter"][0]
+        test_name, total_time, function_time, percent = function_to_results[
+            "code_to_optimize.bubble_sort_codeflash_trace.sorter"
+        ][0]
         assert total_time >= 0.0
         assert function_time >= 0.0
         assert percent >= 0.0
@@ -214,9 +263,15 @@ def test_trace_multithreaded_benchmark() -> None:
         bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
         # Expected function calls
         expected_calls = [
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_benchmark_sort", "tests.pytest.benchmarks_multithread.test_multithread_sort", 4),
+            (
+                "sorter",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_benchmark_sort",
+                "tests.pytest.benchmarks_multithread.test_multithread_sort",
+                4,
+            )
         ]
         for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
             assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"
@@ -232,6 +287,7 @@ def test_trace_multithreaded_benchmark() -> None:
     finally:
         # cleanup
         output_file.unlink(missing_ok=True)
+
 
 def test_trace_benchmark_decorator() -> None:
     project_root = Path(__file__).parent.parent / "code_to_optimize"
@@ -249,7 +305,8 @@ def test_trace_benchmark_decorator() -> None:
         # Get the count of records
         # Get all records
         cursor.execute(
-            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name")
+            "SELECT function_name, class_name, module_name, file_path, benchmark_function_name, benchmark_module_path, benchmark_line_number FROM benchmark_function_timings ORDER BY benchmark_module_path, benchmark_function_name, function_name"
+        )
         function_calls = cursor.fetchall()
 
         # Assert the length of function calls
@@ -259,7 +316,9 @@ def test_trace_benchmark_decorator() -> None:
         function_to_results = validate_and_format_benchmark_table(function_benchmark_timings, total_benchmark_timings)
         assert "code_to_optimize.bubble_sort_codeflash_trace.sorter" in function_to_results
 
-        test_name, total_time, function_time, percent = function_to_results["code_to_optimize.bubble_sort_codeflash_trace.sorter"][0]
+        test_name, total_time, function_time, percent = function_to_results[
+            "code_to_optimize.bubble_sort_codeflash_trace.sorter"
+        ][0]
         assert total_time > 0.0
         assert function_time > 0.0
         assert percent > 0.0
@@ -267,12 +326,24 @@ def test_trace_benchmark_decorator() -> None:
         bubble_sort_path = (project_root / "bubble_sort_codeflash_trace.py").as_posix()
         # Expected function calls
         expected_calls = [
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_benchmark_sort", "tests.pytest.benchmarks_test_decorator.test_benchmark_decorator", 5),
-            ("sorter", "", "code_to_optimize.bubble_sort_codeflash_trace",
-             f"{bubble_sort_path}",
-             "test_pytest_mark", "tests.pytest.benchmarks_test_decorator.test_benchmark_decorator", 11),
+            (
+                "sorter",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_benchmark_sort",
+                "tests.pytest.benchmarks_test_decorator.test_benchmark_decorator",
+                5,
+            ),
+            (
+                "sorter",
+                "",
+                "code_to_optimize.bubble_sort_codeflash_trace",
+                f"{bubble_sort_path}",
+                "test_pytest_mark",
+                "tests.pytest.benchmarks_test_decorator.test_benchmark_decorator",
+                11,
+            ),
         ]
         for idx, (actual, expected) in enumerate(zip(function_calls, expected_calls)):
             assert actual[0] == expected[0], f"Mismatch at index {idx} for function_name"

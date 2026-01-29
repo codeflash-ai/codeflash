@@ -1,5 +1,4 @@
-"""
-Extensive tests for the language registry module.
+"""Extensive tests for the language registry module.
 
 These tests verify that language registration, lookup, and detection
 work correctly.
@@ -10,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import Language, LanguageSupport
+from codeflash.languages.base import Language
 from codeflash.languages.registry import (
     UnsupportedLanguageError,
     clear_cache,
@@ -28,7 +27,6 @@ from codeflash.languages.registry import (
 def setup_registry():
     """Ensure PythonSupport is registered before each test."""
     # Import to trigger registration
-    from codeflash.languages.python import PythonSupport
 
     yield
     # Clear cache after each test to avoid side effects
@@ -92,9 +90,7 @@ class TestGetLanguageSupport:
         """Test that unsupported extension raises UnsupportedLanguageError."""
         with pytest.raises(UnsupportedLanguageError) as exc_info:
             get_language_support(Path("/test/example.xyz"))
-        assert "xyz" in str(exc_info.value.identifier) or "example.xyz" in str(
-            exc_info.value.identifier
-        )
+        assert "xyz" in str(exc_info.value.identifier) or "example.xyz" in str(exc_info.value.identifier)
 
     def test_unsupported_language_raises(self):
         """Test that unsupported language name raises UnsupportedLanguageError."""
@@ -175,9 +171,8 @@ class TestDetectProjectLanguage:
 
     def test_detect_empty_project_raises(self):
         """Test that empty project raises UnsupportedLanguageError."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(UnsupportedLanguageError):
-                detect_project_language(Path(tmpdir), Path(tmpdir))
+        with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(UnsupportedLanguageError):
+            detect_project_language(Path(tmpdir), Path(tmpdir))
 
     def test_detect_with_different_roots(self):
         """Test detection with different project and module roots."""

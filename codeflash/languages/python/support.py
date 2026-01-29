@@ -73,7 +73,7 @@ class PythonSupport:
         """
         import libcst as cst
 
-        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize, FunctionVisitor
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionVisitor
 
         criteria = filter_criteria or FunctionFilterCriteria()
 
@@ -339,12 +339,7 @@ class PythonSupport:
         # Try ruff first
         try:
             result = subprocess.run(
-                ["ruff", "format", "-"],
-                check=False,
-                input=source,
-                capture_output=True,
-                text=True,
-                timeout=30,
+                ["ruff", "format", "-"], check=False, input=source, capture_output=True, text=True, timeout=30
             )
             if result.returncode == 0:
                 return result.stdout
@@ -356,12 +351,7 @@ class PythonSupport:
         # Try black as fallback
         try:
             result = subprocess.run(
-                ["black", "-q", "-"],
-                check=False,
-                input=source,
-                capture_output=True,
-                text=True,
-                timeout=30,
+                ["black", "-q", "-"], check=False, input=source, capture_output=True, text=True, timeout=30
             )
             if result.returncode == 0:
                 return result.stdout
@@ -397,19 +387,11 @@ class PythonSupport:
         junit_xml = output_dir / "pytest-results.xml"
 
         # Build pytest command
-        cmd = [
-            "python",
-            "-m",
-            "pytest",
-            f"--junitxml={junit_xml}",
-            "-v",
-        ]
+        cmd = ["python", "-m", "pytest", f"--junitxml={junit_xml}", "-v"]
         cmd.extend(str(f) for f in test_files)
 
         try:
-            result = subprocess.run(
-                cmd, check=False, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
-            )
+            result = subprocess.run(cmd, check=False, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
             results = self.parse_test_results(junit_xml, result.stdout)
             return results, junit_xml
 
@@ -653,11 +635,7 @@ class PythonSupport:
 
         """
         # Common test directory patterns for Python
-        test_dirs = [
-            project_root / "tests",
-            project_root / "test",
-            project_root / "spec",
-        ]
+        test_dirs = [project_root / "tests", project_root / "test", project_root / "spec"]
 
         for test_dir in test_dirs:
             if test_dir.exists() and test_dir.is_dir():
@@ -669,9 +647,7 @@ class PythonSupport:
 
         return None
 
-    def get_module_path(
-        self, source_file: Path, project_root: Path, tests_root: Path | None = None
-    ) -> str:
+    def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         """Get the module path for importing a Python source file.
 
         For Python, this returns a dot-separated module path (e.g., 'mypackage.mymodule').

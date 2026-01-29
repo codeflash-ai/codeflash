@@ -4,14 +4,11 @@ Code normalizers transform source code into a canonical form for duplicate detec
 They normalize variable names, remove comments/docstrings, and produce consistent output
 that can be compared across different implementations of the same algorithm.
 """
+
 # TODO:{claude} move to base.py in language folder
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 
 class CodeNormalizer(ABC):
@@ -30,6 +27,7 @@ class CodeNormalizer(ABC):
         >>> code2 = "def foo(x): z = x + 1; return z"
         >>> normalizer.normalize(code1) == normalizer.normalize(code2)
         True
+
     """
 
     @property
@@ -52,6 +50,7 @@ class CodeNormalizer(ABC):
 
         Returns:
             Normalized representation of the code
+
         """
         ...
 
@@ -66,6 +65,7 @@ class CodeNormalizer(ABC):
 
         Returns:
             Normalized representation suitable for hashing
+
         """
         ...
 
@@ -78,6 +78,7 @@ class CodeNormalizer(ABC):
 
         Returns:
             True if codes are structurally identical
+
         """
         try:
             normalized1 = self.normalize_for_hash(code1)
@@ -94,6 +95,7 @@ class CodeNormalizer(ABC):
 
         Returns:
             SHA-256 hash of normalized code
+
         """
         import hashlib
 

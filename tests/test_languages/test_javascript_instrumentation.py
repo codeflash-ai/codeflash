@@ -1,13 +1,10 @@
-"""
-Tests for JavaScript instrumentation (line profiling and tracing).
+"""Tests for JavaScript instrumentation (line profiling and tracing).
 
 This module tests the line profiling and tracing instrumentation for JavaScript code.
 """
 
 import tempfile
 from pathlib import Path
-
-import pytest
 
 from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.javascript.line_profiler import JavaScriptLineProfiler
@@ -52,11 +49,7 @@ function add(a, b) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="add",
-            file_path=file_path,
-            start_line=2,
-            end_line=5,
-            language=Language.JAVASCRIPT,
+            name="add", file_path=file_path, start_line=2, end_line=5, language=Language.JAVASCRIPT
         )
 
         output_file = Path("/tmp/test_profile.json")
@@ -117,11 +110,7 @@ function multiply(x, y) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="multiply",
-            file_path=file_path,
-            start_line=2,
-            end_line=4,
-            language=Language.JAVASCRIPT,
+            name="multiply", file_path=file_path, start_line=2, end_line=4, language=Language.JAVASCRIPT
         )
 
         output_db = Path("/tmp/test_traces.db")
@@ -165,17 +154,11 @@ function greet(name) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="greet",
-            file_path=file_path,
-            start_line=2,
-            end_line=4,
-            language=Language.JAVASCRIPT,
+            name="greet", file_path=file_path, start_line=2, end_line=4, language=Language.JAVASCRIPT
         )
 
         output_file = file_path.parent / ".codeflash" / "traces.db"
-        instrumented = js_support.instrument_for_behavior(
-            source, [func_info], output_file=output_file
-        )
+        instrumented = js_support.instrument_for_behavior(source, [func_info], output_file=output_file)
 
         assert "__codeflash_tracer__" in instrumented
         assert "wrap" in instrumented
@@ -202,11 +185,7 @@ function square(n) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="square",
-            file_path=file_path,
-            start_line=2,
-            end_line=5,
-            language=Language.JAVASCRIPT,
+            name="square", file_path=file_path, start_line=2, end_line=5, language=Language.JAVASCRIPT
         )
 
         output_file = file_path.parent / ".codeflash" / "line_profile.json"
@@ -373,10 +352,7 @@ const result = calc.fibonacci(10);
 console.log(result);
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Calculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Calculator.fibonacci", capture_func="capture"
         )
 
         # Should transform calc.fibonacci(10) to codeflash.capture(..., calc.fibonacci.bind(calc), 10)
@@ -395,10 +371,7 @@ test('fibonacci works', () => {
 });
 """
         transformed, counter = transform_expect_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="FibonacciCalculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="FibonacciCalculator.fibonacci", capture_func="capture"
         )
 
         # Should transform expect(calc.fibonacci(10)) to
@@ -446,10 +419,7 @@ class FibonacciCalculator {
 }
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="FibonacciCalculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="FibonacciCalculator.fibonacci", capture_func="capture"
         )
 
         # The method definition should NOT be transformed
@@ -468,10 +438,7 @@ FibonacciCalculator.prototype.fibonacci = function(n) {
 };
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="FibonacciCalculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="FibonacciCalculator.fibonacci", capture_func="capture"
         )
 
         # The prototype assignment should NOT be transformed
@@ -489,10 +456,7 @@ const b = calc.fibonacci(10);
 const sum = a + b;
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Calculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Calculator.fibonacci", capture_func="capture"
         )
 
         # Should transform both calls
@@ -511,10 +475,7 @@ class Wrapper {
 }
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Wrapper.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Wrapper.fibonacci", capture_func="capture"
         )
 
         # Should transform this.fibonacci(n)
@@ -524,9 +485,9 @@ class Wrapper {
 
     def test_full_instrumentation_produces_valid_syntax(self):
         """Test that full instrumentation produces syntactically valid JavaScript."""
-        from codeflash.languages.javascript.instrument import _instrument_js_test_code
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
+        from codeflash.languages.javascript.instrument import _instrument_js_test_code
 
         js_support = get_language_support(Language.JAVASCRIPT)
 
@@ -584,11 +545,7 @@ describe('Calculator', () => {
 });
 """
         instrumented = _instrument_js_test_code(
-            code=test_code,
-            func_name="add",
-            test_file_path="test.js",
-            mode="behavior",
-            qualified_name="Calculator.add",
+            code=test_code, func_name="add", test_file_path="test.js", mode="behavior", qualified_name="Calculator.add"
         )
 
         # describe and test structure should be preserved
@@ -610,10 +567,7 @@ const data = await api.fetchData('http://example.com');
 console.log(data);
 """
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fetchData",
-            qualified_name="ApiClient.fetchData",
-            capture_func="capture",
+            code=code, func_name="fetchData", qualified_name="ApiClient.fetchData", capture_func="capture"
         )
 
         # Should preserve await
@@ -632,10 +586,7 @@ class TestInstrumentationFullStringEquality:
         code = "    calc.fibonacci(10);"
 
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Calculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Calculator.fibonacci", capture_func="capture"
         )
 
         expected = "    codeflash.capture('Calculator.fibonacci', '1', calc.fibonacci.bind(calc), 10);"
@@ -649,10 +600,7 @@ class TestInstrumentationFullStringEquality:
         code = "    expect(calc.fibonacci(10)).toBe(55);"
 
         transformed, counter = transform_expect_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Calculator.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Calculator.fibonacci", capture_func="capture"
         )
 
         expected = "    expect(codeflash.capture('Calculator.fibonacci', '1', calc.fibonacci.bind(calc), 10)).toBe(55);"
@@ -684,10 +632,7 @@ class TestInstrumentationFullStringEquality:
         code = "    fibonacci(10);"
 
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="fibonacci", capture_func="capture"
         )
 
         expected = "    codeflash.capture('fibonacci', '1', fibonacci, 10);"
@@ -701,10 +646,7 @@ class TestInstrumentationFullStringEquality:
         code = "        return this.fibonacci(n - 1);"
 
         transformed, counter = transform_standalone_calls(
-            code=code,
-            func_name="fibonacci",
-            qualified_name="Class.fibonacci",
-            capture_func="capture",
+            code=code, func_name="fibonacci", qualified_name="Class.fibonacci", capture_func="capture"
         )
 
         expected = "        return codeflash.capture('Class.fibonacci', '1', this.fibonacci.bind(this), n - 1);"

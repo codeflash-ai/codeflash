@@ -50,7 +50,9 @@ def test_speedup_critic() -> None:
         total_candidate_timing=12,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True)  # 20% improvement
+    assert speedup_critic(
+        candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True
+    )  # 20% improvement
 
     candidate_result = OptimizedCandidateResult(
         max_loop_count=5,
@@ -61,7 +63,9 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert not speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True)  # 6% improvement
+    assert not speedup_critic(
+        candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True
+    )  # 6% improvement
 
     original_code_runtime = 100000
     best_runtime_until_now = 100000
@@ -75,7 +79,9 @@ def test_speedup_critic() -> None:
         optimization_candidate_index=0,
     )
 
-    assert speedup_critic(candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True)  # 6% improvement
+    assert speedup_critic(
+        candidate_result, original_code_runtime, best_runtime_until_now, disable_gh_action_noise=True
+    )  # 6% improvement
 
 
 def test_generated_test_critic() -> None:
@@ -418,6 +424,7 @@ def test_coverage_critic() -> None:
 
     assert coverage_critic(failing_coverage) is False
 
+
 def test_throughput_gain() -> None:
     """Test throughput_gain calculation."""
     # Test basic throughput improvement
@@ -458,7 +465,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Test case 2: Runtime improves significantly, throughput doesn't meet threshold (should pass)
@@ -478,7 +485,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Test case 3: Throughput improves significantly, runtime doesn't meet threshold (should pass)
@@ -498,7 +505,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Test case 4: No throughput data - should fall back to runtime-only evaluation
@@ -518,7 +525,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=None,  # No original throughput data
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Test case 5: Test best_throughput_until_now comparison
@@ -539,7 +546,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Should fail when there's a better throughput already
@@ -549,7 +556,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=7000,  # Better runtime already exists
         original_async_throughput=original_async_throughput,
         best_throughput_until_now=120,  # Better throughput already exists
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
     # Test case 6: Zero original throughput (edge case)
@@ -570,7 +577,7 @@ def test_speedup_critic_with_async_throughput() -> None:
         best_runtime_until_now=None,
         original_async_throughput=0,  # Zero original throughput
         best_throughput_until_now=None,
-        disable_gh_action_noise=True
+        disable_gh_action_noise=True,
     )
 
 
@@ -594,29 +601,20 @@ def test_concurrency_gain() -> None:
 
     # Test no improvement
     same = ConcurrencyMetrics(
-        sequential_time_ns=10_000_000,
-        concurrent_time_ns=10_000_000,
-        concurrency_factor=10,
-        concurrency_ratio=1.0,
+        sequential_time_ns=10_000_000, concurrent_time_ns=10_000_000, concurrency_factor=10, concurrency_ratio=1.0
     )
     assert concurrency_gain(original, same) == 0.0
 
     # Test slight improvement
     slightly_better = ConcurrencyMetrics(
-        sequential_time_ns=10_000_000,
-        concurrent_time_ns=8_000_000,
-        concurrency_factor=10,
-        concurrency_ratio=1.25,
+        sequential_time_ns=10_000_000, concurrent_time_ns=8_000_000, concurrency_factor=10, concurrency_ratio=1.25
     )
     # 25% improvement: (1.25 - 1.0) / 1.0 = 0.25
     assert concurrency_gain(original, slightly_better) == 0.25
 
     # Test zero original ratio (edge case)
     zero_ratio = ConcurrencyMetrics(
-        sequential_time_ns=0,
-        concurrent_time_ns=1_000_000,
-        concurrency_factor=10,
-        concurrency_ratio=0.0,
+        sequential_time_ns=0, concurrent_time_ns=1_000_000, concurrency_factor=10, concurrency_ratio=0.0
     )
     assert concurrency_gain(zero_ratio, optimized) == 0.0
 
@@ -628,10 +626,7 @@ def test_speedup_critic_with_concurrency_metrics() -> None:
 
     # Original concurrency metrics (blocking code - ratio ~= 1.0)
     original_concurrency = ConcurrencyMetrics(
-        sequential_time_ns=10_000_000,
-        concurrent_time_ns=10_000_000,
-        concurrency_factor=10,
-        concurrency_ratio=1.0,
+        sequential_time_ns=10_000_000, concurrent_time_ns=10_000_000, concurrency_factor=10, concurrency_ratio=1.0
     )
 
     # Test case 1: Concurrency improves significantly (blocking -> non-blocking)
@@ -731,10 +726,7 @@ def test_speedup_critic_with_concurrency_metrics() -> None:
         total_candidate_timing=10000,
         async_throughput=100,
         concurrency_metrics=ConcurrencyMetrics(
-            sequential_time_ns=10_000_000,
-            concurrent_time_ns=2_000_000,
-            concurrency_factor=10,
-            concurrency_ratio=5.0,
+            sequential_time_ns=10_000_000, concurrent_time_ns=2_000_000, concurrency_factor=10, concurrency_ratio=5.0
         ),
     )
 

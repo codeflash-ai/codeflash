@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING
 
 from codeflash.code_utils.normalizers.base import CodeNormalizer
-
-if TYPE_CHECKING:
-    pass
 
 
 class VariableNormalizer(ast.NodeTransformer):
@@ -197,6 +193,7 @@ class PythonNormalizer(CodeNormalizer):
 
         Returns:
             Normalized Python code as a string
+
         """
         tree = ast.parse(code)
 
@@ -219,6 +216,7 @@ class PythonNormalizer(CodeNormalizer):
 
         Returns:
             AST dump string suitable for hashing
+
         """
         tree = ast.parse(code)
         _remove_docstrings_from_ast(tree)

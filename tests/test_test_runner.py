@@ -49,10 +49,7 @@ class TestUnittestRunnerSorter(unittest.TestCase):
         )
         test_file_path.write_text(code, encoding="utf-8")
         result_file, process, _, _ = run_behavioral_tests(
-            test_files,
-            test_framework=config.test_framework,
-            cwd=Path(config.project_root_path),
-            test_env=test_env,
+            test_files, test_framework=config.test_framework, cwd=Path(config.project_root_path), test_env=test_env
         )
         results = parse_test_xml(result_file, test_files, config, process)
     assert results[0].did_pass, "Test did not pass as expected"

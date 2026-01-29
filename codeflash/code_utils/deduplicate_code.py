@@ -8,13 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import TYPE_CHECKING
 
 from codeflash.code_utils.normalizers import get_normalizer
 from codeflash.languages import current_language, is_python
-
-if TYPE_CHECKING:
-    pass
 
 
 def normalize_code(
@@ -35,6 +31,7 @@ def normalize_code(
 
     Returns:
         Normalized code as string
+
     """
     if language is None:
         language = current_language().value
@@ -89,6 +86,7 @@ def get_code_fingerprint(code: str, language: str | None = None) -> str:
 
     Returns:
         SHA-256 hash of normalized code
+
     """
     if language is None:
         language = current_language().value
@@ -112,6 +110,7 @@ def are_codes_duplicate(code1: str, code2: str, language: str | None = None) -> 
 
     Returns:
         True if codes are structurally identical (ignoring local variable names)
+
     """
     if language is None:
         language = current_language().value
@@ -127,8 +126,4 @@ def are_codes_duplicate(code1: str, code2: str, language: str | None = None) -> 
 
 
 # Re-export for backward compatibility
-__all__ = [
-    "normalize_code",
-    "get_code_fingerprint",
-    "are_codes_duplicate",
-]
+__all__ = ["are_codes_duplicate", "get_code_fingerprint", "normalize_code"]

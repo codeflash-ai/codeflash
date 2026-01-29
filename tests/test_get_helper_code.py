@@ -242,8 +242,8 @@ class _PersistentCache(Generic[_P, _R, _CacheBackendT]):
         code_context = ctx_result.unwrap()
         assert code_context.helper_functions[0].qualified_name == "AbstractCacheBackend.get_cache_or_call"
         assert (
-                code_context.testgen_context.flat
-                == f'''# file: {file_path.relative_to(project_root_path)}
+            code_context.testgen_context.flat
+            == f'''# file: {file_path.relative_to(project_root_path)}
 _P = ParamSpec("_P")
 _KEY_T = TypeVar("_KEY_T")
 _STORE_T = TypeVar("_STORE_T")
@@ -412,8 +412,8 @@ def test_bubble_sort_deps() -> None:
         pytest.fail()
     code_context = ctx_result.unwrap()
     assert (
-            code_context.testgen_context.flat
-            == f"""{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep1_helper.py"))}
+        code_context.testgen_context.flat
+        == f"""{get_code_block_splitter(Path("code_to_optimize/bubble_sort_dep1_helper.py"))}
 def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
 
@@ -438,7 +438,7 @@ def sorter_deps(arr):
     )
     assert len(code_context.helper_functions) == 2
     assert (
-            code_context.helper_functions[0].fully_qualified_name
-            == "code_to_optimize.bubble_sort_dep1_helper.dep1_comparer"
+        code_context.helper_functions[0].fully_qualified_name
+        == "code_to_optimize.bubble_sort_dep1_helper.dep1_comparer"
     )
     assert code_context.helper_functions[1].fully_qualified_name == "code_to_optimize.bubble_sort_dep2_swap.dep2_swap"

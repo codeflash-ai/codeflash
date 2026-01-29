@@ -1,5 +1,4 @@
-"""
-Extensive tests for the JavaScript language support implementation.
+"""Extensive tests for the JavaScript language support implementation.
 
 These tests verify that JavaScriptSupport correctly discovers functions,
 replaces code, and integrates with the codeflash language abstraction.
@@ -10,12 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import (
-    FunctionFilterCriteria,
-    FunctionInfo,
-    Language,
-    ParentInfo,
-)
+from codeflash.languages.base import FunctionFilterCriteria, FunctionInfo, Language, ParentInfo
 from codeflash.languages.javascript.support import JavaScriptSupport
 
 
@@ -322,12 +316,7 @@ function multiply(a, b) {
     return a * b;
 }
 """
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test.js"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test.js"), start_line=1, end_line=3)
         new_code = """function add(a, b) {
     // Optimized
     return (a + b) | 0;
@@ -354,12 +343,7 @@ function other() {
 
 // Footer
 """
-        func = FunctionInfo(
-            name="target",
-            file_path=Path("/test.js"),
-            start_line=4,
-            end_line=6,
-        )
+        func = FunctionInfo(name="target", file_path=Path("/test.js"), start_line=4, end_line=6)
         new_code = """function target() {
     return 42;
 }
@@ -407,12 +391,7 @@ function other() {
 
 const multiply = (x, y) => x * y;
 """
-        func = FunctionInfo(
-            name="add",
-            file_path=Path("/test.js"),
-            start_line=1,
-            end_line=3,
-        )
+        func = FunctionInfo(name="add", file_path=Path("/test.js"), start_line=1, end_line=3)
         new_code = """const add = (a, b) => {
     return (a + b) | 0;
 };
@@ -504,18 +483,9 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(
-                name="add",
-                file_path=file_path,
-                start_line=1,
-                end_line=3,
-            )
+            func = FunctionInfo(name="add", file_path=file_path, start_line=1, end_line=3)
 
-            context = js_support.extract_code_context(
-                func,
-                file_path.parent,
-                file_path.parent,
-            )
+            context = js_support.extract_code_context(func, file_path.parent, file_path.parent)
 
             assert "function add" in context.target_code
             assert "return a + b" in context.target_code
@@ -540,11 +510,7 @@ function main(a) {
             functions = js_support.discover_functions(file_path)
             main_func = next(f for f in functions if f.name == "main")
 
-            context = js_support.extract_code_context(
-                main_func,
-                file_path.parent,
-                file_path.parent,
-            )
+            context = js_support.extract_code_context(main_func, file_path.parent, file_path.parent)
 
             assert "function main" in context.target_code
             # Helper should be found
@@ -689,6 +655,7 @@ describe('Math functions', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1035,10 +1002,14 @@ class TestClassMethodReplacement:
             parents=(ParentInfo(name="Math", type="ClassDef"),),
             is_method=True,
         )
-        source = js_support.replace_function(source, add_func, """    add(a, b) {
+        source = js_support.replace_function(
+            source,
+            add_func,
+            """    add(a, b) {
         return (a + b) | 0;
     }
-""")
+""",
+        )
 
         assert js_support.validate_syntax(source) is True
 
@@ -1346,8 +1317,7 @@ class Counter {
 module.exports = { Counter };
 """
             assert result == expected_result, (
-                f"Replacement result does not match expected.\n"
-                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+                f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert js_support.validate_syntax(result) is True
 
@@ -1455,8 +1425,7 @@ class User {
 export { User };
 """
             assert result == expected_result, (
-                f"Replacement result does not match expected.\n"
-                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+                f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert ts_support.validate_syntax(result) is True
 
@@ -1544,8 +1513,7 @@ class Calculator {
 }
 """
             assert result == expected_result, (
-                f"Replacement result does not match expected.\n"
-                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+                f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert js_support.validate_syntax(result) is True
 
@@ -1631,7 +1599,6 @@ class MathUtils {
 module.exports = { MathUtils };
 """
             assert result == expected_result, (
-                f"Replacement result does not match expected.\n"
-                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+                f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert js_support.validate_syntax(result) is True

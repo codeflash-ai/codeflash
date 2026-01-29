@@ -75,9 +75,7 @@ class StandaloneCallTransformer:
         # Pattern to match func_name( with optional leading await and optional object prefix
         # Captures: (whitespace)(await )?(object.)*func_name(
         # We'll filter out expect() and codeflash. cases in the transform loop
-        self._call_pattern = re.compile(
-            rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(func_name)}\s*\("
-        )
+        self._call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(func_name)}\s*\(")
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -353,9 +351,7 @@ class ExpectCallTransformer:
         self.invocation_counter = 0
         # Pattern to match start of expect((object.)*func_name(
         # Captures: (whitespace), (object prefix like calc. or this.)
-        self._expect_pattern = re.compile(
-            rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(func_name)}\s*\("
-        )
+        self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(func_name)}\s*\(")
 
     def transform(self, code: str) -> str:
         """Transform all expect calls in the code."""

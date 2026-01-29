@@ -1,5 +1,4 @@
-"""
-End-to-end integration tests for JavaScript pipeline.
+"""End-to-end integration tests for JavaScript pipeline.
 
 Tests the full optimization pipeline for JavaScript:
 - Function discovery
@@ -13,11 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.discovery.functions_to_optimize import (
-    FunctionToOptimize,
-    find_all_functions_in_file,
-    get_files_for_language,
-)
+from codeflash.discovery.functions_to_optimize import find_all_functions_in_file, get_files_for_language
 from codeflash.languages.base import Language
 
 
@@ -149,11 +144,7 @@ function multiply(a, b) {
 
         # Create FunctionInfo for the add function
         func_info = FunctionInfo(
-            name="add",
-            file_path=Path("/tmp/test.js"),
-            start_line=2,
-            end_line=4,
-            language=Language.JAVASCRIPT,
+            name="add", file_path=Path("/tmp/test.js"), start_line=2, end_line=4, language=Language.JAVASCRIPT
         )
 
         result = js_support.replace_function(original_source, func_info, new_function)
@@ -189,11 +180,7 @@ class TestJavaScriptTestDiscovery:
         # Create FunctionInfo for fibonacci function
         fib_file = js_project_dir / "fibonacci.js"
         func_info = FunctionInfo(
-            name="fibonacci",
-            file_path=fib_file,
-            start_line=11,
-            end_line=16,
-            language=Language.JAVASCRIPT,
+            name="fibonacci", file_path=fib_file, start_line=11, end_line=16, language=Language.JAVASCRIPT
         )
 
         # Discover tests
@@ -233,19 +220,13 @@ function standalone(x) {
             assert len(functions.get(file_path, [])) >= 3
 
             # Check standalone function
-            standalone_fn = next(
-                (fn for fn in functions[file_path] if fn.function_name == "standalone"),
-                None,
-            )
+            standalone_fn = next((fn for fn in functions[file_path] if fn.function_name == "standalone"), None)
             assert standalone_fn is not None
             assert standalone_fn.language == "javascript"
             assert len(standalone_fn.parents) == 0
 
             # Check class method
-            add_fn = next(
-                (fn for fn in functions[file_path] if fn.function_name == "add"),
-                None,
-            )
+            add_fn = next((fn for fn in functions[file_path] if fn.function_name == "add"), None)
             assert add_fn is not None
             assert add_fn.language == "javascript"
             assert len(add_fn.parents) == 1
@@ -258,9 +239,7 @@ function standalone(x) {
         code_strings = CodeStringsMarkdown(
             code_strings=[
                 CodeString(
-                    code="function add(a, b) { return a + b; }",
-                    file_path=Path("test.js"),
-                    language="javascript",
+                    code="function add(a, b) { return a + b; }", file_path=Path("test.js"), language="javascript"
                 )
             ],
             language="javascript",

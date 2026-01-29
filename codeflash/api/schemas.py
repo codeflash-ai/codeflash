@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 
@@ -192,10 +191,7 @@ class TestGenRequest:
         """Convert to API payload dict, maintaining backward compatibility."""
         payload = {
             "source_code_being_tested": self.source_code,
-            "function_to_optimize": {
-                "function_name": self.function_name,
-                "is_async": self.is_async,
-            },
+            "function_to_optimize": {"function_name": self.function_name, "is_async": self.is_async},
             "helper_function_names": self.helper_function_names,
             "module_path": self.module_path,
             "test_module_path": self.test_module_path,
@@ -243,24 +239,16 @@ def python_language_info(version: str | None = None) -> LanguageInfo:
 
 
 def javascript_language_info(
-    module_system: ModuleSystem = ModuleSystem.COMMONJS,
-    version: str = "ES2022",
+    module_system: ModuleSystem = ModuleSystem.COMMONJS, version: str = "ES2022"
 ) -> LanguageInfo:
     """Create LanguageInfo for JavaScript."""
     ext = ".mjs" if module_system == ModuleSystem.ESM else ".js"
     return LanguageInfo(
-        name="javascript",
-        version=version,
-        module_system=module_system,
-        file_extension=ext,
-        has_type_annotations=False,
+        name="javascript", version=version, module_system=module_system, file_extension=ext, has_type_annotations=False
     )
 
 
-def typescript_language_info(
-    module_system: ModuleSystem = ModuleSystem.ESM,
-    version: str = "ES2022",
-) -> LanguageInfo:
+def typescript_language_info(module_system: ModuleSystem = ModuleSystem.ESM, version: str = "ES2022") -> LanguageInfo:
     """Create LanguageInfo for TypeScript."""
     return LanguageInfo(
         name="typescript",

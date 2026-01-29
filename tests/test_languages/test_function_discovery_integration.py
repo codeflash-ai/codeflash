@@ -1,5 +1,4 @@
-"""
-Tests for the integrated multi-language function discovery.
+"""Tests for the integrated multi-language function discovery.
 
 These tests verify that the function discovery in functions_to_optimize.py
 correctly routes to language-specific implementations.
@@ -8,10 +7,7 @@ correctly routes to language-specific implementations.
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from codeflash.discovery.functions_to_optimize import (
-    FunctionToOptimize,
     find_all_functions_in_file,
     get_all_files_and_functions,
     get_files_for_language,

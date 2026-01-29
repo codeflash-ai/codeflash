@@ -9,6 +9,7 @@ Examples:
     python run_js_e2e_tests.py                     # Run all tests sequentially
     python run_js_e2e_tests.py --test fibonacci    # Run only fibonacci tests
     python run_js_e2e_tests.py --parallel          # Run tests in parallel
+
 """
 
 import argparse
@@ -62,19 +63,14 @@ def run_single_test(test_file: str) -> TestResult:
         output = f"Error running test: {e}"
 
     duration = time.time() - start_time
-    return TestResult(
-        name=test_file.replace(".py", ""),
-        success=success,
-        duration=duration,
-        output=output,
-    )
+    return TestResult(name=test_file.replace(".py", ""), success=success, duration=duration, output=output)
 
 
 def run_tests_sequential(tests: list[str]) -> list[TestResult]:
     """Run tests sequentially."""
     results = []
     for test in tests:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running: {test}")
         print("=" * 60)
         result = run_single_test(test)
@@ -124,22 +120,9 @@ def print_summary(results: list[TestResult]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run JS/TS e2e tests")
-    parser.add_argument(
-        "--test",
-        type=str,
-        help="Run only tests matching this pattern",
-    )
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Run tests in parallel",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=4,
-        help="Number of parallel workers (default: 4)",
-    )
+    parser.add_argument("--test", type=str, help="Run only tests matching this pattern")
+    parser.add_argument("--parallel", action="store_true", help="Run tests in parallel")
+    parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers (default: 4)")
     args = parser.parse_args()
 
     # Filter tests if pattern specified

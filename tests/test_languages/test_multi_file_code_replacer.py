@@ -79,6 +79,7 @@ function findMin(numbers) {
 """
 
 from pathlib import Path
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.registry import get_language_support
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
@@ -89,6 +90,7 @@ from codeflash.verification.verification_utils import TestConfig
 class Args:
     disable_imports_sorting = True
     formatter_cmds = ["disabled"]
+
 
 def test_js_replcement() -> None:
     try:
@@ -128,11 +130,14 @@ def test_js_replcement() -> None:
         func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
         result = func_optimizer.get_code_optimization_context()
         from codeflash.either import is_successful
+
         if not is_successful(result):
             import pytest
-            pytest.skip(f"Context extraction not fully implemented for JS: {result.failure() if hasattr(result, 'failure') else result}")
-        code_context: CodeOptimizationContext = result.unwrap()
 
+            pytest.skip(
+                f"Context extraction not fully implemented for JS: {result.failure() if hasattr(result, 'failure') else result}"
+            )
+        code_context: CodeOptimizationContext = result.unwrap()
 
         original_helper_code: dict[Path, str] = {}
         helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
@@ -143,7 +148,9 @@ def test_js_replcement() -> None:
 
         func_optimizer.args = Args()
         did_update = func_optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(new_code), original_helper_code=original_helper_code
+            code_context=code_context,
+            optimized_code=CodeStringsMarkdown.parse_markdown_code(new_code),
+            original_helper_code=original_helper_code,
         )
 
         assert did_update, "Expected code to be updated"
@@ -319,7 +326,9 @@ module.exports = {
 """
 
         assert main_code == expected_main, f"Main file mismatch.\n\nActual:\n{main_code}\n\nExpected:\n{expected_main}"
-        assert helper_code == expected_helper, f"Helper file mismatch.\n\nActual:\n{helper_code}\n\nExpected:\n{expected_helper}"
+        assert helper_code == expected_helper, (
+            f"Helper file mismatch.\n\nActual:\n{helper_code}\n\nExpected:\n{expected_helper}"
+        )
 
     finally:
         main_file.write_text(original_main, encoding="utf-8")

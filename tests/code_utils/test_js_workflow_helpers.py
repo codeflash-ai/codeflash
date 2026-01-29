@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from codeflash.cli_cmds.init_javascript import (
     JsPackageManager,
     get_js_codeflash_install_step,

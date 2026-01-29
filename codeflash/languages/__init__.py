@@ -1,5 +1,4 @@
-"""
-Multi-language support for Codeflash.
+"""Multi-language support for Codeflash.
 
 This package provides the abstraction layer that allows Codeflash to support
 multiple programming languages while keeping the core optimization pipeline
@@ -37,6 +36,11 @@ from codeflash.languages.current import (
     reset_current_language,
     set_current_language,
 )
+from codeflash.languages.javascript import JavaScriptSupport, TypeScriptSupport  # noqa: F401
+
+# Import language support modules to trigger auto-registration
+# This ensures all supported languages are available when this package is imported
+from codeflash.languages.python import PythonSupport  # noqa: F401
 from codeflash.languages.registry import (
     detect_project_language,
     get_language_support,
@@ -44,11 +48,6 @@ from codeflash.languages.registry import (
     get_supported_languages,
     register_language,
 )
-
-# Import language support modules to trigger auto-registration
-# This ensures all supported languages are available when this package is imported
-from codeflash.languages.python import PythonSupport  # noqa: F401
-from codeflash.languages.javascript import JavaScriptSupport, TypeScriptSupport  # noqa: F401
 
 __all__ = [
     # Base types

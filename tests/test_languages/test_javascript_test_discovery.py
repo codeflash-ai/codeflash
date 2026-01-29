@@ -1,5 +1,4 @@
-"""
-Comprehensive tests for JavaScript test discovery functionality.
+"""Comprehensive tests for JavaScript test discovery functionality.
 
 These tests verify that the JavaScript language support correctly discovers
 Jest tests and maps them to source functions, similar to Python's test discovery tests.
@@ -10,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.javascript.support import JavaScriptSupport
 
 
@@ -630,6 +628,7 @@ it('third test', () => {});
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -654,6 +653,7 @@ describe('Suite B', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -677,6 +677,7 @@ describe('Outer', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -700,6 +701,7 @@ describe.skip('skipped describe', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -720,6 +722,7 @@ describe.only('only describe', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -737,6 +740,7 @@ describe('describe single', () => {});
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -746,15 +750,16 @@ describe('describe single', () => {});
     def test_find_tests_with_double_quotes(self, js_support):
         """Test finding tests with double-quoted names."""
         with tempfile.NamedTemporaryFile(suffix=".test.js", mode="w", delete=False) as f:
-            f.write('''
+            f.write("""
 test("double quotes", () => {});
 describe("describe double", () => {});
-''')
+""")
             f.flush()
             file_path = Path(f.name)
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -770,6 +775,7 @@ describe("describe double", () => {});
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1015,6 +1021,7 @@ describe('日本語テスト', () => {
 
             source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1042,6 +1049,7 @@ test.each([
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1067,6 +1075,7 @@ describe.each([
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1091,6 +1100,7 @@ describe('Math operations', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1178,8 +1188,7 @@ describe('formatName', () => {
             for test_list in tests.values():
                 all_test_names.extend([t.test_name for t in test_list])
 
-            assert any("validateEmail" in name or "accepts valid email" in name
-                       for name in all_test_names)
+            assert any("validateEmail" in name or "accepts valid email" in name for name in all_test_names)
 
     def test_discovery_with_fixtures(self, js_support):
         """Test discovery when test file uses beforeEach/afterEach."""
@@ -1449,6 +1458,7 @@ testCases.forEach(name => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1476,6 +1486,7 @@ describe('conditional tests', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1499,6 +1510,7 @@ test('slow test', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1521,6 +1533,7 @@ test.todo('also needs implementation');
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1543,6 +1556,7 @@ test.concurrent('concurrent test 2', async () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1641,6 +1655,7 @@ describe('Array', function() {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 
@@ -1671,6 +1686,7 @@ describe('User', () => {
 
             source = file_path.read_text()
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)
 

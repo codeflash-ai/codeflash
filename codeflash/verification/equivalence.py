@@ -18,12 +18,14 @@ reprlib_repr = reprlib.Repr()
 reprlib_repr.maxstring = 1500
 test_diff_repr = reprlib_repr.repr
 
+
 def safe_repr(obj: object) -> str:
     """Safely get repr of an object, handling Mock objects with corrupted state."""
     try:
         return repr(obj)
     except (AttributeError, TypeError, RecursionError) as e:
         return f"<repr failed: {type(e).__name__}: {e}>"
+
 
 def compare_test_results(
     original_results: TestResults,

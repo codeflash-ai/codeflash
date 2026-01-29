@@ -1,5 +1,4 @@
-"""
-Python language support for Codeflash.
+"""Python language support for Codeflash.
 
 This module provides the PythonSupport class which wraps the existing
 Python-specific implementations (LibCST, Jedi, pytest, etc.) to conform

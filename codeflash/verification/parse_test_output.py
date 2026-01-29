@@ -246,20 +246,30 @@ def parse_jest_json_results(
                     # Check behavior path
                     if test_file.instrumented_behavior_file_path:
                         try:
-                            rel_path = str(test_file.instrumented_behavior_file_path.relative_to(test_config.tests_project_rootdir))
+                            rel_path = str(
+                                test_file.instrumented_behavior_file_path.relative_to(test_config.tests_project_rootdir)
+                            )
                         except ValueError:
                             rel_path = test_file.instrumented_behavior_file_path.name
-                        if rel_path == expected_path or rel_path.replace("/", ".").replace(".js", "") == result_module_path:
+                        if (
+                            rel_path == expected_path
+                            or rel_path.replace("/", ".").replace(".js", "") == result_module_path
+                        ):
                             test_file_path = test_file.instrumented_behavior_file_path
                             test_type = test_file.test_type
                             break
                     # Check benchmarking path
                     if test_file.benchmarking_file_path:
                         try:
-                            rel_path = str(test_file.benchmarking_file_path.relative_to(test_config.tests_project_rootdir))
+                            rel_path = str(
+                                test_file.benchmarking_file_path.relative_to(test_config.tests_project_rootdir)
+                            )
                         except ValueError:
                             rel_path = test_file.benchmarking_file_path.name
-                        if rel_path == expected_path or rel_path.replace("/", ".").replace(".js", "") == result_module_path:
+                        if (
+                            rel_path == expected_path
+                            or rel_path.replace("/", ".").replace(".js", "") == result_module_path
+                        ):
                             test_file_path = test_file.benchmarking_file_path
                             test_type = test_file.test_type
                             break
@@ -416,9 +426,22 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
             # For Python, it's a module path (e.g., "tests.test_foo") that needs conversion
             if is_jest:
                 # Jest test file extensions (including .test.ts, .spec.ts patterns)
-                jest_test_extensions = (".test.ts", ".test.js", ".test.tsx", ".test.jsx",
-                                        ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
-                                        ".ts", ".js", ".tsx", ".jsx", ".mjs", ".mts")
+                jest_test_extensions = (
+                    ".test.ts",
+                    ".test.js",
+                    ".test.tsx",
+                    ".test.jsx",
+                    ".spec.ts",
+                    ".spec.js",
+                    ".spec.tsx",
+                    ".spec.jsx",
+                    ".ts",
+                    ".js",
+                    ".tsx",
+                    ".jsx",
+                    ".mjs",
+                    ".mts",
+                )
                 # Check if it's a module-style path (no slashes, has dots beyond extension)
                 if "/" not in test_module_path and "\\" not in test_module_path:
                     # Find the appropriate extension to preserve
@@ -430,7 +453,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                     if extension:
                         # Convert module-style path to file path
                         # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
-                        base_path = test_module_path[:-len(extension)]
+                        base_path = test_module_path[: -len(extension)]
                         file_path = base_path.replace(".", os.sep) + extension
                         # Check if the module path includes the tests directory name
                         tests_dir_name = test_config.tests_project_rootdir.name
@@ -560,6 +583,7 @@ def _extract_jest_console_output(suite_elem) -> str:
 
     return raw_content
 
+
 # TODO: {Claude} we need to move to the support directory.
 def parse_jest_test_xml(
     test_xml_file_path: Path,
@@ -611,10 +635,7 @@ def parse_jest_test_xml(
         if test_file.instrumented_behavior_file_path:
             # Store both the absolute path and resolved path as keys
             abs_path = str(test_file.instrumented_behavior_file_path.resolve())
-            instrumented_path_lookup[abs_path] = (
-                test_file.instrumented_behavior_file_path,
-                test_file.test_type,
-            )
+            instrumented_path_lookup[abs_path] = (test_file.instrumented_behavior_file_path, test_file.test_type)
             # Also store the string representation in case of minor path differences
             instrumented_path_lookup[str(test_file.instrumented_behavior_file_path)] = (
                 test_file.instrumented_behavior_file_path,

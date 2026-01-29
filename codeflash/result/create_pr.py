@@ -31,7 +31,9 @@ def existing_tests_source_for(
     optimized_runtimes_all: dict[InvocationId, list[int]],
     test_files_registry: TestFiles | None = None,
 ) -> tuple[str, str, str]:
-    logger.debug(f"[PR-DEBUG] existing_tests_source_for called with func={function_qualified_name_with_modules_from_root}")
+    logger.debug(
+        f"[PR-DEBUG] existing_tests_source_for called with func={function_qualified_name_with_modules_from_root}"
+    )
     logger.debug(f"[PR-DEBUG] function_to_tests keys: {list(function_to_tests.keys())}")
     logger.debug(f"[PR-DEBUG] original_runtimes_all has {len(original_runtimes_all)} entries")
     logger.debug(f"[PR-DEBUG] optimized_runtimes_all has {len(optimized_runtimes_all)} entries")
@@ -60,11 +62,17 @@ def existing_tests_source_for(
         for tf in test_files_registry.test_files:
             if tf.original_file_path:
                 if tf.instrumented_behavior_file_path:
-                    instrumented_to_original[tf.instrumented_behavior_file_path.resolve()] = tf.original_file_path.resolve()
-                    logger.debug(f"[PR-DEBUG] Mapping (behavior): {tf.instrumented_behavior_file_path.name} -> {tf.original_file_path.name}")
+                    instrumented_to_original[tf.instrumented_behavior_file_path.resolve()] = (
+                        tf.original_file_path.resolve()
+                    )
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (behavior): {tf.instrumented_behavior_file_path.name} -> {tf.original_file_path.name}"
+                    )
                 if tf.benchmarking_file_path:
                     instrumented_to_original[tf.benchmarking_file_path.resolve()] = tf.original_file_path.resolve()
-                    logger.debug(f"[PR-DEBUG] Mapping (perf): {tf.benchmarking_file_path.name} -> {tf.original_file_path.name}")
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (perf): {tf.benchmarking_file_path.name} -> {tf.original_file_path.name}"
+                    )
 
     # Resolve all paths to absolute for consistent comparison
     non_generated_tests: set[Path] = set()
@@ -84,9 +92,22 @@ def existing_tests_source_for(
         # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
         test_module_path = invocation_id.test_module_path
         # Jest test file extensions (including .test.ts, .spec.ts patterns)
-        jest_test_extensions = (".test.ts", ".test.js", ".test.tsx", ".test.jsx",
-                                ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
-                                ".ts", ".js", ".tsx", ".jsx", ".mjs", ".mts")
+        jest_test_extensions = (
+            ".test.ts",
+            ".test.js",
+            ".test.tsx",
+            ".test.jsx",
+            ".spec.ts",
+            ".spec.js",
+            ".spec.tsx",
+            ".spec.jsx",
+            ".ts",
+            ".js",
+            ".tsx",
+            ".jsx",
+            ".mjs",
+            ".mts",
+        )
         # Find the appropriate extension
         matched_ext = None
         for ext in jest_test_extensions:
@@ -96,7 +117,7 @@ def existing_tests_source_for(
         if matched_ext:
             # JavaScript/TypeScript: convert module-style path to file path
             # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
-            base_path = test_module_path[:-len(matched_ext)]
+            base_path = test_module_path[: -len(matched_ext)]
             # Convert dots to path separators in the base path
             file_path = base_path.replace(".", os.sep) + matched_ext
             # Check if the module path includes the tests directory name

@@ -1,18 +1,11 @@
-"""
-Tests for JavaScript module system detection.
+"""Tests for JavaScript module system detection.
 """
 
 import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
-from codeflash.languages.javascript.module_system import (
-    ModuleSystem,
-    detect_module_system,
-    get_import_statement,
-)
+from codeflash.languages.javascript.module_system import ModuleSystem, detect_module_system, get_import_statement
 
 
 class TestModuleSystemDetection:
@@ -73,9 +66,7 @@ class TestModuleSystemDetection:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             file_path = project_root / "module.js"
-            file_path.write_text(
-                "const foo = require('./bar');\nmodule.exports = { baz: 1 };"
-            )
+            file_path.write_text("const foo = require('./bar');\nmodule.exports = { baz: 1 };")
 
             result = detect_module_system(project_root, file_path)
             assert result == ModuleSystem.COMMONJS
@@ -99,9 +90,7 @@ class TestImportStatementGeneration:
             target = tmpdir / "lib" / "utils.js"
             source = tmpdir / "tests" / "utils.test.js"
 
-            result = get_import_statement(
-                ModuleSystem.COMMONJS, target, source, ["foo", "bar"]
-            )
+            result = get_import_statement(ModuleSystem.COMMONJS, target, source, ["foo", "bar"])
 
             assert result == "const { foo, bar } = require('../lib/utils');"
 
@@ -112,9 +101,7 @@ class TestImportStatementGeneration:
             target = tmpdir / "lib" / "utils.js"
             source = tmpdir / "tests" / "utils.test.js"
 
-            result = get_import_statement(
-                ModuleSystem.ES_MODULE, target, source, ["foo", "bar"]
-            )
+            result = get_import_statement(ModuleSystem.ES_MODULE, target, source, ["foo", "bar"])
 
             assert result == "import { foo, bar } from '../lib/utils';"
 
@@ -147,9 +134,7 @@ class TestImportStatementGeneration:
             target = tmpdir / "utils.js"
             source = tmpdir / "index.js"
 
-            result = get_import_statement(
-                ModuleSystem.COMMONJS, target, source, ["foo"]
-            )
+            result = get_import_statement(ModuleSystem.COMMONJS, target, source, ["foo"])
 
             assert result == "const { foo } = require('./utils');"
 
@@ -160,9 +145,7 @@ class TestImportStatementGeneration:
             target = tmpdir / "lib" / "helpers" / "utils.js"
             source = tmpdir / "tests" / "test.js"
 
-            result = get_import_statement(
-                ModuleSystem.COMMONJS, target, source, ["foo"]
-            )
+            result = get_import_statement(ModuleSystem.COMMONJS, target, source, ["foo"])
 
             assert result == "const { foo } = require('../lib/helpers/utils');"
 
@@ -173,8 +156,6 @@ class TestImportStatementGeneration:
             target = tmpdir / "utils.js"
             source = tmpdir / "tests" / "unit" / "test.js"
 
-            result = get_import_statement(
-                ModuleSystem.COMMONJS, target, source, ["foo"]
-            )
+            result = get_import_statement(ModuleSystem.COMMONJS, target, source, ["foo"])
 
             assert result == "const { foo } = require('../../utils');"

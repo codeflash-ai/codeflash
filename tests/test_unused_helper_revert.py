@@ -4,13 +4,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from codeflash.context.unused_definition_remover import detect_unused_helper_functions
+
+from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
-from codeflash.context.unused_definition_remover import revert_unused_helper_functions
-
 
 
 @pytest.fixture
@@ -94,7 +93,9 @@ def helper_function_2(x):
     code_context = ctx_result.unwrap()
 
     # Test unused helper detection
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+    unused_helpers = detect_unused_helper_functions(
+        optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+    )
 
     # Should detect helper_function_2 as unused
     unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -144,7 +145,9 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Apply optimization and test reversion
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+    )
 
     # Check final file content
     final_content = main_file.read_text()
@@ -208,7 +211,9 @@ def helper_function_2(x):
     # 1. Apply the optimization
     # 2. Detect unused helpers
     # 3. Revert unused helpers to original definitions
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+    )
 
     # Check final file content
     final_content = main_file.read_text()
@@ -227,13 +232,12 @@ def helper_function_2(x):
 def test_no_unused_helpers_no_revert(temp_project):
     """Test that when all helpers are still used, nothing is reverted."""
     temp_dir, main_file, test_cfg = temp_project
-    
-    
+
     # Store original content to verify nothing changes
     original_content = main_file.read_text()
-    
+
     revert_unused_helper_functions(temp_dir, [], {})
-    
+
     # Verify the file content remains unchanged
     assert main_file.read_text() == original_content, "File should remain unchanged when no helpers to revert"
 
@@ -278,11 +282,15 @@ def helper_function_2(x):
     original_helper_code = {main_file: main_file.read_text()}
 
     # Test detection - should find no unused helpers
-    unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+    unused_helpers = detect_unused_helper_functions(
+        optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+    )
     assert len(unused_helpers) == 0, "No helpers should be detected as unused"
 
     # Apply optimization
-    optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+    optimizer.replace_function_and_helpers_with_optimized_code(
+        code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+    )
 
     # Check final file content - should contain the optimized versions
     final_content = main_file.read_text()
@@ -367,7 +375,9 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect helper_function_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -410,7 +420,9 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
         # Check main file content
         main_content = main_file.read_text()
         assert "result1 + n * 3" in main_content, "Entrypoint function should be optimized"
@@ -458,7 +470,9 @@ def helper_function_2(x):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
 
         # Check main file content
         main_content = main_file.read_text()
@@ -555,7 +569,9 @@ class Calculator:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect Calculator.helper_method_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -587,7 +603,9 @@ class Calculator:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper),
+            original_helper_code,
         )
 
         # Check final file content
@@ -606,7 +624,9 @@ class Calculator:
         # Test reversion
         original_helper_code = {main_file: main_file.read_text()}
 
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
 
         # Check final file content
         final_content = main_file.read_text()
@@ -700,7 +720,9 @@ class Processor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect external_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -732,7 +754,9 @@ class Processor:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper),
+            original_helper_code,
         )
 
         # Check final file content
@@ -772,7 +796,9 @@ class Processor:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper), original_helper_code
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_code_with_modified_helper),
+            original_helper_code,
         )
 
         # Check final file content
@@ -1035,7 +1061,9 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect multiply, process_data as unused (at minimum)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1095,7 +1123,9 @@ def subtract(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1195,7 +1225,9 @@ def entrypoint_function(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect multiply_numbers and divide_numbers as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1246,7 +1278,9 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1305,7 +1339,9 @@ def divide_numbers(x, y):
         }
 
         # Apply optimization and test reversion
-        optimizer.replace_function_and_helpers_with_optimized_code(code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code)
+        optimizer.replace_function_and_helpers_with_optimized_code(
+            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code
+        )
 
         # Check main file content
         main_content = main_file.read_text()
@@ -1456,7 +1492,9 @@ class MathUtils:
 
         # Apply optimization and test reversion
         optimizer.replace_function_and_helpers_with_optimized_code(
-            code_context, CodeStringsMarkdown.parse_markdown_code(optimized_static_code_with_modified_helper), original_helper_code
+            code_context,
+            CodeStringsMarkdown.parse_markdown_code(optimized_static_code_with_modified_helper),
+            original_helper_code,
         )
 
         # Check final file content
@@ -1531,10 +1569,7 @@ async def async_entrypoint(n):
 
         # Create FunctionToOptimize instance for async function
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, 
-            function_name="async_entrypoint", 
-            parents=[],
-            is_async=True
+            file_path=main_file, function_name="async_entrypoint", parents=[], is_async=True
         )
 
         # Create function optimizer
@@ -1551,7 +1586,9 @@ async def async_entrypoint(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1562,6 +1599,7 @@ async def async_entrypoint(n):
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -1620,11 +1658,7 @@ def sync_entrypoint(n):
         )
 
         # Create FunctionToOptimize instance for sync function
-        function_to_optimize = FunctionToOptimize(
-            file_path=main_file, 
-            function_name="sync_entrypoint", 
-            parents=[]
-        )
+        function_to_optimize = FunctionToOptimize(file_path=main_file, function_name="sync_entrypoint", parents=[])
 
         # Create function optimizer
         optimizer = FunctionOptimizer(
@@ -1640,7 +1674,9 @@ def sync_entrypoint(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1651,6 +1687,7 @@ def sync_entrypoint(n):
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -1729,10 +1766,7 @@ async def mixed_entrypoint(n):
 
         # Create FunctionToOptimize instance for async function
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, 
-            function_name="mixed_entrypoint", 
-            parents=[],
-            is_async=True
+            file_path=main_file, function_name="mixed_entrypoint", parents=[], is_async=True
         )
 
         # Create function optimizer
@@ -1749,7 +1783,9 @@ async def mixed_entrypoint(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect both sync_helper_2 and async_helper_2 as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1760,6 +1796,7 @@ async def mixed_entrypoint(n):
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -1830,7 +1867,7 @@ class AsyncProcessor:
             file_path=main_file,
             function_name="entrypoint_method",
             parents=[FunctionParent(name="AsyncProcessor", type="ClassDef")],
-            is_async=True
+            is_async=True,
         )
 
         # Create function optimizer
@@ -1847,7 +1884,9 @@ class AsyncProcessor:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect async_helper_method_2 as unused (sync_helper_method may not be discovered as helper)
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -1858,6 +1897,7 @@ class AsyncProcessor:
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -1913,10 +1953,7 @@ async def async_entrypoint(n):
 
         # Create FunctionToOptimize instance for async function
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, 
-            function_name="async_entrypoint", 
-            parents=[],
-            is_async=True
+            file_path=main_file, function_name="async_entrypoint", parents=[], is_async=True
         )
 
         # Create function optimizer
@@ -1956,6 +1993,7 @@ async def async_entrypoint(n):
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -1995,9 +2033,7 @@ def gcd_recursive(a: int, b: int) -> int:
         )
 
         # Create FunctionToOptimize instance
-        function_to_optimize = FunctionToOptimize(
-            file_path=main_file, function_name="gcd_recursive", parents=[]
-        )
+        function_to_optimize = FunctionToOptimize(file_path=main_file, function_name="gcd_recursive", parents=[])
 
         # Create function optimizer
         optimizer = FunctionOptimizer(
@@ -2013,16 +2049,21 @@ def gcd_recursive(a: int, b: int) -> int:
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should NOT detect gcd_recursive as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
 
-        assert "gcd_recursive" not in unused_names, f"Recursive function gcd_recursive should NOT be detected as unused, but got unused: {unused_names}"
+        assert "gcd_recursive" not in unused_names, (
+            f"Recursive function gcd_recursive should NOT be detected as unused, but got unused: {unused_names}"
+        )
 
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -2104,10 +2145,7 @@ async def async_entrypoint_with_generators(n):
 
         # Create FunctionToOptimize instance for async function
         function_to_optimize = FunctionToOptimize(
-            file_path=main_file, 
-            function_name="async_entrypoint_with_generators", 
-            parents=[],
-            is_async=True
+            file_path=main_file, function_name="async_entrypoint_with_generators", parents=[], is_async=True
         )
 
         # Create function optimizer
@@ -2124,7 +2162,9 @@ async def async_entrypoint_with_generators(n):
         code_context = ctx_result.unwrap()
 
         # Test unused helper detection
-        unused_helpers = detect_unused_helper_functions(optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code))
+        unused_helpers = detect_unused_helper_functions(
+            optimizer.function_to_optimize, code_context, CodeStringsMarkdown.parse_markdown_code(optimized_code)
+        )
 
         # Should detect another_coroutine_helper as unused
         unused_names = {uh.qualified_name for uh in unused_helpers}
@@ -2135,4 +2175,5 @@ async def async_entrypoint_with_generators(n):
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(temp_dir, ignore_errors=True)

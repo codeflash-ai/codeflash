@@ -507,10 +507,7 @@ class LanguageSupport(Protocol):
     # === Test Result Comparison ===
 
     def compare_test_results(
-        self,
-        original_results_path: Path,
-        candidate_results_path: Path,
-        project_root: Path | None = None,
+        self, original_results_path: Path, candidate_results_path: Path, project_root: Path | None = None
     ) -> tuple[bool, list]:
         """Compare test results between original and candidate code.
 

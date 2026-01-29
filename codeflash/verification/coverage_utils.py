@@ -20,16 +20,14 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
 
+
 # TODO:{self} Needs cleanup for jest logic check for coverage algorithm here and if we need to move it to /support
 class JestCoverageUtils:
     """Coverage utils class for interfacing with Jest coverage output."""
 
     @staticmethod
     def load_from_jest_json(
-        coverage_json_path: Path,
-        function_name: str,
-        code_context: CodeOptimizationContext,
-        source_code_path: Path,
+        coverage_json_path: Path, function_name: str, code_context: CodeOptimizationContext, source_code_path: Path
     ) -> CoverageData:
         """Load coverage data from Jest's coverage-final.json file.
 
@@ -41,6 +39,7 @@ class JestCoverageUtils:
 
         Returns:
             CoverageData object with parsed coverage information
+
         """
         if not coverage_json_path or not coverage_json_path.exists():
             logger.debug(f"Jest coverage file not found: {coverage_json_path}")

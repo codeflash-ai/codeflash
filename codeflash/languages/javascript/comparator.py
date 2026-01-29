@@ -23,6 +23,7 @@ def _get_compare_results_script(project_root: Path | None = None) -> Path | None
 
     Returns:
         Path to compare-results.js if found, None otherwise.
+
     """
     search_dirs = []
     if project_root:
@@ -59,6 +60,7 @@ def compare_test_results(
 
     Returns:
         Tuple of (all_equivalent, list of TestDiff objects).
+
     """
     script_path = comparator_script or _get_compare_results_script(project_root)
 
