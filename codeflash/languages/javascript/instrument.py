@@ -203,6 +203,11 @@ class StandaloneCallTransformer:
         prefix = match.group(2) or ""  # "await " or ""
         object_prefix = match.group(3) or ""  # Object prefix like "calc." or ""
 
+        # If qualified_name is a standalone function (no dot), don't match method calls
+        # e.g., if qualified_name="func", don't match "obj.func()" - only match "func()"
+        if "." not in self.qualified_name and object_prefix:
+            return None
+
         # Find the opening paren position
         match_text = match.group(0)
         paren_offset = match_text.rfind("(")
@@ -389,6 +394,11 @@ class ExpectCallTransformer:
         """
         leading_ws = match.group(1)
         object_prefix = match.group(2) or ""  # Object prefix like "calc." or ""
+
+        # If qualified_name is a standalone function (no dot), don't match method calls
+        # e.g., if qualified_name="func", don't match "obj.func()" - only match "func()"
+        if "." not in self.qualified_name and object_prefix:
+            return None
 
         # Find the arguments of the function call (handling nested parens)
         args_start = match.end()
