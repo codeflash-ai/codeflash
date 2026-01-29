@@ -19,6 +19,7 @@ from codeflash.either import Failure, Success
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 from codeflash.verification.comparator import (
     PYTEST_TEMP_PATH_PATTERN,
+    PYTHON_TEMPFILE_PATTERN,
     _extract_exception_from_message,
     _get_wrapped_exception,
     _is_temp_path,
@@ -2316,6 +2317,77 @@ def test_dict_views() -> None:
     assert not comparator(d.items(), [("a", 1), ("b", 2)])
 
 
+def test_mappingproxy() -> None:
+    """Test comparator support for types.MappingProxyType (read-only dict view)."""
+    import types
+
+    # Basic equality
+    mp1 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+    mp2 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+    assert comparator(mp1, mp2)
+
+    # Different values
+    mp3 = types.MappingProxyType({"a": 1, "b": 2, "c": 4})
+    assert not comparator(mp1, mp3)
+
+    # Different keys
+    mp4 = types.MappingProxyType({"a": 1, "b": 2, "d": 3})
+    assert not comparator(mp1, mp4)
+
+    # Different length
+    mp5 = types.MappingProxyType({"a": 1, "b": 2})
+    assert not comparator(mp1, mp5)
+
+    # Order doesn't matter (like dict)
+    mp6 = types.MappingProxyType({"c": 3, "a": 1, "b": 2})
+    assert comparator(mp1, mp6)
+
+    # Empty mappingproxy
+    empty1 = types.MappingProxyType({})
+    empty2 = types.MappingProxyType({})
+    assert comparator(empty1, empty2)
+
+    # Nested values
+    nested1 = types.MappingProxyType({"a": [1, 2, 3], "b": {"x": 1}})
+    nested2 = types.MappingProxyType({"a": [1, 2, 3], "b": {"x": 1}})
+    nested3 = types.MappingProxyType({"a": [1, 2, 4], "b": {"x": 1}})
+    assert comparator(nested1, nested2)
+    assert not comparator(nested1, nested3)
+
+    # mappingproxy is not equal to dict (different types)
+    d = {"a": 1, "b": 2}
+    mp = types.MappingProxyType({"a": 1, "b": 2})
+    assert not comparator(mp, d)
+    assert not comparator(d, mp)
+
+    # Verify class __dict__ is indeed a mappingproxy
+    class MyClass:
+        x = 1
+        y = 2
+
+    assert isinstance(MyClass.__dict__, types.MappingProxyType)
+
+
+def test_mappingproxy_superset() -> None:
+    """Test comparator superset_obj support for mappingproxy."""
+    import types
+
+    mp1 = types.MappingProxyType({"a": 1, "b": 2})
+    mp2 = types.MappingProxyType({"a": 1, "b": 2, "c": 3})
+
+    # mp2 is a superset of mp1
+    assert comparator(mp1, mp2, superset_obj=True)
+    # mp1 is not a superset of mp2
+    assert not comparator(mp2, mp1, superset_obj=True)
+
+    # Same mappingproxy with superset_obj=True
+    assert comparator(mp1, mp1, superset_obj=True)
+
+    # Different values even with superset
+    mp3 = types.MappingProxyType({"a": 1, "b": 99, "c": 3})
+    assert not comparator(mp1, mp3, superset_obj=True)
+
+
 def test_tensorflow_tensor() -> None:
     """Test comparator support for TensorFlow Tensor objects."""
     try:
@@ -3906,3 +3978,82 @@ class TestComparatorTempPathsRealisticScenarios:
             "permanent_dir": "/home/user/data/"
         }
         assert comparator(config1, config2)
+
+
+class TestPythonTempfilePaths:
+    """Tests for Python tempfile paths (from tempfile.mkdtemp() or TemporaryDirectory())."""
+
+    def test_is_temp_path_detects_python_tempfile(self):
+        """Test that _is_temp_path detects Python tempfile paths."""
+        assert _is_temp_path("/tmp/tmpqtwy7hpf/special.txt")
+        assert _is_temp_path("/tmp/tmpp6wx3tz3/special.txt")
+        assert _is_temp_path("/tmp/tmpabcdef12/")
+        assert _is_temp_path("/tmp/tmp_underscore/file.txt")
+
+    def test_is_temp_path_various_tempfile_names(self):
+        """Test various tempfile naming patterns."""
+        assert _is_temp_path("/tmp/tmpABCDEF/file.txt")  # uppercase
+        assert _is_temp_path("/tmp/tmp123456/file.txt")  # numeric
+        assert _is_temp_path("/tmp/tmpaBc123/file.txt")  # mixed
+        assert _is_temp_path("/tmp/tmp_test_dir/subdir/file.txt")  # with underscore
+
+    def test_is_temp_path_non_tempfile(self):
+        """Test that non-tempfile paths are not detected."""
+        assert not _is_temp_path("/tmp/mydir/file.txt")  # doesn't start with tmp
+        assert not _is_temp_path("/tmp/temp/file.txt")  # temp, not tmp
+        assert not _is_temp_path("/home/user/tmp123/file.txt")  # not in /tmp/
+
+    def test_normalize_temp_path_python_tempfile(self):
+        """Test normalization of Python tempfile paths."""
+        path1 = _normalize_temp_path("/tmp/tmpqtwy7hpf/special.txt")
+        path2 = _normalize_temp_path("/tmp/tmpp6wx3tz3/special.txt")
+        assert path1 == path2 == "/tmp/python-temp/special.txt"
+
+    def test_normalize_temp_path_preserves_subdirs(self):
+        """Test that subdirectories are preserved during normalization."""
+        result = _normalize_temp_path("/tmp/tmpabcdef12/subdir/nested/file.txt")
+        assert result == "/tmp/python-temp/subdir/nested/file.txt"
+
+    def test_comparator_python_tempfile_paths_equal(self):
+        """Test that different tempfile paths with same content are equal."""
+        path1 = "/tmp/tmpqtwy7hpf/special.txt"
+        path2 = "/tmp/tmpp6wx3tz3/special.txt"
+        assert comparator(path1, path2)
+
+    def test_comparator_python_tempfile_different_filenames_not_equal(self):
+        """Test that different filenames in tempfile paths are not equal."""
+        path1 = "/tmp/tmpqtwy7hpf/special.txt"
+        path2 = "/tmp/tmpp6wx3tz3/different.txt"
+        assert not comparator(path1, path2)
+
+    def test_comparator_python_tempfile_in_tuple(self):
+        """Test tempfile paths in tuples."""
+        orig = ("/tmp/tmpqtwy7hpf/special.txt",)
+        new = ("/tmp/tmpp6wx3tz3/special.txt",)
+        assert comparator(orig, new)
+
+    def test_comparator_python_tempfile_in_list(self):
+        """Test tempfile paths in lists."""
+        orig = ["/tmp/tmpabcdef12/file1.txt", "/tmp/tmpabcdef12/file2.txt"]
+        new = ["/tmp/tmpxyz78901/file1.txt", "/tmp/tmpxyz78901/file2.txt"]
+        assert comparator(orig, new)
+
+    def test_comparator_python_tempfile_in_dict(self):
+        """Test tempfile paths in dictionaries."""
+        orig = {"output": "/tmp/tmpabcdef12/result.json"}
+        new = {"output": "/tmp/tmpxyz78901/result.json"}
+        assert comparator(orig, new)
+
+    def test_comparator_mixed_pytest_and_python_tempfile(self):
+        """Test that pytest and Python tempfile paths don't match each other."""
+        pytest_path = "/tmp/pytest-of-user/pytest-0/file.txt"
+        python_path = "/tmp/tmpabcdef12/file.txt"
+        # These should not be equal - they're different temp path types
+        assert not comparator(pytest_path, python_path)
+
+    def test_python_tempfile_pattern_regex(self):
+        """Test the PYTHON_TEMPFILE_PATTERN regex directly."""
+        assert PYTHON_TEMPFILE_PATTERN.search("/tmp/tmpabcdef/file.txt")
+        assert PYTHON_TEMPFILE_PATTERN.search("/tmp/tmp123456/")
+        assert not PYTHON_TEMPFILE_PATTERN.search("/tmp/mydir/file.txt")
+        assert not PYTHON_TEMPFILE_PATTERN.search("/home/tmp123/file.txt")

@@ -124,7 +124,7 @@ def _get_string_usage(text: str) -> Usage:
     
     helper_file.unlink(missing_ok=True)
     main_file.unlink(missing_ok=True)
-    
+
     expected_helper = """import re
 from collections.abc import Sequence
 

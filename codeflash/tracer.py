@@ -138,6 +138,13 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                         env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
                     else:
                         env["PYTHONPATH"] = project_root_str
+                    # Disable JIT compilation to ensure tracing captures all function calls
+                    env["NUMBA_DISABLE_JIT"] = str(1)
+                    env["TORCHDYNAMO_DISABLE"] = str(1)
+                    env["PYTORCH_JIT"] = str(0)
+                    env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+                    env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+                    env["JAX_DISABLE_JIT"] = str(1)
                     processes.append(
                         subprocess.Popen(
                             [
@@ -175,6 +182,13 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                     env["PYTHONPATH"] = f"{project_root_str}{os.pathsep}{pythonpath}"
                 else:
                     env["PYTHONPATH"] = project_root_str
+                # Disable JIT compilation to ensure tracing captures all function calls
+                env["NUMBA_DISABLE_JIT"] = str(1)
+                env["TORCHDYNAMO_DISABLE"] = str(1)
+                env["PYTORCH_JIT"] = str(0)
+                env["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+                env["TF_ENABLE_ONEDNN_OPTS"] = str(0)
+                env["JAX_DISABLE_JIT"] = str(1)
 
                 subprocess.run(
                     [
