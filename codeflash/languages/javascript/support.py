@@ -1661,6 +1661,7 @@ class JavaScriptSupport:
             try:
                 result = subprocess.run(
                     ["npm", "install", "--save-dev", str(local_package_path)],
+                    check=False,
                     cwd=project_root,
                     capture_output=True,
                     text=True,

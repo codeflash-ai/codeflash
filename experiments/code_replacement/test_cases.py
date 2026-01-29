@@ -1,5 +1,4 @@
-"""
-Test cases for evaluating JavaScript/TypeScript code replacement strategies.
+"""Test cases for evaluating JavaScript/TypeScript code replacement strategies.
 
 Each test case includes:
 - original_source: The original JS/TS code
@@ -33,22 +32,22 @@ TEST_CASES = [
     ReplacementTestCase(
         name="simple_function",
         description="Basic named function declaration",
-        original_source='''function add(a, b) {
+        original_source="""function add(a, b) {
     return a + b;
 }
 
 function multiply(a, b) {
     return a * b;
 }
-''',
+""",
         function_name="add",
         start_line=1,
         end_line=3,
-        new_function='''function add(a, b) {
+        new_function="""function add(a, b) {
     // Optimized version
     return a + b | 0;
-}''',
-        expected_result='''function add(a, b) {
+}""",
+        expected_result="""function add(a, b) {
     // Optimized version
     return a + b | 0;
 }
@@ -56,54 +55,51 @@ function multiply(a, b) {
 function multiply(a, b) {
     return a * b;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="arrow_function_const",
         description="Arrow function assigned to const",
-        original_source='''const square = (x) => {
+        original_source="""const square = (x) => {
     return x * x;
 };
 
 const cube = (x) => x * x * x;
-''',
+""",
         function_name="square",
         start_line=1,
         end_line=3,
-        new_function='''const square = (x) => {
+        new_function="""const square = (x) => {
     return x ** 2;
-};''',
-        expected_result='''const square = (x) => {
+};""",
+        expected_result="""const square = (x) => {
     return x ** 2;
 };
 
 const cube = (x) => x * x * x;
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="arrow_function_oneliner",
         description="Single-line arrow function",
-        original_source='''const double = x => x * 2;
+        original_source="""const double = x => x * 2;
 const triple = x => x * 3;
-''',
+""",
         function_name="double",
         start_line=1,
         end_line=1,
-        new_function='''const double = x => x << 1;''',
-        expected_result='''const double = x => x << 1;
+        new_function="""const double = x => x << 1;""",
+        expected_result="""const double = x => x << 1;
 const triple = x => x * 3;
-'''
+""",
     ),
-
     # ===========================================
     # CLASS METHODS
     # ===========================================
     ReplacementTestCase(
         name="class_method",
         description="Method inside a class",
-        original_source='''class Calculator {
+        original_source="""class Calculator {
     constructor(value) {
         this.value = value;
     }
@@ -116,15 +112,15 @@ const triple = x => x * 3;
         return this.value * n;
     }
 }
-''',
+""",
         function_name="add",
         start_line=6,
         end_line=8,
-        new_function='''    add(n) {
+        new_function="""    add(n) {
         // Optimized addition
         return (this.value + n) | 0;
-    }''',
-        expected_result='''class Calculator {
+    }""",
+        expected_result="""class Calculator {
     constructor(value) {
         this.value = value;
     }
@@ -138,13 +134,12 @@ const triple = x => x * 3;
         return this.value * n;
     }
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="static_method",
         description="Static method in class",
-        original_source='''class MathUtils {
+        original_source="""class MathUtils {
     static fibonacci(n) {
         if (n <= 1) return n;
         return MathUtils.fibonacci(n - 1) + MathUtils.fibonacci(n - 2);
@@ -155,19 +150,19 @@ const triple = x => x * 3;
         return n * MathUtils.factorial(n - 1);
     }
 }
-''',
+""",
         function_name="fibonacci",
         start_line=2,
         end_line=5,
-        new_function='''    static fibonacci(n) {
+        new_function="""    static fibonacci(n) {
         // Memoized version
         const memo = [0, 1];
         for (let i = 2; i <= n; i++) {
             memo[i] = memo[i-1] + memo[i-2];
         }
         return memo[n];
-    }''',
-        expected_result='''class MathUtils {
+    }""",
+        expected_result="""class MathUtils {
     static fibonacci(n) {
         // Memoized version
         const memo = [0, 1];
@@ -182,16 +177,15 @@ const triple = x => x * 3;
         return n * MathUtils.factorial(n - 1);
     }
 }
-'''
+""",
     ),
-
     # ===========================================
     # ASYNC FUNCTIONS
     # ===========================================
     ReplacementTestCase(
         name="async_function",
         description="Async function declaration",
-        original_source='''async function fetchData(url) {
+        original_source="""async function fetchData(url) {
     const response = await fetch(url);
     return response.json();
 }
@@ -200,11 +194,11 @@ async function postData(url, data) {
     const response = await fetch(url, { method: 'POST', body: JSON.stringify(data) });
     return response.json();
 }
-''',
+""",
         function_name="fetchData",
         start_line=1,
         end_line=4,
-        new_function='''async function fetchData(url) {
+        new_function="""async function fetchData(url) {
     // With caching
     const cached = cache.get(url);
     if (cached) return cached;
@@ -212,8 +206,8 @@ async function postData(url, data) {
     const data = await response.json();
     cache.set(url, data);
     return data;
-}''',
-        expected_result='''async function fetchData(url) {
+}""",
+        expected_result="""async function fetchData(url) {
     // With caching
     const cached = cache.get(url);
     if (cached) return cached;
@@ -227,16 +221,15 @@ async function postData(url, data) {
     const response = await fetch(url, { method: 'POST', body: JSON.stringify(data) });
     return response.json();
 }
-'''
+""",
     ),
-
     # ===========================================
     # EDGE CASES: COMMENTS & WHITESPACE
     # ===========================================
     ReplacementTestCase(
         name="function_with_jsdoc",
         description="Function with JSDoc comment above it",
-        original_source='''/**
+        original_source="""/**
  * Calculates the sum of two numbers.
  * @param {number} a - First number
  * @param {number} b - Second number
@@ -249,14 +242,14 @@ function sum(a, b) {
 function diff(a, b) {
     return a - b;
 }
-''',
+""",
         function_name="sum",
         start_line=7,  # Function starts after JSDoc
         end_line=9,
-        new_function='''function sum(a, b) {
+        new_function="""function sum(a, b) {
     return (a + b) | 0;
-}''',
-        expected_result='''/**
+}""",
+        expected_result="""/**
  * Calculates the sum of two numbers.
  * @param {number} a - First number
  * @param {number} b - Second number
@@ -269,13 +262,12 @@ function sum(a, b) {
 function diff(a, b) {
     return a - b;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="inline_comments",
         description="Function with inline comments",
-        original_source='''function process(data) {
+        original_source="""function process(data) {
     // Validate input
     if (!data) return null;
 
@@ -284,28 +276,27 @@ function diff(a, b) {
 
     return result;
 }
-''',
+""",
         function_name="process",
         start_line=1,
         end_line=9,
-        new_function='''function process(data) {
+        new_function="""function process(data) {
     if (!data) return null;
     return data.map(x => x << 1);
-}''',
-        expected_result='''function process(data) {
+}""",
+        expected_result="""function process(data) {
     if (!data) return null;
     return data.map(x => x << 1);
 }
-'''
+""",
     ),
-
     # ===========================================
     # NESTED FUNCTIONS
     # ===========================================
     ReplacementTestCase(
         name="function_with_nested",
         description="Function containing nested functions",
-        original_source='''function outer(x) {
+        original_source="""function outer(x) {
     function inner(y) {
         return y * 2;
     }
@@ -315,15 +306,15 @@ function diff(a, b) {
 function other() {
     return 42;
 }
-''',
+""",
         function_name="outer",
         start_line=1,
         end_line=6,
-        new_function='''function outer(x) {
+        new_function="""function outer(x) {
     const inner = y => y << 1;
     return inner(x) + 1;
-}''',
-        expected_result='''function outer(x) {
+}""",
+        expected_result="""function outer(x) {
     const inner = y => y << 1;
     return inner(x) + 1;
 }
@@ -331,58 +322,56 @@ function other() {
 function other() {
     return 42;
 }
-'''
+""",
     ),
-
     # ===========================================
     # TYPESCRIPT SPECIFIC
     # ===========================================
     ReplacementTestCase(
         name="typescript_typed_function",
         description="TypeScript function with type annotations",
-        original_source='''function greet(name: string): string {
+        original_source="""function greet(name: string): string {
     return `Hello, ${name}!`;
 }
 
 function farewell(name: string): string {
     return `Goodbye, ${name}!`;
 }
-''',
+""",
         function_name="greet",
         start_line=1,
         end_line=3,
-        new_function='''function greet(name: string): string {
+        new_function="""function greet(name: string): string {
     return 'Hello, ' + name + '!';
-}''',
-        expected_result='''function greet(name: string): string {
+}""",
+        expected_result="""function greet(name: string): string {
     return 'Hello, ' + name + '!';
 }
 
 function farewell(name: string): string {
     return `Goodbye, ${name}!`;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="typescript_generic",
         description="TypeScript generic function",
-        original_source='''function identity<T>(arg: T): T {
+        original_source="""function identity<T>(arg: T): T {
     return arg;
 }
 
 function first<T>(arr: T[]): T | undefined {
     return arr[0];
 }
-''',
+""",
         function_name="identity",
         start_line=1,
         end_line=3,
-        new_function='''function identity<T>(arg: T): T {
+        new_function="""function identity<T>(arg: T): T {
     // Direct return
     return arg;
-}''',
-        expected_result='''function identity<T>(arg: T): T {
+}""",
+        expected_result="""function identity<T>(arg: T): T {
     // Direct return
     return arg;
 }
@@ -390,13 +379,12 @@ function first<T>(arr: T[]): T | undefined {
 function first<T>(arr: T[]): T | undefined {
     return arr[0];
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="typescript_interface_method",
         description="TypeScript class implementing interface",
-        original_source='''interface Processor {
+        original_source="""interface Processor {
     process(data: number[]): number[];
 }
 
@@ -409,18 +397,18 @@ class ArrayProcessor implements Processor {
         return data.filter(x => x > 0);
     }
 }
-''',
+""",
         function_name="process",
         start_line=6,
         end_line=8,
-        new_function='''    process(data: number[]): number[] {
+        new_function="""    process(data: number[]): number[] {
         const result = new Array(data.length);
         for (let i = 0; i < data.length; i++) {
             result[i] = data[i] << 1;
         }
         return result;
-    }''',
-        expected_result='''interface Processor {
+    }""",
+        expected_result="""interface Processor {
     process(data: number[]): number[];
 }
 
@@ -437,59 +425,57 @@ class ArrayProcessor implements Processor {
         return data.filter(x => x > 0);
     }
 }
-'''
+""",
     ),
-
     # ===========================================
     # EXPORT PATTERNS
     # ===========================================
     ReplacementTestCase(
         name="exported_function",
         description="Exported function declaration",
-        original_source='''export function calculate(a, b) {
+        original_source="""export function calculate(a, b) {
     return a + b;
 }
 
 export function subtract(a, b) {
     return a - b;
 }
-''',
+""",
         function_name="calculate",
         start_line=1,
         end_line=3,
-        new_function='''export function calculate(a, b) {
+        new_function="""export function calculate(a, b) {
     return (a + b) | 0;
-}''',
-        expected_result='''export function calculate(a, b) {
+}""",
+        expected_result="""export function calculate(a, b) {
     return (a + b) | 0;
 }
 
 export function subtract(a, b) {
     return a - b;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="default_export",
         description="Default exported function",
-        original_source='''export default function main(args) {
+        original_source="""export default function main(args) {
     return args.reduce((a, b) => a + b, 0);
 }
 
 function helper(x) {
     return x * 2;
 }
-''',
+""",
         function_name="main",
         start_line=1,
         end_line=3,
-        new_function='''export default function main(args) {
+        new_function="""export default function main(args) {
     let sum = 0;
     for (const arg of args) sum += arg;
     return sum;
-}''',
-        expected_result='''export default function main(args) {
+}""",
+        expected_result="""export default function main(args) {
     let sum = 0;
     for (const arg of args) sum += arg;
     return sum;
@@ -498,16 +484,15 @@ function helper(x) {
 function helper(x) {
     return x * 2;
 }
-'''
+""",
     ),
-
     # ===========================================
     # DECORATORS (TypeScript/Experimental JS)
     # ===========================================
     ReplacementTestCase(
         name="decorated_method",
         description="Method with decorators",
-        original_source='''class Service {
+        original_source="""class Service {
     @log
     @memoize
     compute(x: number): number {
@@ -518,14 +503,14 @@ function helper(x) {
         console.log('other');
     }
 }
-''',
+""",
         function_name="compute",
         start_line=4,  # Method starts after decorators
         end_line=6,
-        new_function='''    compute(x: number): number {
+        new_function="""    compute(x: number): number {
         return x ** 2;
-    }''',
-        expected_result='''class Service {
+    }""",
+        expected_result="""class Service {
     @log
     @memoize
     compute(x: number): number {
@@ -536,92 +521,88 @@ function helper(x) {
         console.log('other');
     }
 }
-'''
+""",
     ),
-
     # ===========================================
     # FIRST/LAST FUNCTION EDGE CASES
     # ===========================================
     ReplacementTestCase(
         name="first_function_in_file",
         description="Replacing the very first function in file",
-        original_source='''function first() {
+        original_source="""function first() {
     return 1;
 }
 
 function second() {
     return 2;
 }
-''',
+""",
         function_name="first",
         start_line=1,
         end_line=3,
-        new_function='''function first() {
+        new_function="""function first() {
     return 1 | 0;
-}''',
-        expected_result='''function first() {
+}""",
+        expected_result="""function first() {
     return 1 | 0;
 }
 
 function second() {
     return 2;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="last_function_in_file",
         description="Replacing the last function in file",
-        original_source='''function first() {
+        original_source="""function first() {
     return 1;
 }
 
 function last() {
     return 999;
 }
-''',
+""",
         function_name="last",
         start_line=5,
         end_line=7,
-        new_function='''function last() {
+        new_function="""function last() {
     return 1000;
-}''',
-        expected_result='''function first() {
+}""",
+        expected_result="""function first() {
     return 1;
 }
 
 function last() {
     return 1000;
 }
-'''
+""",
     ),
-
     ReplacementTestCase(
         name="only_function_in_file",
         description="Replacing the only function in file",
-        original_source='''function only() {
+        original_source="""function only() {
     return 42;
 }
-''',
+""",
         function_name="only",
         start_line=1,
         end_line=3,
-        new_function='''function only() {
+        new_function="""function only() {
     return 42 | 0;
-}''',
-        expected_result='''function only() {
+}""",
+        expected_result="""function only() {
     return 42 | 0;
 }
-'''
+""",
     ),
-
     # ===========================================
     # INDENTATION PRESERVATION
     # ===========================================
     ReplacementTestCase(
         name="deeply_nested_method",
         description="Method with deep indentation",
-        original_source='''const module = {
+        original_source="""const module = {
     submodule: {
         handler: {
             process(data) {
@@ -630,14 +611,14 @@ function last() {
         }
     }
 };
-''',
+""",
         function_name="process",
         start_line=4,
         end_line=6,
-        new_function='''            process(data) {
+        new_function="""            process(data) {
                 return data.map(x => x << 1);
-            }''',
-        expected_result='''const module = {
+            }""",
+        expected_result="""const module = {
     submodule: {
         handler: {
             process(data) {
@@ -646,7 +627,7 @@ function last() {
         }
     }
 };
-'''
+""",
     ),
 ]
 

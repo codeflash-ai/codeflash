@@ -1,5 +1,4 @@
-"""
-Run experiments to compare code replacement approaches for JavaScript/TypeScript.
+"""Run experiments to compare code replacement approaches for JavaScript/TypeScript.
 
 This script tests all three approaches against the test cases and generates
 a comparison report.
@@ -8,14 +7,15 @@ a comparison report.
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
-from test_cases import get_test_cases, ReplacementTestCase
+from test_cases import get_test_cases
 
 
 @dataclass
 class ApproachResult:
     """Result from testing an approach on one test case."""
+
     test_name: str
     passed: bool
     time_ms: float
@@ -26,6 +26,7 @@ class ApproachResult:
 @dataclass
 class ApproachSummary:
     """Summary of results for one approach."""
+
     name: str
     description: str
     passed: int = 0
@@ -51,8 +52,7 @@ def test_approach_b() -> ApproachSummary:
     from approach_b_text_based import TextBasedReplacer
 
     summary = ApproachSummary(
-        name="Approach B: Text-Based",
-        description="Pure Python text manipulation using line numbers",
+        name="Approach B: Text-Based", description="Pure Python text manipulation using line numbers"
     )
 
     replacer = TextBasedReplacer()
@@ -60,27 +60,19 @@ def test_approach_b() -> ApproachSummary:
     for tc in get_test_cases():
         start_time = time.perf_counter()
         try:
-            result = replacer.replace_function(
-                tc.original_source,
-                tc.start_line,
-                tc.end_line,
-                tc.new_function,
-            )
+            result = replacer.replace_function(tc.original_source, tc.start_line, tc.end_line, tc.new_function)
             end_time = time.perf_counter()
             time_ms = (end_time - start_time) * 1000
 
             # Normalize for comparison
-            result_normalized = result.replace('\r\n', '\n')
-            expected_normalized = tc.expected_result.replace('\r\n', '\n')
+            result_normalized = result.replace("\r\n", "\n")
+            expected_normalized = tc.expected_result.replace("\r\n", "\n")
 
             passed = result_normalized == expected_normalized
 
-            summary.results.append(ApproachResult(
-                test_name=tc.name,
-                passed=passed,
-                time_ms=time_ms,
-                output=result if not passed else None,
-            ))
+            summary.results.append(
+                ApproachResult(test_name=tc.name, passed=passed, time_ms=time_ms, output=result if not passed else None)
+            )
 
             if passed:
                 summary.passed += 1
@@ -91,12 +83,7 @@ def test_approach_b() -> ApproachSummary:
         except Exception as e:
             end_time = time.perf_counter()
             time_ms = (end_time - start_time) * 1000
-            summary.results.append(ApproachResult(
-                test_name=tc.name,
-                passed=False,
-                time_ms=time_ms,
-                error=str(e),
-            ))
+            summary.results.append(ApproachResult(test_name=tc.name, passed=False, time_ms=time_ms, error=str(e)))
             summary.errors += 1
             summary.total_time_ms += time_ms
 
@@ -106,57 +93,42 @@ def test_approach_b() -> ApproachSummary:
 def test_approach_c() -> ApproachSummary:
     """Test Approach C: Hybrid (tree-sitter + text)."""
     try:
-        from approach_c_hybrid import HybridReplacer, TREE_SITTER_AVAILABLE
+        from approach_c_hybrid import TREE_SITTER_AVAILABLE, HybridReplacer
     except ImportError:
         return ApproachSummary(
-            name="Approach C: Hybrid",
-            description="Tree-sitter analysis + text replacement",
-            available=False,
+            name="Approach C: Hybrid", description="Tree-sitter analysis + text replacement", available=False
         )
 
     if not TREE_SITTER_AVAILABLE:
         return ApproachSummary(
-            name="Approach C: Hybrid",
-            description="Tree-sitter analysis + text replacement",
-            available=False,
+            name="Approach C: Hybrid", description="Tree-sitter analysis + text replacement", available=False
         )
 
-    summary = ApproachSummary(
-        name="Approach C: Hybrid",
-        description="Tree-sitter analysis + text replacement",
-    )
+    summary = ApproachSummary(name="Approach C: Hybrid", description="Tree-sitter analysis + text replacement")
 
-    js_replacer = HybridReplacer('javascript')
-    ts_replacer = HybridReplacer('typescript')
+    js_replacer = HybridReplacer("javascript")
+    ts_replacer = HybridReplacer("typescript")
 
     for tc in get_test_cases():
         # Use TypeScript parser for TypeScript test cases
-        is_typescript = 'typescript' in tc.name or 'interface' in tc.description.lower()
+        is_typescript = "typescript" in tc.name or "interface" in tc.description.lower()
         replacer = ts_replacer if is_typescript else js_replacer
 
         start_time = time.perf_counter()
         try:
-            result = replacer.replace_function_by_lines(
-                tc.original_source,
-                tc.start_line,
-                tc.end_line,
-                tc.new_function,
-            )
+            result = replacer.replace_function_by_lines(tc.original_source, tc.start_line, tc.end_line, tc.new_function)
             end_time = time.perf_counter()
             time_ms = (end_time - start_time) * 1000
 
             # Normalize for comparison
-            result_normalized = result.replace('\r\n', '\n')
-            expected_normalized = tc.expected_result.replace('\r\n', '\n')
+            result_normalized = result.replace("\r\n", "\n")
+            expected_normalized = tc.expected_result.replace("\r\n", "\n")
 
             passed = result_normalized == expected_normalized
 
-            summary.results.append(ApproachResult(
-                test_name=tc.name,
-                passed=passed,
-                time_ms=time_ms,
-                output=result if not passed else None,
-            ))
+            summary.results.append(
+                ApproachResult(test_name=tc.name, passed=passed, time_ms=time_ms, output=result if not passed else None)
+            )
 
             if passed:
                 summary.passed += 1
@@ -167,12 +139,7 @@ def test_approach_c() -> ApproachSummary:
         except Exception as e:
             end_time = time.perf_counter()
             time_ms = (end_time - start_time) * 1000
-            summary.results.append(ApproachResult(
-                test_name=tc.name,
-                passed=False,
-                time_ms=time_ms,
-                error=str(e),
-            ))
+            summary.results.append(ApproachResult(test_name=tc.name, passed=False, time_ms=time_ms, error=str(e)))
             summary.errors += 1
             summary.total_time_ms += time_ms
 
@@ -182,19 +149,19 @@ def test_approach_c() -> ApproachSummary:
 def test_approach_a() -> ApproachSummary:
     """Test Approach A: jscodeshift/recast."""
     summary = ApproachSummary(
-        name="Approach A: jscodeshift",
-        description="AST-based replacement via Node.js subprocess",
+        name="Approach A: jscodeshift", description="AST-based replacement via Node.js subprocess"
     )
 
     try:
         from approach_a_jscodeshift import JsCodeshiftReplacer
+
         replacer = JsCodeshiftReplacer()
 
         if not replacer._check_node_available():
             summary.available = False
             return summary
 
-    except Exception as e:
+    except Exception:
         summary.available = False
         return summary
 
@@ -234,7 +201,7 @@ def generate_report(summaries: list[ApproachSummary]) -> str:
     for s in summaries:
         if not s.available:
             report.append(f"## {s.name}\n")
-            report.append(f"**Status**: Not available (missing dependencies)\n")
+            report.append("**Status**: Not available (missing dependencies)\n")
             report.append(f"**Description**: {s.description}\n")
             continue
 

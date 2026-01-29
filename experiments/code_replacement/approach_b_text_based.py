@@ -1,5 +1,4 @@
-"""
-Approach B: Text-based code replacement using line numbers.
+"""Approach B: Text-based code replacement using line numbers.
 
 This approach:
 1. Uses tree-sitter to find function boundaries (line numbers)
@@ -19,15 +18,15 @@ Cons:
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass
 class FunctionLocation:
     """Location of a function in source code."""
+
     name: str
     start_line: int  # 1-indexed
-    end_line: int    # 1-indexed, inclusive
+    end_line: int  # 1-indexed, inclusive
     start_byte: int
     end_byte: int
 
@@ -35,15 +34,8 @@ class FunctionLocation:
 class TextBasedReplacer:
     """Replace functions using text-based line manipulation."""
 
-    def replace_function(
-        self,
-        source: str,
-        start_line: int,
-        end_line: int,
-        new_function: str,
-    ) -> str:
-        """
-        Replace function at given line range with new function code.
+    def replace_function(self, source: str, start_line: int, end_line: int, new_function: str) -> str:
+        """Replace function at given line range with new function code.
 
         Args:
             source: Original source code
@@ -53,12 +45,13 @@ class TextBasedReplacer:
 
         Returns:
             Modified source code
+
         """
         lines = source.splitlines(keepends=True)
 
         # Handle case where source doesn't end with newline
-        if lines and not lines[-1].endswith('\n'):
-            lines[-1] += '\n'
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
 
         # Get indentation from original function's first line
         if start_line <= len(lines):
@@ -85,7 +78,7 @@ class TextBasedReplacer:
                 if line.strip():  # Non-empty line
                     if indent_diff > 0:
                         # Add indentation
-                        adjusted_new_lines.append(' ' * indent_diff + line)
+                        adjusted_new_lines.append(" " * indent_diff + line)
                     else:
                         # Remove indentation (careful not to remove too much)
                         current_indent = len(line) - len(line.lstrip())
@@ -96,15 +89,15 @@ class TextBasedReplacer:
             new_lines = adjusted_new_lines
 
         # Ensure new function ends with newline
-        if new_lines and not new_lines[-1].endswith('\n'):
-            new_lines[-1] += '\n'
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines[-1] += "\n"
 
         # Build result: before + new function + after
-        before = lines[:start_line - 1]
+        before = lines[: start_line - 1]
         after = lines[end_line:]
 
         result_lines = before + new_lines + after
-        return ''.join(result_lines)
+        return "".join(result_lines)
 
     def replace_function_preserve_context(
         self,
@@ -115,8 +108,7 @@ class TextBasedReplacer:
         preserve_leading_empty_lines: bool = True,
         preserve_trailing_empty_lines: bool = True,
     ) -> str:
-        """
-        Replace function while preserving surrounding whitespace context.
+        """Replace function while preserving surrounding whitespace context.
 
         Args:
             source: Original source code
@@ -128,12 +120,13 @@ class TextBasedReplacer:
 
         Returns:
             Modified source code
+
         """
         lines = source.splitlines(keepends=True)
 
         # Handle case where source doesn't end with newline
-        if lines and not lines[-1].endswith('\n'):
-            lines[-1] += '\n'
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
 
         # Find actual content boundaries (skip empty lines at start/end of function)
         actual_start = start_line
@@ -141,8 +134,8 @@ class TextBasedReplacer:
 
         # Prepare new function lines
         new_lines = new_function.splitlines(keepends=True)
-        if new_lines and not new_lines[-1].endswith('\n'):
-            new_lines[-1] += '\n'
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines[-1] += "\n"
 
         # Auto-detect and adjust indentation
         if lines and start_line <= len(lines):
@@ -159,7 +152,7 @@ class TextBasedReplacer:
                     for line in new_lines:
                         if line.strip():
                             if indent_diff > 0:
-                                adjusted_new_lines.append(' ' * indent_diff + line)
+                                adjusted_new_lines.append(" " * indent_diff + line)
                             else:
                                 current_indent = len(line) - len(line.lstrip())
                                 remove_amount = min(current_indent, abs(indent_diff))
@@ -169,21 +162,15 @@ class TextBasedReplacer:
                     new_lines = adjusted_new_lines
 
         # Build result
-        before = lines[:actual_start - 1]
+        before = lines[: actual_start - 1]
         after = lines[actual_end:]
 
         result_lines = before + new_lines + after
-        return ''.join(result_lines)
+        return "".join(result_lines)
 
 
-def replace_function_text_based(
-    source: str,
-    start_line: int,
-    end_line: int,
-    new_function: str,
-) -> str:
-    """
-    Convenience function for text-based replacement.
+def replace_function_text_based(source: str, start_line: int, end_line: int, new_function: str) -> str:
+    """Convenience function for text-based replacement.
 
     Args:
         source: Original source code
@@ -193,6 +180,7 @@ def replace_function_text_based(
 
     Returns:
         Modified source code
+
     """
     replacer = TextBasedReplacer()
     return replacer.replace_function(source, start_line, end_line, new_function)
@@ -212,16 +200,11 @@ if __name__ == "__main__":
     failed = 0
 
     for tc in get_test_cases():
-        result = replacer.replace_function(
-            tc.original_source,
-            tc.start_line,
-            tc.end_line,
-            tc.new_function,
-        )
+        result = replacer.replace_function(tc.original_source, tc.start_line, tc.end_line, tc.new_function)
 
         # Normalize line endings for comparison
-        result_normalized = result.replace('\r\n', '\n')
-        expected_normalized = tc.expected_result.replace('\r\n', '\n')
+        result_normalized = result.replace("\r\n", "\n")
+        expected_normalized = tc.expected_result.replace("\r\n", "\n")
 
         if result_normalized == expected_normalized:
             print(f"✓ PASS: {tc.name}")
@@ -229,12 +212,12 @@ if __name__ == "__main__":
         else:
             print(f"✗ FAIL: {tc.name}")
             print(f"  Description: {tc.description}")
-            print(f"  --- Expected ---")
+            print("  --- Expected ---")
             for i, line in enumerate(expected_normalized.splitlines(), 1):
-                print(f"  {i:3}: {repr(line)}")
-            print(f"  --- Got ---")
+                print(f"  {i:3}: {line!r}")
+            print("  --- Got ---")
             for i, line in enumerate(result_normalized.splitlines(), 1):
-                print(f"  {i:3}: {repr(line)}")
+                print(f"  {i:3}: {line!r}")
             failed += 1
         print()
 

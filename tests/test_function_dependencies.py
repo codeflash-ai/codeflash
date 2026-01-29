@@ -187,7 +187,8 @@ class Graph:
                 self.topologicalSortUtil(i, visited, stack)
 
         # Print contents of stack
-        return stack"""
+        return stack
+"""
     )
 
 
@@ -232,5 +233,6 @@ class C:
         if num == 0:
             return 0
         num_1 = self.calculate_something_3(num)
-        return self.recursive(num) + num_1"""
+        return self.recursive(num) + num_1
+"""
     )

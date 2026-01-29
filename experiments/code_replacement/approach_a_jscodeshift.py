@@ -1,5 +1,4 @@
-"""
-Approach A: jscodeshift/recast via Node.js subprocess.
+"""Approach A: jscodeshift/recast via Node.js subprocess.
 
 This approach:
 1. Writes a jscodeshift transform script
@@ -30,6 +29,7 @@ from typing import Optional
 @dataclass
 class JsCodeshiftResult:
     """Result from jscodeshift transformation."""
+
     success: bool
     output: str
     error: Optional[str] = None
@@ -46,12 +46,7 @@ class JsCodeshiftReplacer:
     def _check_node_available(self) -> bool:
         """Check if Node.js is available."""
         try:
-            result = subprocess.run(
-                ['node', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=5)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
@@ -60,24 +55,14 @@ class JsCodeshiftReplacer:
         """Check if jscodeshift is available via npx."""
         try:
             result = subprocess.run(
-                ['npx', 'jscodeshift', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["npx", "jscodeshift", "--version"], check=False, capture_output=True, text=True, timeout=10
             )
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
 
-    def _create_transform_script(
-        self,
-        function_name: str,
-        new_source: str,
-        start_line: int,
-        end_line: int,
-    ) -> str:
-        """
-        Create a jscodeshift transform script.
+    def _create_transform_script(self, function_name: str, new_source: str, start_line: int, end_line: int) -> str:
+        """Create a jscodeshift transform script.
 
         Args:
             function_name: Name of function to replace
@@ -87,11 +72,12 @@ class JsCodeshiftReplacer:
 
         Returns:
             JavaScript transform script
+
         """
         # Escape the new source for embedding in JS string
         escaped_source = json.dumps(new_source)
 
-        return f'''
+        return f"""
 // jscodeshift transform to replace function by line number
 module.exports = function(fileInfo, api) {{
     const j = api.jscodeshift;
@@ -180,23 +166,17 @@ module.exports = function(fileInfo, api) {{
 
     return root.toSource({{ quote: 'single' }});
 }};
-'''
+"""
 
-    def _create_simple_transform_script(
-        self,
-        start_line: int,
-        end_line: int,
-        new_source: str,
-    ) -> str:
-        """
-        Create a simpler transform script that uses line-based replacement.
+    def _create_simple_transform_script(self, start_line: int, end_line: int, new_source: str) -> str:
+        """Create a simpler transform script that uses line-based replacement.
 
         This fallback approach uses recast to parse, does line-based replacement,
         and uses recast to output (preserving formatting).
         """
         escaped_source = json.dumps(new_source)
 
-        return f'''
+        return f"""
 // Simple line-based replacement using recast for parsing/printing
 const recast = require('recast');
 
@@ -237,18 +217,12 @@ module.exports = function(fileInfo, api) {{
 
     return [...before, ...adjustedNewLines, ...after].join('\\n');
 }};
-'''
+"""
 
     def replace_function(
-        self,
-        source: str,
-        function_name: str,
-        new_function: str,
-        start_line: int,
-        end_line: int,
+        self, source: str, function_name: str, new_function: str, start_line: int, end_line: int
     ) -> JsCodeshiftResult:
-        """
-        Replace a function using jscodeshift.
+        """Replace a function using jscodeshift.
 
         Args:
             source: Original source code
@@ -259,31 +233,33 @@ module.exports = function(fileInfo, api) {{
 
         Returns:
             JsCodeshiftResult with success status and output
+
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
 
             # Write source file
-            source_file = tmpdir_path / 'source.js'
+            source_file = tmpdir_path / "source.js"
             source_file.write_text(source)
 
             # Write transform script
-            transform_file = tmpdir_path / 'transform.js'
-            transform_script = self._create_transform_script(
-                function_name, new_function, start_line, end_line
-            )
+            transform_file = tmpdir_path / "transform.js"
+            transform_script = self._create_transform_script(function_name, new_function, start_line, end_line)
             transform_file.write_text(transform_script)
 
             try:
                 # Run jscodeshift
                 result = subprocess.run(
                     [
-                        'npx', 'jscodeshift',
-                        '-t', str(transform_file),
+                        "npx",
+                        "jscodeshift",
+                        "-t",
+                        str(transform_file),
                         str(source_file),
-                        '--print',  # Print output to stdout instead of modifying file
-                        '--dry',    # Don't actually write
+                        "--print",  # Print output to stdout instead of modifying file
+                        "--dry",  # Don't actually write
                     ],
+                    check=False,
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -298,40 +274,23 @@ module.exports = function(fileInfo, api) {{
                         # Fallback: read the file
                         output = source_file.read_text()
 
-                    return JsCodeshiftResult(
-                        success=True,
-                        output=output,
-                    )
-                else:
-                    return JsCodeshiftResult(
-                        success=False,
-                        output=source,  # Return original on failure
-                        error=f"jscodeshift failed with code {result.returncode}",
-                        stderr=result.stderr,
-                    )
+                    return JsCodeshiftResult(success=True, output=output)
+                return JsCodeshiftResult(
+                    success=False,
+                    output=source,  # Return original on failure
+                    error=f"jscodeshift failed with code {result.returncode}",
+                    stderr=result.stderr,
+                )
 
             except subprocess.TimeoutExpired:
-                return JsCodeshiftResult(
-                    success=False,
-                    output=source,
-                    error="jscodeshift timed out",
-                )
+                return JsCodeshiftResult(success=False, output=source, error="jscodeshift timed out")
             except Exception as e:
-                return JsCodeshiftResult(
-                    success=False,
-                    output=source,
-                    error=str(e),
-                )
+                return JsCodeshiftResult(success=False, output=source, error=str(e))
 
     def replace_function_simple(
-        self,
-        source: str,
-        start_line: int,
-        end_line: int,
-        new_function: str,
+        self, source: str, start_line: int, end_line: int, new_function: str
     ) -> JsCodeshiftResult:
-        """
-        Replace a function using simple line-based approach via Node.js.
+        """Replace a function using simple line-based approach via Node.js.
 
         This is a fallback that still uses Node.js but with simpler logic.
 
@@ -343,6 +302,7 @@ module.exports = function(fileInfo, api) {{
 
         Returns:
             JsCodeshiftResult with success status and output
+
         """
         # For simplicity, let's just use the text-based approach
         # but run through Node.js for consistency testing
@@ -351,21 +311,13 @@ module.exports = function(fileInfo, api) {{
         replacer = TextBasedReplacer()
         result = replacer.replace_function(source, start_line, end_line, new_function)
 
-        return JsCodeshiftResult(
-            success=True,
-            output=result,
-        )
+        return JsCodeshiftResult(success=True, output=result)
 
 
 def replace_function_jscodeshift(
-    source: str,
-    function_name: str,
-    new_function: str,
-    start_line: int,
-    end_line: int,
+    source: str, function_name: str, new_function: str, start_line: int, end_line: int
 ) -> str:
-    """
-    Convenience function for jscodeshift replacement.
+    """Convenience function for jscodeshift replacement.
 
     Args:
         source: Original source code
@@ -376,6 +328,7 @@ def replace_function_jscodeshift(
 
     Returns:
         Modified source code (or original if failed)
+
     """
     replacer = JsCodeshiftReplacer()
     result = replacer.replace_function(source, function_name, new_function, start_line, end_line)
@@ -384,8 +337,6 @@ def replace_function_jscodeshift(
 
 # Test the implementation
 if __name__ == "__main__":
-    from test_cases import get_test_cases
-
     replacer = JsCodeshiftReplacer()
 
     # Check if jscodeshift is available
@@ -402,21 +353,15 @@ if __name__ == "__main__":
     print()
 
     # Test with a simple case first
-    simple_source = '''function add(a, b) {
+    simple_source = """function add(a, b) {
     return a + b;
 }
-'''
-    simple_new = '''function add(a, b) {
+"""
+    simple_new = """function add(a, b) {
     return (a + b) | 0;
-}'''
+}"""
 
-    result = replacer.replace_function(
-        simple_source,
-        "add",
-        simple_new,
-        start_line=1,
-        end_line=3,
-    )
+    result = replacer.replace_function(simple_source, "add", simple_new, start_line=1, end_line=3)
 
     print("Simple test result:")
     print(f"  Success: {result.success}")
