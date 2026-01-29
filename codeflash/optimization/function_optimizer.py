@@ -2486,8 +2486,6 @@ class FunctionOptimizer:
                     pytest_cmd=self.test_cfg.pytest_cmd,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=1,
-                    pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
                 )
             elif testing_type == TestingMode.PERFORMANCE:

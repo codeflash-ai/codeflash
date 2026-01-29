@@ -76,6 +76,7 @@ class Tracer:
         config: dict,
         result_pickle_file_path: Path,
         functions: list[str] | None = None,
+        *,
         disable: bool = False,
         project_root: Path | None = None,
         max_function_count: int = 256,

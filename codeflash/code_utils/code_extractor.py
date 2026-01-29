@@ -44,14 +44,14 @@ class GlobalFunctionCollector(cst.CSTVisitor):
         self.scope_depth += 1
         return True
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.scope_depth -= 1
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
         self.scope_depth += 1
         return True
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.scope_depth -= 1
 
 
@@ -65,7 +65,7 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
         self.processed_functions: set[str] = set()
         self.scope_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.scope_depth += 1
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -80,14 +80,14 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
             return self.new_functions[name]
         return updated_node
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
         self.scope_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         self.scope_depth -= 1
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new functions that weren't in the original file
         new_statements = list(updated_node.body)
 
@@ -370,7 +370,7 @@ class GlobalStatementTransformer(cst.CSTTransformer):
         super().__init__()
         self.global_statements = global_statements
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         if not self.global_statements:
             return updated_node
 
@@ -1553,10 +1553,7 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
 
     # If numba is not installed and all modules used require numba for optimization,
     # return False since we can't optimize this code
-    if not has_numba and modules_used.issubset(NUMBA_REQUIRED_MODULES):
-        return False
-
-    return True
+    return not (not has_numba and modules_used.issubset(NUMBA_REQUIRED_MODULES))
 
 
 def get_opt_review_metrics(

@@ -200,7 +200,7 @@ class CodeFlashBenchmarkPlugin:
 
     # Pytest hooks
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session, exitstatus) -> None:
+    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001
         """Execute after whole test run is completed."""
         # Write any remaining benchmark timings to the database
         codeflash_trace.close()
@@ -218,7 +218,7 @@ class CodeFlashBenchmarkPlugin:
         skip_no_benchmark = pytest.mark.skip(reason="Test requires benchmark fixture")
         for item in items:
             # Check for direct benchmark fixture usage
-            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames
+            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames  # ty:ignore[unsupported-operator]
 
             # Check for @pytest.mark.benchmark marker
             has_marker = False
@@ -236,7 +236,7 @@ class CodeFlashBenchmarkPlugin:
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
 
-        def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN002, ANN003, ANN204, PGH003
+        def __call__(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN204
             """Handle both direct function calls and decorator usage."""
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)

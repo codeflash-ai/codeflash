@@ -722,7 +722,6 @@ class AiServiceClient:
         function_trace_id: str,
         coverage_message: str,
         replay_tests: str,
-        concolic_tests: str,
         calling_fn_details: str,
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.

@@ -30,21 +30,21 @@ def main() -> None:
         if args.config_file and Path.exists(args.config_file):
             pyproject_config, _ = parse_config_file(args.config_file)
             disable_telemetry = pyproject_config.get("disable_telemetry", False)
-        init_sentry(not disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(not disable_telemetry)
+        init_sentry(enabled=not disable_telemetry, exclude_errors=True)
+        posthog_cf.initialize_posthog(enabled=not disable_telemetry)
         args.func()
     elif args.verify_setup:
         args = process_pyproject_config(args)
-        init_sentry(not args.disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(not args.disable_telemetry)
+        init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+        posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
         ask_run_end_to_end_test(args)
     else:
         args = process_pyproject_config(args)
         if not env_utils.check_formatter_installed(args.formatter_cmds):
             return
         args.previous_checkpoint_functions = ask_should_use_checkpoint_get_functions(args)
-        init_sentry(not args.disable_telemetry, exclude_errors=True)
-        posthog_cf.initialize_posthog(not args.disable_telemetry)
+        init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+        posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
         from codeflash.optimization import optimizer
 

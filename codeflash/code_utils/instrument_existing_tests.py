@@ -690,15 +690,14 @@ def detect_frameworks_from_code(code: str) -> dict[str, str]:
                     frameworks["tensorflow"] = alias.asname if alias.asname else module_name
                 elif module_name == "jax":
                     frameworks["jax"] = alias.asname if alias.asname else module_name
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                module_name = node.module.split(".")[0]
-                if module_name == "torch" and "torch" not in frameworks:
-                    frameworks["torch"] = module_name
-                elif module_name == "tensorflow" and "tensorflow" not in frameworks:
-                    frameworks["tensorflow"] = module_name
-                elif module_name == "jax" and "jax" not in frameworks:
-                    frameworks["jax"] = module_name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            module_name = node.module.split(".")[0]
+            if module_name == "torch" and "torch" not in frameworks:
+                frameworks["torch"] = module_name
+            elif module_name == "tensorflow" and "tensorflow" not in frameworks:
+                frameworks["tensorflow"] = module_name
+            elif module_name == "jax" and "jax" not in frameworks:
+                frameworks["jax"] = module_name
 
     return frameworks
 
