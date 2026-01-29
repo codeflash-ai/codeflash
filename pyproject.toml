@@ -256,19 +256,6 @@ ignore = [
     "LOG015",
     "PLC0415",
     "UP045",
-    # Style rules - valid code patterns we allow in this codebase
-    "FBT001",  # Boolean positional arg - common in Python APIs
-    "FBT002",  # Boolean default arg - common in Python APIs
-    "ARG001",  # Unused function arg - required for interface implementations
-    "ARG002",  # Unused method arg - required for interface implementations (e.g., libcst visitors)
-    "ANN401",  # typing.Any - sometimes necessary
-    "ANN001",  # Missing type annotation - not all internal code needs full typing
-    "TRY300",  # Try/except style preference
-    "TRY401",  # Logging exception style preference
-    "S110",    # try-except-pass - sometimes legitimate
-    "PLR0911", # Too many return statements - complex functions sometimes need this
-    "SIM102",  # Nested if style - sometimes clearer than combined conditions
-    "SIM103",  # Return negation style - preference
 ]
 
 [tool.ruff.lint.flake8-type-checking]
