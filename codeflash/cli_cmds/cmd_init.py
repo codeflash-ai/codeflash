@@ -1091,9 +1091,10 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
 
 def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:
     """Determine which dependency manager is being used based on pyproject.toml contents."""
-    if (Path.cwd() / "poetry.lock").exists():
+    cwd = Path.cwd()
+    if (cwd / "poetry.lock").exists():
         return DependencyManager.POETRY
-    if (Path.cwd() / "uv.lock").exists():
+    if (cwd / "uv.lock").exists():
         return DependencyManager.UV
     if "tool" not in pyproject_data:
         return DependencyManager.PIP
