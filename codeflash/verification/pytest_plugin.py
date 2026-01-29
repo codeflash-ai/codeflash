@@ -12,7 +12,7 @@ import sys
 import time as _time_module
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 from unittest import TestCase
 
 # PyTest Imports
@@ -437,7 +437,7 @@ class PytestLoops:
             "importlib",
         }
 
-        def _clear_cache_for_object(obj: Any) -> None:
+        def _clear_cache_for_object(obj: obj) -> None:
             if obj in processed_functions:
                 return
             processed_functions.add(obj)
@@ -469,9 +469,9 @@ class PytestLoops:
                         for _, obj in inspect.getmembers(module):
                             if callable(obj):
                                 _clear_cache_for_object(obj)
-                except Exception:  # noqa: S110
+                except Exception:
                     pass
-        except Exception:  # noqa: S110
+        except Exception:
             pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:

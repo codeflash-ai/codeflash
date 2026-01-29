@@ -256,6 +256,7 @@ ignore = [
     "LOG015",
     "PLC0415",
     "UP045",
+    "S110",    # try-except-pass - we do this a lot
 ]
 
 [tool.ruff.lint.flake8-type-checking]
