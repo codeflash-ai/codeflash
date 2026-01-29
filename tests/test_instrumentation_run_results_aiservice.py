@@ -6,6 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import isort
+
 from code_to_optimize.bubble_sort_method import BubbleSorter
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.formatter import sort_imports
@@ -403,7 +404,7 @@ class BubbleSorter:
         assert test_results_mutated_attr[0].return_value[0] == {"x": 1}
         assert test_results_mutated_attr[0].verification_type == VerificationType.INIT_STATE_FTO
         assert test_results_mutated_attr[0].stdout == ""
-        match,_ = compare_test_results(
+        match, _ = compare_test_results(
             test_results, test_results_mutated_attr
         )  # The test should fail because the instance attribute was mutated
         assert not match
@@ -458,7 +459,7 @@ class BubbleSorter:
         assert test_results_new_attr[0].stdout == ""
         # assert test_results_new_attr[1].return_value[1]["self"].x == 0 TODO: add self as input
         # assert test_results_new_attr[1].return_value[1]["self"].y == 2 TODO: add self as input
-        match,_ = compare_test_results(
+        match, _ = compare_test_results(
             test_results, test_results_new_attr
         )  # The test should pass because the instance attribute was not mutated, only a new one was added
         assert match

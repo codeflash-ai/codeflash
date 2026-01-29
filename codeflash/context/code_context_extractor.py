@@ -21,6 +21,10 @@ from codeflash.context.unused_definition_remover import (
     remove_unused_definitions_by_function_names,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
+
+# Language support imports for multi-language code context extraction
+from codeflash.languages import is_python
+from codeflash.languages.base import Language
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -35,6 +39,7 @@ if TYPE_CHECKING:
     from libcst import CSTNode
 
     from codeflash.context.unused_definition_remover import UsageInfo
+    from codeflash.languages.base import HelperFunction
 
 
 def build_testgen_context(
@@ -75,6 +80,12 @@ def get_code_optimization_context(
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
 ) -> CodeOptimizationContext:
+    # Route to language-specific implementation for non-Python languages
+    if not is_python():
+        return get_code_optimization_context_for_language(
+            function_to_optimize, project_root_path, optim_token_limit, testgen_token_limit
+        )
+
     # Get FunctionSource representation of helpers of FTO
     helpers_of_fto_dict, helpers_of_fto_list = get_function_sources_from_jedi(
         {function_to_optimize.file_path: {function_to_optimize.qualified_name}}, project_root_path
@@ -95,7 +106,7 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 
@@ -198,11 +209,161 @@ def get_code_optimization_context(
     )
 
 
+def get_code_optimization_context_for_language(
+    function_to_optimize: FunctionToOptimize,
+    project_root_path: Path,
+    optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
+    testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
+) -> CodeOptimizationContext:
+    """Extract code optimization context for non-Python languages.
+
+    Uses the language support abstraction to extract code context and converts
+    it to the CodeOptimizationContext format expected by the pipeline.
+
+    This function supports multi-file context extraction, grouping helpers by file
+    and creating proper CodeStringsMarkdown with file paths for multi-file replacement.
+
+    Args:
+        function_to_optimize: The function to extract context for.
+        project_root_path: Root of the project.
+        optim_token_limit: Token limit for optimization context.
+        testgen_token_limit: Token limit for testgen context.
+
+    Returns:
+        CodeOptimizationContext with target code and dependencies.
+
+    """
+    from codeflash.languages import get_language_support
+    from codeflash.languages.base import FunctionInfo, ParentInfo
+
+    # Get language support for this function
+    language = Language(function_to_optimize.language)
+    lang_support = get_language_support(language)
+
+    # Convert FunctionToOptimize to FunctionInfo for language support
+    parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
+    func_info = FunctionInfo(
+        name=function_to_optimize.function_name,
+        file_path=function_to_optimize.file_path,
+        start_line=function_to_optimize.starting_line or 1,
+        end_line=function_to_optimize.ending_line or 1,
+        parents=parents,
+        is_async=function_to_optimize.is_async,
+        is_method=len(function_to_optimize.parents) > 0,
+        language=language,
+    )
+
+    # Extract code context using language support
+    code_context = lang_support.extract_code_context(func_info, project_root_path, project_root_path)
+
+    # Build imports string if available
+    imports_code = "\n".join(code_context.imports) if code_context.imports else ""
+
+    # Get relative path for target file
+    try:
+        target_relative_path = function_to_optimize.file_path.resolve().relative_to(project_root_path.resolve())
+    except ValueError:
+        target_relative_path = function_to_optimize.file_path
+
+    # Group helpers by file path
+    helpers_by_file: dict[Path, list[HelperFunction]] = defaultdict(list)
+    helper_function_sources = []
+
+    for helper in code_context.helper_functions:
+        helpers_by_file[helper.file_path].append(helper)
+
+        # Convert to FunctionSource for pipeline compatibility
+        helper_function_sources.append(
+            FunctionSource(
+                file_path=helper.file_path,
+                qualified_name=helper.qualified_name,
+                fully_qualified_name=helper.qualified_name,
+                only_function_name=helper.name,
+                source_code=helper.source_code,
+                jedi_definition=None,
+            )
+        )
+
+    # Build read-writable code (target file + same-file helpers + global variables)
+    read_writable_code_strings = []
+
+    # Combine target code with same-file helpers
+    target_file_code = code_context.target_code
+    same_file_helpers = helpers_by_file.get(function_to_optimize.file_path, [])
+    if same_file_helpers:
+        helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
+        target_file_code = target_file_code + "\n\n" + helper_code
+
+    # Add global variables (module-level declarations) referenced by the function and helpers
+    # These should be included in read-writable context so AI can modify them if needed
+    if code_context.read_only_context:
+        target_file_code = code_context.read_only_context + "\n\n" + target_file_code
+
+    # Add imports to target file code
+    if imports_code:
+        target_file_code = imports_code + "\n\n" + target_file_code
+
+    read_writable_code_strings.append(
+        CodeString(code=target_file_code, file_path=target_relative_path, language=function_to_optimize.language)
+    )
+
+    # Add helper files (cross-file helpers)
+    for file_path, file_helpers in helpers_by_file.items():
+        if file_path == function_to_optimize.file_path:
+            continue  # Already included in target file
+
+        try:
+            helper_relative_path = file_path.resolve().relative_to(project_root_path.resolve())
+        except ValueError:
+            helper_relative_path = file_path
+
+        # Combine all helpers from this file
+        combined_helper_code = "\n\n".join(h.source_code for h in file_helpers)
+
+        read_writable_code_strings.append(
+            CodeString(
+                code=combined_helper_code, file_path=helper_relative_path, language=function_to_optimize.language
+            )
+        )
+
+    read_writable_code = CodeStringsMarkdown(
+        code_strings=read_writable_code_strings, language=function_to_optimize.language
+    )
+
+    # Build testgen context (same as read_writable for non-Python)
+    testgen_context = CodeStringsMarkdown(
+        code_strings=read_writable_code_strings.copy(), language=function_to_optimize.language
+    )
+
+    # Check token limits
+    read_writable_tokens = encoded_tokens_len(read_writable_code.markdown)
+    if read_writable_tokens > optim_token_limit:
+        raise ValueError("Read-writable code has exceeded token limit, cannot proceed")
+
+    testgen_tokens = encoded_tokens_len(testgen_context.markdown)
+    if testgen_tokens > testgen_token_limit:
+        raise ValueError("Testgen code context has exceeded token limit, cannot proceed")
+
+    # Generate code hash from all read-writable code
+    code_hash = hashlib.sha256(read_writable_code.flat.encode("utf-8")).hexdigest()
+
+    return CodeOptimizationContext(
+        testgen_context=testgen_context,
+        read_writable_code=read_writable_code,
+        # Global variables are now included in read-writable code, so don't duplicate in read-only
+        read_only_context_code="",
+        hashing_code_context=read_writable_code.flat,
+        hashing_code_context_hash=code_hash,
+        helper_functions=helper_function_sources,
+        preexisting_objects=set(),  # Not implemented for non-Python yet
+    )
+
+
 def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
     """Extract code context from files containing target functions and their helpers, formatting them as markdown.
@@ -833,7 +994,7 @@ def get_imported_names(import_node: cst.Import | cst.ImportFrom) -> set[str]:
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from an indented block if it exists."""  # noqa: D401
+    """Removes the docstring from an indented block if it exists."""
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
     first_stmt = indented_block.body[0].body[0]
@@ -847,7 +1008,7 @@ def parse_code_and_prune_cst(
     code_context_type: CodeContextType,
     target_functions: set[str],
     helpers_of_helper_functions: set[str] = set(),  # noqa: B006
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
     module = cst.parse_module(code)
@@ -888,7 +1049,7 @@ def parse_code_and_prune_cst(
     return ""
 
 
-def prune_cst_for_read_writable_code(  # noqa: PLR0911
+def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], defs_with_usages: dict[str, UsageInfo], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
@@ -1006,7 +1167,7 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_code_hashing(  # noqa: PLR0911
+def prune_cst_for_code_hashing(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
@@ -1095,14 +1256,14 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_context(  # noqa: PLR0911
+def prune_cst_for_context(
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
-    include_target_in_output: bool = False,  # noqa: FBT001, FBT002
-    include_init_dunder: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
+    include_target_in_output: bool = False,
+    include_init_dunder: bool = False,
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node for code context extraction.
 

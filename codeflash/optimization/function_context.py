@@ -41,6 +41,6 @@ def belongs_to_function_qualified(name: Name, qualified_function_name: str) -> b
             return False
         if (name := name.parent()) and name.type == "function":
             return get_qualified_name(name.module_name, name.full_name) == qualified_function_name
-        return False  # noqa: TRY300
+        return False
     except ValueError:
         return False

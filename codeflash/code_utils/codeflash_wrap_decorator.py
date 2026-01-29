@@ -46,7 +46,7 @@ def extract_test_context_from_env() -> tuple[str, str | None, str]:
 
 def codeflash_behavior_async(func: F) -> F:
     @wraps(func)
-    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
         function_name = func.__name__
         line_id = os.environ["CODEFLASH_CURRENT_LINE_ID"]
@@ -122,7 +122,7 @@ def codeflash_behavior_async(func: F) -> F:
 
 def codeflash_performance_async(func: F) -> F:
     @wraps(func)
-    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
         function_name = func.__name__
         line_id = os.environ["CODEFLASH_CURRENT_LINE_ID"]
@@ -172,7 +172,7 @@ def codeflash_concurrency_async(func: F) -> F:
     """Measures concurrent vs sequential execution performance for async functions."""
 
     @wraps(func)
-    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
         function_name = func.__name__
         concurrency_factor = int(os.environ.get("CODEFLASH_CONCURRENCY_FACTOR", "10"))
 

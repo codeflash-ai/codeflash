@@ -39,7 +39,7 @@ def get_latest_version_from_pypi() -> str | None:
 
             return latest_version
         logger.debug(f"Failed to fetch version from PyPI: {response.status_code}")
-        return None  # noqa: TRY300
+        return None
     except requests.RequestException as e:
         logger.debug(f"Network error fetching version from PyPI: {e}")
         return None

@@ -3,8 +3,6 @@
 from collections import Counter
 from pathlib import Path
 
-import pytest
-
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 
@@ -340,11 +338,13 @@ class TestFileToNoOfTests:
             )
 
         counter = test_results.file_to_no_of_tests(["test_remove"])
-        expected = Counter({
-            Path("/tmp/file1.py"): 1,  # Only 1 GENERATED_REGRESSION test
-            Path("/tmp/file2.py"): 1,  # Only test_keep (test_remove is excluded)
-            Path("/tmp/file3.py"): 3,  # All 3 tests
-        })
+        expected = Counter(
+            {
+                Path("/tmp/file1.py"): 1,  # Only 1 GENERATED_REGRESSION test
+                Path("/tmp/file2.py"): 1,  # Only test_keep (test_remove is excluded)
+                Path("/tmp/file3.py"): 3,  # All 3 tests
+            }
+        )
         assert counter == expected
 
     def test_case_sensitivity(self):
@@ -438,7 +438,7 @@ class TestFileToNoOfTests:
             )
 
         counter = test_results.file_to_no_of_tests([])
-        expected = Counter({path: 1 for path in paths})
+        expected = Counter(dict.fromkeys(paths, 1))
         assert counter == expected
 
     def test_large_removal_list(self):

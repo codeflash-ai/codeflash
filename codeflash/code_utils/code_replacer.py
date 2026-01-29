@@ -18,12 +18,15 @@ from codeflash.code_utils.code_extractor import (
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
+from codeflash.languages import is_python
 from codeflash.models.models import FunctionParent
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import Language, LanguageSupport
+    from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -109,7 +112,7 @@ class PytestMarkAdder(cst.CSTTransformer):
                             if isinstance(import_alias, cst.ImportAlias) and import_alias.name.value == "pytest":
                                 self.has_pytest_import = True
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         """Add pytest import if not present."""
         if not self.has_pytest_import:
             # Create import statement
@@ -118,7 +121,7 @@ class PytestMarkAdder(cst.CSTTransformer):
             updated_node = updated_node.with_changes(body=[import_stmt, *updated_node.body])
         return updated_node
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         """Add pytest mark to test functions."""
         # Check if the mark already exists
         for decorator in updated_node.decorators:
@@ -291,7 +294,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         return True
 
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:
         if self.current_class:
             self.current_class = None
 
@@ -315,7 +318,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         )
         self.current_class = None
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -344,7 +347,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 )
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         node = updated_node
         max_function_index = None
         max_class_index = None
@@ -440,8 +443,15 @@ def replace_function_definitions_in_module(
     module_abspath: Path,
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
-    should_add_global_assignments: bool = True,  # noqa: FBT001, FBT002
+    should_add_global_assignments: bool = True,
+    function_to_optimize: Optional[FunctionToOptimize] = None,
 ) -> bool:
+    # Route to language-specific implementation for non-Python languages
+    if not is_python():
+        return replace_function_definitions_for_language(
+            function_names, optimized_code, module_abspath, project_root_path, function_to_optimize
+        )
+
     source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
 
@@ -463,16 +473,271 @@ def replace_function_definitions_in_module(
     return True
 
 
+def replace_function_definitions_for_language(
+    function_names: list[str],
+    optimized_code: CodeStringsMarkdown,
+    module_abspath: Path,
+    project_root_path: Path,
+    function_to_optimize: Optional[FunctionToOptimize] = None,
+) -> bool:
+    """Replace function definitions for non-Python languages.
+
+    Uses the language support abstraction to perform code replacement.
+
+    Args:
+        function_names: List of qualified function names to replace.
+        optimized_code: The optimized code to apply.
+        module_abspath: Path to the module file.
+        project_root_path: Root of the project.
+        function_to_optimize: The function being optimized (needed for line info).
+
+    Returns:
+        True if the code was modified, False if no changes.
+
+    """
+    from codeflash.languages import get_language_support
+    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+
+    original_source_code: str = module_abspath.read_text(encoding="utf8")
+    code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
+
+    if not code_to_apply.strip():
+        return False
+
+    # Get language support
+    language = Language(optimized_code.language)
+    lang_support = get_language_support(language)
+
+    # Add any new global declarations from the optimized code to the original source
+    original_source_code = _add_global_declarations_for_language(
+        optimized_code=code_to_apply,
+        original_source=original_source_code,
+        module_abspath=module_abspath,
+        language=language,
+    )
+
+    # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
+    if (
+        function_to_optimize
+        and function_to_optimize.starting_line
+        and function_to_optimize.ending_line
+        and function_to_optimize.file_path == module_abspath
+    ):
+        parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
+        func_info = FunctionInfo(
+            name=function_to_optimize.function_name,
+            file_path=module_abspath,
+            start_line=function_to_optimize.starting_line,
+            end_line=function_to_optimize.ending_line,
+            parents=parents,
+            is_async=function_to_optimize.is_async,
+            language=language,
+        )
+        # Extract just the target function from the optimized code
+        optimized_func = _extract_function_from_code(
+            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+        )
+        if optimized_func:
+            new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
+        else:
+            # Fallback: use the entire optimized code (for simple single-function files)
+            new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
+    else:
+        # For helper files or when we don't have precise line info:
+        # Find each function by name in both original and optimized code
+        # Then replace with the corresponding optimized version
+        new_code = original_source_code
+        modified = False
+
+        # Get the list of function names to replace
+        functions_to_replace = list(function_names)
+
+        for func_name in functions_to_replace:
+            # Re-discover functions from current code state to get correct line numbers
+            current_functions = lang_support.discover_functions_from_source(new_code, module_abspath)
+
+            # Find the function in current code
+            func = None
+            for f in current_functions:
+                if func_name in (f.qualified_name, f.name):
+                    func = f
+                    break
+
+            if func is None:
+                continue
+
+            # Extract just this function from the optimized code
+            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
+            if optimized_func:
+                new_code = lang_support.replace_function(new_code, func, optimized_func)
+                modified = True
+
+        if not modified:
+            logger.warning(f"Could not find function {function_names} in {module_abspath}")
+            return False
+
+    # Check if there was actually a change
+    if original_source_code.strip() == new_code.strip():
+        return False
+
+    module_abspath.write_text(new_code, encoding="utf8")
+    return True
+
+
+def _extract_function_from_code(
+    lang_support: LanguageSupport, source_code: str, function_name: str, file_path: Path | None = None
+) -> str | None:
+    """Extract a specific function's source code from a code string.
+
+    Includes JSDoc/docstring comments if present.
+
+    Args:
+        lang_support: Language support instance.
+        source_code: The full source code containing the function.
+        function_name: Name of the function to extract.
+        file_path: Path to the file (used to determine correct analyzer for JS/TS).
+
+    Returns:
+        The function's source code (including doc comments), or None if not found.
+
+    """
+    try:
+        # Use the language support to find functions in the source
+        # file_path is needed for JS/TS to determine correct analyzer (TypeScript vs JavaScript)
+        functions = lang_support.discover_functions_from_source(source_code, file_path)
+        for func in functions:
+            if func.name == function_name:
+                # Extract the function's source using line numbers
+                # Use doc_start_line if available to include JSDoc/docstring
+                lines = source_code.splitlines(keepends=True)
+                effective_start = func.doc_start_line or func.start_line
+                if effective_start and func.end_line and effective_start <= len(lines):
+                    func_lines = lines[effective_start - 1 : func.end_line]
+                    return "".join(func_lines)
+    except Exception as e:
+        logger.debug(f"Error extracting function {function_name}: {e}")
+
+    return None
+
+
+def _add_global_declarations_for_language(
+    optimized_code: str, original_source: str, module_abspath: Path, language: Language
+) -> str:
+    """Add new global declarations from optimized code to original source.
+
+    Finds module-level declarations (const, let, var, class, type, interface, enum)
+    in the optimized code that don't exist in the original source and adds them.
+
+    Args:
+        optimized_code: The optimized code that may contain new declarations.
+        original_source: The original source code.
+        module_abspath: Path to the module file (for parser selection).
+        language: The language of the code.
+
+    Returns:
+        Original source with new declarations added after imports.
+
+    """
+    from codeflash.languages.base import Language
+
+    # Only process JavaScript/TypeScript
+    if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+        return original_source
+
+    try:
+        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+        analyzer = get_analyzer_for_file(module_abspath)
+
+        # Find declarations in both original and optimized code
+        original_declarations = analyzer.find_module_level_declarations(original_source)
+        optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
+
+        if not optimized_declarations:
+            return original_source
+
+        # Get names of existing declarations
+        existing_names = {decl.name for decl in original_declarations}
+
+        # Find new declarations (names that don't exist in original)
+        new_declarations = []
+        seen_sources = set()  # Track to avoid duplicates from destructuring
+        for decl in optimized_declarations:
+            if decl.name not in existing_names and decl.source_code not in seen_sources:
+                new_declarations.append(decl)
+                seen_sources.add(decl.source_code)
+
+        if not new_declarations:
+            return original_source
+
+        # Sort by line number to maintain order
+        new_declarations.sort(key=lambda d: d.start_line)
+
+        # Find insertion point (after imports)
+        lines = original_source.splitlines(keepends=True)
+        insertion_line = _find_insertion_line_after_imports_js(lines, analyzer, original_source)
+
+        # Build new declarations string
+        new_decl_code = "\n".join(decl.source_code for decl in new_declarations)
+        new_decl_code = new_decl_code + "\n\n"
+
+        # Insert declarations
+        before = lines[:insertion_line]
+        after = lines[insertion_line:]
+        result_lines = [*before, new_decl_code, *after]
+
+        return "".join(result_lines)
+
+    except Exception as e:
+        logger.debug(f"Error adding global declarations: {e}")
+        return original_source
+
+
+def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
+    """Find the line index where new declarations should be inserted (after imports).
+
+    Args:
+        lines: Source lines.
+        analyzer: TreeSitter analyzer for the file.
+        source: Full source code.
+
+    Returns:
+        Line index (0-based) for insertion.
+
+    """
+    try:
+        imports = analyzer.find_imports(source)
+        if imports:
+            # Find the last import's end line
+            return max(imp.end_line for imp in imports)
+    except Exception as exc:
+        logger.debug(f"Exception occurred in _find_insertion_line_after_imports_js: {exc}")
+
+    # Default: insert at beginning (after any shebang/directive comments)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("//") and not stripped.startswith("#!"):
+            return i
+
+    return 0
+
+
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
     file_to_code_context = optimized_code.file_to_path()
     module_optimized_code = file_to_code_context.get(str(relative_path))
     if module_optimized_code is None:
-        logger.warning(
-            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-            "re-check your 'markdown code structure'"
-            f"existing files are {file_to_code_context.keys()}"
-        )
-        module_optimized_code = ""
+        # Fallback: if there's only one code block with None file path,
+        # use it regardless of the expected path (the AI server doesn't always include file paths)
+        if "None" in file_to_code_context and len(file_to_code_context) == 1:
+            module_optimized_code = file_to_code_context["None"]
+            logger.debug(f"Using code block with None file_path for {relative_path}")
+        else:
+            logger.warning(
+                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                "re-check your 'markdown code structure'"
+                f"existing files are {file_to_code_context.keys()}"
+            )
+            module_optimized_code = ""
     return module_optimized_code
 
 
@@ -518,7 +783,8 @@ def replace_optimized_code(
                     [
                         callee.qualified_name
                         for callee in code_context.helper_functions
-                        if callee.file_path == module_path and callee.jedi_definition.type != "class"
+                        if callee.file_path == module_path
+                        and (callee.jedi_definition is None or callee.jedi_definition.type != "class")
                     ]
                 ),
                 candidate.source_code,
