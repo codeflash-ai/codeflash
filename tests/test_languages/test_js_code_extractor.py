@@ -1104,6 +1104,12 @@ class TestCodeExtractorIntegration:
 
     def test_function_optimizer_workflow(self, cjs_project):
         """Test full FunctionOptimizer workflow."""
+        from codeflash.languages import current as lang_current
+        from codeflash.languages.base import Language
+
+        # Force set language to JavaScript for proper context extraction routing
+        lang_current._current_language = Language.JAVASCRIPT
+
         js_support = get_language_support("javascript")
         calculator_file = cjs_project / "calculator.js"
 
