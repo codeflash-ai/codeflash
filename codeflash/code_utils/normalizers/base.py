@@ -83,9 +83,10 @@ class CodeNormalizer(ABC):
         try:
             normalized1 = self.normalize_for_hash(code1)
             normalized2 = self.normalize_for_hash(code2)
-            return normalized1 == normalized2
         except Exception:
             return False
+        else:
+            return normalized1 == normalized2
 
     def get_fingerprint(self, code: str) -> str:
         """Generate a fingerprint hash for normalized code.

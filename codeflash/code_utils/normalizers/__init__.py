@@ -16,8 +16,6 @@ Usage:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from codeflash.code_utils.normalizers.base import CodeNormalizer
 from codeflash.code_utils.normalizers.javascript import JavaScriptNormalizer, TypeScriptNormalizer
 from codeflash.code_utils.normalizers.python import PythonNormalizer

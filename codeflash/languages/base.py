@@ -613,17 +613,7 @@ class LanguageSupport(Protocol):
         """Parse line profiler output."""
         ...
 
-    # === Test Framework ===
 
-    @property
-    def test_framework(self) -> str:
-        """Get the test framework used by this language.
-
-        Returns:
-            Test framework name (e.g., "pytest", "jest").
-
-        """
-        ...
 
     # === Test Execution ===
 
