@@ -1,0 +1,14 @@
+{
+  "name": "code-to-optimize-js-cjs",
+  "version": "1.0.0",
+  "description": "CommonJS JavaScript test project for Codeflash E2E testing",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "codeflash": "file:../../../packages/codeflash",
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0"
+  }
+}

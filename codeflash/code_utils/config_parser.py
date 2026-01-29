@@ -5,10 +5,11 @@ from typing import Any
 
 import tomlkit
 
+from codeflash.code_utils.config_js import find_package_json, parse_package_json_config
 from codeflash.lsp.helpers import is_LSP_enabled
 
-PYPROJECT_TOML_CACHE = {}
-ALL_CONFIG_FILES = {}  # map path to closest config file
+PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
+ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
 
 
 def find_pyproject_toml(config_file: Path | None = None) -> Path:
@@ -83,9 +84,27 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
     return list(list_of_conftest_files)
 
 
+# TODO for claude: There should be different functions to parse it per language, which should be chosen during runtime
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
+    # First try package.json for JS/TS projects
+    package_json_path = find_package_json(config_file_path)
+    if package_json_path:
+        result = parse_package_json_config(package_json_path)
+        if result is not None:
+            config, path = result
+            # Validate formatter if needed
+            if not override_formatter_check and config.get("formatter_cmds"):
+                formatter_cmds = config.get("formatter_cmds", [])
+                if formatter_cmds and formatter_cmds[0] == "your-formatter $file":
+                    raise ValueError(
+                        "The formatter command is not set correctly in package.json. Please set the "
+                        "formatter command in the 'formatterCmds' key."
+                    )
+            return config, path
+
+    # Fall back to pyproject.toml
     config_file_path = find_pyproject_toml(config_file_path)
     try:
         with config_file_path.open("rb") as f:

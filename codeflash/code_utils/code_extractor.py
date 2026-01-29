@@ -16,6 +16,7 @@ from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_REVIEW
+from codeflash.languages.base import Language
 from codeflash.models.models import CodePosition, FunctionParent
 
 if TYPE_CHECKING:
@@ -1339,9 +1340,12 @@ def get_fn_references_jedi(
     source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
 ) -> list[Path]:
     start_time = time.perf_counter()
-    function_position: CodePosition = find_specific_function_in_file(
+    function_position: CodePosition | None = find_specific_function_in_file(
         source_code, file_path, target_function, target_class
     )
+    if function_position is None:
+        # Function not found (may be non-Python code)
+        return []
     try:
         script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
         # Get references to the function
@@ -1557,8 +1561,11 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
 
 
 def get_opt_review_metrics(
-    source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
+    source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path, language: Language
 ) -> str:
+    if language != Language.PYTHON:
+        # TODO: {Claude} handle function refrences for other languages
+        return ""
     start_time = time.perf_counter()
     try:
         qualified_name_split = qualified_name.rsplit(".", maxsplit=1)

@@ -1,1 +1,1 @@
-﻿MY_CONSTANT = 7
+MY_CONSTANT = 7

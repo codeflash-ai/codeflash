@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +15,8 @@ from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
 from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.coverage_utils import prepare_coverage_files
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages import is_python
+from codeflash.languages.registry import get_language_support, get_language_support_by_framework
 from codeflash.models.models import TestFiles, TestType
 
 if TYPE_CHECKING:
@@ -20,6 +24,82 @@ if TYPE_CHECKING:
 
 BEHAVIORAL_BLOCKLISTED_PLUGINS = ["benchmark", "codspeed", "xdist", "sugar"]
 BENCHMARKING_BLOCKLISTED_PLUGINS = ["codspeed", "cov", "benchmark", "profiling", "xdist", "sugar"]
+
+# Pattern to extract timing from stdout markers: !######...:<duration_ns>######!
+# Jest markers have multiple colons: !######module:test:func:loop:id:duration######!
+# Python markers: !######module:class.test:func:loop:id:duration######!
+_TIMING_MARKER_PATTERN = re.compile(r"!######.+:(\d+)######!")
+
+
+def _calculate_utilization_fraction(stdout: str, wall_clock_ns: int, test_type: str = "unknown") -> None:
+    """Calculate and log the function utilization fraction.
+
+    Utilization = sum(function_runtimes_from_markers) / total_wall_clock_time
+
+    This metric shows how much of the test execution time was spent in actual
+    function calls vs overhead (Jest startup, test framework, I/O, etc.).
+
+    Args:
+        stdout: The stdout from the test subprocess containing timing markers.
+        wall_clock_ns: Total wall clock time for the subprocess in nanoseconds.
+        test_type: Type of test for logging context (e.g., "behavioral", "performance").
+
+    """
+    if not stdout or wall_clock_ns <= 0:
+        return
+
+    # Extract all timing values from stdout markers
+    matches = _TIMING_MARKER_PATTERN.findall(stdout)
+    if not matches:
+        logger.debug(f"[{test_type}] No timing markers found in stdout, cannot calculate utilization")
+        return
+
+    # Sum all function runtimes
+    total_function_runtime_ns = sum(int(m) for m in matches)
+
+    # Calculate utilization fraction
+    utilization = total_function_runtime_ns / wall_clock_ns if wall_clock_ns > 0 else 0
+    utilization_pct = utilization * 100
+
+    # Log metrics
+    logger.debug(
+        f"[{test_type}] Function Utilization Fraction: {utilization_pct:.2f}% "
+        f"(function_time={total_function_runtime_ns / 1e6:.1f}ms, "
+        f"wall_time={wall_clock_ns / 1e6:.1f}ms, "
+        f"overhead={100 - utilization_pct:.1f}%, "
+        f"num_markers={len(matches)})"
+    )
+
+
+def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> None:
+    """Ensure runtime environment is set up for the project.
+
+    For JavaScript/TypeScript: Installs codeflash npm package.
+    Falls back to copying runtime files if package installation fails.
+
+    Args:
+        project_root: The project root directory.
+        language: The programming language (e.g., "javascript", "typescript").
+
+    """
+    try:
+        language_support = get_language_support(language)
+    except (KeyError, ValueError):
+        logger.debug(f"No language support found for {language}, skipping runtime file setup")
+        return
+
+    # Try to install npm package (for JS/TS) or other language-specific setup
+    if language_support.ensure_runtime_environment(project_root):
+        return  # Package installed successfully
+
+    # Fall back to copying runtime files directly
+    runtime_files = language_support.get_runtime_files()
+    for runtime_file in runtime_files:
+        dest_path = project_root / runtime_file.name
+        # Always copy to ensure we have the latest version
+        if not dest_path.exists() or dest_path.stat().st_mtime < runtime_file.stat().st_mtime:
+            shutil.copy2(runtime_file, dest_path)
+            logger.debug(f"Copied {runtime_file.name} to {project_root}")
 
 
 def execute_test_subprocess(
@@ -44,9 +124,23 @@ def run_behavioral_tests(
     pytest_cmd: str = "pytest",
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     enable_coverage: bool = False,
+    js_project_root: Path | None = None,
+    candidate_index: int = 0,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
-    if test_framework in {"pytest", "unittest"}:
+    # Check if there's a language support for this test framework that implements run_behavioral_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_behavioral_tests"):
+        return language_support.run_behavioral_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=pytest_timeout,
+            project_root=js_project_root,
+            enable_coverage=enable_coverage,
+            candidate_index=candidate_index,
+        )
+    if is_python():
         test_files: list[str] = []
         for file in test_paths.test_files:
             if file.test_type == TestType.REPLAY_TEST:
@@ -164,8 +258,23 @@ def run_line_profile_tests(
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     pytest_timeout: int | None = None,
+    pytest_min_loops: int = 5,
+    pytest_max_loops: int = 100_000,
+    js_project_root: Path | None = None,
+    line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
+    # Check if there's a language support for this test framework that implements run_line_profile_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_line_profile_tests"):
+        return language_support.run_line_profile_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=pytest_timeout,
+            project_root=js_project_root,
+            line_profile_output_file=line_profiler_output_file,
+        )
+    if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"
@@ -214,8 +323,22 @@ def run_benchmarking_tests(
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
+    js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
-    if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
+    # Check if there's a language support for this test framework that implements run_benchmarking_tests
+    language_support = get_language_support_by_framework(test_framework)
+    if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
+        return language_support.run_benchmarking_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=pytest_timeout,
+            project_root=js_project_root,
+            min_loops=pytest_min_loops,
+            max_loops=pytest_max_loops,
+            target_duration_seconds=pytest_target_runtime_seconds,
+        )
+    if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
             shlex.split(f"{SAFE_SYS_EXECUTABLE} -m pytest", posix=IS_POSIX)
             if pytest_cmd == "pytest"

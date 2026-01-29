@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
@@ -9,11 +10,13 @@ class Args:
     disable_imports_sorting = True
     formatter_cmds = ["disabled"]
 
+
 def test_multi_file_replcement01() -> None:
     root_dir = Path(__file__).parent.parent.resolve()
     helper_file = (root_dir / "code_to_optimize/temp_helper.py").resolve()
-    
-    helper_file.write_text("""import re
+
+    helper_file.write_text(
+        """import re
 from collections.abc import Sequence
 
 from pydantic_ai_slim.pydantic_ai.messages import BinaryContent, UserContent
@@ -36,7 +39,9 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
         # TODO(Marcelo): We need to study how we can estimate the tokens for AudioUrl or ImageUrl.
 
     return tokens
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
 
     main_file = (root_dir / "code_to_optimize/temp_main.py").resolve()
 
@@ -93,8 +98,6 @@ def _get_string_usage(text: str) -> Usage:
 ```
 """
 
-    
-
     func = FunctionToOptimize(function_name="_get_string_usage", parents=[], file_path=main_file)
     test_config = TestConfig(
         tests_root=root_dir / "tests/pytest",
@@ -106,8 +109,6 @@ def _get_string_usage(text: str) -> Usage:
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     code_context: CodeOptimizationContext = func_optimizer.get_code_optimization_context().unwrap()
 
-  
-    
     original_helper_code: dict[Path, str] = {}
     helper_function_paths = {hf.file_path for hf in code_context.helper_functions}
     for helper_function_path in helper_function_paths:
@@ -117,11 +118,13 @@ def _get_string_usage(text: str) -> Usage:
 
     func_optimizer.args = Args()
     func_optimizer.replace_function_and_helpers_with_optimized_code(
-        code_context=code_context, optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code), original_helper_code=original_helper_code
+        code_context=code_context,
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_code),
+        original_helper_code=original_helper_code,
     )
     new_code = main_file.read_text(encoding="utf-8")
     new_helper_code = helper_file.read_text(encoding="utf-8")
-    
+
     helper_file.unlink(missing_ok=True)
     main_file.unlink(missing_ok=True)
 
@@ -160,5 +163,5 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
     return tokens
 """
 
-    assert new_code.rstrip() == original_main.rstrip() # No Change
+    assert new_code.rstrip() == original_main.rstrip()  # No Change
     assert new_helper_code.rstrip() == expected_helper.rstrip()

@@ -1,14 +1,6 @@
-import tempfile
-from argparse import Namespace
-from pathlib import Path
 
-import libcst as cst
 
-from codeflash.context.code_context_extractor import get_code_optimization_context
 from codeflash.context.unused_definition_remover import remove_unused_definitions_by_function_names
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import FunctionParent
-from codeflash.optimization.optimizer import Optimizer
 
 
 def test_variable_removal_only() -> None:
@@ -336,6 +328,7 @@ def unused_function():
     qualified_functions = {"use_constants", "use_cleanup"}
     result = remove_unused_definitions_by_function_names(code, qualified_functions)
     assert result.strip() == expected.strip()
+
 
 def test_base_class_inheritance() -> None:
     """Test that base classes used only for inheritance are preserved."""

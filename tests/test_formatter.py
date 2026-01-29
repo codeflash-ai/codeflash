@@ -1,23 +1,23 @@
 import argparse
-import os
+import shutil
 import tempfile
 from pathlib import Path
 
 import pytest
-import shutil
 
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
-
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
+
 @pytest.fixture
 def temp_dir():
     with tempfile.TemporaryDirectory() as tmpdirname:
         yield Path(tmpdirname)
+
 
 def test_remove_duplicate_imports():
     """Test that duplicate imports are removed when should_sort_imports is True."""
@@ -187,9 +187,7 @@ def foo():
     temp_file = temp_dir / "test_file.py"
     temp_file.write_text(original_code)
 
-    actual = format_code(
-        formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=temp_file
-    )
+    actual = format_code(formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"], path=temp_file)
     assert actual == expected
 
 
@@ -208,7 +206,7 @@ def foo():
         assert False, f"Shouldn't throw an exception even if the formatter is not found: {e}"
 
 
-def _run_formatting_test(source_code: str, should_content_change: bool, expected = None, optimized_function: str = ""):
+def _run_formatting_test(source_code: str, should_content_change: bool, expected=None, optimized_function: str = ""):
     try:
         import ruff  # type: ignore
     except ImportError:
@@ -217,67 +215,50 @@ def _run_formatting_test(source_code: str, should_content_change: bool, expected
     with tempfile.TemporaryDirectory() as test_dir_str:
         test_dir = Path(test_dir_str)
         source_file = test_dir / "source.py"
-        
+
         source_file.write_text(source_code)
         original = source_code
         target_path = test_dir / "target.py"
-        
+
         shutil.copy2(source_file, target_path)
 
-        function_to_optimize = FunctionToOptimize(
-            function_name="process_data", 
-            parents=[], 
-            file_path=target_path
-        )
+        function_to_optimize = FunctionToOptimize(function_name="process_data", parents=[], file_path=target_path)
 
         test_cfg = TestConfig(
-            tests_root=test_dir,
-            project_root_path=test_dir,
-            test_framework="pytest",
-            tests_project_rootdir=test_dir,
+            tests_root=test_dir, project_root_path=test_dir, test_framework="pytest", tests_project_rootdir=test_dir
         )
 
         args = argparse.Namespace(
-            disable_imports_sorting=False,
-            formatter_cmds=[
-                "ruff check --exit-zero --fix $file",
-                "ruff format $file"
-            ],
+            disable_imports_sorting=False, formatter_cmds=["ruff check --exit-zero --fix $file", "ruff format $file"]
         )
 
-        optimizer = FunctionOptimizer(
-            function_to_optimize=function_to_optimize,
-            test_cfg=test_cfg,
-            args=args,
-        )
-        
+        optimizer = FunctionOptimizer(function_to_optimize=function_to_optimize, test_cfg=test_cfg, args=args)
+
         optimizer.reformat_code_and_helpers(
             helper_functions=[],
             path=target_path,
             original_code=optimizer.function_to_optimize_source_code,
-            optimized_context=CodeStringsMarkdown(code_strings=[
-                CodeString(
-                    code=optimized_function,
-                    file_path=target_path.relative_to(test_dir)
-                )
-            ]),
+            optimized_context=CodeStringsMarkdown(
+                code_strings=[CodeString(code=optimized_function, file_path=target_path.relative_to(test_dir))]
+            ),
         )
 
         content = target_path.read_text(encoding="utf8")
 
         if expected is not None:
-            assert content == expected, f"Expected content to be \n===========\n{expected}\n===========\nbut got\n===========\n{content}\n===========\n"
+            assert content == expected, (
+                f"Expected content to be \n===========\n{expected}\n===========\nbut got\n===========\n{content}\n===========\n"
+            )
 
         if should_content_change:
-            assert content != original, f"Expected content to change for source.py"
+            assert content != original, "Expected content to change for source.py"
         else:
-            assert content == original, f"Expected content to remain unchanged for source.py"
-
+            assert content == original, "Expected content to remain unchanged for source.py"
 
 
 def test_formatting_file_with_many_diffs():
     """Test that files with many formatting errors are skipped (content unchanged)."""
-    source_code = '''import os,sys,json,datetime,re
+    source_code = """import os,sys,json,datetime,re
 from collections import defaultdict,OrderedDict
 import numpy as np,pandas as pd
 
@@ -354,7 +335,7 @@ def main():
     else:print("Pipeline failed")
 
 if __name__=='__main__':main()
-'''
+"""
     _run_formatting_test(source_code, False)
 
 
@@ -423,7 +404,7 @@ def process_data(data, config=None):
 
 def test_formatting_extremely_messy_file():
     """Test that extremely messy files with 100+ potential changes are skipped."""
-    source_code = '''import os,sys,json,datetime,re,collections,itertools,functools,operator
+    source_code = """import os,sys,json,datetime,re,collections,itertools,functools,operator
 from pathlib import Path
 from typing import Dict,List,Optional,Union,Any,Tuple
 import numpy as np,pandas as pd,matplotlib.pyplot as plt
@@ -554,25 +535,28 @@ def main():
         for error in processor.errors:print(f"  - {error}")
 
 if __name__=='__main__':main()
-'''
+"""
     _run_formatting_test(source_code, False)
 
 
 def test_formatting_edge_case_exactly_100_diffs():
     """Test behavior when exactly at the threshold of 100 changes."""
     # Create a file with exactly 100 minor formatting issues
-    snippet = '''import json\n''' + '''
+    snippet = (
+        """import json\n"""
+         """
 def func_{i}():
     x=1;y=2;z=3
     return x+y+z
-'''
+"""
+    )
     source_code = "".join([snippet.format(i=i) for i in range(100)])
     _run_formatting_test(source_code, False)
 
 
 def test_formatting_with_syntax_errors():
     """Test that files with syntax errors are handled gracefully."""
-    source_code = '''import json
+    source_code = """import json
 
 def process_data(data):
     if not data:
@@ -585,7 +569,7 @@ def process_data(data):
         result.append(item)
     
     return result
-'''
+"""
     _run_formatting_test(source_code, False)
 
 
@@ -641,7 +625,7 @@ def another_function_with_long_line():
 
 def test_formatting_class_with_methods():
     """Test formatting of classes with multiple methods and minor issues."""
-    source_code = '''class DataProcessor:
+    source_code = """class DataProcessor:
     def __init__(self, config):
         self.config=config
         self.data=[]
@@ -660,13 +644,13 @@ def test_formatting_class_with_methods():
                     'processed':True
                 })
         return result
-'''
+"""
     _run_formatting_test(source_code, True)
 
 
 def test_formatting_with_complex_comprehensions():
     """Test files with complex list/dict comprehensions and formatting."""
-    source_code = '''def complex_comprehensions(data):
+    source_code = """def complex_comprehensions(data):
     # Various comprehension styles with formatting issues
     result1=[item['value'] for item in data if item.get('active',True) and 'value' in item]
     
@@ -683,13 +667,13 @@ def test_formatting_with_complex_comprehensions():
         'complex':result3,
         'nested':nested
     }
-'''
+"""
     _run_formatting_test(source_code, True)
 
 
 def test_formatting_with_decorators_and_async():
     """Test files with decorators and async functions."""
-    source_code = '''import asyncio
+    source_code = """import asyncio
 from functools import wraps
 
 def timer_decorator(func):
@@ -715,26 +699,26 @@ class AsyncProcessor:
     @staticmethod
     async def process_batch(batch):
         return [{'id':item['id'],'status':'done'} for item in batch if 'id' in item]
-'''
+"""
     _run_formatting_test(source_code, True)
 
 
 def test_formatting_threshold_configuration():
     """Test that the diff threshold can be configured (if supported)."""
     # This test assumes the threshold might be configurable
-    source_code = '''import json,os,sys
+    source_code = """import json,os,sys
 def func1():x=1;y=2;return x+y
 def func2():a=1;b=2;return a+b
 def func3():c=1;d=2;return c+d
-'''
+"""
     # Test with a file that has moderate formatting issues
     _run_formatting_test(source_code, True, optimized_function="def func2():a=1;b=2;return a+b")
 
 
 def test_formatting_empty_file():
     """Test formatting of empty or minimal files."""
-    source_code = '''# Just a comment pass
-'''
+    source_code = """# Just a comment pass
+"""
     _run_formatting_test(source_code, False)
 
 
@@ -798,6 +782,7 @@ class ProcessorWithDocs:
         return{'result':[item for item in data if self._is_valid(item)]}"""
     _run_formatting_test(source_code, True, optimized_function=optimization_function, expected=expected)
 
+
 def test_sort_imports_skip_file():
     """Test that isort skips files with # isort:skip_file."""
     code = """# isort:skip_file
@@ -808,6 +793,7 @@ import sys, os, json  # isort will ignore this file completely"""
 
 
 # ==================== Tests for format_generated_code ====================
+
 
 def test_format_generated_code_disabled():
     """Test that format_generated_code returns code with normalized newlines when formatter is disabled."""
@@ -888,6 +874,7 @@ def test_function(x, y, z):
 
     result = format_generated_code(test_code, ["black $file"])
     assert result == expected
+
 
 def test_format_generated_code_with_inference():
     """Test format_generated_code with ruff formatter."""
@@ -1154,6 +1141,7 @@ from inference.core.models.base import Model
     result = format_generated_code(test_code, ["ruff format $file"])
     assert result == expected
 
+
 def test_format_generated_code_with_ruff():
     """Test format_generated_code with ruff formatter."""
     try:
@@ -1205,8 +1193,11 @@ def test_format_generated_code_invalid_formatter():
 
     # Should handle gracefully and return code with normalized newlines
     result = format_generated_code(test_code, ["nonexistent_formatter $file"])
-    assert result == """def test():
+    assert (
+        result
+        == """def test():
     pass"""
+    )
 
 
 def test_format_generated_code_syntax_error():
@@ -1217,8 +1208,11 @@ def test_format_generated_code_syntax_error():
     # Formatter should fail but function should handle it gracefully
     result = format_generated_code(test_code, ["black $file"])
     # Should return code with normalized newlines when formatting fails
-    assert result == """def test(:  # syntax error
+    assert (
+        result
+        == """def test(:  # syntax error
     pass"""
+    )
 
 
 def test_format_generated_code_already_formatted():
@@ -1272,9 +1266,9 @@ def test_format_generated_code_trailing_whitespace():
     """
 
     result = format_generated_code(test_code, ["black $file"])
-    lines = result.split('\n')
+    lines = result.split("\n")
     for line in lines:
-        assert line == line.rstrip(), f"Line has trailing whitespace: {repr(line)}"
+        assert line == line.rstrip(), f"Line has trailing whitespace: {line!r}"
 
 
 def test_format_generated_code_preserves_comments():

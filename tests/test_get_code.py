@@ -1,10 +1,12 @@
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from codeflash.code_utils.code_extractor import get_code
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent
-import pytest
-from pathlib import Path
+
 
 @pytest.fixture
 def temp_dir():

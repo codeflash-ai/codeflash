@@ -8,12 +8,9 @@ from codeflash.discovery.discover_unit_tests import (
     filter_test_files_by_imports,
 )
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import TestsInFile, TestType, FunctionParent
+from codeflash.models.models import FunctionParent, TestsInFile, TestType
 from codeflash.verification.verification_utils import TestConfig
 
-
-from pathlib import Path
-from codeflash.discovery.discover_unit_tests import discover_unit_tests
 
 def test_unit_test_discovery_pytest():
     project_path = Path(__file__).parent.parent.resolve() / "code_to_optimize"
@@ -209,10 +206,14 @@ def test_discover_tests_pytest_with_multi_level_dirs():
         assert len(discovered_tests) == 3
         discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
         assert discovered_root_test.resolve() == root_test_file_path.resolve()
-        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        discovered_level1_test = next(
+            iter(discovered_tests["level1.level1_code.level1_function"])
+        ).tests_in_file.test_file
         assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
 
-        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        discovered_level2_test = next(
+            iter(discovered_tests["level1.level2.level2_code.level2_function"])
+        ).tests_in_file.test_file
         assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
 
@@ -297,12 +298,18 @@ def test_discover_tests_pytest_dirs():
         assert len(discovered_tests) == 4
         discovered_root_test = next(iter(discovered_tests["root_code.root_function"])).tests_in_file.test_file
         assert discovered_root_test.resolve() == root_test_file_path.resolve()
-        discovered_level1_test = next(iter(discovered_tests["level1.level1_code.level1_function"])).tests_in_file.test_file
+        discovered_level1_test = next(
+            iter(discovered_tests["level1.level1_code.level1_function"])
+        ).tests_in_file.test_file
         assert discovered_level1_test.resolve() == level1_test_file_path.resolve()
-        discovered_level2_test = next(iter(discovered_tests["level1.level2.level2_code.level2_function"])).tests_in_file.test_file
+        discovered_level2_test = next(
+            iter(discovered_tests["level1.level2.level2_code.level2_function"])
+        ).tests_in_file.test_file
         assert discovered_level2_test.resolve() == level2_test_file_path.resolve()
 
-        discovered_level3_test = next(iter(discovered_tests["level1.level3.level3_code.level3_function"])).tests_in_file.test_file
+        discovered_level3_test = next(
+            iter(discovered_tests["level1.level3.level3_code.level3_function"])
+        ).tests_in_file.test_file
         assert discovered_level3_test.resolve() == level3_test_file_path.resolve()
 
 
@@ -337,7 +344,9 @@ def test_discover_tests_pytest_with_class():
 
         # Check if the test class and method are discovered
         assert len(discovered_tests) == 1
-        discovered_class_test = next(iter(discovered_tests["some_class_code.SomeClass.some_method"])).tests_in_file.test_file
+        discovered_class_test = next(
+            iter(discovered_tests["some_class_code.SomeClass.some_method"])
+        ).tests_in_file.test_file
         assert discovered_class_test.resolve() == test_file_path.resolve()
 
 
@@ -461,7 +470,9 @@ def test_discover_tests_pytest_with_nested_class():
 
         # Check if the test for the nested class method is discovered
         assert len(discovered_tests) == 1
-        discovered_inner_test = next(iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])).tests_in_file.test_file
+        discovered_inner_test = next(
+            iter(discovered_tests["nested_class_code.OuterClass.InnerClass.inner_method"])
+        ).tests_in_file.test_file
         assert discovered_inner_test.resolve() == test_file_path.resolve()
 
 
@@ -714,6 +725,7 @@ class TestCalculator(unittest.TestCase):
         assert calculator_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert calculator_test.tests_in_file.test_function == "test_add_with_parameters"
 
+
 def test_unittest_discovery_with_pytest_fixture():
     with tempfile.TemporaryDirectory() as tmpdirname:
         path_obj_tmpdirname = Path(tmpdirname)
@@ -761,7 +773,11 @@ def test_topological_sort(g):
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
-        fto = FunctionToOptimize(function_name="topologicalSort", file_path=code_file_path, parents=[FunctionParent(name="Graph", type="ClassDef")])
+        fto = FunctionToOptimize(
+            function_name="topologicalSort",
+            file_path=code_file_path,
+            parents=[FunctionParent(name="Graph", type="ClassDef")],
+        )
         # Discover tests
         discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
 
@@ -772,6 +788,7 @@ def test_topological_sort(g):
         tpsort_test = next(iter(discovered_tests["topological_sort.Graph.topologicalSort"]))
         assert tpsort_test.tests_in_file.test_file.resolve() == test_file_path.resolve()
         assert tpsort_test.tests_in_file.test_function == "test_topological_sort"
+
 
 def test_unittest_discovery_with_pytest_class_fixture():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -906,7 +923,11 @@ class TestRouterIndexManagement:
             test_framework="pytest",  # Using pytest framework to discover unittest tests
             tests_project_rootdir=path_obj_tmpdirname.parent,
         )
-        fto = FunctionToOptimize(function_name="_build_model_id_to_deployment_index_map", file_path=code_file_path, parents=[FunctionParent(name="Router", type="ClassDef")])
+        fto = FunctionToOptimize(
+            function_name="_build_model_id_to_deployment_index_map",
+            file_path=code_file_path,
+            parents=[FunctionParent(name="Router", type="ClassDef")],
+        )
         # Discover tests
         discovered_tests, _, _ = discover_unit_tests(test_config, file_to_funcs_to_optimize={code_file_path: [fto]})
 
@@ -1514,6 +1535,7 @@ def test_target():
 
         assert should_process is True
 
+
 def test_analyze_imports_method():
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -1538,6 +1560,7 @@ def test_topological_sort():
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
         assert should_process is True
+
 
 def test_analyze_imports_fixture():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1566,6 +1589,7 @@ def test_topological_sort(g):
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
         assert should_process is True
+
 
 def test_analyze_imports_class_fixture():
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -1610,6 +1634,7 @@ class TestRouterIndexManagement:
 
         assert should_process is True
 
+
 def test_analyze_imports_aliased_class_method_negative():
     with tempfile.TemporaryDirectory() as tmpdirname:
         test_file = Path(tmpdirname) / "test_example.py"
@@ -1629,7 +1654,6 @@ def test_target():
         should_process = analyze_imports_in_test_file(test_file, target_functions)
 
         assert should_process is False
-
 
 
 def test_analyze_imports_class_with_multiple_methods():
@@ -2005,8 +2029,6 @@ def test_discover_unit_tests_caching():
         tests_project_rootdir=project_root_path,
         use_cache=False,
     )
-
-
 
     non_cached_function_to_tests, non_cached_num_discovered_tests, non_cached_num_discovered_replay_tests = (
         discover_unit_tests(test_config)

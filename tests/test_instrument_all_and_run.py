@@ -116,11 +116,7 @@ def test_sort():
         func = FunctionToOptimize(function_name="sorter", parents=[], file_path=Path(fto_path))
         os.chdir(run_cwd)
         success, new_test = inject_profiling_into_existing_test(
-            test_path,
-            [CodePosition(6, 13), CodePosition(10, 13)],
-            func,
-            project_root_path,
-            mode=TestingMode.BEHAVIOR,
+            test_path, [CodePosition(6, 13), CodePosition(10, 13)], func, project_root_path, mode=TestingMode.BEHAVIOR
         )
         os.chdir(original_cwd)
         assert success
@@ -552,7 +548,9 @@ def test_sort():
     fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
     original_code = fto_path.read_text("utf-8")
     fto = FunctionToOptimize(
-        function_name="sorter_classmethod", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
+        function_name="sorter_classmethod",
+        parents=[FunctionParent(name="BubbleSorter", type="ClassDef")],
+        file_path=Path(fto_path),
     )
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmp_test_path = Path(tmpdirname) / "test_classmethod_behavior_results_temp.py"
@@ -646,8 +644,11 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
-        assert test_results[1].stdout == """codeflash stdout : BubbleSorter.sorter_classmethod() called
+        assert (
+            test_results[1].stdout
+            == """codeflash stdout : BubbleSorter.sorter_classmethod() called
 """
+        )
 
         results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,
@@ -718,7 +719,9 @@ def test_sort():
     fto_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_method.py").resolve()
     original_code = fto_path.read_text("utf-8")
     fto = FunctionToOptimize(
-        function_name="sorter_staticmethod", parents=[FunctionParent(name="BubbleSorter", type="ClassDef")], file_path=Path(fto_path)
+        function_name="sorter_staticmethod",
+        parents=[FunctionParent(name="BubbleSorter", type="ClassDef")],
+        file_path=Path(fto_path),
     )
     with tempfile.TemporaryDirectory() as tmpdirname:
         tmp_test_path = Path(tmpdirname) / "test_staticmethod_behavior_results_temp.py"
@@ -812,8 +815,11 @@ def test_sort():
         )
         assert test_results[1].runtime > 0
         assert test_results[1].did_pass
-        assert test_results[1].stdout == """codeflash stdout : BubbleSorter.sorter_staticmethod() called
+        assert (
+            test_results[1].stdout
+            == """codeflash stdout : BubbleSorter.sorter_staticmethod() called
 """
+        )
 
         results2, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.BEHAVIOR,

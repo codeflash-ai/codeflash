@@ -54,7 +54,9 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir,
+            cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"],
+            env=os.environ.copy(),
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -129,7 +131,9 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir,
+            cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"],
+            env=os.environ.copy(),
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -194,7 +198,9 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir,
+            cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"],
+            env=os.environ.copy(),
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -279,7 +285,9 @@ class MyClass:
 
         # Run pytest as a subprocess
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir,
+            cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"],
+            env=os.environ.copy(),
         )
 
         # Check for errors
@@ -356,7 +364,9 @@ class MyClass:
         with sample_code_path.open("w") as f:
             f.write(sample_code)
         result = execute_test_subprocess(
-            cwd=test_dir, cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"], env=os.environ.copy()
+            cwd=test_dir,
+            cmd_list=[f"{SAFE_SYS_EXECUTABLE}", "-m", "pytest", test_file_name, "-s"],
+            env=os.environ.copy(),
         )
         assert not result.stderr
         assert result.returncode == 0
@@ -1184,6 +1194,7 @@ class MyClass:
         helper_path_1.unlink(missing_ok=True)
         helper_path_2.unlink(missing_ok=True)
 
+
 def test_get_stack_info_env_var_fallback() -> None:
     """Test that get_test_info_from_stack falls back to environment variables when stack walking fails to find test_name.
 
@@ -1421,8 +1432,7 @@ def calculate_portfolio_metrics(
             f.write(test_code)
 
         fto = FunctionToOptimize("calculate_portfolio_metrics", fto_file_path, parents=[])
-        file_path_to_helper_class = {
-        }
+        file_path_to_helper_class = {}
         instrument_codeflash_capture(fto, file_path_to_helper_class, tests_root)
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -1453,8 +1463,7 @@ def calculate_portfolio_metrics(
         candidate_helper_code = {}
         for file_path in file_path_to_helper_class:
             candidate_helper_code[file_path] = Path(file_path).read_text("utf-8")
-        file_path_to_helper_classes = {
-        }
+        file_path_to_helper_classes = {}
         instrument_codeflash_capture(fto, file_path_to_helper_classes, tests_root)
 
         test_results, coverage_data = func_optimizer.run_and_parse_tests(

@@ -280,7 +280,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return comparator(dict(orig), dict(new), superset_obj)
 
         if HAS_NUMPY:
-            import numpy as np  # type: ignore  # noqa: PGH003
+            import numpy as np
 
             if isinstance(orig, (np.datetime64, np.timedelta64)):
                 # Handle NaT (Not a Time) - numpy's equivalent of NaN for datetime
@@ -343,7 +343,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             return (orig != new).nnz == 0
 
         if HAS_PANDAS:
-            import pandas  # type: ignore  # noqa: ICN001, PGH003
+            import pandas  # noqa: ICN001
 
             if isinstance(
                 orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)

@@ -1,8 +1,7 @@
-import tempfile
-from pathlib import Path
-import uuid
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -81,9 +80,7 @@ async def async_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_async.py"
     test_file.write_text(async_function_code)
 
-    func = FunctionToOptimize(
-        function_name="async_function", file_path=test_file, parents=[], is_async=True
-    )
+    func = FunctionToOptimize(function_name="async_function", file_path=test_file, parents=[], is_async=True)
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
@@ -120,9 +117,7 @@ async def async_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_async.py"
     test_file.write_text(async_function_code)
 
-    func = FunctionToOptimize(
-        function_name="async_function", file_path=test_file, parents=[], is_async=True
-    )
+    func = FunctionToOptimize(function_name="async_function", file_path=test_file, parents=[], is_async=True)
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.PERFORMANCE)
 
@@ -160,9 +155,7 @@ async def async_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_async.py"
     test_file.write_text(async_function_code)
 
-    func = FunctionToOptimize(
-        function_name="async_function", file_path=test_file, parents=[], is_async=True
-    )
+    func = FunctionToOptimize(function_name="async_function", file_path=test_file, parents=[], is_async=True)
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.CONCURRENCY)
 
@@ -243,9 +236,7 @@ async def async_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_async.py"
     test_file.write_text(already_decorated_code)
 
-    func = FunctionToOptimize(
-        function_name="async_function", file_path=test_file, parents=[], is_async=True
-    )
+    func = FunctionToOptimize(function_name="async_function", file_path=test_file, parents=[], is_async=True)
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
@@ -290,12 +281,10 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success = add_async_decorator_to_function(
-        source_file, func, TestingMode.BEHAVIOR
-    )
+    source_success = add_async_decorator_to_function(source_file, func, TestingMode.BEHAVIOR)
 
     assert source_success is True
-    
+
     # Verify the file was modified
     instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
@@ -347,12 +336,10 @@ async def test_async_function():
     # First instrument the source module
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success = add_async_decorator_to_function(
-        source_file, func, TestingMode.PERFORMANCE
-    )
+    source_success = add_async_decorator_to_function(source_file, func, TestingMode.PERFORMANCE)
 
     assert source_success is True
-    
+
     # Verify the file was modified
     instrumented_source = source_file.read_text()
     assert "@codeflash_performance_async" in instrumented_source
@@ -413,12 +400,10 @@ async def test_mixed_functions():
 
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success = add_async_decorator_to_function(
-        source_file, async_func, TestingMode.BEHAVIOR
-    )
+    source_success = add_async_decorator_to_function(source_file, async_func, TestingMode.BEHAVIOR)
 
     assert source_success
-    
+
     # Verify the file was modified
     instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
@@ -428,11 +413,7 @@ async def test_mixed_functions():
     assert "def sync_function(x: int, y: int) -> int:" in instrumented_source
 
     success, instrumented_test_code = inject_profiling_into_existing_test(
-        test_file,
-        [CodePosition(8, 18), CodePosition(11, 19)],
-        async_func,
-        temp_dir,
-        mode=TestingMode.BEHAVIOR,
+        test_file, [CodePosition(8, 18), CodePosition(11, 19)], async_func, temp_dir, mode=TestingMode.BEHAVIOR
     )
 
     # Async functions should not be instrumented at the test level
@@ -465,8 +446,7 @@ class OuterClass:
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
-    expected_output = (
-        """import asyncio
+    expected_output = """import asyncio
 
 from codeflash.code_utils.codeflash_wrap_decorator import \\
     codeflash_behavior_async
@@ -480,7 +460,6 @@ class OuterClass:
             await asyncio.sleep(0.001)
             return x * 2
 """
-    )
 
     assert decorator_added
     modified_code = test_file.read_text()
@@ -510,9 +489,7 @@ async def async_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_async.py"
     test_file.write_text(decorated_async_code)
 
-    func = FunctionToOptimize(
-        function_name="async_function", file_path=test_file, parents=[], is_async=True
-    )
+    func = FunctionToOptimize(function_name="async_function", file_path=test_file, parents=[], is_async=True)
 
     decorator_added = add_async_decorator_to_function(test_file, func, TestingMode.BEHAVIOR)
 
@@ -538,21 +515,15 @@ def sync_function(x: int, y: int) -> int:
     test_file = temp_dir / "test_sync.py"
     test_file.write_text(sync_function_code)
 
-    sync_func = FunctionToOptimize(
-        function_name="sync_function",
-        file_path=test_file,
-        parents=[],
-        is_async=False,
-    )
+    sync_func = FunctionToOptimize(function_name="sync_function", file_path=test_file, parents=[], is_async=False)
 
-    decorator_added = add_async_decorator_to_function(
-        test_file, sync_func, TestingMode.BEHAVIOR
-    )
+    decorator_added = add_async_decorator_to_function(test_file, sync_func, TestingMode.BEHAVIOR)
 
     assert not decorator_added
     # File should not be modified for sync functions
     modified_code = test_file.read_text()
     assert modified_code == sync_function_code
+
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_inject_profiling_async_multiple_calls_same_test(temp_dir):
@@ -599,12 +570,10 @@ async def test_multiple_calls():
     # First instrument the source module with async decorators
     from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 
-    source_success = add_async_decorator_to_function(
-        source_file, func, TestingMode.BEHAVIOR
-    )
+    source_success = add_async_decorator_to_function(source_file, func, TestingMode.BEHAVIOR)
 
     assert source_success
-    
+
     # Verify the file was modified
     instrumented_source = source_file.read_text()
     assert "@codeflash_behavior_async" in instrumented_source
@@ -636,18 +605,15 @@ async def test_multiple_calls():
     line_id_1_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '1'")
     line_id_2_count = instrumented_test_code.count("os.environ['CODEFLASH_CURRENT_LINE_ID'] = '2'")
 
-
     assert line_id_0_count == 2, f"Expected 2 occurrences of line_id '0', got {line_id_0_count}"
     assert line_id_1_count == 1, f"Expected 1 occurrence of line_id '1', got {line_id_1_count}"
     assert line_id_2_count == 1, f"Expected 1 occurrence of line_id '2', got {line_id_2_count}"
-
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_behavior_decorator_return_values_and_test_ids():
     """Test that async behavior decorator correctly captures return values, test IDs, and stores data in database."""
     import asyncio
-    import os
     import sqlite3
     from pathlib import Path
 
@@ -684,7 +650,7 @@ def test_async_behavior_decorator_return_values_and_test_ids():
 
         from codeflash.code_utils.codeflash_wrap_decorator import get_run_tmp_file
 
-        db_path = get_run_tmp_file(Path(f"test_return_values_2.sqlite"))
+        db_path = get_run_tmp_file(Path("test_return_values_2.sqlite"))
 
         # Verify database exists and has data
         assert db_path.exists(), f"Database file not created at {db_path}"
@@ -745,7 +711,6 @@ def test_async_behavior_decorator_return_values_and_test_ids():
 @pytest.mark.skipif(sys.platform == "win32", reason="pending support for asyncio on windows")
 def test_async_decorator_comprehensive_return_values_and_test_ids():
     import asyncio
-    import os
     import sqlite3
     from pathlib import Path
 
@@ -793,7 +758,7 @@ def test_async_decorator_comprehensive_return_values_and_test_ids():
                 f"Expected {test_case['expected']}, got {result} for args {test_case['args']}, kwargs {test_case['kwargs']}"
             )
 
-        db_path = get_run_tmp_file(Path(f"test_return_values_3.sqlite"))
+        db_path = get_run_tmp_file(Path("test_return_values_3.sqlite"))
         assert db_path.exists(), f"Database not created at {db_path}"
 
         con = sqlite3.connect(db_path)
@@ -836,7 +801,6 @@ def test_async_decorator_comprehensive_return_values_and_test_ids():
             assert iteration_id == expected_iteration_id, (
                 f"Row {i}: Expected iteration_id '{expected_iteration_id}', got '{iteration_id}'"
             )
-
 
             args, kwargs, actual_return_value = pickle.loads(return_value_blob)
             expected_args = test_cases[i]["args"]

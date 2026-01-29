@@ -11,6 +11,7 @@ import libcst as cst
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+from codeflash.languages import is_javascript
 from codeflash.models.models import CodeString, CodeStringsMarkdown
 
 if TYPE_CHECKING:
@@ -629,8 +630,8 @@ def _analyze_imports_in_optimized_code(
     helpers_by_file_and_func = defaultdict(dict)
     helpers_by_file = defaultdict(list)  # preserved for "import module"
     for helper in code_context.helper_functions:
-        jedi_type = helper.jedi_definition.type
-        if jedi_type != "class":
+        jedi_type = helper.jedi_definition.type if helper.jedi_definition else None
+        if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
             func_name = helper.only_function_name
             module_name = helper.file_path.stem
             # Cache function lookup for this (module, func)
@@ -716,6 +717,11 @@ def detect_unused_helper_functions(
         List of FunctionSource objects representing unused helper functions
 
     """
+    # Skip this analysis for non-Python languages since we use Python's ast module
+    if is_javascript():
+        logger.debug("Skipping unused helper function detection for JavaScript/TypeScript")
+        return []
+
     if isinstance(optimized_code, CodeStringsMarkdown) and len(optimized_code.code_strings) > 0:
         return list(
             chain.from_iterable(
@@ -783,7 +789,8 @@ def detect_unused_helper_functions(
         unused_helpers = []
         entrypoint_file_path = function_to_optimize.file_path
         for helper_function in code_context.helper_functions:
-            if helper_function.jedi_definition.type != "class":
+            jedi_type = helper_function.jedi_definition.type if helper_function.jedi_definition else None
+            if jedi_type != "class":  # Include when jedi_definition is None (non-Python)
                 # Check if the helper function is called using multiple name variants
                 helper_qualified_name = helper_function.qualified_name
                 helper_simple_name = helper_function.only_function_name
