@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
@@ -1136,12 +1135,6 @@ class TestCodeExtractorIntegration:
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
         result = func_optimizer.get_code_optimization_context()
-
-        from codeflash.either import is_successful
-
-        if not is_successful(result):
-            error_msg = result.failure() if hasattr(result, "failure") else str(result)
-            pytest.skip(f"Context extraction not fully implemented: {error_msg}")
 
         context = result.unwrap()
 
