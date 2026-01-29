@@ -81,9 +81,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
             f"Language support classes must be instantiable without arguments. "
             f"Error: {e}"
         )
-        raise ValueError(
-            msg
-        ) from e
+        raise ValueError(msg) from e
 
     # Register by extension
     for ext in extensions:

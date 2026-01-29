@@ -1917,7 +1917,15 @@ class TypeScriptSupport(JavaScriptSupport):
             List of glob patterns for test files.
 
         """
-        return ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx", "__tests__/**/*.ts", "__tests__/**/*.tsx", *super()._get_test_patterns()]
+        return [
+            "*.test.ts",
+            "*.test.tsx",
+            "*.spec.ts",
+            "*.spec.tsx",
+            "__tests__/**/*.ts",
+            "__tests__/**/*.tsx",
+            *super()._get_test_patterns(),
+        ]
 
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for TypeScript.

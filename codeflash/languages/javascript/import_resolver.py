@@ -343,7 +343,7 @@ class MultiFileHelperFinder:
         # Find helpers from imported modules
         results: dict[Path, list[HelperFunction]] = {}
 
-        for (import_info, actual_name) in call_to_import.values():
+        for import_info, actual_name in call_to_import.values():
             # Resolve the import to a file path
             resolved = self.import_resolver.resolve_import(import_info, function.file_path)
             if resolved is None:

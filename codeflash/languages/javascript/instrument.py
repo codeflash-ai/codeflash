@@ -972,4 +972,3 @@ def instrument_generated_js_test(
         qualified_name=qualified_name,
         remove_assertions=True,
     )
-

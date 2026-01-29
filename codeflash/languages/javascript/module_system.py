@@ -291,7 +291,6 @@ def convert_esm_to_commonjs(code: str) -> str:
     return default_import.sub(replace_default, code)
 
 
-
 def ensure_module_system_compatibility(code: str, target_module_system: str) -> str:
     """Ensure code uses the correct module system syntax.
 
