@@ -7,12 +7,14 @@ These tests verify that code replacement correctly handles:
 - ES Modules (import/export) syntax
 - TypeScript import handling
 """
+from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
 import pytest
 
+from codeflash.code_utils.code_replacer import replace_function_definitions_for_language
 from codeflash.languages.javascript.module_system import (
     ModuleSystem,
     convert_commonjs_to_esm,
@@ -21,6 +23,31 @@ from codeflash.languages.javascript.module_system import (
     ensure_module_system_compatibility,
     get_import_statement,
 )
+
+from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
+from codeflash.models.models import CodeStringsMarkdown
+
+
+@pytest.fixture
+def js_support():
+    """Create a JavaScriptSupport instance."""
+    return JavaScriptSupport()
+
+
+@pytest.fixture
+def ts_support():
+    """Create a TypeScriptSupport instance."""
+    return TypeScriptSupport()
+
+
+@pytest.fixture
+def temp_project(tmp_path):
+    """Create a temporary project directory structure."""
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    return project_root
+
+
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -594,3 +621,1275 @@ class TestIntegrationWithFixtures:
             assert len(import_lines) == 0, (
                 f"import statements should be converted to require.\nFound import lines: {import_lines}"
             )
+
+class TestSimpleFunctionReplacement:
+    """Tests for simple function body replacement with strict assertions."""
+
+    def test_replace_simple_function_body(self, js_support, temp_project):
+        """Test replacing a simple function body preserves structure exactly."""
+        original_source = """\
+function add(a, b) {
+    return a + b;
+}
+"""
+        file_path = temp_project / "math.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        # Optimized version with different body
+        optimized_code = """\
+function add(a, b) {
+    // Optimized: direct return
+    return a + b;
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function add(a, b) {
+    // Optimized: direct return
+    return a + b;
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_function_with_multiple_statements(self, js_support, temp_project):
+        """Test replacing function with complex multi-statement body."""
+        original_source = """\
+function processData(data) {
+    const result = [];
+    for (let i = 0; i < data.length; i++) {
+        result.push(data[i] * 2);
+    }
+    return result;
+}
+"""
+        file_path = temp_project / "processor.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        # Optimized version using map
+        optimized_code = """\
+function processData(data) {
+    return data.map(x => x * 2);
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function processData(data) {
+    return data.map(x => x * 2);
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_preserves_surrounding_code(self, js_support, temp_project):
+        """Test that replacement preserves code before and after the function."""
+        original_source = """\
+const CONFIG = { debug: true };
+
+function targetFunction(x) {
+    console.log(x);
+    return x * 2;
+}
+
+function otherFunction(y) {
+    return y + 1;
+}
+
+module.exports = { targetFunction, otherFunction };
+"""
+        file_path = temp_project / "module.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        target_func = next(f for f in functions if f.name == "targetFunction")
+
+        optimized_code = """\
+function targetFunction(x) {
+    return x << 1;
+}
+"""
+
+        result = js_support.replace_function(original_source, target_func, optimized_code)
+
+        expected_result = """\
+const CONFIG = { debug: true };
+
+function targetFunction(x) {
+    return x << 1;
+}
+
+function otherFunction(y) {
+    return y + 1;
+}
+
+module.exports = { targetFunction, otherFunction };
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestClassMethodReplacement:
+    """Tests for class method replacement with strict assertions."""
+
+    def test_replace_class_method_body(self, js_support, temp_project):
+        """Test replacing a class method body preserves class structure."""
+        original_source = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        const result = a + b;
+        return Number(result.toFixed(this.precision));
+    }
+
+    subtract(a, b) {
+        return a - b;
+    }
+}
+"""
+        file_path = temp_project / "calculator.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        add_method = next(f for f in functions if f.name == "add")
+
+        # Optimized version provided in class context
+        optimized_code = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return +((a + b).toFixed(this.precision));
+    }
+}
+"""
+
+        result = js_support.replace_function(original_source, add_method, optimized_code)
+
+        expected_result = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return +((a + b).toFixed(this.precision));
+    }
+
+    subtract(a, b) {
+        return a - b;
+    }
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_method_calling_sibling_methods(self, js_support, temp_project):
+        """Test replacing method that calls other methods in same class."""
+        original_source = """\
+class DataProcessor {
+    constructor() {
+        this.cache = new Map();
+    }
+
+    validate(data) {
+        return data !== null && data !== undefined;
+    }
+
+    process(data) {
+        if (!this.validate(data)) {
+            throw new Error('Invalid data');
+        }
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+            result.push(data[i] * 2);
+        }
+        return result;
+    }
+}
+"""
+        file_path = temp_project / "processor.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        process_method = next(f for f in functions if f.name == "process")
+
+        optimized_code = """\
+class DataProcessor {
+    constructor() {
+        this.cache = new Map();
+    }
+
+    process(data) {
+        if (!this.validate(data)) {
+            throw new Error('Invalid data');
+        }
+        return data.map(x => x * 2);
+    }
+}
+"""
+
+        result = js_support.replace_function(original_source, process_method, optimized_code)
+
+        expected_result = """\
+class DataProcessor {
+    constructor() {
+        this.cache = new Map();
+    }
+
+    validate(data) {
+        return data !== null && data !== undefined;
+    }
+
+    process(data) {
+        if (!this.validate(data)) {
+            throw new Error('Invalid data');
+        }
+        return data.map(x => x * 2);
+    }
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestJSDocPreservation:
+    """Tests for JSDoc comment handling during replacement."""
+
+    def test_replace_preserves_jsdoc_above_function(self, js_support, temp_project):
+        """Test that JSDoc comments above the function are preserved."""
+        original_source = """\
+/**
+ * Calculates the sum of two numbers.
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} The sum
+ */
+function add(a, b) {
+    const sum = a + b;
+    return sum;
+}
+"""
+        file_path = temp_project / "math.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+/**
+ * Calculates the sum of two numbers.
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} The sum
+ */
+function add(a, b) {
+    return a + b;
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+/**
+ * Calculates the sum of two numbers.
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} The sum
+ */
+function add(a, b) {
+    return a + b;
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_class_method_with_jsdoc(self, js_support, temp_project):
+        """Test replacing class method with JSDoc on both class and method."""
+        original_source = """\
+/**
+ * A simple cache implementation.
+ * @class Cache
+ */
+class Cache {
+    constructor() {
+        this.data = new Map();
+    }
+
+    /**
+     * Gets a value from cache.
+     * @param {string} key - The cache key
+     * @returns {*} The cached value or undefined
+     */
+    get(key) {
+        const entry = this.data.get(key);
+        if (entry) {
+            return entry.value;
+        }
+        return undefined;
+    }
+}
+"""
+        file_path = temp_project / "cache.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        get_method = next(f for f in functions if f.name == "get")
+
+        optimized_code = """\
+class Cache {
+    constructor() {
+        this.data = new Map();
+    }
+
+    /**
+     * Gets a value from cache.
+     * @param {string} key - The cache key
+     * @returns {*} The cached value or undefined
+     */
+    get(key) {
+        return this.data.get(key)?.value;
+    }
+}
+"""
+
+        result = js_support.replace_function(original_source, get_method, optimized_code)
+
+        expected_result = """\
+/**
+ * A simple cache implementation.
+ * @class Cache
+ */
+class Cache {
+    constructor() {
+        this.data = new Map();
+    }
+
+    /**
+     * Gets a value from cache.
+     * @param {string} key - The cache key
+     * @returns {*} The cached value or undefined
+     */
+    get(key) {
+        return this.data.get(key)?.value;
+    }
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestAsyncFunctionReplacement:
+    """Tests for async function replacement."""
+
+    def test_replace_async_function_body(self, js_support, temp_project):
+        """Test replacing async function preserves async keyword."""
+        original_source = """\
+async function fetchData(url) {
+    const response = await fetch(url);
+    const data = await response.json();
+    return data;
+}
+"""
+        file_path = temp_project / "api.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+async function fetchData(url) {
+    return (await fetch(url)).json();
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+async function fetchData(url) {
+    return (await fetch(url)).json();
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_async_class_method(self, js_support, temp_project):
+        """Test replacing async class method."""
+        original_source = """\
+class ApiClient {
+    constructor(baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    async get(endpoint) {
+        const url = this.baseUrl + endpoint;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Request failed');
+        }
+        const data = await response.json();
+        return data;
+    }
+}
+"""
+        file_path = temp_project / "client.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        get_method = next(f for f in functions if f.name == "get")
+
+        optimized_code = """\
+class ApiClient {
+    constructor(baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    async get(endpoint) {
+        const response = await fetch(this.baseUrl + endpoint);
+        if (!response.ok) throw new Error('Request failed');
+        return response.json();
+    }
+}
+"""
+
+        result = js_support.replace_function(original_source, get_method, optimized_code)
+
+        expected_result = """\
+class ApiClient {
+    constructor(baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    async get(endpoint) {
+        const response = await fetch(this.baseUrl + endpoint);
+        if (!response.ok) throw new Error('Request failed');
+        return response.json();
+    }
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestGeneratorFunctionReplacement:
+    """Tests for generator function replacement."""
+
+    def test_replace_generator_function_body(self, js_support, temp_project):
+        """Test replacing generator function preserves generator syntax."""
+        original_source = """\
+function* range(start, end) {
+    for (let i = start; i < end; i++) {
+        yield i;
+    }
+}
+"""
+        file_path = temp_project / "generators.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function* range(start, end) {
+    let i = start;
+    while (i < end) yield i++;
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function* range(start, end) {
+    let i = start;
+    while (i < end) yield i++;
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestTypeScriptReplacement:
+    """Tests for TypeScript-specific replacement."""
+
+    def test_replace_typescript_function_with_types(self, ts_support, temp_project):
+        """Test replacing TypeScript function preserves type annotations."""
+        original_source = """\
+function processArray(items: number[]): number {
+    let sum = 0;
+    for (let i = 0; i < items.length; i++) {
+        sum += items[i];
+    }
+    return sum;
+}
+"""
+        file_path = temp_project / "processor.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = ts_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function processArray(items: number[]): number {
+    return items.reduce((a, b) => a + b, 0);
+}
+"""
+
+        result = ts_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function processArray(items: number[]): number {
+    return items.reduce((a, b) => a + b, 0);
+}
+"""
+        assert result == expected_result
+        assert ts_support.validate_syntax(result) is True
+
+    def test_replace_typescript_class_method_with_generics(self, ts_support, temp_project):
+        """Test replacing TypeScript generic class method."""
+        original_source = """\
+class Container<T> {
+    private items: T[] = [];
+
+    add(item: T): void {
+        this.items.push(item);
+    }
+
+    getAll(): T[] {
+        const result: T[] = [];
+        for (let i = 0; i < this.items.length; i++) {
+            result.push(this.items[i]);
+        }
+        return result;
+    }
+}
+"""
+        file_path = temp_project / "container.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = ts_support.discover_functions(file_path)
+        get_all_method = next(f for f in functions if f.name == "getAll")
+
+        optimized_code = """\
+class Container<T> {
+    private items: T[] = [];
+
+    getAll(): T[] {
+        return [...this.items];
+    }
+}
+"""
+
+        result = ts_support.replace_function(original_source, get_all_method, optimized_code)
+
+        expected_result = """\
+class Container<T> {
+    private items: T[] = [];
+
+    add(item: T): void {
+        this.items.push(item);
+    }
+
+    getAll(): T[] {
+        return [...this.items];
+    }
+}
+"""
+        assert result == expected_result
+        assert ts_support.validate_syntax(result) is True
+
+    def test_replace_typescript_interface_typed_function(self, ts_support, temp_project):
+        """Test replacing function that uses interfaces."""
+        original_source = """\
+interface User {
+    id: string;
+    name: string;
+    email: string;
+}
+
+function createUser(name: string, email: string): User {
+    const id = Math.random().toString(36).substring(2, 15);
+    const user: User = {
+        id: id,
+        name: name,
+        email: email
+    };
+    return user;
+}
+"""
+        file_path = temp_project / "user.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = ts_support.discover_functions(file_path)
+        func = next(f for f in functions if f.name == "createUser")
+
+        optimized_code = """\
+function createUser(name: string, email: string): User {
+    return {
+        id: Math.random().toString(36).substring(2, 15),
+        name,
+        email
+    };
+}
+"""
+
+        result = ts_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+interface User {
+    id: string;
+    name: string;
+    email: string;
+}
+
+function createUser(name: string, email: string): User {
+    return {
+        id: Math.random().toString(36).substring(2, 15),
+        name,
+        email
+    };
+}
+"""
+        assert result == expected_result
+        assert ts_support.validate_syntax(result) is True
+
+
+class TestComplexReplacements:
+    """Tests for complex replacement scenarios."""
+
+    def test_replace_function_with_nested_functions(self, js_support, temp_project):
+        """Test replacing function that contains nested function definitions."""
+        original_source = """\
+function processItems(items) {
+    function helper(item) {
+        return item * 2;
+    }
+
+    const results = [];
+    for (let i = 0; i < items.length; i++) {
+        results.push(helper(items[i]));
+    }
+    return results;
+}
+"""
+        file_path = temp_project / "processor.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        process_func = next(f for f in functions if f.name == "processItems")
+
+        optimized_code = """\
+function processItems(items) {
+    const helper = x => x * 2;
+    return items.map(helper);
+}
+"""
+
+        result = js_support.replace_function(original_source, process_func, optimized_code)
+
+        expected_result = """\
+function processItems(items) {
+    const helper = x => x * 2;
+    return items.map(helper);
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_multiple_methods_sequentially(self, js_support, temp_project):
+        """Test replacing multiple methods in the same class sequentially."""
+        original_source = """\
+class MathUtils {
+    static sum(arr) {
+        let total = 0;
+        for (let i = 0; i < arr.length; i++) {
+            total += arr[i];
+        }
+        return total;
+    }
+
+    static average(arr) {
+        if (arr.length === 0) return 0;
+        let total = 0;
+        for (let i = 0; i < arr.length; i++) {
+            total += arr[i];
+        }
+        return total / arr.length;
+    }
+}
+"""
+        file_path = temp_project / "math.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # First replacement: sum method
+        functions = js_support.discover_functions(file_path)
+        sum_method = next(f for f in functions if f.name == "sum")
+
+        optimized_sum = """\
+class MathUtils {
+    static sum(arr) {
+        return arr.reduce((a, b) => a + b, 0);
+    }
+}
+"""
+
+        result = js_support.replace_function(original_source, sum_method, optimized_sum)
+
+        expected_after_first = """\
+class MathUtils {
+    static sum(arr) {
+        return arr.reduce((a, b) => a + b, 0);
+    }
+
+    static average(arr) {
+        if (arr.length === 0) return 0;
+        let total = 0;
+        for (let i = 0; i < arr.length; i++) {
+            total += arr[i];
+        }
+        return total / arr.length;
+    }
+}
+"""
+        assert result == expected_after_first
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_function_with_complex_destructuring(self, js_support, temp_project):
+        """Test replacing function with complex parameter destructuring."""
+        original_source = """\
+function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+    const serverUrl = host + ':' + port;
+    const dbConnection = url + '?poolSize=' + poolSize;
+    return {
+        server: serverUrl,
+        db: dbConnection
+    };
+}
+"""
+        file_path = temp_project / "config.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+    return {
+        server: `${host}:${port}`,
+        db: `${url}?poolSize=${poolSize}`
+    };
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function processConfig({ server: { host, port }, database: { url, poolSize } }) {
+    return {
+        server: `${host}:${port}`,
+        db: `${url}?poolSize=${poolSize}`
+    };
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestEdgeCases:
+    """Tests for edge cases in code replacement."""
+
+    def test_replace_minimal_function_body(self, js_support, temp_project):
+        """Test replacing function with minimal body."""
+        original_source = """\
+function minimal() {
+    return null;
+}
+"""
+        file_path = temp_project / "minimal.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function minimal() {
+    return { initialized: true, timestamp: Date.now() };
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function minimal() {
+    return { initialized: true, timestamp: Date.now() };
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_single_line_function(self, js_support, temp_project):
+        """Test replacing single-line function."""
+        original_source = """\
+function identity(x) { return x; }
+"""
+        file_path = temp_project / "utils.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function identity(x) { return x ?? null; }
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function identity(x) { return x ?? null; }
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_function_with_special_characters_in_strings(self, js_support, temp_project):
+        """Test replacing function containing special characters in strings."""
+        original_source = """\
+function formatMessage(name) {
+    const greeting = 'Hello, ' + name + '!';
+    const special = "Contains \\"quotes\\" and \\n newlines";
+    return greeting + ' ' + special;
+}
+"""
+        file_path = temp_project / "formatter.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function formatMessage(name) {
+    return `Hello, ${name}! Contains "quotes" and
+ newlines`;
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function formatMessage(name) {
+    return `Hello, ${name}! Contains "quotes" and
+ newlines`;
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_function_with_regex(self, js_support, temp_project):
+        """Test replacing function containing regex patterns."""
+        original_source = """\
+function validateEmail(email) {
+    const pattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/;
+    if (pattern.test(email)) {
+        return true;
+    }
+    return false;
+}
+"""
+        file_path = temp_project / "validator.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        func = functions[0]
+
+        optimized_code = """\
+function validateEmail(email) {
+    return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/.test(email);
+}
+"""
+
+        result = js_support.replace_function(original_source, func, optimized_code)
+
+        expected_result = """\
+function validateEmail(email) {
+    return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$/.test(email);
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestModuleExportHandling:
+    """Tests for proper handling of module exports during replacement."""
+
+    def test_replace_exported_function_commonjs(self, js_support, temp_project):
+        """Test replacing function in CommonJS module preserves exports."""
+        original_source = """\
+function helper(x) {
+    return x * 2;
+}
+
+function main(data) {
+    const results = [];
+    for (let i = 0; i < data.length; i++) {
+        results.push(helper(data[i]));
+    }
+    return results;
+}
+
+module.exports = { main, helper };
+"""
+        file_path = temp_project / "module.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        main_func = next(f for f in functions if f.name == "main")
+
+        optimized_code = """\
+function main(data) {
+    return data.map(helper);
+}
+"""
+
+        result = js_support.replace_function(original_source, main_func, optimized_code)
+
+        expected_result = """\
+function helper(x) {
+    return x * 2;
+}
+
+function main(data) {
+    return data.map(helper);
+}
+
+module.exports = { main, helper };
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_exported_function_esm(self, js_support, temp_project):
+        """Test replacing function in ES Module preserves exports."""
+        original_source = """\
+export function helper(x) {
+    return x * 2;
+}
+
+export function main(data) {
+    const results = [];
+    for (let i = 0; i < data.length; i++) {
+        results.push(helper(data[i]));
+    }
+    return results;
+}
+"""
+        file_path = temp_project / "module.js"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        functions = js_support.discover_functions(file_path)
+        main_func = next(f for f in functions if f.name == "main")
+
+        optimized_code = """\
+export function main(data) {
+    return data.map(helper);
+}
+"""
+
+        result = js_support.replace_function(original_source, main_func, optimized_code)
+
+        expected_result = """\
+export function helper(x) {
+    return x * 2;
+}
+
+export function main(data) {
+    return data.map(helper);
+}
+"""
+        assert result == expected_result
+        assert js_support.validate_syntax(result) is True
+
+
+class TestSyntaxValidation:
+    """Tests to ensure replaced code is always syntactically valid."""
+
+    def test_all_replacements_produce_valid_syntax(self, js_support, temp_project):
+        """Test that various replacements all produce valid JavaScript."""
+        test_cases = [
+            # (original, optimized, description)
+            (
+                "function f(x) { return x + 1; }",
+                "function f(x) { return ++x; }",
+                "increment replacement"
+            ),
+            (
+                "function f(arr) { return arr.length > 0; }",
+                "function f(arr) { return !!arr.length; }",
+                "boolean conversion"
+            ),
+            (
+                "function f(a, b) { if (a) { return a; } return b; }",
+                "function f(a, b) { return a || b; }",
+                "logical OR replacement"
+            ),
+        ]
+
+        for i, (original, optimized, description) in enumerate(test_cases):
+            file_path = temp_project / f"test_{i}.js"
+            file_path.write_text(original, encoding="utf-8")
+
+            functions = js_support.discover_functions(file_path)
+            func = functions[0]
+
+            result = js_support.replace_function(original, func, optimized)
+
+            is_valid = js_support.validate_syntax(result)
+            assert is_valid is True, f"Replacement '{description}' produced invalid syntax:\n{result}"
+
+
+def test_code_replacer_for_class_method(ts_support, temp_project):
+    original = """/**
+ * DataProcessor class - demonstrates class method optimization in TypeScript.
+ * Contains intentionally inefficient implementations for optimization testing.
+ */
+
+/**
+ * A class for processing data arrays with various operations.
+ */
+export class DataProcessor<T> {
+    private data: T[];
+
+    /**
+     * Create a DataProcessor instance.
+     * @param data - Initial data array
+     */
+    constructor(data: T[] = []) {
+        this.data = [...data];
+    }
+
+    /**
+     * Find duplicates in the data array.
+     * Intentionally inefficient O(n²) implementation.
+     * @returns Array of duplicate values
+     */
+    findDuplicates(): T[] {
+        const duplicates: T[] = [];
+        for (let i = 0; i < this.data.length; i++) {
+            for (let j = i + 1; j < this.data.length; j++) {
+                if (this.data[i] === this.data[j]) {
+                    if (!duplicates.includes(this.data[i])) {
+                        duplicates.push(this.data[i]);
+                    }
+                }
+            }
+        }
+        return duplicates;
+    }
+
+    /**
+     * Sort the data using bubble sort.
+     * Intentionally inefficient O(n²) implementation.
+     * @returns Sorted copy of the data
+     */
+    sortData(): T[] {
+        const result = [...this.data];
+        const n = result.length;
+        for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n - 1; j++) {
+                if (result[j] > result[j + 1]) {
+                    const temp = result[j];
+                    result[j] = result[j + 1];
+                    result[j + 1] = temp;
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Get unique values from the data.
+     * Intentionally inefficient O(n²) implementation.
+     * @returns Array of unique values
+     */
+    getUnique(): T[] {
+        const unique: T[] = [];
+        for (let i = 0; i < this.data.length; i++) {
+            let found = false;
+            for (let j = 0; j < unique.length; j++) {
+                if (unique[j] === this.data[i]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                unique.push(this.data[i]);
+            }
+        }
+        return unique;
+    }
+
+    /**
+     * Get the data array.
+     * @returns The data array
+     */
+    getData(): T[] {
+        return [...this.data];
+    }
+}
+"""
+    file_path = temp_project / "app.ts"
+    file_path.write_text(original, encoding="utf-8")
+    target_func = "findDuplicates"
+    parent_class = "DataProcessor"
+
+    functions = ts_support.discover_functions(file_path)
+    # find function
+    target_func_info = None
+    for func in functions:
+        if func.name == target_func and func.parents[0].name == parent_class:
+            target_func_info = func
+            break
+    assert target_func_info is not None
+
+    new_code = """```typescript:app.ts
+class DataProcessor<T> {
+   private data: T[];
+
+   /**
+    * Create a DataProcessor instance.
+    * @param data - Initial data array
+    */
+   constructor(data: T[] = []) {
+        this.data = [...data];
+    }
+
+    /**
+     * Find duplicates in the data array.
+     * Optimized O(n) implementation using Sets.
+     * @returns Array of duplicate values
+     */
+    findDuplicates(): T[] {
+        const seen = new Set<T>();
+        const duplicates = new Set<T>();
+
+        for (let i = 0, len = this.data.length; i < len; i++) {
+            const item = this.data[i];
+            if (seen.has(item)) {
+                duplicates.add(item);
+            } else {
+                seen.add(item);
+            }
+        }
+
+        return Array.from(duplicates);
+    }
+}
+```
+"""
+    code_markdown = CodeStringsMarkdown.parse_markdown_code(new_code)
+    replaced = replace_function_definitions_for_language([f"{parent_class}.{target_func}"], code_markdown, file_path, temp_project)
+    assert replaced
+
+    new_code = file_path.read_text()
+    assert new_code == """/**
+ * DataProcessor class - demonstrates class method optimization in TypeScript.
+ * Contains intentionally inefficient implementations for optimization testing.
+ */
+
+/**
+ * A class for processing data arrays with various operations.
+ */
+export class DataProcessor<T> {
+    private data: T[];
+
+    /**
+     * Create a DataProcessor instance.
+     * @param data - Initial data array
+     */
+    constructor(data: T[] = []) {
+        this.data = [...data];
+    }
+
+    /**
+     * Find duplicates in the data array.
+     * Optimized O(n) implementation using Sets.
+     * @returns Array of duplicate values
+     */
+    findDuplicates(): T[] {
+        const seen = new Set<T>();
+        const duplicates = new Set<T>();
+
+        for (let i = 0, len = this.data.length; i < len; i++) {
+            const item = this.data[i];
+            if (seen.has(item)) {
+                duplicates.add(item);
+            } else {
+                seen.add(item);
+            }
+        }
+
+        return Array.from(duplicates);
+    }
+
+    /**
+     * Sort the data using bubble sort.
+     * Intentionally inefficient O(n²) implementation.
+     * @returns Sorted copy of the data
+     */
+    sortData(): T[] {
+        const result = [...this.data];
+        const n = result.length;
+        for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n - 1; j++) {
+                if (result[j] > result[j + 1]) {
+                    const temp = result[j];
+                    result[j] = result[j + 1];
+                    result[j + 1] = temp;
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Get unique values from the data.
+     * Intentionally inefficient O(n²) implementation.
+     * @returns Array of unique values
+     */
+    getUnique(): T[] {
+        const unique: T[] = [];
+        for (let i = 0; i < this.data.length; i++) {
+            let found = false;
+            for (let j = 0; j < unique.length; j++) {
+                if (unique[j] === this.data[i]) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                unique.push(this.data[i]);
+            }
+        }
+        return unique;
+    }
+
+    /**
+     * Get the data array.
+     * @returns The data array
+     */
+    getData(): T[] {
+        return [...this.data];
+    }
+}
+"""
+

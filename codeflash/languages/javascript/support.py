@@ -977,11 +977,17 @@ class JavaScriptSupport:
             new_source: New source code containing the optimized function.
 
         Returns:
-            Modified source code with function body replaced.
+            Modified source code with function body replaced, or original source
+            if new_source is empty or invalid.
 
         """
         if function.start_line is None or function.end_line is None:
             logger.error("Function %s has no line information", function.name)
+            return source
+
+        # If new_source is empty or whitespace-only, return original unchanged
+        if not new_source or not new_source.strip():
+            logger.warning("Empty new_source provided for %s, returning original", function.name)
             return source
 
         # Get analyzer for parsing
@@ -990,20 +996,81 @@ class JavaScriptSupport:
         else:
             analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
+        # Check if new_source contains a JSDoc comment - if so, use full replacement
+        # to include the updated JSDoc along with the function body
+        stripped_new_source = new_source.strip()
+        if stripped_new_source.startswith("/**"):
+            # new_source includes JSDoc, use full replacement to apply the new JSDoc
+            if not self._contains_function_declaration(new_source, function.name, analyzer):
+                logger.warning("new_source does not contain function %s, returning original", function.name)
+                return source
+            return self._replace_function_text_based(source, function, new_source, analyzer)
+
         # Extract just the method body from the new source
         new_body = self._extract_function_body(new_source, function.name, analyzer)
         if new_body is None:
             logger.warning("Could not extract body for %s from optimized code, using full replacement", function.name)
+            # Verify that new_source contains actual code before falling back to text replacement
+            # This prevents deletion of the original function when new_source is invalid
+            if not self._contains_function_declaration(new_source, function.name, analyzer):
+                logger.warning("new_source does not contain function %s, returning original", function.name)
+                return source
             return self._replace_function_text_based(source, function, new_source, analyzer)
 
         # Find the original function and replace its body
         return self._replace_function_body(source, function, new_body, analyzer)
+
+    def _contains_function_declaration(self, source: str, function_name: str, analyzer: TreeSitterAnalyzer) -> bool:
+        """Check if source contains a function declaration with the given name.
+
+        Args:
+            source: Source code to check.
+            function_name: Name of the function to look for.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            True if the source contains the function declaration.
+
+        """
+        try:
+            tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
+            if any(func.name == function_name for func in tree_functions):
+                return True
+
+            # If not found, try wrapping in a dummy class (for standalone method definitions)
+            wrapped_source = f"class __DummyClass__ {{\n{source}\n}}"
+            tree_functions = analyzer.find_functions(wrapped_source, include_methods=True, include_arrow_functions=True)
+            return any(func.name == function_name for func in tree_functions)
+        except Exception:
+            return False
 
     def _extract_function_body(self, source: str, function_name: str, analyzer: TreeSitterAnalyzer) -> str | None:
         """Extract the body of a function from source code.
 
         Searches for the function by name (handles both standalone functions and class methods)
         and extracts just the body content (between { and }).
+
+        Args:
+            source: Source code containing the function.
+            function_name: Name of the function to find.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            The function body content (including braces), or None if not found.
+
+        """
+        # Try to find the function in the source as-is
+        result = self._find_and_extract_body(source, function_name, analyzer)
+        if result is not None:
+            return result
+
+        # If not found, the source might be just a method definition without class context
+        # Try wrapping it in a dummy class to parse it correctly
+        wrapped_source = f"class __DummyClass__ {{\n{source}\n}}"
+        return self._find_and_extract_body(wrapped_source, function_name, analyzer)
+
+    def _find_and_extract_body(self, source: str, function_name: str, analyzer: TreeSitterAnalyzer) -> str | None:
+        """Internal helper to find a function and extract its body.
 
         Args:
             source: Source code containing the function.
@@ -1104,7 +1171,12 @@ class JavaScriptSupport:
                     if name == target_name and (node.start_point[0] + 1) == target_line:
                         return node
 
-            if node.type in ("function_declaration", "function"):
+            if node.type in (
+                "function_declaration",
+                "function",
+                "generator_function_declaration",
+                "generator_function",
+            ):
                 name_node = node.child_by_field_name("name")
                 if name_node:
                     name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")

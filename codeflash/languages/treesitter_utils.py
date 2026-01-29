@@ -947,15 +947,37 @@ class TreeSitterAnalyzer:
             is_exported = True
             # Find the actual declaration inside the export
             for child in node.children:
-                if child.type in (
-                    "lexical_declaration",
-                    "variable_declaration",
-                    "class_declaration",
-                    "type_alias_declaration",
-                    "interface_declaration",
-                    "enum_declaration",
-                ):
+                if child.type in ("lexical_declaration", "variable_declaration"):
                     self._extract_declaration(child, source_bytes, declarations, is_exported, node)
+                    return
+                if child.type == "class_declaration":
+                    name_node = child.child_by_field_name("name")
+                    if name_node:
+                        declarations.append(
+                            ModuleLevelDeclaration(
+                                name=self.get_node_text(name_node, source_bytes),
+                                declaration_type="class",
+                                source_code=self.get_node_text(node, source_bytes),
+                                start_line=node.start_point[0] + 1,
+                                end_line=node.end_point[0] + 1,
+                                is_exported=is_exported,
+                            )
+                        )
+                    return
+                if child.type in ("type_alias_declaration", "interface_declaration", "enum_declaration"):
+                    name_node = child.child_by_field_name("name")
+                    if name_node:
+                        decl_type = child.type.replace("_declaration", "").replace("_alias", "")
+                        declarations.append(
+                            ModuleLevelDeclaration(
+                                name=self.get_node_text(name_node, source_bytes),
+                                declaration_type=decl_type,
+                                source_code=self.get_node_text(node, source_bytes),
+                                start_line=node.start_point[0] + 1,
+                                end_line=node.end_point[0] + 1,
+                                is_exported=is_exported,
+                            )
+                        )
                     return
             return
 

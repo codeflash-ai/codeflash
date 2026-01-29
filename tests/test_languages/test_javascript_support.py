@@ -949,7 +949,10 @@ class TestClassMethodReplacement:
         assert js_support.validate_syntax(result) is True
 
     def test_replace_class_method_with_jsdoc(self, js_support):
-        """Test replacing a class method that has JSDoc."""
+        """Test replacing a class method that has JSDoc.
+
+        When new_code includes a JSDoc, it should replace the original JSDoc.
+        """
         source = """class Calculator {
     /**
      * Adds two numbers.
@@ -977,7 +980,9 @@ class TestClassMethodReplacement:
 """
         result = js_support.replace_function(source, func, new_code)
 
+        # New JSDoc should replace the original
         assert "optimized" in result
+        # Body should be replaced with the optimized version
         assert "(a + b) | 0" in result
         assert js_support.validate_syntax(result) is True
 
