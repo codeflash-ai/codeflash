@@ -613,8 +613,6 @@ class LanguageSupport(Protocol):
         """Parse line profiler output."""
         ...
 
-
-
     # === Test Execution ===
 
     def run_behavioral_tests(

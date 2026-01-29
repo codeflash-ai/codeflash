@@ -634,7 +634,7 @@ function last() {
 ]
 
 
-def get_test_cases():
+def get_test_cases() -> list[ReplacementTestCase]:
     """Return all test cases."""
     return TEST_CASES
 
