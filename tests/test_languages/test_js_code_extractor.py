@@ -5,6 +5,7 @@ Uses strict string equality to verify extraction results.
 
 import shutil
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -1131,7 +1132,9 @@ class TestCodeExtractorIntegration:
             pytest_cmd="jest",
         )
 
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = FunctionOptimizer(
+            function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
+        )
         result = func_optimizer.get_code_optimization_context()
 
         from codeflash.either import is_successful

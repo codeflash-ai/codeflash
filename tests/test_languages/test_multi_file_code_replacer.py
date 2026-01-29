@@ -79,6 +79,7 @@ function findMin(numbers) {
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.registry import get_language_support
@@ -127,7 +128,9 @@ def test_js_replcement() -> None:
             project_root_path=root_dir,
             pytest_cmd="jest",
         )
-        func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
+        func_optimizer = FunctionOptimizer(
+            function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
+        )
         result = func_optimizer.get_code_optimization_context()
         from codeflash.either import is_successful
 
