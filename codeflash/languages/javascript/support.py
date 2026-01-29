@@ -321,6 +321,29 @@ class JavaScriptSupport:
         else:
             target_code = ""
 
+        # For class methods, wrap the method in its class definition
+        # This is necessary because method definition syntax is only valid inside a class body
+        if function.is_method and function.parents:
+            class_name = None
+            for parent in function.parents:
+                if parent.type == "ClassDef":
+                    class_name = parent.name
+                    break
+
+            if class_name:
+                # Find the class definition in the source to get proper indentation and any class JSDoc
+                class_info = self._find_class_definition(source, class_name, analyzer)
+                if class_info:
+                    class_jsdoc, class_indent = class_info
+                    # Wrap the method in a minimal class definition
+                    if class_jsdoc:
+                        target_code = f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{target_code}{class_indent}}}\n"
+                    else:
+                        target_code = f"{class_indent}class {class_name} {{\n{target_code}{class_indent}}}\n"
+                else:
+                    # Fallback: wrap with no indentation
+                    target_code = f"class {class_name} {{\n{target_code}}}\n"
+
         imports = analyzer.find_imports(source)
 
         # Find helper functions called by target
@@ -337,6 +360,16 @@ class JavaScriptSupport:
             target_code=target_code, helpers=helpers, source=source, analyzer=analyzer, imports=imports
         )
 
+        # Validate that the extracted code is syntactically valid
+        # If not, raise an error to fail the optimization early
+        if target_code and not self.validate_syntax(target_code):
+            error_msg = (
+                f"Extracted code for {function.name} is not syntactically valid JavaScript. "
+                f"Cannot proceed with optimization."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
         return CodeContext(
             target_code=target_code,
             target_file=function.file_path,
@@ -345,6 +378,61 @@ class JavaScriptSupport:
             imports=import_lines,
             language=Language.JAVASCRIPT,
         )
+
+    def _find_class_definition(
+        self, source: str, class_name: str, analyzer: TreeSitterAnalyzer
+    ) -> tuple[str, str] | None:
+        """Find a class definition and extract its JSDoc comment and indentation.
+
+        Args:
+            source: The source code to search.
+            class_name: The name of the class to find.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            Tuple of (jsdoc_comment, indentation) or None if not found.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+
+        def find_class_node(node):
+            """Recursively find a class declaration with the given name."""
+            if node.type in ("class_declaration", "class"):
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    node_name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                    if node_name == class_name:
+                        return node
+            for child in node.children:
+                result = find_class_node(child)
+                if result:
+                    return result
+            return None
+
+        class_node = find_class_node(tree.root_node)
+        if not class_node:
+            return None
+
+        # Get indentation from the class line
+        lines = source.splitlines(keepends=True)
+        class_line_idx = class_node.start_point[0]
+        if class_line_idx < len(lines):
+            class_line = lines[class_line_idx]
+            indent = len(class_line) - len(class_line.lstrip())
+            indentation = " " * indent
+        else:
+            indentation = ""
+
+        # Look for preceding JSDoc comment
+        jsdoc = ""
+        prev_sibling = class_node.prev_named_sibling
+        if prev_sibling and prev_sibling.type == "comment":
+            comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+            if comment_text.strip().startswith("/**"):
+                jsdoc = comment_text
+
+        return (jsdoc, indentation)
 
     def _find_helper_functions(
         self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path

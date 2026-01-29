@@ -35,6 +35,7 @@ class ExpectCallMatch:
     func_args: str
     assertion_chain: str
     has_trailing_semicolon: bool
+    object_prefix: str = ""  # Object prefix like "calc." or "this." or ""
 
 
 @dataclass
@@ -45,7 +46,8 @@ class StandaloneCallMatch:
     end_pos: int
     leading_whitespace: str
     func_args: str
-    prefix: str  # Everything between whitespace and func name (e.g., "await ", "")
+    prefix: str  # "await " or ""
+    object_prefix: str  # Object prefix like "calc." or "this." or ""
     has_trailing_semicolon: bool
 
 
@@ -61,6 +63,7 @@ class StandaloneCallTransformer:
     - func(args) -> codeflash.capturePerf('name', 'id', func, args)
     - const result = func(args) -> const result = codeflash.capturePerf(...)
     - arr.map(() => func(args)) -> arr.map(() => codeflash.capturePerf(..., func, args))
+    - calc.fibonacci(n) -> codeflash.capturePerf('...', 'id', calc.fibonacci.bind(calc), n)
 
     """
 
@@ -69,9 +72,12 @@ class StandaloneCallTransformer:
         self.qualified_name = qualified_name
         self.capture_func = capture_func
         self.invocation_counter = 0
-        # Pattern to match func_name( with optional leading await
+        # Pattern to match func_name( with optional leading await and optional object prefix
+        # Captures: (whitespace)(await )?(object.)*func_name(
         # We'll filter out expect() and codeflash. cases in the transform loop
-        self._call_pattern = re.compile(rf"(\s*)(await\s+)?{re.escape(func_name)}\s*\(")
+        self._call_pattern = re.compile(
+            rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(func_name)}\s*\("
+        )
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -121,6 +127,42 @@ class StandaloneCallTransformer:
         if f"codeflash.{self.capture_func}(" in lookback[-60:]:
             return True
 
+        # Skip if this is a function/method definition, not a call
+        # Patterns to skip:
+        # - ClassName.prototype.funcName = function(
+        # - funcName = function(
+        # - funcName: function(
+        # - function funcName(
+        # - funcName() { (method definition in class)
+        near_context = lookback[-80:] if len(lookback) >= 80 else lookback
+
+        # Skip prototype assignment: ClassName.prototype.funcName = function(
+        if re.search(r"\.prototype\.\w+\s*=\s*function\s*$", near_context):
+            return True
+
+        # Skip function assignment: funcName = function(
+        if re.search(rf"{re.escape(self.func_name)}\s*=\s*function\s*$", near_context):
+            return True
+
+        # Skip function declaration: function funcName(
+        if re.search(rf"function\s+{re.escape(self.func_name)}\s*$", near_context):
+            return True
+
+        # Skip method definition in class body: funcName(params) { or async funcName(params) {
+        # Check by looking at what comes after the closing paren
+        # The match ends at the opening paren, so find the closing paren and check what follows
+        close_paren_pos = self._find_matching_paren(code, match.end() - 1)
+        if close_paren_pos != -1:
+            # Check if followed by { (method definition) after optional whitespace
+            after_close = code[close_paren_pos : close_paren_pos + 20].lstrip()
+            if after_close.startswith("{"):
+                # This is a method definition like "fibonacci(n) {"
+                # But we still want to capture certain patterns like arrow functions
+                # Check if there's no => before the {
+                between = code[close_paren_pos : close_paren_pos + 20].strip()
+                if not between.startswith("=>"):
+                    return True
+
         # Skip if inside expect() - look for 'expect(' with unmatched parens
         # Find the last 'expect(' and check if it's still open
         expect_search_start = max(0, start - 100)
@@ -138,10 +180,28 @@ class StandaloneCallTransformer:
 
         return False
 
+    def _find_matching_paren(self, code: str, open_paren_pos: int) -> int:
+        """Find the position of the closing paren for the given opening paren."""
+        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+            return -1
+
+        depth = 1
+        pos = open_paren_pos + 1
+
+        while pos < len(code) and depth > 0:
+            if code[pos] == "(":
+                depth += 1
+            elif code[pos] == ")":
+                depth -= 1
+            pos += 1
+
+        return pos if depth == 0 else -1
+
     def _parse_standalone_call(self, code: str, match: re.Match) -> StandaloneCallMatch | None:
         """Parse a complete standalone func(...) call."""
         leading_ws = match.group(1)
         prefix = match.group(2) or ""  # "await " or ""
+        object_prefix = match.group(3) or ""  # Object prefix like "calc." or ""
 
         # Find the opening paren position
         match_text = match.group(0)
@@ -169,6 +229,7 @@ class StandaloneCallTransformer:
             leading_whitespace=leading_ws,
             func_args=func_args,
             prefix=prefix,
+            object_prefix=object_prefix,
             has_trailing_semicolon=has_trailing_semicolon,
         )
 
@@ -212,6 +273,23 @@ class StandaloneCallTransformer:
         args_str = match.func_args.strip()
         semicolon = ";" if match.has_trailing_semicolon else ""
 
+        # Handle method calls on objects (e.g., calc.fibonacci, this.method)
+        if match.object_prefix:
+            # Remove trailing dot from object prefix for the bind call
+            obj = match.object_prefix.rstrip(".")
+            full_method = f"{obj}.{self.func_name}"
+
+            if args_str:
+                return (
+                    f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                    f"'{line_id}', {full_method}.bind({obj}), {args_str}){semicolon}"
+                )
+            return (
+                f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
+                f"'{line_id}', {full_method}.bind({obj})){semicolon}"
+            )
+
+        # Handle standalone function calls
         if args_str:
             return (
                 f"{match.leading_whitespace}{match.prefix}codeflash.{self.capture_func}('{self.qualified_name}', "
@@ -268,8 +346,11 @@ class ExpectCallTransformer:
         self.capture_func = capture_func
         self.remove_assertions = remove_assertions
         self.invocation_counter = 0
-        # Pattern to match start of expect(func_name(
-        self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*{re.escape(func_name)}\s*\(")
+        # Pattern to match start of expect((object.)*func_name(
+        # Captures: (whitespace), (object prefix like calc. or this.)
+        self._expect_pattern = re.compile(
+            rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(func_name)}\s*\("
+        )
 
     def transform(self, code: str) -> str:
         """Transform all expect calls in the code."""
@@ -307,6 +388,7 @@ class ExpectCallTransformer:
         Returns None if the pattern doesn't match expected structure.
         """
         leading_ws = match.group(1)
+        object_prefix = match.group(2) or ""  # Object prefix like "calc." or ""
 
         # Find the arguments of the function call (handling nested parens)
         args_start = match.end()
@@ -341,6 +423,7 @@ class ExpectCallTransformer:
             func_args=func_args,
             assertion_chain=assertion_chain,
             has_trailing_semicolon=has_trailing_semicolon,
+            object_prefix=object_prefix,
         )
 
     def _find_balanced_parens(self, code: str, open_paren_pos: int) -> tuple[str | None, int]:
@@ -473,16 +556,24 @@ class ExpectCallTransformer:
         line_id = str(self.invocation_counter)
         args_str = match.func_args.strip()
 
+        # Determine the function reference to use
+        if match.object_prefix:
+            # Method call on object: calc.fibonacci -> calc.fibonacci.bind(calc)
+            obj = match.object_prefix.rstrip(".")
+            func_ref = f"{obj}.{self.func_name}.bind({obj})"
+        else:
+            func_ref = self.func_name
+
         if self.remove_assertions:
             # For generated/regression tests: remove expect wrapper and assertion
             if args_str:
                 return (
                     f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
-                    f"'{line_id}', {self.func_name}, {args_str});"
+                    f"'{line_id}', {func_ref}, {args_str});"
                 )
             return (
                 f"{match.leading_whitespace}codeflash.{self.capture_func}('{self.qualified_name}', "
-                f"'{line_id}', {self.func_name});"
+                f"'{line_id}', {func_ref});"
             )
 
         # For existing tests: keep the expect wrapper
@@ -490,11 +581,11 @@ class ExpectCallTransformer:
         if args_str:
             return (
                 f"{match.leading_whitespace}expect(codeflash.{self.capture_func}('{self.qualified_name}', "
-                f"'{line_id}', {self.func_name}, {args_str})){match.assertion_chain}{semicolon}"
+                f"'{line_id}', {func_ref}, {args_str})){match.assertion_chain}{semicolon}"
             )
         return (
             f"{match.leading_whitespace}expect(codeflash.{self.capture_func}('{self.qualified_name}', "
-            f"'{line_id}', {self.func_name})){match.assertion_chain}{semicolon}"
+            f"'{line_id}', {func_ref})){match.assertion_chain}{semicolon}"
         )
 
 
@@ -582,13 +673,18 @@ def inject_profiling_into_existing_js_test(
 
 
 def _is_function_used_in_test(code: str, func_name: str) -> bool:
-    """Check if a function is imported or used in the test code."""
-    # Check for CommonJS require
+    """Check if a function is imported or used in the test code.
+
+    This function handles both standalone functions and class methods.
+    For class methods, it checks if the method is called on any object
+    (e.g., calc.fibonacci, this.fibonacci).
+    """
+    # Check for CommonJS require with named export
     require_pattern = rf"(?:const|let|var)\s+\{{\s*[^}}]*\b{re.escape(func_name)}\b[^}}]*\}}\s*=\s*require\s*\("
     if re.search(require_pattern, code):
         return True
 
-    # Check for ES6 import
+    # Check for ES6 import with named export
     import_pattern = rf"import\s+\{{\s*[^}}]*\b{re.escape(func_name)}\b[^}}]*\}}\s+from"
     if re.search(import_pattern, code):
         return True
@@ -600,6 +696,12 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
 
     default_import = rf"import\s+{re.escape(func_name)}\s+from"
     if re.search(default_import, code):
+        return True
+
+    # Check for method calls: obj.funcName( or this.funcName(
+    # This handles class methods called on instances
+    method_call_pattern = rf"\w+\.{re.escape(func_name)}\s*\("
+    if re.search(method_call_pattern, code):
         return True
 
     return False

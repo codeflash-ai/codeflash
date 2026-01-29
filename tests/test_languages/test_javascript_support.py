@@ -695,3 +695,546 @@ describe('Math functions', () => {
             assert "Math functions" in test_names
             assert "add returns sum" in test_names
             assert "handles negative numbers" in test_names
+
+
+class TestClassMethodExtraction:
+    """Tests for class method extraction and code context.
+
+    These tests use full string equality to verify exact extraction output.
+    """
+
+    def test_extract_class_method_wraps_in_class(self, js_support):
+        """Test that extracting a class method wraps it in a class definition."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+
+    multiply(a, b) {
+        return a * b;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            # Discover the method
+            functions = js_support.discover_functions(file_path)
+            add_method = next(f for f in functions if f.name == "add")
+
+            # Extract code context
+            context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+
+            # Full string equality check for exact extraction output
+            expected_code = """class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+}
+"""
+            assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+            assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_class_method_with_jsdoc(self, js_support):
+        """Test extracting a class method with JSDoc comments."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""/**
+ * A simple calculator class.
+ */
+class Calculator {
+    /**
+     * Adds two numbers.
+     * @param {number} a - First number
+     * @param {number} b - Second number
+     * @returns {number} The sum
+     */
+    add(a, b) {
+        return a + b;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_method = next(f for f in functions if f.name == "add")
+
+            context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+
+            # Full string equality check - includes class JSDoc, class definition, method JSDoc, and method
+            expected_code = """/**
+ * A simple calculator class.
+ */
+class Calculator {
+    /**
+     * Adds two numbers.
+     * @param {number} a - First number
+     * @param {number} b - Second number
+     * @returns {number} The sum
+     */
+    add(a, b) {
+        return a + b;
+    }
+}
+"""
+            assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+            assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_class_method_syntax_valid(self, js_support):
+        """Test that extracted class method code is always syntactically valid."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class FibonacciCalculator {
+    fibonacci(n) {
+        if (n <= 1) {
+            return n;
+        }
+        return this.fibonacci(n - 1) + this.fibonacci(n - 2);
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            fib_method = next(f for f in functions if f.name == "fibonacci")
+
+            context = js_support.extract_code_context(fib_method, file_path.parent, file_path.parent)
+
+            # Full string equality check
+            expected_code = """class FibonacciCalculator {
+    fibonacci(n) {
+        if (n <= 1) {
+            return n;
+        }
+        return this.fibonacci(n - 1) + this.fibonacci(n - 2);
+    }
+}
+"""
+            assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+            assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_nested_class_method(self, js_support):
+        """Test extracting a method from a nested class structure."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Outer {
+    createInner() {
+        return class Inner {
+            getValue() {
+                return 42;
+            }
+        };
+    }
+
+    add(a, b) {
+        return a + b;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_method = next((f for f in functions if f.name == "add"), None)
+
+            if add_method:
+                context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+
+                # Full string equality check
+                expected_code = """class Outer {
+    add(a, b) {
+        return a + b;
+    }
+}
+"""
+                assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+                assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_async_class_method(self, js_support):
+        """Test extracting an async class method."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class ApiClient {
+    async fetchData(url) {
+        const response = await fetch(url);
+        return response.json();
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            fetch_method = next(f for f in functions if f.name == "fetchData")
+
+            context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
+
+            # Full string equality check
+            expected_code = """class ApiClient {
+    async fetchData(url) {
+        const response = await fetch(url);
+        return response.json();
+    }
+}
+"""
+            assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+            assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_static_class_method(self, js_support):
+        """Test extracting a static class method."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class MathUtils {
+    static add(a, b) {
+        return a + b;
+    }
+
+    static multiply(a, b) {
+        return a * b;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_method = next((f for f in functions if f.name == "add"), None)
+
+            if add_method:
+                context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+
+                # Full string equality check
+                expected_code = """class MathUtils {
+    static add(a, b) {
+        return a + b;
+    }
+}
+"""
+                assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+                assert js_support.validate_syntax(context.target_code) is True
+
+    def test_extract_class_method_without_class_jsdoc(self, js_support):
+        """Test extracting a method from a class without JSDoc."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class SimpleClass {
+    simpleMethod() {
+        return "hello";
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            method = next(f for f in functions if f.name == "simpleMethod")
+
+            context = js_support.extract_code_context(method, file_path.parent, file_path.parent)
+
+            # Full string equality check
+            expected_code = """class SimpleClass {
+    simpleMethod() {
+        return "hello";
+    }
+}
+"""
+            assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+            assert js_support.validate_syntax(context.target_code) is True
+
+
+class TestClassMethodReplacement:
+    """Tests for replacing class methods."""
+
+    def test_replace_class_method_preserves_class_structure(self, js_support):
+        """Test that replacing a class method preserves the class structure."""
+        source = """class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+
+    multiply(a, b) {
+        return a * b;
+    }
+}
+"""
+        func = FunctionInfo(
+            name="add",
+            file_path=Path("/test.js"),
+            start_line=2,
+            end_line=4,
+            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            is_method=True,
+        )
+        new_code = """    add(a, b) {
+        // Optimized bitwise addition
+        return (a + b) | 0;
+    }
+"""
+        result = js_support.replace_function(source, func, new_code)
+
+        # Check class structure is preserved
+        assert "class Calculator" in result
+        assert "multiply(a, b)" in result
+        assert "return a * b" in result
+
+        # Check new code is inserted
+        assert "Optimized bitwise addition" in result
+        assert "(a + b) | 0" in result
+
+        # Check result is valid JavaScript
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_class_method_with_jsdoc(self, js_support):
+        """Test replacing a class method that has JSDoc."""
+        source = """class Calculator {
+    /**
+     * Adds two numbers.
+     */
+    add(a, b) {
+        return a + b;
+    }
+}
+"""
+        func = FunctionInfo(
+            name="add",
+            file_path=Path("/test.js"),
+            start_line=5,  # Method starts here
+            end_line=7,
+            doc_start_line=2,  # JSDoc starts here
+            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            is_method=True,
+        )
+        new_code = """    /**
+     * Adds two numbers (optimized).
+     */
+    add(a, b) {
+        return (a + b) | 0;
+    }
+"""
+        result = js_support.replace_function(source, func, new_code)
+
+        assert "optimized" in result
+        assert "(a + b) | 0" in result
+        assert js_support.validate_syntax(result) is True
+
+    def test_replace_multiple_class_methods_sequentially(self, js_support):
+        """Test replacing multiple methods in sequence."""
+        source = """class Math {
+    add(a, b) {
+        return a + b;
+    }
+
+    subtract(a, b) {
+        return a - b;
+    }
+}
+"""
+        # Replace add first
+        add_func = FunctionInfo(
+            name="add",
+            file_path=Path("/test.js"),
+            start_line=2,
+            end_line=4,
+            parents=(ParentInfo(name="Math", type="ClassDef"),),
+            is_method=True,
+        )
+        source = js_support.replace_function(source, add_func, """    add(a, b) {
+        return (a + b) | 0;
+    }
+""")
+
+        assert js_support.validate_syntax(source) is True
+
+        # Now need to re-discover to get updated line numbers
+        # In practice, codeflash handles this, but for test we just check validity
+        assert "return (a + b) | 0" in source
+        assert "return a - b" in source
+
+    def test_replace_class_method_indentation_adjustment(self, js_support):
+        """Test that indentation is correctly adjusted when replacing."""
+        source = """    class Indented {
+        innerMethod() {
+            return 1;
+        }
+    }
+"""
+        func = FunctionInfo(
+            name="innerMethod",
+            file_path=Path("/test.js"),
+            start_line=2,
+            end_line=4,
+            parents=(ParentInfo(name="Indented", type="ClassDef"),),
+            is_method=True,
+        )
+        # New code with no indentation
+        new_code = """innerMethod() {
+    return 42;
+}
+"""
+        result = js_support.replace_function(source, func, new_code)
+
+        # Check that indentation was adjusted
+        lines = result.splitlines()
+        method_line = next(l for l in lines if "innerMethod" in l)
+        # Should have 8 spaces (original indentation)
+        assert method_line.startswith("        ")
+
+        assert js_support.validate_syntax(result) is True
+
+
+class TestClassMethodEdgeCases:
+    """Edge case tests for class method handling."""
+
+    def test_class_with_constructor(self, js_support):
+        """Test handling classes with constructors."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Counter {
+    constructor(start = 0) {
+        this.value = start;
+    }
+
+    increment() {
+        return ++this.value;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+
+            # Should find constructor and increment
+            names = {f.name for f in functions}
+            assert "constructor" in names or "increment" in names
+
+    def test_class_with_getters_setters(self, js_support):
+        """Test handling classes with getters and setters."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Person {
+    constructor(name) {
+        this._name = name;
+    }
+
+    get name() {
+        return this._name;
+    }
+
+    set name(value) {
+        this._name = value;
+    }
+
+    greet() {
+        return 'Hello, ' + this._name;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+
+            # Should find at least greet
+            names = {f.name for f in functions}
+            assert "greet" in names
+
+    def test_class_extending_another(self, js_support):
+        """Test handling classes that extend another class."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Animal {
+    speak() {
+        return 'sound';
+    }
+}
+
+class Dog extends Animal {
+    speak() {
+        return 'bark';
+    }
+
+    fetch() {
+        return 'ball';
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+
+            # Find Dog's fetch method
+            fetch_method = next((f for f in functions if f.name == "fetch" and f.class_name == "Dog"), None)
+
+            if fetch_method:
+                context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
+
+                # Full string equality check
+                expected_code = """class Dog {
+    fetch() {
+        return 'ball';
+    }
+}
+"""
+                assert context.target_code == expected_code, f"Expected:\n{expected_code}\nGot:\n{context.target_code}"
+                assert js_support.validate_syntax(context.target_code) is True
+
+    def test_class_with_private_method(self, js_support):
+        """Test handling classes with private methods (ES2022+)."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class SecureClass {
+    #privateMethod() {
+        return 'secret';
+    }
+
+    publicMethod() {
+        return this.#privateMethod();
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+
+            # Should at least find publicMethod
+            names = {f.name for f in functions}
+            assert "publicMethod" in names
+
+    def test_commonjs_class_export(self, js_support):
+        """Test handling CommonJS exported classes."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+}
+
+module.exports = { Calculator };
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_method = next(f for f in functions if f.name == "add")
+
+            context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+
+            assert "class Calculator" in context.target_code
+            assert js_support.validate_syntax(context.target_code) is True
+
+    def test_es_module_class_export(self, js_support):
+        """Test handling ES module exported classes."""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write("""export class Calculator {
+    add(a, b) {
+        return a + b;
+    }
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+
+            # Find the add method
+            add_method = next((f for f in functions if f.name == "add"), None)
+
+            if add_method:
+                context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
+                assert js_support.validate_syntax(context.target_code) is True
