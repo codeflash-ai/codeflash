@@ -60,11 +60,7 @@ def run_merge_benchmark(count=100):
     test_results_xml, test_results_bin = generate_test_invocations(count)
 
     # Perform the merge operation that will be benchmarked
-    merge_test_results(
-        xml_test_results=test_results_xml,
-        bin_test_results=test_results_bin,
-        test_framework="unittest"
-    )
+    merge_test_results(xml_test_results=test_results_xml, bin_test_results=test_results_bin, test_framework="unittest")
 
 
 def test_benchmark_merge_test_results(benchmark):

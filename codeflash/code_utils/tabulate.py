@@ -649,7 +649,7 @@ def tabulate(
     headersalign=None,
     rowalign=None,
     maxheadercolwidths=None,
-):
+) -> str:
     if tabular_data is None:
         tabular_data = []
 

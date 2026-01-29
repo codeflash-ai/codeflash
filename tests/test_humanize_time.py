@@ -1,6 +1,6 @@
-from codeflash.code_utils.time_utils import humanize_runtime, format_time
-from codeflash.code_utils.time_utils import format_perf
 import pytest
+
+from codeflash.code_utils.time_utils import format_perf, format_time, humanize_runtime
 
 
 def test_humanize_runtime():
@@ -140,19 +140,22 @@ class TestFormatTime:
         assert format_time(3_600_000_000_000) == "3600s"  # 1 hour
         assert format_time(86_400_000_000_000) == "86400s"  # 1 day
 
-    @pytest.mark.parametrize("nanoseconds,expected", [
-        (0, "0ns"),
-        (42, "42ns"),
-        (1_500, "1.50μs"),
-        (25_000, "25.0μs"),
-        (150_000, "150μs"),
-        (2_500_000, "2.50ms"),
-        (45_000_000, "45.0ms"),
-        (200_000_000, "200ms"),
-        (3_500_000_000, "3.50s"),
-        (75_000_000_000, "75.0s"),
-        (300_000_000_000, "300s"),
-    ])
+    @pytest.mark.parametrize(
+        "nanoseconds,expected",
+        [
+            (0, "0ns"),
+            (42, "42ns"),
+            (1_500, "1.50μs"),
+            (25_000, "25.0μs"),
+            (150_000, "150μs"),
+            (2_500_000, "2.50ms"),
+            (45_000_000, "45.0ms"),
+            (200_000_000, "200ms"),
+            (3_500_000_000, "3.50s"),
+            (75_000_000_000, "75.0s"),
+            (300_000_000_000, "300s"),
+        ],
+    )
     def test_parametrized_examples(self, nanoseconds, expected):
         """Parametrized test with various input/output combinations."""
         assert format_time(nanoseconds) == expected

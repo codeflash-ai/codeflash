@@ -1,16 +1,15 @@
+import array  # Add import for array
 import ast
 import copy
 import dataclasses
 import datetime
 import decimal
 import re
-from collections import ChainMap, Counter, UserDict, UserList, UserString, defaultdict, deque, namedtuple, OrderedDict
-
 import sys
 import uuid
+from collections import ChainMap, Counter, OrderedDict, UserDict, UserList, UserString, defaultdict, deque, namedtuple
 from enum import Enum, Flag, IntFlag, auto
 from pathlib import Path
-import array # Add import for array
 
 import pydantic
 import pytest
@@ -136,61 +135,64 @@ def test_basic_python_objects() -> None:
     assert comparator(a, b)
     assert not comparator(a, c)
 
-@pytest.mark.parametrize("r1, r2, expected", [
-    (range(1, 10), range(1, 10), True),                # equal
-    (range(0, 10), range(1, 10), False),               # different start
-    (range(2, 10), range(1, 10), False),
-    (range(1, 5), range(1, 10), False),                # different stop
-    (range(1, 20), range(1, 10), False),
-    (range(1, 10, 1), range(1, 10, 2), False),          # different step
-    (range(1, 10, 3), range(1, 10, 2), False),
-    (range(-5, 0), range(-5, 0), True),                # negative ranges
-    (range(-10, 0), range(-5, 0), False),
-    (range(5, 1), range(10, 5), True),                # empty ranges
-    (range(5, 1), range(5, 1), True),
-    (range(7), range(0, 7), True),
-    (range(0, 7), range(0, 7, 1), True),
-    (range(7), range(0, 7, 1), True),
-])
 
+@pytest.mark.parametrize(
+    "r1, r2, expected",
+    [
+        (range(1, 10), range(1, 10), True),  # equal
+        (range(10), range(1, 10), False),  # different start
+        (range(2, 10), range(1, 10), False),
+        (range(1, 5), range(1, 10), False),  # different stop
+        (range(1, 20), range(1, 10), False),
+        (range(1, 10, 1), range(1, 10, 2), False),  # different step
+        (range(1, 10, 3), range(1, 10, 2), False),
+        (range(-5, 0), range(-5, 0), True),  # negative ranges
+        (range(-10, 0), range(-5, 0), False),
+        (range(5, 1), range(10, 5), True),  # empty ranges
+        (range(5, 1), range(5, 1), True),
+        (range(7), range(7), True),
+        (range(7), range(0, 7, 1), True),
+        (range(7), range(0, 7, 1), True),
+    ],
+)
 def test_ranges(r1, r2, expected):
     assert comparator(r1, r2) == expected
 
 
 def test_standard_python_library_objects() -> None:
-    a = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
-    b = datetime.datetime(2020, 2, 2, 2, 2, 2) # type: ignore
-    c = datetime.datetime(2020, 2, 2, 2, 2, 3) # type: ignore
+    a = datetime.datetime(2020, 2, 2, 2, 2, 2)  # type: ignore
+    b = datetime.datetime(2020, 2, 2, 2, 2, 2)  # type: ignore
+    c = datetime.datetime(2020, 2, 2, 2, 2, 3)  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.date(2020, 2, 2) # type: ignore
-    b = datetime.date(2020, 2, 2) # type: ignore
-    c = datetime.date(2020, 2, 3) # type: ignore
+    a = datetime.date(2020, 2, 2)  # type: ignore
+    b = datetime.date(2020, 2, 2)  # type: ignore
+    c = datetime.date(2020, 2, 3)  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.timedelta(days=1) # type: ignore
-    b = datetime.timedelta(days=1) # type: ignore
-    c = datetime.timedelta(days=2) # type: ignore
+    a = datetime.timedelta(days=1)  # type: ignore
+    b = datetime.timedelta(days=1)  # type: ignore
+    c = datetime.timedelta(days=2)  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.time(2, 2, 2) # type: ignore
-    b = datetime.time(2, 2, 2) # type: ignore
-    c = datetime.time(2, 2, 3) # type: ignore
+    a = datetime.time(2, 2, 2)  # type: ignore
+    b = datetime.time(2, 2, 2)  # type: ignore
+    c = datetime.time(2, 2, 3)  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = datetime.timezone.utc # type: ignore
-    b = datetime.timezone.utc # type: ignore
-    c = datetime.timezone(datetime.timedelta(hours=1)) # type: ignore
+    a = datetime.timezone.utc  # type: ignore
+    b = datetime.timezone.utc  # type: ignore
+    c = datetime.timezone(datetime.timedelta(hours=1))  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = decimal.Decimal(3.14) # type: ignore
-    b = decimal.Decimal(3.14) # type: ignore
-    c = decimal.Decimal(3.15) # type: ignore
+    a = decimal.Decimal(3.14)  # type: ignore
+    b = decimal.Decimal(3.14)  # type: ignore
+    c = decimal.Decimal(3.15)  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -204,15 +206,15 @@ def test_standard_python_library_objects() -> None:
         GREEN = auto()
         BLUE = auto()
 
-    a = Color.RED # type: ignore
-    b = Color.RED # type: ignore
-    c = Color.GREEN # type: ignore
+    a = Color.RED  # type: ignore
+    b = Color.RED  # type: ignore
+    c = Color.GREEN  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    a = Color2.RED # type: ignore
-    b = Color2.RED # type: ignore
-    c = Color2.GREEN # type: ignore
+    a = Color2.RED  # type: ignore
+    b = Color2.RED  # type: ignore
+    c = Color2.GREEN  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -222,8 +224,8 @@ def test_standard_python_library_objects() -> None:
         BLUE = auto()
 
     a = Color4.RED  # type: ignore
-    b = Color4.RED # type: ignore
-    c = Color4.GREEN # type: ignore
+    b = Color4.RED  # type: ignore
+    c = Color4.GREEN  # type: ignore
     assert comparator(a, b)
     assert not comparator(a, c)
 
@@ -235,19 +237,19 @@ def test_standard_python_library_objects() -> None:
     assert not comparator(a, c)
     assert not comparator(a, d)
 
-    arr1 = array.array('i', [1, 2, 3])
-    arr2 = array.array('i', [1, 2, 3])
-    arr3 = array.array('i', [4, 5, 6])
-    arr4 = array.array('f', [1.0, 2.0, 3.0])
+    arr1 = array.array("i", [1, 2, 3])
+    arr2 = array.array("i", [1, 2, 3])
+    arr3 = array.array("i", [4, 5, 6])
+    arr4 = array.array("f", [1.0, 2.0, 3.0])
 
     assert comparator(arr1, arr2)
     assert not comparator(arr1, arr3)
     assert not comparator(arr1, arr4)
     assert not comparator(arr1, [1, 2, 3])
 
-    empty_arr_i1 = array.array('i')
-    empty_arr_i2 = array.array('i')
-    empty_arr_f = array.array('f')
+    empty_arr_i1 = array.array("i")
+    empty_arr_i2 = array.array("i")
+    empty_arr_f = array.array("f")
     assert comparator(empty_arr_i1, empty_arr_i2)
     assert not comparator(empty_arr_i1, empty_arr_f)
     assert not comparator(empty_arr_i1, arr1)
@@ -256,8 +258,6 @@ def test_standard_python_library_objects() -> None:
     id3 = uuid.uuid4()
     assert comparator(id1, id1)
     assert not comparator(id1, id3)
-
-
 
 
 def test_numpy():
@@ -354,10 +354,10 @@ def test_numpy():
     assert comparator(ak, al)
     assert not comparator(ai, ak)
 
-    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
-    a_struct = np.array([('Alice', 25)], dtype=dt)
-    b_struct = np.array([('Alice', 25)], dtype=dt)
-    c_struct = np.array([('Bob', 30)], dtype=dt)
+    dt = np.dtype([("name", "S10"), ("age", np.int32)])
+    a_struct = np.array([("Alice", 25)], dtype=dt)
+    b_struct = np.array([("Alice", 25)], dtype=dt)
+    c_struct = np.array([("Bob", 30)], dtype=dt)
 
     a_void = a_struct[0]
     b_void = b_struct[0]
@@ -395,7 +395,8 @@ def test_numpy_random_generator():
     assert comparator(rng4, rng5)
 
     # Test with different bit generators
-    from numpy.random import PCG64, MT19937
+    from numpy.random import MT19937, PCG64
+
     rng_pcg1 = np.random.Generator(PCG64(seed=42))
     rng_pcg2 = np.random.Generator(PCG64(seed=42))
     assert comparator(rng_pcg1, rng_pcg2)
@@ -624,15 +625,15 @@ def test_pandas():
     assert comparator(s1, s2)
     assert not comparator(s1, s3)
 
-    df1 = pd.DataFrame({'a': [1, 2, pd.NA], 'b': [4, pd.NA, 6]})
-    df2 = pd.DataFrame({'a': [1, 2, pd.NA], 'b': [4, pd.NA, 6]})
-    df3 = pd.DataFrame({'a': [1, 2, None], 'b': [4, None, 6]})
+    df1 = pd.DataFrame({"a": [1, 2, pd.NA], "b": [4, pd.NA, 6]})
+    df2 = pd.DataFrame({"a": [1, 2, pd.NA], "b": [4, pd.NA, 6]})
+    df3 = pd.DataFrame({"a": [1, 2, None], "b": [4, None, 6]})
     assert comparator(df1, df2)
     assert not comparator(df1, df3)
 
-    d1 = {'a': pd.NA, 'b': [1, pd.NA, 3]}
-    d2 = {'a': pd.NA, 'b': [1, pd.NA, 3]}
-    d3 = {'a': None, 'b': [1, None, 3]}
+    d1 = {"a": pd.NA, "b": [1, pd.NA, 3]}
+    d2 = {"a": pd.NA, "b": [1, pd.NA, 3]}
+    d3 = {"a": None, "b": [1, None, 3]}
     assert comparator(d1, d2)
     assert not comparator(d1, d3)
 
@@ -789,16 +790,16 @@ def test_torch():
     assert not comparator(o, q)
 
     # Test tensors with NaN values
-    r = torch.tensor([1.0, float('nan'), 3.0])
-    s = torch.tensor([1.0, float('nan'), 3.0])
+    r = torch.tensor([1.0, float("nan"), 3.0])
+    s = torch.tensor([1.0, float("nan"), 3.0])
     t = torch.tensor([1.0, 2.0, 3.0])
     assert comparator(r, s)  # NaN == NaN
     assert not comparator(r, t)
 
     # Test tensors with infinity values
-    u = torch.tensor([1.0, float('inf'), 3.0])
-    v = torch.tensor([1.0, float('inf'), 3.0])
-    w = torch.tensor([1.0, float('-inf'), 3.0])
+    u = torch.tensor([1.0, float("inf"), 3.0])
+    v = torch.tensor([1.0, float("inf"), 3.0])
+    w = torch.tensor([1.0, float("-inf"), 3.0])
     assert comparator(u, v)
     assert not comparator(u, w)
 
@@ -811,16 +812,16 @@ def test_torch():
         assert not comparator(x, z)
 
     # Test tensors with requires_grad
-    aa = torch.tensor([1., 2., 3.], requires_grad=True)
-    bb = torch.tensor([1., 2., 3.], requires_grad=True)
-    cc = torch.tensor([1., 2., 3.], requires_grad=False)
+    aa = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    bb = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    cc = torch.tensor([1.0, 2.0, 3.0], requires_grad=False)
     assert comparator(aa, bb)
     assert not comparator(aa, cc)
 
     # Test complex tensors
-    dd = torch.tensor([1+2j, 3+4j])
-    ee = torch.tensor([1+2j, 3+4j])
-    ff = torch.tensor([1+2j, 3+5j])
+    dd = torch.tensor([1 + 2j, 3 + 4j])
+    ee = torch.tensor([1 + 2j, 3 + 4j])
+    ff = torch.tensor([1 + 2j, 3 + 5j])
     assert comparator(dd, ee)
     assert not comparator(dd, ff)
 
@@ -937,9 +938,9 @@ def test_jax():
     assert not comparator(u, w)
 
     # Test complex arrays
-    x = jnp.array([1+2j, 3+4j])
-    y = jnp.array([1+2j, 3+4j])
-    z = jnp.array([1+2j, 3+5j])
+    x = jnp.array([1 + 2j, 3 + 4j])
+    y = jnp.array([1 + 2j, 3 + 4j])
+    z = jnp.array([1 + 2j, 3 + 5j])
     assert comparator(x, y)
     assert not comparator(x, z)
 
@@ -953,91 +954,76 @@ def test_jax():
 
 def test_xarray():
     try:
-        import xarray as xr
         import numpy as np
+        import xarray as xr
     except ImportError:
         pytest.skip()
 
     # Test basic DataArray
-    a = xr.DataArray([1, 2, 3], dims=['x'])
-    b = xr.DataArray([1, 2, 3], dims=['x'])
-    c = xr.DataArray([1, 2, 4], dims=['x'])
+    a = xr.DataArray([1, 2, 3], dims=["x"])
+    b = xr.DataArray([1, 2, 3], dims=["x"])
+    c = xr.DataArray([1, 2, 4], dims=["x"])
     assert comparator(a, b)
     assert not comparator(a, c)
 
     # Test DataArray with coordinates
-    d = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 2]}, dims=['x'])
-    e = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 2]}, dims=['x'])
-    f = xr.DataArray([1, 2, 3], coords={'x': [0, 1, 3]}, dims=['x'])
+    d = xr.DataArray([1, 2, 3], coords={"x": [0, 1, 2]}, dims=["x"])
+    e = xr.DataArray([1, 2, 3], coords={"x": [0, 1, 2]}, dims=["x"])
+    f = xr.DataArray([1, 2, 3], coords={"x": [0, 1, 3]}, dims=["x"])
     assert comparator(d, e)
     assert not comparator(d, f)
 
     # Test DataArray with attributes
-    g = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'meters'})
-    h = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'meters'})
-    i = xr.DataArray([1, 2, 3], dims=['x'], attrs={'units': 'feet'})
+    g = xr.DataArray([1, 2, 3], dims=["x"], attrs={"units": "meters"})
+    h = xr.DataArray([1, 2, 3], dims=["x"], attrs={"units": "meters"})
+    i = xr.DataArray([1, 2, 3], dims=["x"], attrs={"units": "feet"})
     assert comparator(g, h)
     assert not comparator(g, i)
 
     # Test 2D DataArray
-    j = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=['x', 'y'])
-    k = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=['x', 'y'])
-    l = xr.DataArray([[1, 2, 3], [4, 5, 7]], dims=['x', 'y'])
+    j = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=["x", "y"])
+    k = xr.DataArray([[1, 2, 3], [4, 5, 6]], dims=["x", "y"])
+    l = xr.DataArray([[1, 2, 3], [4, 5, 7]], dims=["x", "y"])
     assert comparator(j, k)
     assert not comparator(j, l)
 
     # Test DataArray with different dimensions
-    m = xr.DataArray([1, 2, 3], dims=['x'])
-    n = xr.DataArray([1, 2, 3], dims=['y'])
+    m = xr.DataArray([1, 2, 3], dims=["x"])
+    n = xr.DataArray([1, 2, 3], dims=["y"])
     assert not comparator(m, n)
 
     # Test DataArray with NaN values
-    o = xr.DataArray([1.0, np.nan, 3.0], dims=['x'])
-    p = xr.DataArray([1.0, np.nan, 3.0], dims=['x'])
-    q = xr.DataArray([1.0, 2.0, 3.0], dims=['x'])
+    o = xr.DataArray([1.0, np.nan, 3.0], dims=["x"])
+    p = xr.DataArray([1.0, np.nan, 3.0], dims=["x"])
+    q = xr.DataArray([1.0, 2.0, 3.0], dims=["x"])
     assert comparator(o, p)
     assert not comparator(o, q)
 
     # Test Dataset
-    r = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
-        'pressure': (['x', 'y'], [[5, 6], [7, 8]])
-    })
-    s = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
-        'pressure': (['x', 'y'], [[5, 6], [7, 8]])
-    })
-    t = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]]),
-        'pressure': (['x', 'y'], [[5, 6], [7, 9]])
-    })
+    r = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]]), "pressure": (["x", "y"], [[5, 6], [7, 8]])})
+    s = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]]), "pressure": (["x", "y"], [[5, 6], [7, 8]])})
+    t = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]]), "pressure": (["x", "y"], [[5, 6], [7, 9]])})
     assert comparator(r, s)
     assert not comparator(r, t)
 
     # Test Dataset with coordinates
-    u = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]])
-    }, coords={'x': [0, 1], 'y': [0, 1]})
-    v = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]])
-    }, coords={'x': [0, 1], 'y': [0, 1]})
-    w = xr.Dataset({
-        'temp': (['x', 'y'], [[1, 2], [3, 4]])
-    }, coords={'x': [0, 2], 'y': [0, 1]})
+    u = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]])}, coords={"x": [0, 1], "y": [0, 1]})
+    v = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]])}, coords={"x": [0, 1], "y": [0, 1]})
+    w = xr.Dataset({"temp": (["x", "y"], [[1, 2], [3, 4]])}, coords={"x": [0, 2], "y": [0, 1]})
     assert comparator(u, v)
     assert not comparator(u, w)
 
     # Test Dataset with attributes
-    x = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'sensor'})
-    y = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'sensor'})
-    z = xr.Dataset({'temp': (['x'], [1, 2, 3])}, attrs={'source': 'model'})
+    x = xr.Dataset({"temp": (["x"], [1, 2, 3])}, attrs={"source": "sensor"})
+    y = xr.Dataset({"temp": (["x"], [1, 2, 3])}, attrs={"source": "sensor"})
+    z = xr.Dataset({"temp": (["x"], [1, 2, 3])}, attrs={"source": "model"})
     assert comparator(x, y)
     assert not comparator(x, z)
 
     # Test Dataset with different variables
-    aa = xr.Dataset({'temp': (['x'], [1, 2, 3])})
-    bb = xr.Dataset({'temp': (['x'], [1, 2, 3])})
-    cc = xr.Dataset({'pressure': (['x'], [1, 2, 3])})
+    aa = xr.Dataset({"temp": (["x"], [1, 2, 3])})
+    bb = xr.Dataset({"temp": (["x"], [1, 2, 3])})
+    cc = xr.Dataset({"pressure": (["x"], [1, 2, 3])})
     assert comparator(aa, bb)
     assert not comparator(aa, cc)
 
@@ -1047,27 +1033,27 @@ def test_xarray():
     assert comparator(dd, ee)
 
     # Test DataArray with different shapes
-    ff = xr.DataArray([1, 2, 3], dims=['x'])
-    gg = xr.DataArray([[1, 2, 3]], dims=['x', 'y'])
+    ff = xr.DataArray([1, 2, 3], dims=["x"])
+    gg = xr.DataArray([[1, 2, 3]], dims=["x", "y"])
     assert not comparator(ff, gg)
 
     # Test DataArray with different data types
     # Note: xarray.identical() considers int and float arrays with same values as identical
-    hh = xr.DataArray(np.array([1, 2, 3], dtype='int32'), dims=['x'])
-    ii = xr.DataArray(np.array([1, 2, 3], dtype='int64'), dims=['x'])
+    hh = xr.DataArray(np.array([1, 2, 3], dtype="int32"), dims=["x"])
+    ii = xr.DataArray(np.array([1, 2, 3], dtype="int64"), dims=["x"])
     # xarray is permissive with dtype comparisons, treats these as identical
     assert comparator(hh, ii)
 
     # Test DataArray with infinity
-    jj = xr.DataArray([1.0, np.inf, 3.0], dims=['x'])
-    kk = xr.DataArray([1.0, np.inf, 3.0], dims=['x'])
-    ll = xr.DataArray([1.0, -np.inf, 3.0], dims=['x'])
+    jj = xr.DataArray([1.0, np.inf, 3.0], dims=["x"])
+    kk = xr.DataArray([1.0, np.inf, 3.0], dims=["x"])
+    ll = xr.DataArray([1.0, -np.inf, 3.0], dims=["x"])
     assert comparator(jj, kk)
     assert not comparator(jj, ll)
 
     # Test Dataset vs DataArray (different types)
-    mm = xr.DataArray([1, 2, 3], dims=['x'])
-    nn = xr.Dataset({'data': (['x'], [1, 2, 3])})
+    mm = xr.DataArray([1, 2, 3], dims=["x"])
+    nn = xr.Dataset({"data": (["x"], [1, 2, 3])})
     assert not comparator(mm, nn)
 
 
@@ -1677,8 +1663,8 @@ def test_exceptions_comparator():
     code7 = "a = 1 + 2"
     module7 = ast.parse(code7)
     for node in ast.walk(module7):
-       for child in ast.iter_child_nodes(node):
-         child.parent = node # type: ignore
+        for child in ast.iter_child_nodes(node):
+            child.parent = node  # type: ignore
     module8 = copy.deepcopy(module7)
     assert comparator(module7, module8)
 
@@ -1696,11 +1682,11 @@ def test_torch_runtime_error_wrapping():
     The comparator should consider an IndexError equivalent to a TorchRuntimeError
     that wraps an IndexError.
     """
+
     # Create a mock TorchRuntimeError class that mimics torch._dynamo.exc.TorchRuntimeError
     class TorchRuntimeError(Exception):
         """Mock TorchRuntimeError for testing."""
 
-        pass
 
     # Monkey-patch the __module__ to match torch._dynamo.exc
     TorchRuntimeError.__module__ = "torch._dynamo.exc"
@@ -1749,11 +1735,7 @@ def test_torch_runtime_error_wrapping():
     assert comparator(error1, error2)
 
     # Test 7: Exception wrapped in tuple (return value scenario from debug output)
-    orig_return = (
-        ("tensor1", "tensor2"),
-        {},
-        IndexError("index 0 is out of bounds for dimension 0 with size 0"),
-    )
+    orig_return = (("tensor1", "tensor2"), {}, IndexError("index 0 is out of bounds for dimension 0 with size 0"))
     torch_wrapped_return = (
         ("tensor1", "tensor2"),
         {},
@@ -2021,14 +2003,14 @@ def test_collections() -> None:
     assert not comparator(empty_deque1, a)
 
     # namedtuple
-    Point = namedtuple('Point', ['x', 'y'])
+    Point = namedtuple("Point", ["x", "y"])
     a = Point(x=1, y=2)
     b = Point(x=1, y=2)
     c = Point(x=1, y=3)
     assert comparator(a, b)
     assert not comparator(a, c)
 
-    Point2 = namedtuple('Point2', ['x', 'y'])
+    Point2 = namedtuple("Point2", ["x", "y"])
     d = Point2(x=1, y=2)
     assert not comparator(a, d)
 
@@ -2036,50 +2018,50 @@ def test_collections() -> None:
     assert not comparator(a, e)
 
     # ChainMap
-    map1 = {'a': 1, 'b': 2}
-    map2 = {'c': 3, 'd': 4}
+    map1 = {"a": 1, "b": 2}
+    map2 = {"c": 3, "d": 4}
     a = ChainMap(map1, map2)
     b = ChainMap(map1, map2)
     c = ChainMap(map2, map1)
-    d = {'a': 1, 'b': 2, 'c': 3, 'd': 4}
+    d = {"a": 1, "b": 2, "c": 3, "d": 4}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
 
     # Counter
-    a = Counter(['a', 'b', 'a', 'c', 'b', 'a'])
-    b = Counter({'a': 3, 'b': 2, 'c': 1})
-    c = Counter({'a': 3, 'b': 2, 'c': 2})
-    d = {'a': 3, 'b': 2, 'c': 1}
+    a = Counter(["a", "b", "a", "c", "b", "a"])
+    b = Counter({"a": 3, "b": 2, "c": 1})
+    c = Counter({"a": 3, "b": 2, "c": 2})
+    d = {"a": 3, "b": 2, "c": 1}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
 
     # OrderedDict
-    a = OrderedDict([('a', 1), ('b', 2)])
-    b = OrderedDict([('a', 1), ('b', 2)])
-    c = OrderedDict([('b', 2), ('a', 1)])
-    d = {'a': 1, 'b': 2}
+    a = OrderedDict([("a", 1), ("b", 2)])
+    b = OrderedDict([("a", 1), ("b", 2)])
+    c = OrderedDict([("b", 2), ("a", 1)])
+    d = {"a": 1, "b": 2}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
 
     # defaultdict
-    a = defaultdict(int, {'a': 1, 'b': 2})
-    b = defaultdict(int, {'a': 1, 'b': 2})
-    c = defaultdict(list, {'a': 1, 'b': 2})
-    d = {'a': 1, 'b': 2}
-    e = defaultdict(int, {'a': 1, 'b': 3})
+    a = defaultdict(int, {"a": 1, "b": 2})
+    b = defaultdict(int, {"a": 1, "b": 2})
+    c = defaultdict(list, {"a": 1, "b": 2})
+    d = {"a": 1, "b": 2}
+    e = defaultdict(int, {"a": 1, "b": 3})
     assert comparator(a, b)
     assert comparator(a, c)
     assert not comparator(a, d)
     assert not comparator(a, e)
 
     # UserDict
-    a = UserDict({'a': 1, 'b': 2})
-    b = UserDict({'a': 1, 'b': 2})
-    c = UserDict({'a': 1, 'b': 3})
-    d = {'a': 1, 'b': 2}
+    a = UserDict({"a": 1, "b": 2})
+    b = UserDict({"a": 1, "b": 2})
+    c = UserDict({"a": 1, "b": 3})
+    d = {"a": 1, "b": 2}
     assert comparator(a, b)
     assert not comparator(a, c)
     assert not comparator(a, d)
@@ -2113,7 +2095,7 @@ def test_attrs():
     class Person:
         name: str
         age: int = 10
-        
+
     a = Person("Alice", 25)
     b = Person("Alice", 25)
     c = Person("Bob", 25)
@@ -2126,7 +2108,7 @@ def test_attrs():
     class Point:
         x: int
         y: int
-        
+
     p1 = Point(1, 2)
     p2 = Point(1, 2)
     p3 = Point(2, 3)
@@ -2138,7 +2120,7 @@ def test_attrs():
         brand: str
         model: str
         year: int = 2020
-        
+
     v1 = Vehicle("Toyota", "Camry", 2021)
     v2 = Vehicle("Toyota", "Camry", 2021)
     v3 = Vehicle("Honda", "Civic", 2021)
@@ -2151,17 +2133,17 @@ def test_attrs():
         private_field: str = attrs.field(repr=False)
         non_eq_field: int = attrs.field(eq=False, default=0)
         computed: str = attrs.field(init=False, eq=True)
-        
+
         def __attrs_post_init__(self):
             self.computed = f"{self.public_field}_{self.private_field}"
-    
+
     c1 = ComplexClass("test", "secret")
     c2 = ComplexClass("test", "secret")
     c3 = ComplexClass("different", "secret")
-    
+
     c1.non_eq_field = 100
     c2.non_eq_field = 200
-    
+
     assert comparator(c1, c2)
     assert not comparator(c1, c3)
 
@@ -2169,20 +2151,20 @@ def test_attrs():
     class Address:
         street: str
         city: str
-        
-    @attrs.define 
+
+    @attrs.define
     class PersonWithAddress:
         name: str
         address: Address
-        
+
     addr1 = Address("123 Main St", "Anytown")
     addr2 = Address("123 Main St", "Anytown")
     addr3 = Address("456 Oak Ave", "Anytown")
-    
+
     person1 = PersonWithAddress("John", addr1)
     person2 = PersonWithAddress("John", addr2)
     person3 = PersonWithAddress("John", addr3)
-    
+
     assert comparator(person1, person2)
     assert not comparator(person1, person3)
 
@@ -2190,11 +2172,11 @@ def test_attrs():
     class Container:
         items: list
         metadata: dict
-        
+
     cont1 = Container([1, 2, 3], {"type": "numbers"})
     cont2 = Container([1, 2, 3], {"type": "numbers"})
     cont3 = Container([1, 2, 4], {"type": "numbers"})
-    
+
     assert comparator(cont1, cont2)
     assert not comparator(cont1, cont3)
 
@@ -2202,16 +2184,16 @@ def test_attrs():
     class BaseClass:
         name: str
         value: int
-        
+
     @attrs.define
     class ExtendedClass:
         name: str
         value: int
         extra_field: str = "default"
-        
+
     base = BaseClass("test", 42)
     extended = ExtendedClass("test", 42, "extra")
-    
+
     assert not comparator(base, extended)
 
     @attrs.define
@@ -2219,18 +2201,19 @@ def test_attrs():
         name: str
         timestamp: float = attrs.field(eq=False)  # Should be ignored
         debug_info: str = attrs.field(eq=False, default="debug")
-        
+
     obj1 = WithNonEqFields("test", 1000.0, "info1")
     obj2 = WithNonEqFields("test", 9999.0, "info2")  # Different non-eq fields
     obj3 = WithNonEqFields("different", 1000.0, "info1")
-    
+
     assert comparator(obj1, obj2)  # Should be equal despite different timestamp/debug_info
     assert not comparator(obj1, obj3)  # Should be different due to name
+
     @attrs.define
     class MinimalClass:
         name: str
         value: int
-        
+
     @attrs.define
     class ExtendedClass:
         name: str
@@ -2238,7 +2221,7 @@ def test_attrs():
         extra_field: str = "default"
         metadata: dict = attrs.field(factory=dict)
         timestamp: float = attrs.field(eq=False, default=0.0)  # This should be ignored
-        
+
     minimal = MinimalClass("test", 42)
     extended = ExtendedClass("test", 42, "extra", {"key": "value"}, 1000.0)
 
@@ -2442,25 +2425,25 @@ def test_tensorflow_tensor() -> None:
     assert not comparator(o, q)
 
     # Test tensors with NaN values
-    r = tf.constant([1.0, float('nan'), 3.0])
-    s = tf.constant([1.0, float('nan'), 3.0])
+    r = tf.constant([1.0, float("nan"), 3.0])
+    s = tf.constant([1.0, float("nan"), 3.0])
     t = tf.constant([1.0, 2.0, 3.0])
 
     assert comparator(r, s)  # NaN == NaN should be True
     assert not comparator(r, t)
 
     # Test tensors with infinity values
-    u = tf.constant([1.0, float('inf'), 3.0])
-    v = tf.constant([1.0, float('inf'), 3.0])
-    w = tf.constant([1.0, float('-inf'), 3.0])
+    u = tf.constant([1.0, float("inf"), 3.0])
+    v = tf.constant([1.0, float("inf"), 3.0])
+    w = tf.constant([1.0, float("-inf"), 3.0])
 
     assert comparator(u, v)
     assert not comparator(u, w)
 
     # Test complex tensors
-    x = tf.constant([1+2j, 3+4j])
-    y = tf.constant([1+2j, 3+4j])
-    z = tf.constant([1+2j, 3+5j])
+    x = tf.constant([1 + 2j, 3 + 4j])
+    y = tf.constant([1 + 2j, 3 + 4j])
+    z = tf.constant([1 + 2j, 3 + 5j])
 
     assert comparator(x, y)
     assert not comparator(x, z)
@@ -2628,20 +2611,12 @@ def test_tensorflow_sparse_tensor() -> None:
         pytest.skip("tensorflow required for this test")
 
     # Test equal sparse tensors
-    a = tf.SparseTensor(
-        indices=[[0, 0], [1, 2]],
-        values=[1.0, 2.0],
-        dense_shape=[3, 4]
-    )
-    b = tf.SparseTensor(
-        indices=[[0, 0], [1, 2]],
-        values=[1.0, 2.0],
-        dense_shape=[3, 4]
-    )
+    a = tf.SparseTensor(indices=[[0, 0], [1, 2]], values=[1.0, 2.0], dense_shape=[3, 4])
+    b = tf.SparseTensor(indices=[[0, 0], [1, 2]], values=[1.0, 2.0], dense_shape=[3, 4])
     c = tf.SparseTensor(
         indices=[[0, 0], [1, 2]],
         values=[1.0, 3.0],  # Different value
-        dense_shape=[3, 4]
+        dense_shape=[3, 4],
     )
 
     assert comparator(a, b)
@@ -2651,7 +2626,7 @@ def test_tensorflow_sparse_tensor() -> None:
     d = tf.SparseTensor(
         indices=[[0, 0], [1, 3]],  # Different index
         values=[1.0, 2.0],
-        dense_shape=[3, 4]
+        dense_shape=[3, 4],
     )
 
     assert not comparator(a, d)
@@ -2660,22 +2635,14 @@ def test_tensorflow_sparse_tensor() -> None:
     e = tf.SparseTensor(
         indices=[[0, 0], [1, 2]],
         values=[1.0, 2.0],
-        dense_shape=[4, 5]  # Different shape
+        dense_shape=[4, 5],  # Different shape
     )
 
     assert not comparator(a, e)
 
     # Test empty sparse tensors
-    f = tf.SparseTensor(
-        indices=tf.zeros([0, 2], dtype=tf.int64),
-        values=[],
-        dense_shape=[3, 4]
-    )
-    g = tf.SparseTensor(
-        indices=tf.zeros([0, 2], dtype=tf.int64),
-        values=[],
-        dense_shape=[3, 4]
-    )
+    f = tf.SparseTensor(indices=tf.zeros([0, 2], dtype=tf.int64), values=[], dense_shape=[3, 4])
+    g = tf.SparseTensor(indices=tf.zeros([0, 2], dtype=tf.int64), values=[], dense_shape=[3, 4])
 
     assert comparator(f, g)
 
@@ -2783,72 +2750,72 @@ def test_numpy_datetime64() -> None:
         pytest.skip("numpy required for this test")
 
     # Test datetime64 equality
-    a = np.datetime64('2021-01-01')
-    b = np.datetime64('2021-01-01')
-    c = np.datetime64('2021-01-02')
+    a = np.datetime64("2021-01-01")
+    b = np.datetime64("2021-01-01")
+    c = np.datetime64("2021-01-02")
 
     assert comparator(a, b)
     assert not comparator(a, c)
 
     # Test datetime64 with different units
-    d = np.datetime64('2021-01-01', 'D')
-    e = np.datetime64('2021-01-01', 'D')
-    f = np.datetime64('2021-01-01', 's')  # Different unit (seconds)
+    d = np.datetime64("2021-01-01", "D")
+    e = np.datetime64("2021-01-01", "D")
+    f = np.datetime64("2021-01-01", "s")  # Different unit (seconds)
 
     assert comparator(d, e)
     # Note: datetime64 with different units but same moment may or may not be equal
     # depending on numpy version behavior
 
     # Test datetime64 with time
-    g = np.datetime64('2021-01-01T12:00:00')
-    h = np.datetime64('2021-01-01T12:00:00')
-    i = np.datetime64('2021-01-01T12:00:01')
+    g = np.datetime64("2021-01-01T12:00:00")
+    h = np.datetime64("2021-01-01T12:00:00")
+    i = np.datetime64("2021-01-01T12:00:01")
 
     assert comparator(g, h)
     assert not comparator(g, i)
 
     # Test timedelta64 equality
-    j = np.timedelta64(1, 'D')
-    k = np.timedelta64(1, 'D')
-    l = np.timedelta64(2, 'D')
+    j = np.timedelta64(1, "D")
+    k = np.timedelta64(1, "D")
+    l = np.timedelta64(2, "D")
 
     assert comparator(j, k)
     assert not comparator(j, l)
 
     # Test timedelta64 with different units
-    m = np.timedelta64(1, 'h')
-    n = np.timedelta64(1, 'h')
-    o = np.timedelta64(60, 'm')  # Same duration, different unit
+    m = np.timedelta64(1, "h")
+    n = np.timedelta64(1, "h")
+    o = np.timedelta64(60, "m")  # Same duration, different unit
 
     assert comparator(m, n)
     # 1 hour == 60 minutes, but they have different units
     # numpy may treat them as equal or not depending on comparison
 
     # Test NaT (Not a Time) - numpy's equivalent of NaN for datetime
-    p = np.datetime64('NaT')
-    q = np.datetime64('NaT')
-    r = np.datetime64('2021-01-01')
+    p = np.datetime64("NaT")
+    q = np.datetime64("NaT")
+    r = np.datetime64("2021-01-01")
 
     assert comparator(p, q)  # NaT == NaT should be True
     assert not comparator(p, r)
 
     # Test timedelta64 NaT
-    s = np.timedelta64('NaT')
-    t = np.timedelta64('NaT')
-    u = np.timedelta64(1, 'D')
+    s = np.timedelta64("NaT")
+    t = np.timedelta64("NaT")
+    u = np.timedelta64(1, "D")
 
     assert comparator(s, t)  # NaT == NaT should be True
     assert not comparator(s, u)
 
     # Test datetime64 is not equal to other types
-    v = np.datetime64('2021-01-01')
-    w = '2021-01-01'
+    v = np.datetime64("2021-01-01")
+    w = "2021-01-01"
     assert not comparator(v, w)
 
     # Test arrays of datetime64
-    x = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64')
-    y = np.array(['2021-01-01', '2021-01-02'], dtype='datetime64')
-    z = np.array(['2021-01-01', '2021-01-03'], dtype='datetime64')
+    x = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64")
+    y = np.array(["2021-01-01", "2021-01-02"], dtype="datetime64")
+    z = np.array(["2021-01-01", "2021-01-03"], dtype="datetime64")
 
     assert comparator(x, y)
     assert not comparator(x, z)
@@ -2878,17 +2845,17 @@ def test_numpy_0d_array() -> None:
     assert not comparator(d, f)
 
     # Test 0-d complex array
-    g = np.array(1+2j)
-    h = np.array(1+2j)
-    i = np.array(1+3j)
+    g = np.array(1 + 2j)
+    h = np.array(1 + 2j)
+    i = np.array(1 + 3j)
 
     assert comparator(g, h)
     assert not comparator(g, i)
 
     # Test 0-d string array
-    j = np.array('hello')
-    k = np.array('hello')
-    l = np.array('world')
+    j = np.array("hello")
+    k = np.array("hello")
+    l = np.array("world")
 
     assert comparator(j, k)
     assert not comparator(j, l)
@@ -2910,9 +2877,9 @@ def test_numpy_0d_array() -> None:
     assert not comparator(p, r)
 
     # Test 0-d datetime64 array
-    s = np.array(np.datetime64('2021-01-01'))
-    t = np.array(np.datetime64('2021-01-01'))
-    u = np.array(np.datetime64('2021-01-02'))
+    s = np.array(np.datetime64("2021-01-01"))
+    t = np.array(np.datetime64("2021-01-01"))
+    u = np.array(np.datetime64("2021-01-02"))
 
     assert comparator(s, t)
     assert not comparator(s, u)
@@ -2929,11 +2896,12 @@ def test_numpy_0d_array() -> None:
     # Different shapes
     assert not comparator(x, y)
 
+
 def test_numpy_dtypes() -> None:
     """Test comparator for numpy.dtypes types like Float64DType, Int64DType, etc."""
     try:
         import numpy as np
-        import numpy.dtypes as dtypes
+        from numpy import dtypes
     except ImportError:
         pytest.skip("numpy not available")
 
@@ -2969,25 +2937,25 @@ def test_numpy_dtypes() -> None:
     assert not comparator(dtypes.UInt32DType(), dtypes.Int32DType())
 
     # Test regular np.dtype instances
-    e = np.dtype('float64')
-    f = np.dtype('float64')
+    e = np.dtype("float64")
+    f = np.dtype("float64")
     assert comparator(e, f)
 
-    g = np.dtype('int64')
-    h = np.dtype('int64')
+    g = np.dtype("int64")
+    h = np.dtype("int64")
     assert comparator(g, h)
 
     assert not comparator(e, g)  # float64 vs int64
 
     # Test DType class instances vs regular np.dtype (they should be equal if same underlying type)
-    assert comparator(dtypes.Float64DType(), np.dtype('float64'))
-    assert comparator(dtypes.Int64DType(), np.dtype('int64'))
-    assert comparator(dtypes.Int32DType(), np.dtype('int32'))
-    assert comparator(dtypes.BoolDType(), np.dtype('bool'))
+    assert comparator(dtypes.Float64DType(), np.dtype("float64"))
+    assert comparator(dtypes.Int64DType(), np.dtype("int64"))
+    assert comparator(dtypes.Int32DType(), np.dtype("int32"))
+    assert comparator(dtypes.BoolDType(), np.dtype("bool"))
 
     # Test that DType and np.dtype of different types are not equal
-    assert not comparator(dtypes.Float64DType(), np.dtype('int64'))
-    assert not comparator(dtypes.Int32DType(), np.dtype('float32'))
+    assert not comparator(dtypes.Float64DType(), np.dtype("int64"))
+    assert not comparator(dtypes.Int32DType(), np.dtype("float32"))
 
 
 def test_numpy_extended_precision_types() -> None:
@@ -3059,8 +3027,8 @@ def test_numpy_typing_superset_obj() -> None:
         pytest.skip("numpy or numpy.typing not available")
 
     # Test numpy arrays with object dtype containing dicts (superset scenario)
-    a1 = np.array([{'a': 1}], dtype=object)
-    a2 = np.array([{'a': 1, 'b': 2}], dtype=object)  # superset
+    a1 = np.array([{"a": 1}], dtype=object)
+    a2 = np.array([{"a": 1, "b": 2}], dtype=object)  # superset
     assert comparator(a1, a2, superset_obj=True)
     assert not comparator(a1, a2, superset_obj=False)
 
@@ -3079,9 +3047,9 @@ def test_numpy_typing_superset_obj() -> None:
     assert comparator(arr_type1, arr_type2, superset_obj=True)
 
     # Test numpy structured arrays (np.void) with superset_obj=True
-    dt = np.dtype([('name', 'S10'), ('age', np.int32)])
-    a_struct = np.array([('Alice', 25)], dtype=dt)
-    b_struct = np.array([('Alice', 25)], dtype=dt)
+    dt = np.dtype([("name", "S10"), ("age", np.int32)])
+    a_struct = np.array([("Alice", 25)], dtype=dt)
+    b_struct = np.array([("Alice", 25)], dtype=dt)
     assert comparator(a_struct[0], b_struct[0], superset_obj=True)
 
     # Test numpy random generators with superset_obj=True
@@ -3092,6 +3060,8 @@ def test_numpy_typing_superset_obj() -> None:
     rs1 = np.random.RandomState(seed=42)
     rs2 = np.random.RandomState(seed=42)
     assert comparator(rs1, rs2, superset_obj=True)
+
+
 def test_numba_typed_list() -> None:
     """Test comparator for numba.typed.List."""
     try:
@@ -3218,11 +3188,11 @@ def test_numba_types() -> None:
     assert not comparator(types.none, types.int64)
 
     # Test array types
-    arr_type1 = types.Array(numba.float64, 1, 'C')
-    arr_type2 = types.Array(numba.float64, 1, 'C')
-    arr_type3 = types.Array(numba.float64, 2, 'C')
-    arr_type4 = types.Array(numba.int64, 1, 'C')
-    arr_type5 = types.Array(numba.float64, 1, 'F')  # Fortran order
+    arr_type1 = types.Array(numba.float64, 1, "C")
+    arr_type2 = types.Array(numba.float64, 1, "C")
+    arr_type3 = types.Array(numba.float64, 2, "C")
+    arr_type4 = types.Array(numba.int64, 1, "C")
+    arr_type5 = types.Array(numba.float64, 1, "F")  # Fortran order
 
     assert comparator(arr_type1, arr_type2)
     assert not comparator(arr_type1, arr_type3)  # different ndim
@@ -3575,13 +3545,13 @@ class TestComparatorTempPathsInNestedStructures:
         nested1 = {
             "config": {
                 "output_path": "/tmp/pytest-of-alice/pytest-5/results",
-                "log_path": "/tmp/pytest-of-alice/pytest-5/logs"
+                "log_path": "/tmp/pytest-of-alice/pytest-5/logs",
             }
         }
         nested2 = {
             "config": {
                 "output_path": "/tmp/pytest-of-bob/pytest-10/results",
-                "log_path": "/tmp/pytest-of-bob/pytest-10/logs"
+                "log_path": "/tmp/pytest-of-bob/pytest-10/logs",
             }
         }
         assert comparator(nested1, nested2)
@@ -3594,25 +3564,17 @@ class TestComparatorTempPathsInNestedStructures:
 
     def test_mixed_temp_and_regular_paths(self):
         """Test structures with both temp and regular paths."""
-        data1 = {
-            "temp": "/tmp/pytest-of-user/pytest-0/temp.txt",
-            "regular": "/home/user/file.txt"
-        }
-        data2 = {
-            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
-            "regular": "/home/user/file.txt"
-        }
+        data1 = {"temp": "/tmp/pytest-of-user/pytest-0/temp.txt", "regular": "/home/user/file.txt"}
+        data2 = {"temp": "/tmp/pytest-of-user/pytest-99/temp.txt", "regular": "/home/user/file.txt"}
         assert comparator(data1, data2)
 
-        data3 = {
-            "temp": "/tmp/pytest-of-user/pytest-99/temp.txt",
-            "regular": "/home/user/different.txt"
-        }
+        data3 = {"temp": "/tmp/pytest-of-user/pytest-99/temp.txt", "regular": "/home/user/different.txt"}
         assert not comparator(data1, data3)
 
     def test_temp_paths_in_deque(self):
         """Test temp paths inside deque."""
         from collections import deque
+
         d1 = deque(["/tmp/pytest-of-user/pytest-0/file.txt"])
         d2 = deque(["/tmp/pytest-of-user/pytest-123/file.txt"])
         assert comparator(d1, d2)
@@ -3620,6 +3582,7 @@ class TestComparatorTempPathsInNestedStructures:
     def test_temp_paths_in_chainmap(self):
         """Test temp paths inside ChainMap."""
         from collections import ChainMap
+
         cm1 = ChainMap({"path": "/tmp/pytest-of-user/pytest-0/file.txt"})
         cm2 = ChainMap({"path": "/tmp/pytest-of-user/pytest-99/file.txt"})
         assert comparator(cm1, cm2)
@@ -3699,7 +3662,6 @@ class TestPytestTempPathPatternRegex:
 
     def test_pattern_matches_standard_format(self):
         """Test regex matches standard pytest temp path format."""
-        import re
         assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-0/")
         assert PYTEST_TEMP_PATH_PATTERN.search("/tmp/pytest-of-user/pytest-123/file")
 
@@ -3740,42 +3702,27 @@ class TestComparatorTempPathsWithSuperset:
 
     def test_superset_nested_dict_with_temp_paths(self):
         """Test superset comparison with temp paths in nested dictionaries."""
-        orig = {
-            "config": {
-                "output": "/tmp/pytest-of-alice/pytest-5/results.json"
-            }
-        }
+        orig = {"config": {"output": "/tmp/pytest-of-alice/pytest-5/results.json"}}
         new = {
-            "config": {
-                "output": "/tmp/pytest-of-bob/pytest-100/results.json",
-                "debug": True
-            },
-            "metadata": {"version": "1.0"}
+            "config": {"output": "/tmp/pytest-of-bob/pytest-100/results.json", "debug": True},
+            "metadata": {"version": "1.0"},
         }
         assert comparator(orig, new, superset_obj=True)
 
     def test_superset_multiple_temp_paths_in_dict(self):
         """Test superset with multiple temp paths in dictionary values."""
-        orig = {
-            "input": "/tmp/pytest-of-user/pytest-0/input.txt",
-            "output": "/tmp/pytest-of-user/pytest-0/output.txt"
-        }
+        orig = {"input": "/tmp/pytest-of-user/pytest-0/input.txt", "output": "/tmp/pytest-of-user/pytest-0/output.txt"}
         new = {
             "input": "/tmp/pytest-of-user/pytest-99/input.txt",
             "output": "/tmp/pytest-of-user/pytest-99/output.txt",
-            "log": "/tmp/pytest-of-user/pytest-99/debug.log"
+            "log": "/tmp/pytest-of-user/pytest-99/debug.log",
         }
         assert comparator(orig, new, superset_obj=True)
 
     def test_superset_temp_path_in_list_inside_dict(self):
         """Test superset with temp paths in lists inside dictionaries."""
-        orig = {
-            "files": ["/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt"]
-        }
-        new = {
-            "files": ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"],
-            "count": 2
-        }
+        orig = {"files": ["/tmp/pytest-of-user/pytest-0/a.txt", "/tmp/pytest-of-user/pytest-0/b.txt"]}
+        new = {"files": ["/tmp/pytest-of-user/pytest-99/a.txt", "/tmp/pytest-of-user/pytest-99/b.txt"], "count": 2}
         assert comparator(orig, new, superset_obj=True)
 
     def test_superset_false_when_temp_path_missing(self):
@@ -3786,63 +3733,41 @@ class TestComparatorTempPathsWithSuperset:
 
     def test_superset_temp_path_with_different_filenames_fails(self):
         """Test superset fails when normalized temp paths have different filenames."""
-        orig = {
-            "result": "/tmp/pytest-of-user/pytest-0/output_v1.json"
-        }
-        new = {
-            "result": "/tmp/pytest-of-user/pytest-99/output_v2.json",
-            "extra": "data"
-        }
+        orig = {"result": "/tmp/pytest-of-user/pytest-0/output_v1.json"}
+        new = {"result": "/tmp/pytest-of-user/pytest-99/output_v2.json", "extra": "data"}
         assert not comparator(orig, new, superset_obj=True)
 
     def test_superset_mixed_temp_and_regular_paths(self):
         """Test superset with mix of temp paths and regular paths."""
-        orig = {
-            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
-            "config_file": "/etc/app/config.yaml"
-        }
+        orig = {"temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt", "config_file": "/etc/app/config.yaml"}
         new = {
             "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
             "config_file": "/etc/app/config.yaml",
-            "extra_key": "extra_value"
+            "extra_key": "extra_value",
         }
         assert comparator(orig, new, superset_obj=True)
 
     def test_superset_regular_path_must_match_exactly(self):
         """Test that regular paths must match exactly even in superset mode."""
-        orig = {
-            "temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt",
-            "config_file": "/etc/app/config.yaml"
-        }
+        orig = {"temp_file": "/tmp/pytest-of-user/pytest-0/temp.txt", "config_file": "/etc/app/config.yaml"}
         new = {
             "temp_file": "/tmp/pytest-of-user/pytest-99/temp.txt",
             "config_file": "/etc/app/other.yaml",
-            "extra_key": "extra_value"
+            "extra_key": "extra_value",
         }
         assert not comparator(orig, new, superset_obj=True)
 
     def test_superset_deeply_nested_temp_paths(self):
         """Test superset with deeply nested structures containing temp paths."""
-        orig = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "path": "/tmp/pytest-of-user/pytest-0/deep.txt"
-                    }
-                }
-            }
-        }
+        orig = {"level1": {"level2": {"level3": {"path": "/tmp/pytest-of-user/pytest-0/deep.txt"}}}}
         new = {
             "level1": {
                 "level2": {
-                    "level3": {
-                        "path": "/tmp/pytest-of-other/pytest-999/deep.txt",
-                        "extra": True
-                    },
-                    "sibling": "value"
+                    "level3": {"path": "/tmp/pytest-of-other/pytest-999/deep.txt", "extra": True},
+                    "sibling": "value",
                 }
             },
-            "top_level_extra": 123
+            "top_level_extra": 123,
         }
         assert comparator(orig, new, superset_obj=True)
 
@@ -3870,6 +3795,7 @@ class TestComparatorTempPathsWithSuperset:
 
     def test_superset_with_class_dict_containing_temp_paths(self):
         """Test superset with regular class objects containing temp paths."""
+
         class Result:
             def __init__(self, output_path):
                 self.output_path = output_path
@@ -3902,6 +3828,7 @@ class TestComparatorTempPathsWithSuperset:
 
     def test_superset_with_exception_containing_temp_path(self):
         """Test superset with exception objects containing temp paths in attributes."""
+
         class CustomError(Exception):
             def __init__(self, message, path):
                 super().__init__(message)
@@ -3921,25 +3848,19 @@ class TestComparatorTempPathsRealisticScenarios:
         original_result = {
             "status": "success",
             "output_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/results.json",
-            "log_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/debug.log"
+            "log_file": "/tmp/pytest-of-ci-runner/pytest-42/test_output/debug.log",
         }
         replay_result = {
             "status": "success",
             "output_file": "/tmp/pytest-of-local-user/pytest-0/test_output/results.json",
-            "log_file": "/tmp/pytest-of-local-user/pytest-0/test_output/debug.log"
+            "log_file": "/tmp/pytest-of-local-user/pytest-0/test_output/debug.log",
         }
         assert comparator(original_result, replay_result)
 
     def test_exception_message_with_temp_path(self):
         """Test comparing exception-like structures with temp paths."""
-        exc1 = {
-            "type": "FileNotFoundError",
-            "message": "File not found: /tmp/pytest-of-user/pytest-0/missing.txt"
-        }
-        exc2 = {
-            "type": "FileNotFoundError",
-            "message": "File not found: /tmp/pytest-of-user/pytest-99/missing.txt"
-        }
+        exc1 = {"type": "FileNotFoundError", "message": "File not found: /tmp/pytest-of-user/pytest-0/missing.txt"}
+        exc2 = {"type": "FileNotFoundError", "message": "File not found: /tmp/pytest-of-user/pytest-99/missing.txt"}
         assert comparator(exc1, exc2)
 
     def test_function_return_with_temp_path(self):
@@ -3954,12 +3875,12 @@ class TestComparatorTempPathsRealisticScenarios:
         files1 = [
             "/tmp/pytest-of-user/pytest-0/output/file1.txt",
             "/tmp/pytest-of-user/pytest-0/output/file2.txt",
-            "/tmp/pytest-of-user/pytest-0/output/file3.txt"
+            "/tmp/pytest-of-user/pytest-0/output/file3.txt",
         ]
         files2 = [
             "/tmp/pytest-of-user/pytest-99/output/file1.txt",
             "/tmp/pytest-of-user/pytest-99/output/file2.txt",
-            "/tmp/pytest-of-user/pytest-99/output/file3.txt"
+            "/tmp/pytest-of-user/pytest-99/output/file3.txt",
         ]
         assert comparator(files1, files2)
 
@@ -3969,13 +3890,13 @@ class TestComparatorTempPathsRealisticScenarios:
             "temp_dir": "/tmp/pytest-of-user/pytest-0/",
             "cache_dir": "/tmp/pytest-of-user/pytest-0/cache/",
             "output_dir": "/tmp/pytest-of-user/pytest-0/output/",
-            "permanent_dir": "/home/user/data/"
+            "permanent_dir": "/home/user/data/",
         }
         config2 = {
             "temp_dir": "/tmp/pytest-of-other/pytest-100/",
             "cache_dir": "/tmp/pytest-of-other/pytest-100/cache/",
             "output_dir": "/tmp/pytest-of-other/pytest-100/output/",
-            "permanent_dir": "/home/user/data/"
+            "permanent_dir": "/home/user/data/",
         }
         assert comparator(config1, config2)
 

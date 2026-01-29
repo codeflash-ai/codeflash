@@ -40,11 +40,7 @@ def generate_unified_diff(original: str, modified: str, from_file: str, to_file:
 
 
 def apply_formatter_cmds(
-    cmds: list[str],
-    path: Path,
-    test_dir_str: Optional[str],
-    print_status: bool,  # noqa
-    exit_on_failure: bool = True,  # noqa
+    cmds: list[str], path: Path, test_dir_str: Optional[str], print_status: bool, exit_on_failure: bool = True
 ) -> tuple[Path, str, bool]:
     if not path.exists():
         msg = f"File {path} does not exist. Cannot apply formatter commands."
@@ -111,9 +107,9 @@ def format_code(
     formatter_cmds: list[str],
     path: Union[str, Path],
     optimized_code: str = "",
-    check_diff: bool = False,  # noqa
-    print_status: bool = True,  # noqa
-    exit_on_failure: bool = True,  # noqa
+    check_diff: bool = False,
+    print_status: bool = True,
+    exit_on_failure: bool = True,
 ) -> str:
     if is_LSP_enabled():
         exit_on_failure = False
@@ -174,7 +170,7 @@ def format_code(
         return formatted_code
 
 
-def sort_imports(code: str, **kwargs: Any) -> str:  # noqa : ANN401
+def sort_imports(code: str, **kwargs: Any) -> str:
     try:
         # Deduplicate and sort imports, modify the code in memory, not on disk
         sorted_code = isort.code(code, **kwargs)

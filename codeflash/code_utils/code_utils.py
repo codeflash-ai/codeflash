@@ -166,7 +166,7 @@ def filter_args(addopts_args: list[str]) -> list[str]:
     return filtered_args
 
 
-def modify_addopts(config_file: Path) -> tuple[str, bool]:  # noqa : PLR0911
+def modify_addopts(config_file: Path) -> tuple[str, bool]:
     file_type = config_file.suffix.lower()
     filename = config_file.name
     config = None

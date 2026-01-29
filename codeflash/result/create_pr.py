@@ -18,7 +18,7 @@ from codeflash.github.PrComment import FileDiffContent, PrComment
 from codeflash.result.critic import performance_gain
 
 if TYPE_CHECKING:
-    from codeflash.models.models import FunctionCalledInTest, InvocationId
+    from codeflash.models.models import FunctionCalledInTest, InvocationId, TestFiles
     from codeflash.result.explanation import Explanation
     from codeflash.verification.verification_utils import TestConfig
 
@@ -29,10 +29,21 @@ def existing_tests_source_for(
     test_cfg: TestConfig,
     original_runtimes_all: dict[InvocationId, list[int]],
     optimized_runtimes_all: dict[InvocationId, list[int]],
+    test_files_registry: TestFiles | None = None,
 ) -> tuple[str, str, str]:
+    logger.debug(
+        f"[PR-DEBUG] existing_tests_source_for called with func={function_qualified_name_with_modules_from_root}"
+    )
+    logger.debug(f"[PR-DEBUG] function_to_tests keys: {list(function_to_tests.keys())}")
+    logger.debug(f"[PR-DEBUG] original_runtimes_all has {len(original_runtimes_all)} entries")
+    logger.debug(f"[PR-DEBUG] optimized_runtimes_all has {len(optimized_runtimes_all)} entries")
     test_files = function_to_tests.get(function_qualified_name_with_modules_from_root)
     if not test_files:
+        logger.debug(f"[PR-DEBUG] No test_files found for {function_qualified_name_with_modules_from_root}")
         return "", "", ""
+    logger.debug(f"[PR-DEBUG] Found {len(test_files)} test_files")
+    for tf in test_files:
+        logger.debug(f"[PR-DEBUG]   test_file: {tf.tests_in_file.test_file}, test_type={tf.tests_in_file.test_type}")
     output_existing: str = ""
     output_concolic: str = ""
     output_replay: str = ""
@@ -43,15 +54,101 @@ def existing_tests_source_for(
     tests_root = test_cfg.tests_root
     original_tests_to_runtimes: dict[Path, dict[str, int]] = {}
     optimized_tests_to_runtimes: dict[Path, dict[str, int]] = {}
-    non_generated_tests = set()
+
+    # Build lookup from instrumented path -> original path using the test_files_registry
+    # Include both behavior and benchmarking paths since test results might come from either
+    instrumented_to_original: dict[Path, Path] = {}
+    if test_files_registry:
+        for registry_tf in test_files_registry.test_files:
+            if registry_tf.original_file_path:
+                if registry_tf.instrumented_behavior_file_path:
+                    instrumented_to_original[registry_tf.instrumented_behavior_file_path.resolve()] = (
+                        registry_tf.original_file_path.resolve()
+                    )
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (behavior): {registry_tf.instrumented_behavior_file_path.name} -> {registry_tf.original_file_path.name}"
+                    )
+                if registry_tf.benchmarking_file_path:
+                    instrumented_to_original[registry_tf.benchmarking_file_path.resolve()] = (
+                        registry_tf.original_file_path.resolve()
+                    )
+                    logger.debug(
+                        f"[PR-DEBUG] Mapping (perf): {registry_tf.benchmarking_file_path.name} -> {registry_tf.original_file_path.name}"
+                    )
+
+    # Resolve all paths to absolute for consistent comparison
+    non_generated_tests: set[Path] = set()
     for test_file in test_files:
-        non_generated_tests.add(test_file.tests_in_file.test_file)
+        resolved = test_file.tests_in_file.test_file.resolve()
+        non_generated_tests.add(resolved)
+        logger.debug(f"[PR-DEBUG] Added to non_generated_tests: {resolved}")
     # TODO confirm that original and optimized have the same keys
     all_invocation_ids = original_runtimes_all.keys() | optimized_runtimes_all.keys()
+    logger.debug(f"[PR-DEBUG] Processing {len(all_invocation_ids)} invocation_ids")
+    matched_count = 0
+    skipped_count = 0
     for invocation_id in all_invocation_ids:
-        abs_path = Path(invocation_id.test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
+        # For JavaScript/TypeScript, test_module_path could be:
+        # - A module-style path with dots: "tests.fibonacci.test.ts"
+        # - A file path: "tests/fibonacci.test.ts"
+        # For Python, it's a module name (e.g., "tests.test_example") that needs conversion
+        test_module_path = invocation_id.test_module_path
+        # Jest test file extensions (including .test.ts, .spec.ts patterns)
+        jest_test_extensions = (
+            ".test.ts",
+            ".test.js",
+            ".test.tsx",
+            ".test.jsx",
+            ".spec.ts",
+            ".spec.js",
+            ".spec.tsx",
+            ".spec.jsx",
+            ".ts",
+            ".js",
+            ".tsx",
+            ".jsx",
+            ".mjs",
+            ".mts",
+        )
+        # Find the appropriate extension
+        matched_ext = None
+        for ext in jest_test_extensions:
+            if test_module_path.endswith(ext):
+                matched_ext = ext
+                break
+        if matched_ext:
+            # JavaScript/TypeScript: convert module-style path to file path
+            # "tests.fibonacci__perfinstrumented.test.ts" -> "tests/fibonacci__perfinstrumented.test.ts"
+            base_path = test_module_path[: -len(matched_ext)]
+            # Convert dots to path separators in the base path
+            file_path = base_path.replace(".", os.sep) + matched_ext
+            # Check if the module path includes the tests directory name
+            tests_dir_name = test_cfg.tests_project_rootdir.name
+            if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
+                # Module path includes "tests." - use project root parent
+                instrumented_abs_path = (test_cfg.tests_project_rootdir.parent / file_path).resolve()
+            else:
+                # Module path doesn't include tests dir - use tests root directly
+                instrumented_abs_path = (test_cfg.tests_project_rootdir / file_path).resolve()
+            logger.debug(f"[PR-DEBUG] Looking up: {instrumented_abs_path}")
+            logger.debug(f"[PR-DEBUG]   Available keys: {list(instrumented_to_original.keys())[:3]}")
+            # Try to map instrumented path to original path
+            abs_path = instrumented_to_original.get(instrumented_abs_path, instrumented_abs_path)
+            if abs_path != instrumented_abs_path:
+                logger.debug(f"[PR-DEBUG] Mapped {instrumented_abs_path.name} -> {abs_path.name}")
+            else:
+                logger.debug(f"[PR-DEBUG] No mapping found for {instrumented_abs_path.name}")
+        else:
+            # Python: convert module name to path
+            abs_path = Path(test_module_path.replace(".", os.sep)).with_suffix(".py").resolve()
         if abs_path not in non_generated_tests:
+            skipped_count += 1
+            if skipped_count <= 5:
+                logger.debug(f"[PR-DEBUG] SKIP: abs_path={abs_path.name}")
+                logger.debug(f"[PR-DEBUG]   Expected one of: {[p.name for p in list(non_generated_tests)[:3]]}")
             continue
+        matched_count += 1
+        logger.debug(f"[PR-DEBUG] MATCHED: {abs_path.name}")
         if abs_path not in original_tests_to_runtimes:
             original_tests_to_runtimes[abs_path] = {}
         if abs_path not in optimized_tests_to_runtimes:
@@ -69,6 +166,8 @@ def existing_tests_source_for(
             original_tests_to_runtimes[abs_path][qualified_name] += min(original_runtimes_all[invocation_id])  # type: ignore[index]
         if invocation_id in optimized_runtimes_all:
             optimized_tests_to_runtimes[abs_path][qualified_name] += min(optimized_runtimes_all[invocation_id])  # type: ignore[index]
+    logger.debug(f"[PR-DEBUG] SUMMARY: matched={matched_count}, skipped={skipped_count}")
+    logger.debug(f"[PR-DEBUG] original_tests_to_runtimes has {len(original_tests_to_runtimes)} files")
     # parse into string
     all_abs_paths = (
         original_tests_to_runtimes.keys()
@@ -152,19 +251,19 @@ def existing_tests_source_for(
                             f"{perf_gain}%✅",
                         ]
                     )
-    output_existing += tabulate(  # type: ignore[no-untyped-call]
+    output_existing += tabulate(
         headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_existing += "\n"
     if len(rows_existing) == 0:
         output_existing = ""
-    output_concolic += tabulate(  # type: ignore[no-untyped-call]
+    output_concolic += tabulate(
         headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_concolic += "\n"
     if len(rows_concolic) == 0:
         output_concolic = ""
-    output_replay += tabulate(  # type: ignore[no-untyped-call]
+    output_replay += tabulate(
         headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_replay += "\n"

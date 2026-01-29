@@ -86,11 +86,13 @@ def validate_coverage(stdout: str, expectations: list[CoverageExpectation]) -> b
 
     return True
 
+
 def validate_no_gen_tests(stdout: str) -> bool:
     if "Generated '0' tests for" not in stdout:
         logging.error("Tests generated even when flag was on")
         return False
     return True
+
 
 def run_codeflash_command(
     cwd: pathlib.Path, config: TestConfig, expected_improvement_pct: int, expected_in_stdout: list[str] = None
@@ -106,9 +108,9 @@ def run_codeflash_command(
 
     command = build_command(cwd, config, test_root, config.benchmarks_root if config.benchmarks_root else None)
     env = os.environ.copy()
-    env['PYTHONIOENCODING'] = 'utf-8'
+    env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding="utf-8"
     )
 
     output = []
@@ -131,7 +133,7 @@ def run_codeflash_command(
         if not stdout_validated:
             logging.error("Failed to find expected output in candidate output")
             validated = False
-        logging.info(f"Success: Expected output found in candidate output")
+        logging.info("Success: Expected output found in candidate output")
 
     return validated
 
@@ -150,10 +152,9 @@ def build_command(
     pyproject_path = cwd / "pyproject.toml"
     has_codeflash_config = False
     if pyproject_path.exists():
-        with contextlib.suppress(Exception):
-            with open(pyproject_path, "rb") as f:
-                pyproject_data = tomllib.load(f)
-                has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
+        with contextlib.suppress(Exception), open(pyproject_path, "rb") as f:
+            pyproject_data = tomllib.load(f)
+            has_codeflash_config = "tool" in pyproject_data and "codeflash" in pyproject_data["tool"]
 
     # Only pass --tests-root and --module-root if they're not configured in pyproject.toml
     if not has_codeflash_config:
@@ -206,7 +207,9 @@ def validate_output(stdout: str, return_code: int, expected_improvement_pct: int
     if config.expected_unit_tests_count is not None:
         # Match the global test discovery message from optimizer.py which counts test invocations
         # Format: "Discovered X existing unit tests and Y replay tests in Z.Zs at /path/to/tests"
-        unit_test_match = re.search(r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout)
+        unit_test_match = re.search(
+            r"Discovered (\d+) existing unit tests? and \d+ replay tests? in [\d.]+s at", stdout
+        )
         if not unit_test_match:
             logging.error("Could not find global unit test count")
             return False
@@ -250,9 +253,9 @@ def run_trace_test(cwd: pathlib.Path, config: TestConfig, expected_improvement_p
     clear_directory(test_root)
     command = ["uv", "run", "--no-project", "-m", "codeflash.main", "optimize", "workload.py"]
     env = os.environ.copy()
-    env['PYTHONIOENCODING'] = 'utf-8'
+    env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding='utf-8'
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(cwd), env=env, encoding="utf-8"
     )
 
     output = []

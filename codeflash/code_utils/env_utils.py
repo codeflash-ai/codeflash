@@ -16,7 +16,7 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, sav
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
-def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
+def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]
@@ -155,7 +155,8 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     if not event_path:
         return {}
     with open(event_path, encoding="utf-8") as f:  # noqa: PTH123
-        return json.load(f)  # type: ignore  # noqa
+        result: dict[str, Any] = json.load(f)
+        return result
 
 
 def is_repo_a_fork() -> bool:

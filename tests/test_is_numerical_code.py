@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from codeflash.code_utils.code_extractor import is_numerical_code
 
 

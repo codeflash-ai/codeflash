@@ -27,7 +27,11 @@ def safe_repr(obj: object) -> str:
         return f"<repr failed: {type(e).__name__}: {e}>"
 
 
-def compare_test_results(original_results: TestResults, candidate_results: TestResults) -> tuple[bool, list[TestDiff]]:
+def compare_test_results(
+    original_results: TestResults,
+    candidate_results: TestResults,
+    pass_fail_only: bool = False,  # noqa: FBT001, FBT002
+) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:
         return False, []  # empty test results are not equal
@@ -81,7 +85,28 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
         if original_pytest_error:
             original_pytest_error = shorten_pytest_error(original_pytest_error)
 
-        if not comparator(original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj):
+        if original_test_result.test_type in {
+            TestType.EXISTING_UNIT_TEST,
+            TestType.CONCOLIC_COVERAGE_TEST,
+            TestType.GENERATED_REGRESSION,
+            TestType.REPLAY_TEST,
+        } and (cdd_test_result.did_pass != original_test_result.did_pass):
+            test_diffs.append(
+                TestDiff(
+                    scope=TestDiffScope.DID_PASS,
+                    original_value=str(original_test_result.did_pass),
+                    candidate_value=str(cdd_test_result.did_pass),
+                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
+                    candidate_pytest_error=cdd_pytest_error,
+                    original_pass=original_test_result.did_pass,
+                    candidate_pass=cdd_test_result.did_pass,
+                    original_pytest_error=original_pytest_error,
+                )
+            )
+
+        elif not pass_fail_only and not comparator(
+            original_test_result.return_value, cdd_test_result.return_value, superset_obj=superset_obj
+        ):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.RETURN_VALUE,
@@ -106,33 +131,16 @@ def compare_test_results(original_results: TestResults, candidate_results: TestR
                 )
             except Exception as e:
                 logger.error(e)
-        elif (original_test_result.stdout and cdd_test_result.stdout) and not comparator(
-            original_test_result.stdout, cdd_test_result.stdout
+        elif (
+            not pass_fail_only
+            and (original_test_result.stdout and cdd_test_result.stdout)
+            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
         ):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.STDOUT,
                     original_value=str(original_test_result.stdout),
                     candidate_value=str(cdd_test_result.stdout),
-                    test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
-                    candidate_pytest_error=cdd_pytest_error,
-                    original_pass=original_test_result.did_pass,
-                    candidate_pass=cdd_test_result.did_pass,
-                    original_pytest_error=original_pytest_error,
-                )
-            )
-
-        elif original_test_result.test_type in {
-            TestType.EXISTING_UNIT_TEST,
-            TestType.CONCOLIC_COVERAGE_TEST,
-            TestType.GENERATED_REGRESSION,
-            TestType.REPLAY_TEST,
-        } and (cdd_test_result.did_pass != original_test_result.did_pass):
-            test_diffs.append(
-                TestDiff(
-                    scope=TestDiffScope.DID_PASS,
-                    original_value=str(original_test_result.did_pass),
-                    candidate_value=str(cdd_test_result.did_pass),
                     test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
                     candidate_pytest_error=cdd_pytest_error,
                     original_pass=original_test_result.did_pass,

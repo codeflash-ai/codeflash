@@ -94,7 +94,7 @@ class PicklePatcher:
         obj: object,
         path: list[str] | None = None,  # noqa: ARG004
         protocol: int | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> tuple[bool, bytes | str]:
         """Try to pickle an object using pickle first, then dill. If both fail, create a placeholder.
 
@@ -123,7 +123,7 @@ class PicklePatcher:
                 return False, str(e)
 
     @staticmethod
-    def _recursive_pickle(  # noqa: PLR0911
+    def _recursive_pickle(
         obj: object,
         max_depth: int,
         path: list[str] | None = None,
@@ -192,7 +192,7 @@ class PicklePatcher:
         error_msg: str,  # noqa: ARG004
         path: list[str],
         protocol: int | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> bytes:
         """Handle pickling for dictionary objects.
 
@@ -258,7 +258,7 @@ class PicklePatcher:
         error_msg: str,  # noqa: ARG004
         path: list[str],
         protocol: int | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> bytes:
         """Handle pickling for sequence types (list, tuple, set).
 
@@ -311,12 +311,7 @@ class PicklePatcher:
 
     @staticmethod
     def _handle_object(
-        obj: object,
-        max_depth: int,
-        error_msg: str,
-        path: list[str],
-        protocol: int | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        obj: object, max_depth: int, error_msg: str, path: list[str], protocol: int | None = None, **kwargs: Any
     ) -> bytes:
         """Handle pickling for custom objects with __dict__.
 
@@ -366,7 +361,7 @@ class PicklePatcher:
             if success:
                 return result
             # Fall through to placeholder creation
-        except Exception:  # noqa: S110
+        except Exception:
             pass  # Fall through to placeholder creation
 
         # If we get here, just use a placeholder

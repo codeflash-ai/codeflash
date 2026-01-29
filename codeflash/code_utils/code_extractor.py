@@ -16,6 +16,7 @@ from libcst.helpers import calculate_module_and_package
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.config_consts import MAX_CONTEXT_LEN_REVIEW
+from codeflash.languages.base import Language
 from codeflash.models.models import CodePosition, FunctionParent
 
 if TYPE_CHECKING:
@@ -44,14 +45,14 @@ class GlobalFunctionCollector(cst.CSTVisitor):
         self.scope_depth += 1
         return True
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.scope_depth -= 1
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
         self.scope_depth += 1
         return True
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.scope_depth -= 1
 
 
@@ -65,7 +66,7 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
         self.processed_functions: set[str] = set()
         self.scope_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.scope_depth += 1
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -80,14 +81,14 @@ class GlobalFunctionTransformer(cst.CSTTransformer):
             return self.new_functions[name]
         return updated_node
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
         self.scope_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         self.scope_depth -= 1
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new functions that weren't in the original file
         new_statements = list(updated_node.body)
 
@@ -141,28 +142,28 @@ class GlobalAssignmentCollector(cst.CSTVisitor):
         self.scope_depth = 0
         self.if_else_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> Optional[bool]:
         self.scope_depth += 1
         return True
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.scope_depth -= 1
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> Optional[bool]:
         self.scope_depth += 1
         return True
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.scope_depth -= 1
 
-    def visit_If(self, node: cst.If) -> Optional[bool]:  # noqa: ARG002
+    def visit_If(self, node: cst.If) -> Optional[bool]:
         self.if_else_depth += 1
         return True
 
-    def leave_If(self, original_node: cst.If) -> None:  # noqa: ARG002
+    def leave_If(self, original_node: cst.If) -> None:
         self.if_else_depth -= 1
 
-    def visit_Else(self, node: cst.Else) -> Optional[bool]:  # noqa: ARG002
+    def visit_Else(self, node: cst.Else) -> Optional[bool]:
         # Else blocks are already counted as part of the if statement
         return True
 
@@ -231,24 +232,24 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
         self.scope_depth = 0
         self.if_else_depth = 0
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.scope_depth += 1
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         self.scope_depth -= 1
         return updated_node
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
         self.scope_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         self.scope_depth -= 1
         return updated_node
 
-    def visit_If(self, node: cst.If) -> None:  # noqa: ARG002
+    def visit_If(self, node: cst.If) -> None:
         self.if_else_depth += 1
 
-    def leave_If(self, original_node: cst.If, updated_node: cst.If) -> cst.If:  # noqa: ARG002
+    def leave_If(self, original_node: cst.If, updated_node: cst.If) -> cst.If:
         self.if_else_depth -= 1
         return updated_node
 
@@ -283,7 +284,7 @@ class GlobalAssignmentTransformer(cst.CSTTransformer):
 
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Add any new assignments that weren't in the original file
         new_statements = list(updated_node.body)
 
@@ -370,7 +371,7 @@ class GlobalStatementTransformer(cst.CSTTransformer):
         super().__init__()
         self.global_statements = global_statements
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         if not self.global_statements:
             return updated_node
 
@@ -396,20 +397,20 @@ class GlobalStatementCollector(cst.CSTVisitor):
         self.global_statements = []
         self.in_function_or_class = False
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:
         # Don't visit inside classes
         self.in_function_or_class = True
         return False
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.in_function_or_class = False
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         # Don't visit inside functions
         self.in_function_or_class = True
         return False
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.in_function_or_class = False
 
     def visit_SimpleStatementLine(self, node: cst.SimpleStatementLine) -> None:
@@ -490,16 +491,16 @@ class DottedImportCollector(cst.CSTVisitor):
         self.depth = 0
         self._collect_imports_from_block(node)
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.depth += 1
 
-    def leave_FunctionDef(self, node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, node: cst.FunctionDef) -> None:
         self.depth -= 1
 
-    def visit_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def visit_ClassDef(self, node: cst.ClassDef) -> None:
         self.depth += 1
 
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:
         self.depth -= 1
 
     def visit_If(self, node: cst.If) -> None:
@@ -529,9 +530,7 @@ def find_last_import_line(target_code: str) -> int:
 
 class FutureAliasedImportTransformer(cst.CSTTransformer):
     def leave_ImportFrom(
-        self,
-        original_node: cst.ImportFrom,  # noqa: ARG002
-        updated_node: cst.ImportFrom,
+        self, original_node: cst.ImportFrom, updated_node: cst.ImportFrom
     ) -> cst.BaseSmallStatement | cst.FlattenSentinel[cst.BaseSmallStatement] | cst.RemovalSentinel:
         import libcst.matchers as m
 
@@ -676,7 +675,7 @@ def resolve_star_import(module_name: str, project_root: Path) -> set[str]:
                     if not name.startswith("_"):
                         public_names.add(name)
 
-        return public_names  # noqa: TRY300
+        return public_names
 
     except Exception as e:
         logger.warning(f"Error resolving star import for {module_name}: {e}")
@@ -1165,7 +1164,7 @@ class FunctionCallFinder(ast.NodeVisitor):
 
         return False
 
-    def _get_call_name(self, func_node) -> Optional[str]:  # noqa: ANN001
+    def _get_call_name(self, func_node) -> Optional[str]:
         """Extract the name being called from a function node."""
         # Fast path short-circuit for ast.Name nodes
         if isinstance(func_node, ast.Name):
@@ -1341,9 +1340,12 @@ def get_fn_references_jedi(
     source_code: str, file_path: Path, project_root: Path, target_function: str, target_class: str | None
 ) -> list[Path]:
     start_time = time.perf_counter()
-    function_position: CodePosition = find_specific_function_in_file(
+    function_position: CodePosition | None = find_specific_function_in_file(
         source_code, file_path, target_function, target_class
     )
+    if function_position is None:
+        # Function not found (may be non-Python code)
+        return []
     try:
         script = jedi.Script(code=source_code, path=file_path, project=jedi.Project(path=project_root))
         # Get references to the function
@@ -1555,15 +1557,15 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
 
     # If numba is not installed and all modules used require numba for optimization,
     # return False since we can't optimize this code
-    if not has_numba and modules_used.issubset(NUMBA_REQUIRED_MODULES):  # noqa : SIM103
-        return False
-
-    return True
+    return not (not has_numba and modules_used.issubset(NUMBA_REQUIRED_MODULES))
 
 
 def get_opt_review_metrics(
-    source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
+    source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path, language: Language
 ) -> str:
+    if language != Language.PYTHON:
+        # TODO: {Claude} handle function refrences for other languages
+        return ""
     start_time = time.perf_counter()
     try:
         qualified_name_split = qualified_name.rsplit(".", maxsplit=1)

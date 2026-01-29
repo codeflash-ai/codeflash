@@ -2,8 +2,6 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
-
 from codeflash.code_utils.line_profile_utils import add_decorator_imports, contains_jit_decorator
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import CodeOptimizationContext
@@ -26,7 +24,7 @@ def test_add_decorator_imports_helper_in_class():
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
-    #func_optimizer = pass
+    # func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -36,8 +34,7 @@ def test_add_decorator_imports_helper_in_class():
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
@@ -77,11 +74,14 @@ class BubbleSortClass:
         assert code_context.helper_functions[0].file_path.read_text("utf-8") == expected_code_helper
     finally:
         func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            func_optimizer.function_to_optimize_source_code,
+            original_helper_code,
+            func_optimizer.function_to_optimize.file_path,
         )
 
+
 def test_add_decorator_imports_helper_in_nested_class():
-    #Need to invert the assert once the helper detection is fixed
+    # Need to invert the assert once the helper detection is fixed
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_nested_classmethod.py").resolve()
     tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = (Path(__file__).parent / "..").resolve()
@@ -96,7 +96,7 @@ def test_add_decorator_imports_helper_in_nested_class():
     func = FunctionToOptimize(function_name="sort_classmethod", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
-    #func_optimizer = pass
+    # func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -106,8 +106,7 @@ def test_add_decorator_imports_helper_in_nested_class():
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
@@ -125,8 +124,11 @@ def sort_classmethod(x):
         assert code_context.helper_functions[0].qualified_name == "WrapperClass.__init__"
     finally:
         func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            func_optimizer.function_to_optimize_source_code,
+            original_helper_code,
+            func_optimizer.function_to_optimize.file_path,
         )
+
 
 def test_add_decorator_imports_nodeps():
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort.py").resolve()
@@ -143,7 +145,7 @@ def test_add_decorator_imports_nodeps():
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
-    #func_optimizer = pass
+    # func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -153,8 +155,7 @@ def test_add_decorator_imports_nodeps():
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
@@ -174,8 +175,11 @@ def sorter(arr):
         assert code_path.read_text("utf-8") == expected_code_main
     finally:
         func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            func_optimizer.function_to_optimize_source_code,
+            original_helper_code,
+            func_optimizer.function_to_optimize.file_path,
         )
+
 
 def test_add_decorator_imports_helper_outside():
     code_path = (Path(__file__).parent.resolve() / "../code_to_optimize/bubble_sort_deps.py").resolve()
@@ -192,7 +196,7 @@ def test_add_decorator_imports_helper_outside():
     func = FunctionToOptimize(function_name="sorter_deps", parents=[], file_path=code_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
-    #func_optimizer = pass
+    # func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -202,8 +206,7 @@ def test_add_decorator_imports_helper_outside():
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 
@@ -227,7 +230,7 @@ def sorter_deps(arr):
 def dep1_comparer(arr, j: int) -> bool:
     return arr[j] > arr[j + 1]
 """
-        expected_code_helper2="""from line_profiler import profile as codeflash_line_profile
+        expected_code_helper2 = """from line_profiler import profile as codeflash_line_profile
 
 
 @codeflash_line_profile
@@ -241,8 +244,11 @@ def dep2_swap(arr, j):
         assert code_context.helper_functions[1].file_path.read_text("utf-8") == expected_code_helper2
     finally:
         func_optimizer.write_code_and_helpers(
-            func_optimizer.function_to_optimize_source_code, original_helper_code, func_optimizer.function_to_optimize.file_path
+            func_optimizer.function_to_optimize_source_code,
+            original_helper_code,
+            func_optimizer.function_to_optimize.file_path,
         )
+
 
 def test_add_decorator_imports_helper_in_dunder_class():
     code_str = """def sorter(arr):
@@ -253,7 +259,7 @@ class helper:
         return arr.sort()"""
     code_path = TemporaryDirectory()
     code_write_path = Path(code_path.name) / "dunder_class.py"
-    code_write_path.write_text(code_str,"utf-8")
+    code_write_path.write_text(code_str, "utf-8")
     tests_root = Path(__file__).parent.resolve() / "../code_to_optimize/tests/pytest/"
     project_root_path = Path(code_path.name)
     run_cwd = Path(__file__).parent.parent.resolve()
@@ -267,7 +273,7 @@ class helper:
     func = FunctionToOptimize(function_name="sorter", parents=[], file_path=code_write_path)
     func_optimizer = FunctionOptimizer(function_to_optimize=func, test_cfg=test_config)
     os.chdir(run_cwd)
-    #func_optimizer = pass
+    # func_optimizer = pass
     try:
         ctx_result = func_optimizer.get_code_optimization_context()
         code_context: CodeOptimizationContext = ctx_result.unwrap()
@@ -277,8 +283,7 @@ class helper:
             with helper_function_path.open(encoding="utf8") as f:
                 helper_code = f.read()
                 original_helper_code[helper_function_path] = helper_code
-        line_profiler_output_file = add_decorator_imports(
-            func_optimizer.function_to_optimize, code_context)
+        line_profiler_output_file = add_decorator_imports(func_optimizer.function_to_optimize, code_context)
         expected_code_main = f"""from line_profiler import profile as codeflash_line_profile
 codeflash_line_profile.enable(output_prefix='{line_profiler_output_file.as_posix()}')
 

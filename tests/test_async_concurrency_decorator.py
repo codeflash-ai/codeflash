@@ -157,10 +157,7 @@ class TestParseConcurrencyMetrics:
 !@######CONC:test_module:TestClass:test_func:my_async_func:1:50000000:10000000:5######@!
 More output here
 """
-        test_results = TestResults(
-            test_results=[],
-            perf_stdout=perf_stdout,
-        )
+        test_results = TestResults(test_results=[], perf_stdout=perf_stdout)
 
         metrics = parse_concurrency_metrics(test_results, "my_async_func")
 
@@ -177,10 +174,7 @@ More output here
 !@######CONC:test_module:TestClass:test_func:target_func:2:60000000:10000000:5######@!
 !@######CONC:test_module:TestClass:test_func:other_func:1:30000000:15000000:5######@!
 """
-        test_results = TestResults(
-            test_results=[],
-            perf_stdout=perf_stdout,
-        )
+        test_results = TestResults(test_results=[], perf_stdout=perf_stdout)
 
         metrics = parse_concurrency_metrics(test_results, "target_func")
 
@@ -195,10 +189,7 @@ More output here
         """Test parsing when function name doesn't match."""
         perf_stdout = """!@######CONC:test_module:TestClass:test_func:other_func:1:50000000:10000000:5######@!
 """
-        test_results = TestResults(
-            test_results=[],
-            perf_stdout=perf_stdout,
-        )
+        test_results = TestResults(test_results=[], perf_stdout=perf_stdout)
 
         metrics = parse_concurrency_metrics(test_results, "nonexistent_func")
 
@@ -206,10 +197,7 @@ More output here
 
     def test_parse_concurrency_metrics_empty_stdout(self):
         """Test parsing with empty stdout."""
-        test_results = TestResults(
-            test_results=[],
-            perf_stdout="",
-        )
+        test_results = TestResults(test_results=[], perf_stdout="")
 
         metrics = parse_concurrency_metrics(test_results, "any_func")
 
@@ -217,10 +205,7 @@ More output here
 
     def test_parse_concurrency_metrics_none_stdout(self):
         """Test parsing with None stdout."""
-        test_results = TestResults(
-            test_results=[],
-            perf_stdout=None,
-        )
+        test_results = TestResults(test_results=[], perf_stdout=None)
 
         metrics = parse_concurrency_metrics(test_results, "any_func")
 
@@ -293,8 +278,7 @@ class TestConcurrencyRatioComparison:
 
         # Non-blocking should have significantly higher concurrency ratio
         assert nonblocking_ratio > blocking_ratio, (
-            f"Non-blocking ratio ({nonblocking_ratio:.2f}) should be greater than "
-            f"blocking ratio ({blocking_ratio:.2f})"
+            f"Non-blocking ratio ({nonblocking_ratio:.2f}) should be greater than blocking ratio ({blocking_ratio:.2f})"
         )
 
         # The difference should be substantial (non-blocking should be at least 2x better)

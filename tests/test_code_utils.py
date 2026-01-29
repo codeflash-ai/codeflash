@@ -279,21 +279,23 @@ def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.Mo
     assert path_belongs_to_site_packages(file_path) is False
 
 
-def test_path_belongs_to_site_packages_with_symlinked_site_packages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_path_belongs_to_site_packages_with_symlinked_site_packages(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     real_site_packages = tmp_path / "real_site_packages"
     real_site_packages.mkdir()
-    
+
     symlinked_site_packages = tmp_path / "symlinked_site_packages"
     symlinked_site_packages.symlink_to(real_site_packages)
-    
+
     package_file = real_site_packages / "some_package" / "__init__.py"
     package_file.parent.mkdir()
     package_file.write_text("# package file")
-    
+
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(symlinked_site_packages)])
-    
+
     assert path_belongs_to_site_packages(package_file) is True
-    
+
     symlinked_package_file = symlinked_site_packages / "some_package" / "__init__.py"
     assert path_belongs_to_site_packages(symlinked_package_file) is True
 
@@ -301,40 +303,42 @@ def test_path_belongs_to_site_packages_with_symlinked_site_packages(monkeypatch:
 def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     real_site_packages = tmp_path / "real" / "lib" / "python3.9" / "site-packages"
     real_site_packages.mkdir(parents=True)
-    
+
     link1 = tmp_path / "link1"
     link1.symlink_to(real_site_packages.parent.parent.parent)
-    
-    link2 = tmp_path / "link2" 
+
+    link2 = tmp_path / "link2"
     link2.symlink_to(link1)
-    
+
     package_file = real_site_packages / "test_package" / "module.py"
     package_file.parent.mkdir()
     package_file.write_text("# test module")
-    
+
     site_packages_via_links = link2 / "lib" / "python3.9" / "site-packages"
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(site_packages_via_links)])
-    
+
     assert path_belongs_to_site_packages(package_file) is True
-    
+
     file_via_links = site_packages_via_links / "test_package" / "module.py"
     assert path_belongs_to_site_packages(file_via_links) is True
 
 
-def test_path_belongs_to_site_packages_resolved_paths_normalization(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_path_belongs_to_site_packages_resolved_paths_normalization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     site_packages_dir = tmp_path / "lib" / "python3.9" / "site-packages"
     site_packages_dir.mkdir(parents=True)
-    
+
     package_dir = site_packages_dir / "mypackage"
     package_dir.mkdir()
     package_file = package_dir / "module.py"
     package_file.write_text("# module")
-    
+
     complex_site_packages_path = tmp_path / "lib" / "python3.9" / "other" / ".." / "site-packages" / "."
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(complex_site_packages_path)])
-    
+
     assert path_belongs_to_site_packages(package_file) is True
-    
+
     complex_file_path = tmp_path / "lib" / "python3.9" / "site-packages" / "other" / ".." / "mypackage" / "module.py"
     assert path_belongs_to_site_packages(complex_file_path) is True
 
@@ -374,8 +378,9 @@ def my_function():
 def mock_code_context():
     """Mock CodeOptimizationContext for testing extract_dependent_function."""
     from unittest.mock import MagicMock
+
     from codeflash.models.models import CodeOptimizationContext
-    
+
     context = MagicMock(spec=CodeOptimizationContext)
     context.preexisting_objects = []
     return context
@@ -393,7 +398,7 @@ def helper_function():
 ```
 """)
     assert extract_dependent_function("main_function", mock_code_context) == "helper_function"
-    
+
     # Test async function extraction
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
 def main_function():
@@ -416,7 +421,7 @@ def main_function():
 ```
 """)
     assert extract_dependent_function("main_function", mock_code_context) is False
-    
+
     # Multiple dependent functions
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
 def main_function():
@@ -443,7 +448,7 @@ def sync_helper():
 ```
 """)
     assert extract_dependent_function("async_main", mock_code_context) == "sync_helper"
-    
+
     # Only async functions
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
 async def async_main():
@@ -500,7 +505,7 @@ def test_partial_module_name2(base_dir: Path) -> None:
 
 def test_pytest_unittest_path_resolution_with_prefix(tmp_path: Path) -> None:
     """Test path resolution when pytest includes parent directory in classname.
-    
+
     This handles the case where pytest's base_dir is /path/to/tests but the
     classname includes the parent directory like "project.tests.unittest.test_file.TestClass".
     """
@@ -509,34 +514,29 @@ def test_pytest_unittest_path_resolution_with_prefix(tmp_path: Path) -> None:
     tests_root = project_root / "tests"
     unittest_dir = tests_root / "unittest"
     unittest_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create test files
     test_file = unittest_dir / "test_bubble_sort.py"
     test_file.touch()
-    
+
     generated_test = unittest_dir / "test_sorter__unit_test_0.py"
     generated_test.touch()
-    
+
     # Case 1: pytest reports classname with full path including "code_to_optimize.tests"
     # but base_dir is .../tests (not the project root)
     result = resolve_test_file_from_class_path(
-        "code_to_optimize.tests.unittest.test_bubble_sort.TestPigLatin",
-        tests_root
+        "code_to_optimize.tests.unittest.test_bubble_sort.TestPigLatin", tests_root
     )
     assert result == test_file
-    
+
     # Case 2: Generated test file with class name
     result = resolve_test_file_from_class_path(
-        "code_to_optimize.tests.unittest.test_sorter__unit_test_0.TestSorter",
-        tests_root
+        "code_to_optimize.tests.unittest.test_sorter__unit_test_0.TestSorter", tests_root
     )
     assert result == generated_test
-    
+
     # Case 3: Without the class name (just the module path)
-    result = resolve_test_file_from_class_path(
-        "code_to_optimize.tests.unittest.test_bubble_sort",
-        tests_root
-    )
+    result = resolve_test_file_from_class_path("code_to_optimize.tests.unittest.test_bubble_sort", tests_root)
     assert result == test_file
 
 
@@ -546,23 +546,17 @@ def test_pytest_unittest_multiple_prefix_levels(tmp_path: Path) -> None:
     base = tmp_path / "org" / "project" / "src" / "tests"
     unit_dir = base / "unit"
     unit_dir.mkdir(parents=True, exist_ok=True)
-    
+
     test_file = unit_dir / "test_example.py"
     test_file.touch()
-    
+
     # pytest might report: org.project.src.tests.unit.test_example.TestClass
     # with base_dir being .../src/tests or .../tests
-    result = resolve_test_file_from_class_path(
-        "org.project.src.tests.unit.test_example.TestClass",
-        base
-    )
+    result = resolve_test_file_from_class_path("org.project.src.tests.unit.test_example.TestClass", base)
     assert result == test_file
-    
+
     # Also test with base_dir at different level
-    result = resolve_test_file_from_class_path(
-        "project.src.tests.unit.test_example.TestClass",
-        base
-    )
+    result = resolve_test_file_from_class_path("project.src.tests.unit.test_example.TestClass", base)
     assert result == test_file
 
 
@@ -570,15 +564,14 @@ def test_pytest_unittest_instrumented_files(tmp_path: Path) -> None:
     """Test path resolution for instrumented test files."""
     tests_root = tmp_path / "tests" / "unittest"
     tests_root.mkdir(parents=True, exist_ok=True)
-    
+
     # Create instrumented test file
     instrumented_file = tests_root / "test_bubble_sort__perfinstrumented.py"
     instrumented_file.touch()
-    
+
     # pytest classname includes parent directories
     result = resolve_test_file_from_class_path(
-        "code_to_optimize.tests.unittest.test_bubble_sort__perfinstrumented.TestPigLatin",
-        tmp_path / "tests"
+        "code_to_optimize.tests.unittest.test_bubble_sort__perfinstrumented.TestPigLatin", tmp_path / "tests"
     )
     assert result == instrumented_file
 
@@ -587,15 +580,12 @@ def test_pytest_unittest_nested_classes(tmp_path: Path) -> None:
     """Test path resolution with nested class names."""
     tests_root = tmp_path / "tests"
     tests_root.mkdir(parents=True, exist_ok=True)
-    
+
     test_file = tests_root / "test_nested.py"
     test_file.touch()
-    
+
     # Some unittest frameworks use nested classes
-    result = resolve_test_file_from_class_path(
-        "project.tests.test_nested.OuterClass.InnerClass",
-        tests_root
-    )
+    result = resolve_test_file_from_class_path("project.tests.test_nested.OuterClass.InnerClass", tests_root)
     assert result == test_file
 
 
@@ -603,12 +593,9 @@ def test_pytest_unittest_no_match_returns_none(tmp_path: Path) -> None:
     """Test that non-existent files return None even with prefix stripping."""
     tests_root = tmp_path / "tests"
     tests_root.mkdir(parents=True, exist_ok=True)
-    
+
     # File doesn't exist
-    result = resolve_test_file_from_class_path(
-        "code_to_optimize.tests.unittest.nonexistent_test.TestClass",
-        tests_root
-    )
+    result = resolve_test_file_from_class_path("code_to_optimize.tests.unittest.nonexistent_test.TestClass", tests_root)
     assert result is None
 
 
@@ -617,10 +604,10 @@ def test_pytest_unittest_single_component(tmp_path: Path) -> None:
     base_dir = tmp_path
     test_file = base_dir / "test_simple.py"
     test_file.touch()
-    
+
     result = file_name_from_test_module_name("test_simple", base_dir)
     assert result == test_file
-    
+
     # With class name
     result = file_name_from_test_module_name("test_simple.TestClass", base_dir)
     assert result == test_file
@@ -644,7 +631,7 @@ def test_generate_candidates() -> None:
         "Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
         "krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
         "Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
-        "/Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py"
+        "/Users/krrt7/Desktop/work/codeflash/cli/codeflash/code_utils/coverage_utils.py",
     }
     assert generate_candidates(source_code_path) == expected_candidates
 

@@ -204,7 +204,7 @@ class LineProfilerDecoratorAdder(cst.CSTTransformer):
         # Track when we enter a class
         self.context_stack.append(node.name.value)
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         # Pop the context when we leave a class
         self.context_stack.pop()
         return updated_node
@@ -268,7 +268,7 @@ class ProfileEnableTransformer(cst.CSTTransformer):
 
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         if not self.found_import:
             return updated_node
 
@@ -332,11 +332,11 @@ def add_profile_enable(original_code: str, line_profile_output_file: str) -> str
 
 
 class ImportAdder(cst.CSTTransformer):
-    def __init__(self, import_statement) -> None:  # noqa: ANN001
+    def __init__(self, import_statement) -> None:
         self.import_statement = import_statement
         self.has_import = False
 
-    def leave_Module(self, original_node, updated_node):  # noqa: ANN001, ANN201, ARG002
+    def leave_Module(self, original_node, updated_node):  # noqa: ANN201
         # If the import is already there, don't add it again
         if self.has_import:
             return updated_node
@@ -347,7 +347,7 @@ class ImportAdder(cst.CSTTransformer):
         # Add the import to the module's body
         return updated_node.with_changes(body=[import_node, *list(updated_node.body)])
 
-    def visit_ImportFrom(self, node) -> None:  # noqa: ANN001
+    def visit_ImportFrom(self, node) -> None:
         # Check if the profile is already imported from line_profiler
         if node.module and node.module.value == "line_profiler":
             for import_alias in node.names:
