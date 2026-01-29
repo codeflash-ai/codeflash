@@ -86,8 +86,7 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
 
 # TODO for claude: There should be different functions to parse it per language, which should be chosen during runtime
 def parse_config_file(
-    config_file_path: Path | None = None,
-    override_formatter_check: bool = False,  # noqa: FBT001, FBT002
+    config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
     # First try package.json for JS/TS projects
     package_json_path = find_package_json(config_file_path)

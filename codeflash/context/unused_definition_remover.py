@@ -209,7 +209,7 @@ class DependencyCollector(cst.CSTVisitor):
                 self._extract_names_from_annotation(node.value)
             # No need to check the attribute name itself as it's likely not a top-level definition
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef) -> None:
         self.function_depth -= 1
 
         if self.function_depth == 0 and self.class_depth == 0:
@@ -238,7 +238,7 @@ class DependencyCollector(cst.CSTVisitor):
 
         self.class_depth += 1
 
-    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef) -> None:
         self.class_depth -= 1
 
         if self.class_depth == 0:
@@ -261,7 +261,7 @@ class DependencyCollector(cst.CSTVisitor):
                     # Use the first tracked name as the current top-level name (for dependency tracking)
                     self.current_top_level_name = tracked_names[0]
 
-    def leave_Assign(self, original_node: cst.Assign) -> None:  # noqa: ARG002
+    def leave_Assign(self, original_node: cst.Assign) -> None:
         if self.processing_variable:
             self.processing_variable = False
             self.current_variable_names.clear()
@@ -371,7 +371,7 @@ class QualifiedFunctionUsageMarker:
             self.mark_as_used_recursively(dep)
 
 
-def remove_unused_definitions_recursively(  # noqa: PLR0911
+def remove_unused_definitions_recursively(
     node: cst.CSTNode, definitions: dict[str, UsageInfo]
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node to remove unused definitions.
@@ -554,7 +554,7 @@ def remove_unused_definitions_by_function_names(code: str, qualified_function_na
         # Apply the recursive removal transformation
         modified_module, _ = remove_unused_definitions_recursively(module, defs_with_usages)
 
-        return modified_module.code if modified_module else ""  # noqa: TRY300
+        return modified_module.code if modified_module else ""
     except Exception as e:
         # If any other error occurs during processing, return the original code
         logger.debug(f"Error processing code to remove unused definitions: {type(e).__name__}: {e}")

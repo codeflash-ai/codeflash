@@ -16,7 +16,7 @@ from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, sav
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
-def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:  # noqa
+def check_formatter_installed(formatter_cmds: list[str], exit_on_failure: bool = True) -> bool:
     if not formatter_cmds or formatter_cmds[0] == "disabled":
         return True
     first_cmd = formatter_cmds[0]

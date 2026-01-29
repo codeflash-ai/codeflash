@@ -258,8 +258,8 @@ def run_line_profile_tests(
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     pytest_timeout: int | None = None,
-    pytest_min_loops: int = 5,  # noqa: ARG001
-    pytest_max_loops: int = 100_000,  # noqa: ARG001
+    pytest_min_loops: int = 5,
+    pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
     line_profiler_output_file: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:

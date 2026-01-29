@@ -28,7 +28,7 @@ def generate_tests(
     test_index: int,
     test_path: Path,
     test_perf_path: Path,
-    is_numerical_code: bool | None = None,  # noqa: FBT001
+    is_numerical_code: bool | None = None,
 ) -> tuple[str, str, str, Path, Path] | None:
     # TODO: Sometimes this recreates the original Class definition. This overrides and messes up the original
     #  class import. Remove the recreation of the class definition

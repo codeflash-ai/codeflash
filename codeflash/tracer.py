@@ -232,8 +232,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
                 args = process_pyproject_config(args)
                 args.previous_checkpoint_functions = None
-                init_sentry(not args.disable_telemetry, exclude_errors=True)
-                posthog_cf.initialize_posthog(not args.disable_telemetry)
+                init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
+                posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
                 from codeflash.optimization import optimizer
 

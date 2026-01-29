@@ -99,7 +99,7 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
     return test_module_name, test_class_name, test_name, line_id
 
 
-def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is_fto: bool = False) -> Callable:  # noqa: FBT001, FBT002
+def codeflash_capture(function_name: str, tmp_dir_path: str, tests_root: str, is_fto: bool = False) -> Callable:
     """Define a decorator to instrument the init function, collect test info, and capture the instance state."""
 
     def decorator(wrapped: Callable) -> Callable:

@@ -200,7 +200,7 @@ class CodeFlashBenchmarkPlugin:
 
     # Pytest hooks
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001, ARG002
+    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001
         """Execute after whole test run is completed."""
         # Write any remaining benchmark timings to the database
         codeflash_trace.close()
@@ -218,7 +218,7 @@ class CodeFlashBenchmarkPlugin:
         skip_no_benchmark = pytest.mark.skip(reason="Test requires benchmark fixture")
         for item in items:
             # Check for direct benchmark fixture usage
-            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames
+            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames  # ty:ignore[unsupported-operator]
 
             # Check for @pytest.mark.benchmark marker
             has_marker = False
@@ -249,7 +249,7 @@ class CodeFlashBenchmarkPlugin:
             self._run_benchmark(func)
             return wrapped_func
 
-        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN002, ANN003, ANN202
             """Actual benchmark implementation."""
             node_path = getattr(self.request.node, "path", None) or getattr(self.request.node, "fspath", None)
             if node_path is None:

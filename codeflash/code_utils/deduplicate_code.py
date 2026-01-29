@@ -15,8 +15,8 @@ from codeflash.languages import current_language, is_python
 
 def normalize_code(
     code: str,
-    remove_docstrings: bool = True,  # noqa: FBT001, FBT002
-    return_ast_dump: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = True,
+    return_ast_dump: bool = False,
     language: str | None = None,
 ) -> str:
     """Normalize code by parsing, cleaning, and normalizing variable names.
