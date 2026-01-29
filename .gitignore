@@ -163,7 +163,6 @@ cython_debug/
 #.idea/
 .aider*
 /js/common/node_modules/
-/node_modules/
 *.xml
 *.pem
 
@@ -260,8 +259,8 @@ WARP.MD
 .tessl/
 tessl.json
 **/node_modules/**
-/dist-nuitka/main.dist/*
-packages/codeflash/.npmrc
+**/dist-nuitka/**
+**/.npmrc
 
 # Tessl auto-generates AGENTS.md on install; ignore to avoid cluttering git status
 AGENTS.md
