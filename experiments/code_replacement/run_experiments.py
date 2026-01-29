@@ -159,7 +159,7 @@ def test_approach_a() -> ApproachSummary:
 
         replacer = JsCodeshiftReplacer()
 
-        if not replacer._check_node_available():
+        if not replacer._check_node_available():  # noqa: SLF001
             summary.available = False
             return summary
 
@@ -235,7 +235,7 @@ def generate_report(summaries: list[ApproachSummary]) -> str:
     return "\n".join(report)
 
 
-def main():
+def main() -> None:
     """Run all experiments and generate report."""
     print("=" * 70)
     print("Code Replacement Strategy Experiments")

@@ -18,6 +18,7 @@ Cons:
 - Still text-based replacement (not AST rewriting)
 """
 
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
@@ -117,7 +118,7 @@ class HybridReplacer:
 
             return None
 
-        def traverse(node):
+        def traverse(node) -> None:  # noqa: ANN001
             """Recursively traverse tree to find functions."""
             node_type = node.type
 
@@ -246,7 +247,8 @@ class HybridReplacer:
         boundaries = self.find_function_boundaries(source, function_name)
 
         if not boundaries:
-            raise ValueError(f"Function '{function_name}' not found in source")
+            msg = f"Function '{function_name}' not found in source"
+            raise ValueError(msg)
 
         if len(boundaries) > 1:
             # Multiple functions with same name - use the first one
@@ -368,7 +370,7 @@ if __name__ == "__main__":
 
     if not TREE_SITTER_AVAILABLE:
         print("Cannot run tests: tree-sitter not installed")
-        exit(1)
+        sys.exit(1)
 
     replacer = HybridReplacer("javascript")
     ts_replacer = HybridReplacer("typescript")

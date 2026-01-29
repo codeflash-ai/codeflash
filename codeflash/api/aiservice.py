@@ -240,9 +240,7 @@ class AiServiceClient:
             n_candidates=n_candidates,
         )
 
-    def get_jit_rewritten_code(
-        self, source_code: str, trace_id: str
-    ) -> list[OptimizedCandidate]:
+    def get_jit_rewritten_code(self, source_code: str, trace_id: str) -> list[OptimizedCandidate]:
         """Rewrite the given python code for performance via jit compilation by making a request to the Django endpoint.
 
         Parameters

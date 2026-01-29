@@ -132,14 +132,7 @@ def test_js_replcement() -> None:
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
         result = func_optimizer.get_code_optimization_context()
-        from codeflash.either import is_successful
 
-        if not is_successful(result):
-            import pytest
-
-            pytest.skip(
-                f"Context extraction not fully implemented for JS: {result.failure() if hasattr(result, 'failure') else result}"
-            )
         code_context: CodeOptimizationContext = result.unwrap()
 
         original_helper_code: dict[Path, str] = {}
