@@ -63,6 +63,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install codeflash npm package dependencies
+        run: |
+          cd packages/codeflash
+          npm install
+
       - name: Install JS test project dependencies
         run: |
           cd code_to_optimize/js/code_to_optimize_ts
