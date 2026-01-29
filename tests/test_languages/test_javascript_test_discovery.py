@@ -1003,7 +1003,7 @@ test('funcA works', () => {
 
     def test_unicode_in_test_names(self, js_support):
         """Test handling of unicode characters in test names."""
-        with tempfile.NamedTemporaryFile(suffix=".test.js", mode="w", delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".test.js", mode="w", delete=False, encoding="utf-8") as f:
             f.write("""
 test('handles emoji 🎉', () => {});
 describe('日本語テスト', () => {
@@ -1013,7 +1013,7 @@ describe('日本語テスト', () => {
             f.flush()
             file_path = Path(f.name)
 
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
             from codeflash.languages.treesitter_utils import get_analyzer_for_file
             analyzer = get_analyzer_for_file(file_path)
             test_names = js_support._find_jest_tests(source, analyzer)

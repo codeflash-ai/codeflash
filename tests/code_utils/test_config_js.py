@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,7 @@ class TestGetPackageJsonData:
 
         assert result is None
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="chmod doesn't restrict read access on Windows")
     def test_returns_none_for_unreadable_file(self, tmp_path: Path) -> None:
         """Should return None if file cannot be read."""
         package_json = tmp_path / "package.json"
