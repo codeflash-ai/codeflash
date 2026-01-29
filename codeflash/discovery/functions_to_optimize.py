@@ -59,7 +59,7 @@ class ReturnStatementVisitor(cst.CSTVisitor):
         super().__init__()
         self.has_return_statement: bool = False
 
-    def visit_Return(self, node: cst.Return) -> None:  # noqa: ARG002
+    def visit_Return(self, node: cst.Return) -> None:
         self.has_return_statement = True
 
 
@@ -251,7 +251,7 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:  # noqa: FBT001
+def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[str, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
     return get_functions_within_lines(modified_lines)
 
@@ -472,7 +472,7 @@ def get_all_replay_test_functions(
 def is_git_repo(file_path: str) -> bool:
     try:
         git.Repo(file_path, search_parent_directories=True)
-        return True  # noqa: TRY300
+        return True
     except git.InvalidGitRepositoryError:
         return False
 

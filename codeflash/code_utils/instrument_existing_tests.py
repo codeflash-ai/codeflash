@@ -89,7 +89,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         # it's much more efficient to visit nodes manually. We'll only descend into expressions/statements.
 
         # Helper for manual walk
-        def iter_ast_calls(node):  # noqa: ANN202, ANN001
+        def iter_ast_calls(node):  # noqa: ANN202
             # Generator to yield each ast.Call in test_node, preserves node identity
             stack = [node]
             while stack:
@@ -690,15 +690,14 @@ def detect_frameworks_from_code(code: str) -> dict[str, str]:
                     frameworks["tensorflow"] = alias.asname if alias.asname else module_name
                 elif module_name == "jax":
                     frameworks["jax"] = alias.asname if alias.asname else module_name
-        elif isinstance(node, ast.ImportFrom):  # noqa: SIM102
-            if node.module:
-                module_name = node.module.split(".")[0]
-                if module_name == "torch" and "torch" not in frameworks:
-                    frameworks["torch"] = module_name
-                elif module_name == "tensorflow" and "tensorflow" not in frameworks:
-                    frameworks["tensorflow"] = module_name
-                elif module_name == "jax" and "jax" not in frameworks:
-                    frameworks["jax"] = module_name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            module_name = node.module.split(".")[0]
+            if module_name == "torch" and "torch" not in frameworks:
+                frameworks["torch"] = module_name
+            elif module_name == "tensorflow" and "tensorflow" not in frameworks:
+                frameworks["tensorflow"] = module_name
+            elif module_name == "jax" and "jax" not in frameworks:
+                frameworks["jax"] = module_name
 
     return frameworks
 
@@ -910,8 +909,7 @@ def _create_device_sync_precompute_statements(used_frameworks: dict[str, str] | 
 
 
 def _create_device_sync_statements(
-    used_frameworks: dict[str, str] | None,
-    for_return_value: bool = False,  # noqa: FBT001, FBT002
+    used_frameworks: dict[str, str] | None, for_return_value: bool = False
 ) -> list[ast.stmt]:
     """Create AST statements for device synchronization using pre-computed conditions.
 
@@ -1450,7 +1448,7 @@ class AsyncDecoratorAdder(cst.CSTTransformer):
         # Track when we enter a class
         self.context_stack.append(node.name.value)
 
-    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: ARG002
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:
         # Pop the context when we leave a class
         self.context_stack.pop()
         return updated_node
@@ -1530,7 +1528,7 @@ class AsyncDecoratorImportAdder(cst.CSTTransformer):
                 if import_alias.name.value == decorator_name:
                     self.has_import = True
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # If the import is already there, don't add it again
         if self.has_import:
             return updated_node

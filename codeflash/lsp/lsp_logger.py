@@ -85,11 +85,7 @@ supported_lsp_log_levels = ("info", "debug")
 
 
 def enhanced_log(
-    msg: str | Any,  # noqa: ANN401
-    actual_log_fn: Callable[[str, Any, Any], None],
-    level: str,
-    *args: Any,  # noqa: ANN401
-    **kwargs: Any,  # noqa: ANN401
+    msg: str | Any, actual_log_fn: Callable[[str, Any, Any], None], level: str, *args: Any, **kwargs: Any
 ) -> None:
     if not isinstance(msg, str):
         actual_log_fn(msg, *args, **kwargs)

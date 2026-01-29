@@ -109,7 +109,7 @@ class PytestMarkAdder(cst.CSTTransformer):
                             if isinstance(import_alias, cst.ImportAlias) and import_alias.name.value == "pytest":
                                 self.has_pytest_import = True
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         """Add pytest import if not present."""
         if not self.has_pytest_import:
             # Create import statement
@@ -118,7 +118,7 @@ class PytestMarkAdder(cst.CSTTransformer):
             updated_node = updated_node.with_changes(body=[import_stmt, *updated_node.body])
         return updated_node
 
-    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:  # noqa: ARG002
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
         """Add pytest mark to test functions."""
         # Check if the mark already exists
         for decorator in updated_node.decorators:
@@ -291,7 +291,7 @@ class OptimFunctionCollector(cst.CSTVisitor):
 
         return True
 
-    def leave_ClassDef(self, node: cst.ClassDef) -> None:  # noqa: ARG002
+    def leave_ClassDef(self, node: cst.ClassDef) -> None:
         if self.current_class:
             self.current_class = None
 
@@ -315,7 +315,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
         )
         self.current_class = None
 
-    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: ARG002
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:
         return False
 
     def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:
@@ -344,7 +344,7 @@ class OptimFunctionReplacer(cst.CSTTransformer):
                 )
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         node = updated_node
         max_function_index = None
         max_class_index = None
@@ -440,7 +440,7 @@ def replace_function_definitions_in_module(
     module_abspath: Path,
     preexisting_objects: set[tuple[str, tuple[FunctionParent, ...]]],
     project_root_path: Path,
-    should_add_global_assignments: bool = True,  # noqa: FBT001, FBT002
+    should_add_global_assignments: bool = True,
 ) -> bool:
     source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)

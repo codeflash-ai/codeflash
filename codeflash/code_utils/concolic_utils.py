@@ -71,7 +71,7 @@ class AssertCleanup:
 
         unittest_match = self.unittest_re.match(line)
         if unittest_match:
-            indent, assert_method, args = unittest_match.groups()
+            indent, _assert_method, args = unittest_match.groups()
 
             if args:
                 arg_parts = self._first_top_level_arg(args)

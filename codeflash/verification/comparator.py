@@ -93,7 +93,7 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     return _extract_exception_from_message(str(exc))
 
 
-def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001, ANN401, FBT002, PLR0911
+def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         # Handle exceptions specially - before type check to allow wrapper comparison
@@ -118,7 +118,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
 
             # Check if new wraps something that matches orig
             wrapped_new = _get_wrapped_exception(new)
-            if wrapped_new is not None and comparator(orig, wrapped_new, superset_obj):  # noqa: SIM103
+            if wrapped_new is not None and comparator(orig, wrapped_new, superset_obj):
                 return True
 
             return False
@@ -242,7 +242,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
                         continue
                     if key not in new_keys or not comparator(orig_keys[key], new_keys[key], superset_obj):
                         return False
-                return True  # noqa: TRY300
+                return True
 
             except sqlalchemy.exc.NoInspectionAvailable:
                 pass
@@ -366,12 +366,12 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         try:
             if HAS_NUMPY and np.isnan(orig):
                 return np.isnan(new)
-        except Exception:  # noqa: S110
+        except Exception:
             pass
         try:
             if HAS_NUMPY and np.isinf(orig):
                 return np.isinf(new)
-        except Exception:  # noqa: S110
+        except Exception:
             pass
 
         if HAS_TORCH:
@@ -480,7 +480,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         try:
             if hasattr(orig, "__eq__") and str(type(orig.__eq__)) == "<class 'method'>":
                 return orig == new
-        except Exception:  # noqa: S110
+        except Exception:
             pass
 
         # For class objects
@@ -512,7 +512,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:  # noqa: ANN001
         # TODO : Add other types here
         logger.warning(f"Unknown comparator input type: {type(orig)}")
         sentry_sdk.capture_exception(RuntimeError(f"Unknown comparator input type: {type(orig)}"))
-        return False  # noqa: TRY300
+        return False
     except RecursionError as e:
         logger.error(f"RecursionError while comparing objects: {e}")
         sentry_sdk.capture_exception(e)

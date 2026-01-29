@@ -95,7 +95,7 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 
@@ -202,7 +202,7 @@ def extract_code_markdown_context_from_files(
     helpers_of_fto: dict[Path, set[FunctionSource]],
     helpers_of_helpers: dict[Path, set[FunctionSource]],
     project_root_path: Path,
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
     code_context_type: CodeContextType = CodeContextType.READ_ONLY,
 ) -> CodeStringsMarkdown:
     """Extract code context from files containing target functions and their helpers, formatting them as markdown.
@@ -847,7 +847,7 @@ def parse_code_and_prune_cst(
     code_context_type: CodeContextType,
     target_functions: set[str],
     helpers_of_helper_functions: set[str] = set(),  # noqa: B006
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
 ) -> str:
     """Create a read-only version of the code by parsing and filtering the code to keep only class contextual information, and other module scoped variables."""
     module = cst.parse_module(code)
@@ -888,7 +888,7 @@ def parse_code_and_prune_cst(
     return ""
 
 
-def prune_cst_for_read_writable_code(  # noqa: PLR0911
+def prune_cst_for_read_writable_code(
     node: cst.CSTNode, target_functions: set[str], defs_with_usages: dict[str, UsageInfo], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
@@ -1006,7 +1006,7 @@ def prune_cst_for_read_writable_code(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_code_hashing(  # noqa: PLR0911
+def prune_cst_for_code_hashing(
     node: cst.CSTNode, target_functions: set[str], prefix: str = ""
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node and its children to build the read-writable codeblock. This contains nodes that lead to target functions.
@@ -1095,14 +1095,14 @@ def prune_cst_for_code_hashing(  # noqa: PLR0911
     return (node.with_changes(**updates) if updates else node), True
 
 
-def prune_cst_for_context(  # noqa: PLR0911
+def prune_cst_for_context(
     node: cst.CSTNode,
     target_functions: set[str],
     helpers_of_helper_functions: set[str],
     prefix: str = "",
-    remove_docstrings: bool = False,  # noqa: FBT001, FBT002
-    include_target_in_output: bool = False,  # noqa: FBT001, FBT002
-    include_init_dunder: bool = False,  # noqa: FBT001, FBT002
+    remove_docstrings: bool = False,
+    include_target_in_output: bool = False,
+    include_init_dunder: bool = False,
 ) -> tuple[cst.CSTNode | None, bool]:
     """Recursively filter the node for code context extraction.
 

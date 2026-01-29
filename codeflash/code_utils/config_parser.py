@@ -84,8 +84,7 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
 
 
 def parse_config_file(
-    config_file_path: Path | None = None,
-    override_formatter_check: bool = False,  # noqa: FBT001, FBT002
+    config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
     config_file_path = find_pyproject_toml(config_file_path)
     try:

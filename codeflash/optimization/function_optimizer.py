@@ -1627,8 +1627,8 @@ class FunctionOptimizer:
         self,
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
-        run_experiment: bool = False,  # noqa: FBT001, FBT002
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        run_experiment: bool = False,
+        is_numerical_code: bool | None = None,
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
@@ -2486,8 +2486,6 @@ class FunctionOptimizer:
                     pytest_cmd=self.test_cfg.pytest_cmd,
                     pytest_timeout=INDIVIDUAL_TESTCASE_TIMEOUT,
                     pytest_target_runtime_seconds=testing_time,
-                    pytest_min_loops=1,
-                    pytest_max_loops=1,
                     test_framework=self.test_cfg.test_framework,
                 )
             elif testing_type == TestingMode.PERFORMANCE:

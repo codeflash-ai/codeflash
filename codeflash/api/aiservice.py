@@ -253,7 +253,7 @@ class AiServiceClient:
         line_profiler_results: str,
         n_candidates: int,
         experiment_metadata: ExperimentMetadata | None = None,
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        is_numerical_code: bool | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given python code for performance using line profiler results.
 
@@ -646,7 +646,7 @@ class AiServiceClient:
         test_timeout: int,
         trace_id: str,
         test_index: int,
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        is_numerical_code: bool | None = None,
     ) -> tuple[str, str, str] | None:
         """Generate regression tests for the given function by making a request to the Django endpoint.
 
@@ -706,7 +706,7 @@ class AiServiceClient:
             error = response.json()["error"]
             logger.error(f"Error generating tests: {response.status_code} - {error}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": error})
-            return None  # noqa: TRY300
+            return None
         except Exception:
             logger.error(f"Error generating tests: {response.status_code} - {response.text}")
             ph("cli-testgen-error-response", {"response_status_code": response.status_code, "error": response.text})
@@ -722,7 +722,6 @@ class AiServiceClient:
         function_trace_id: str,
         coverage_message: str,
         replay_tests: str,
-        concolic_tests: str,  # noqa: ARG002
         calling_fn_details: str,
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.

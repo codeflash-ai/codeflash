@@ -110,7 +110,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process each row
             for row in cursor.fetchall():
-                module_name, class_name, function_name, benchmark_file, benchmark_func, benchmark_line, time_ns = row
+                module_name, class_name, function_name, benchmark_file, benchmark_func, _benchmark_line, time_ns = row
 
                 # Create the function key (module_name.class_name.function_name)
                 if class_name:
@@ -172,7 +172,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process overhead information
             for row in cursor.fetchall():
-                benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
+                benchmark_file, benchmark_func, _benchmark_line, total_overhead_ns = row
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
                 overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
 
@@ -184,7 +184,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process each row and subtract overhead
             for row in cursor.fetchall():
-                benchmark_file, benchmark_func, benchmark_line, time_ns = row
+                benchmark_file, benchmark_func, _benchmark_line, time_ns = row
 
                 # Create the benchmark key (file::function::line)
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
@@ -200,7 +200,7 @@ class CodeFlashBenchmarkPlugin:
 
     # Pytest hooks
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001, ARG002
+    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001
         """Execute after whole test run is completed."""
         # Write any remaining benchmark timings to the database
         codeflash_trace.close()
@@ -218,7 +218,7 @@ class CodeFlashBenchmarkPlugin:
         skip_no_benchmark = pytest.mark.skip(reason="Test requires benchmark fixture")
         for item in items:
             # Check for direct benchmark fixture usage
-            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames
+            has_fixture = hasattr(item, "fixturenames") and "benchmark" in item.fixturenames  # ty:ignore[unsupported-operator]
 
             # Check for @pytest.mark.benchmark marker
             has_marker = False
@@ -236,7 +236,7 @@ class CodeFlashBenchmarkPlugin:
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
 
-        def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN001, ANN002, ANN003, ANN204, PGH003
+        def __call__(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN204
             """Handle both direct function calls and decorator usage."""
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
@@ -249,7 +249,7 @@ class CodeFlashBenchmarkPlugin:
             self._run_benchmark(func)
             return wrapped_func
 
-        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN002, ANN003, ANN202
             """Actual benchmark implementation."""
             node_path = getattr(self.request.node, "path", None) or getattr(self.request.node, "fspath", None)
             if node_path is None:
