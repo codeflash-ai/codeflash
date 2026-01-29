@@ -11,7 +11,6 @@ from codeflash.code_utils.config_consts import (
     MIN_TESTCASE_PASSED_THRESHOLD,
     MIN_THROUGHPUT_IMPROVEMENT_THRESHOLD,
 )
-from codeflash.models import models
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:

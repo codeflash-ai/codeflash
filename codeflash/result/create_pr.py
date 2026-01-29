@@ -69,7 +69,9 @@ def existing_tests_source_for(
                         f"[PR-DEBUG] Mapping (behavior): {registry_tf.instrumented_behavior_file_path.name} -> {registry_tf.original_file_path.name}"
                     )
                 if registry_tf.benchmarking_file_path:
-                    instrumented_to_original[registry_tf.benchmarking_file_path.resolve()] = registry_tf.original_file_path.resolve()
+                    instrumented_to_original[registry_tf.benchmarking_file_path.resolve()] = (
+                        registry_tf.original_file_path.resolve()
+                    )
                     logger.debug(
                         f"[PR-DEBUG] Mapping (perf): {registry_tf.benchmarking_file_path.name} -> {registry_tf.original_file_path.name}"
                     )
