@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from libcst import CSTNode
 
     from codeflash.context.unused_definition_remover import UsageInfo
+    from codeflash.languages.base import HelperFunction
 
 
 def build_testgen_context(
@@ -265,7 +266,7 @@ def get_code_optimization_context_for_language(
         target_relative_path = function_to_optimize.file_path
 
     # Group helpers by file path
-    helpers_by_file: dict[Path, list] = defaultdict(list)
+    helpers_by_file: dict[Path, list[HelperFunction]] = defaultdict(list)
     helper_function_sources = []
 
     for helper in code_context.helper_functions:

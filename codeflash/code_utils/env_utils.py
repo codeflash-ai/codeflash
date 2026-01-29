@@ -155,7 +155,8 @@ def get_cached_gh_event_data() -> dict[str, Any]:
     if not event_path:
         return {}
     with open(event_path, encoding="utf-8") as f:  # noqa: PTH123
-        return json.load(f)  # type: ignore  # noqa
+        result: dict[str, Any] = json.load(f)
+        return result
 
 
 def is_repo_a_fork() -> bool:

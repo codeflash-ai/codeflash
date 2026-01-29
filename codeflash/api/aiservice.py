@@ -414,9 +414,9 @@ class AiServiceClient:
             List of refined optimization candidates
 
         """
-        payload = []
+        payload: list[dict[str, Any]] = []
         for opt in request:
-            item = {
+            item: dict[str, Any] = {
                 "optimization_id": opt.optimization_id,
                 "original_source_code": opt.original_source_code,
                 "read_only_dependency_code": opt.read_only_dependency_code,

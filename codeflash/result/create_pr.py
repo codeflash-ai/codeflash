@@ -59,19 +59,19 @@ def existing_tests_source_for(
     # Include both behavior and benchmarking paths since test results might come from either
     instrumented_to_original: dict[Path, Path] = {}
     if test_files_registry:
-        for tf in test_files_registry.test_files:
-            if tf.original_file_path:
-                if tf.instrumented_behavior_file_path:
-                    instrumented_to_original[tf.instrumented_behavior_file_path.resolve()] = (
-                        tf.original_file_path.resolve()
+        for registry_tf in test_files_registry.test_files:
+            if registry_tf.original_file_path:
+                if registry_tf.instrumented_behavior_file_path:
+                    instrumented_to_original[registry_tf.instrumented_behavior_file_path.resolve()] = (
+                        registry_tf.original_file_path.resolve()
                     )
                     logger.debug(
-                        f"[PR-DEBUG] Mapping (behavior): {tf.instrumented_behavior_file_path.name} -> {tf.original_file_path.name}"
+                        f"[PR-DEBUG] Mapping (behavior): {registry_tf.instrumented_behavior_file_path.name} -> {registry_tf.original_file_path.name}"
                     )
-                if tf.benchmarking_file_path:
-                    instrumented_to_original[tf.benchmarking_file_path.resolve()] = tf.original_file_path.resolve()
+                if registry_tf.benchmarking_file_path:
+                    instrumented_to_original[registry_tf.benchmarking_file_path.resolve()] = registry_tf.original_file_path.resolve()
                     logger.debug(
-                        f"[PR-DEBUG] Mapping (perf): {tf.benchmarking_file_path.name} -> {tf.original_file_path.name}"
+                        f"[PR-DEBUG] Mapping (perf): {registry_tf.benchmarking_file_path.name} -> {registry_tf.original_file_path.name}"
                     )
 
     # Resolve all paths to absolute for consistent comparison
@@ -249,19 +249,19 @@ def existing_tests_source_for(
                             f"{perf_gain}%✅",
                         ]
                     )
-    output_existing += tabulate(  # type: ignore[no-untyped-call]
+    output_existing += tabulate(
         headers=headers, tabular_data=rows_existing, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_existing += "\n"
     if len(rows_existing) == 0:
         output_existing = ""
-    output_concolic += tabulate(  # type: ignore[no-untyped-call]
+    output_concolic += tabulate(
         headers=headers, tabular_data=rows_concolic, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_concolic += "\n"
     if len(rows_concolic) == 0:
         output_concolic = ""
-    output_replay += tabulate(  # type: ignore[no-untyped-call]
+    output_replay += tabulate(
         headers=headers, tabular_data=rows_replay, tablefmt="pipe", colglobalalign=None, preserve_whitespace=True
     )
     output_replay += "\n"

@@ -236,7 +236,7 @@ class CodeFlashBenchmarkPlugin:
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
 
-        def __call__(self, func, *args, **kwargs):  # type: ignore  # noqa: ANN001, ANN002, ANN003, ANN204, PGH003
+        def __call__(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN204
             """Handle both direct function calls and decorator usage."""
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
