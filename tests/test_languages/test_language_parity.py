@@ -288,7 +288,7 @@ def js_support():
 
 def write_temp_file(content: str, suffix: str) -> Path:
     """Write content to a temporary file and return the path."""
-    with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False, encoding="utf-8") as f:
         f.write(content)
         f.flush()
         return Path(f.name)

@@ -81,21 +81,21 @@ def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
         if entry_path and isinstance(entry_path, str):
             parent = Path(entry_path).parent
             if parent != Path() and (project_root / parent).is_dir():
-                return str(parent)
+                return parent.as_posix()
 
     # Check module field (ESM)
     module_field = package_data.get("module")
     if module_field and isinstance(module_field, str):
         parent = Path(module_field).parent
         if parent != Path() and (project_root / parent).is_dir():
-            return str(parent)
+            return parent.as_posix()
 
     # Check main field (CJS)
     main_field = package_data.get("main")
     if main_field and isinstance(main_field, str):
         parent = Path(main_field).parent
         if parent != Path() and (project_root / parent).is_dir():
-            return str(parent)
+            return parent.as_posix()
 
     # Check for src/ directory convention
     if (project_root / "src").is_dir():

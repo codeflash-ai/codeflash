@@ -177,9 +177,10 @@ class TestInfo:
     @property
     def full_test_path(self) -> str:
         """Get full test path in pytest format (file::class::function)."""
+        file_path = self.test_file.as_posix()
         if self.test_class:
-            return f"{self.test_file}::{self.test_class}::{self.test_name}"
-        return f"{self.test_file}::{self.test_name}"
+            return f"{file_path}::{self.test_class}::{self.test_name}"
+        return f"{file_path}::{self.test_name}"
 
 
 @dataclass

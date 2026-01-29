@@ -35,7 +35,7 @@ class TestJavaScriptLineProfiler:
         assert profiler.profiler_var in init_code
         assert "hit" in init_code  # Changed from recordLine to hit
         assert "save" in init_code
-        assert str(output_file) in init_code
+        assert output_file.as_posix() in init_code
 
     def test_line_profiler_instruments_simple_function(self):
         """Test line profiler can instrument a simple function."""
@@ -101,7 +101,7 @@ class TestJavaScriptTracer:
         assert tracer.tracer_var in init_code
         assert "serialize" in init_code
         assert "wrap" in init_code
-        assert str(output_db) in init_code
+        assert output_db.as_posix() in init_code
 
     def test_tracer_instruments_simple_function(self):
         """Test tracer can instrument a simple function."""
