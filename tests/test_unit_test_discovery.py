@@ -2,6 +2,8 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from codeflash.discovery.discover_unit_tests import (
     analyze_imports_in_test_file,
     discover_unit_tests,
@@ -2045,3 +2047,65 @@ def test_discover_unit_tests_caching():
     assert non_cached_num_discovered_tests == num_discovered_tests
     assert non_cached_function_to_tests == tests
     assert non_cached_num_discovered_replay_tests == num_discovered_replay_tests
+
+
+def test_discover_tests_pytorch_model_forward_called_via_call():
+    """Test discovery when optimizing Model.forward but test calls model() instead of model.forward().
+
+    In PyTorch, nn.Module.__call__ internally calls forward(). When a test calls model(),
+    we should still discover it as a test for Model.forward.
+    """
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        path_obj_tmpdirname = Path(tmpdirname)
+
+        # Create a module that simulates PyTorch nn.Module behavior
+        code_file_path = path_obj_tmpdirname / "model.py"
+        code_file_content = """
+class Module:
+    def __call__(self, x):
+        return self.forward(x)
+
+class MyModel(Module):
+    def forward(self, x):
+        return x * 2
+"""
+        code_file_path.write_text(code_file_content)
+
+        # Create a test file that calls model() instead of model.forward()
+        test_file_path = path_obj_tmpdirname / "test_model.py"
+        test_file_content = """
+from model import MyModel
+
+def test_model_forward():
+    model = MyModel()
+    # This calls __call__ which internally calls forward
+    result = model(5)
+    assert result == 10
+"""
+        test_file_path.write_text(test_file_content)
+
+        # Define the function we're optimizing: MyModel.forward
+        func_to_optimize = FunctionToOptimize(
+            function_name="forward",
+            file_path=code_file_path,
+            parents=[FunctionParent(name="MyModel", type="ClassDef")],
+            starting_line=7,
+            ending_line=8,
+        )
+
+        test_config = TestConfig(
+            tests_root=path_obj_tmpdirname,
+            project_root_path=path_obj_tmpdirname,
+            test_framework="pytest",
+            tests_project_rootdir=path_obj_tmpdirname.parent,
+        )
+
+        discovered_tests, _, _ = discover_unit_tests(
+            test_config, file_to_funcs_to_optimize={code_file_path: [func_to_optimize]}
+        )
+
+        # The test should be discovered for MyModel.forward
+        # even though the test calls model() not model.forward()
+        assert "model.MyModel.forward" in discovered_tests, (
+            f"Expected 'model.MyModel.forward' in discovered tests. Found: {list(discovered_tests.keys())}"
+        )

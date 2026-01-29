@@ -981,6 +981,65 @@ def process_test_files(
                         # Fallback: Try to match against functions_to_optimize when Jedi can't resolve
                         # This handles cases where Jedi fails with pytest fixtures
                         if functions_to_optimize and name.name:
+                            # Handle PyTorch pattern: model() calls __call__ which calls forward()
+                            # When a variable (instance) is called, check if we're optimizing forward on that class
+                            if definition and definition[0].type == "statement":
+                                try:
+                                    inferred = script.infer(line=name.line, column=name.column)
+                                    for inf in inferred:
+                                        if inf.type == "instance" and inf.full_name:
+                                            # This is an instance being called - check if we optimize forward on this class
+                                            for func_to_opt in functions_to_optimize:
+                                                if func_to_opt.function_name == "forward" and func_to_opt.parents:
+                                                    opt_qualified = func_to_opt.qualified_name_with_modules_from_root(
+                                                        project_root_path
+                                                    )
+                                                    opt_class = opt_qualified.rsplit(".forward", 1)[0]
+                                                    # Check if the inferred type matches the class we're optimizing
+                                                    if opt_class == inf.full_name or inf.full_name.endswith(
+                                                        f".{func_to_opt.parents[-1].name}"
+                                                    ):
+                                                        for test_func in test_functions_by_name[scope]:
+                                                            if test_func.parameters is not None:
+                                                                if test_framework == "pytest":
+                                                                    scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
+                                                                else:
+                                                                    scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
+                                                            else:
+                                                                scope_test_function = test_func.function_name
+
+                                                            function_to_test_map[opt_qualified].add(
+                                                                FunctionCalledInTest(
+                                                                    tests_in_file=TestsInFile(
+                                                                        test_file=test_file,
+                                                                        test_class=test_func.test_class,
+                                                                        test_function=scope_test_function,
+                                                                        test_type=test_func.test_type,
+                                                                    ),
+                                                                    position=CodePosition(
+                                                                        line_no=name.line, col_no=name.column
+                                                                    ),
+                                                                )
+                                                            )
+                                                            tests_cache.insert_test(
+                                                                file_path=str(test_file),
+                                                                file_hash=file_hash,
+                                                                qualified_name_with_modules_from_root=opt_qualified,
+                                                                function_name=scope,
+                                                                test_class=test_func.test_class or "",
+                                                                test_function=scope_test_function,
+                                                                test_type=test_func.test_type,
+                                                                line_number=name.line,
+                                                                col_number=name.column,
+                                                            )
+
+                                                            if test_func.test_type == TestType.REPLAY_TEST:
+                                                                num_discovered_replay_tests += 1
+
+                                                            num_discovered_tests += 1
+                                except Exception as e:
+                                    logger.debug(f"Failed to infer type for {name.name}: {e}")
+
                             for func_to_opt in functions_to_optimize:
                                 # Check if this unresolved name matches a function we're looking for
                                 if func_to_opt.function_name == name.name:
@@ -1045,42 +1104,63 @@ def process_test_files(
                         full_name_without_module_prefix = definition_obj.full_name.replace(module_prefix, "", 1)
                         qualified_name_with_modules_from_root = f"{module_name_from_file_path(definition_obj.module_path, project_root_path)}.{full_name_without_module_prefix}"
 
-                        for test_func in test_functions_by_name[scope]:
-                            if test_func.parameters is not None:
-                                if test_framework == "pytest":
-                                    scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
-                                else:  # unittest
-                                    scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
-                            else:
-                                scope_test_function = test_func.function_name
+                        # Build list of qualified names to register for this call
+                        # This handles the PyTorch pattern where model() calls __call__ which calls forward()
+                        qualified_names_to_register = [qualified_name_with_modules_from_root]
+                        if full_name_without_module_prefix.endswith(".__call__") and functions_to_optimize:
+                            # When __call__ is called, also check if forward() should be mapped
+                            # This handles nn.Module pattern where __call__ internally calls forward()
+                            class_prefix = full_name_without_module_prefix[: -len(".__call__")]
+                            module_from_path = module_name_from_file_path(definition_obj.module_path, project_root_path)
+                            for func_to_opt in functions_to_optimize:
+                                if func_to_opt.function_name == "forward":
+                                    # Check if the class being called is the same or a parent of the optimized class
+                                    opt_qualified = func_to_opt.qualified_name_with_modules_from_root(project_root_path)
+                                    opt_class_prefix = opt_qualified.rsplit(".forward", 1)[0]
+                                    call_class_full = f"{module_from_path}.{class_prefix}"
+                                    # Match if it's the same class or if __call__ is defined in a parent class
+                                    if opt_class_prefix == call_class_full or call_class_full.endswith(
+                                        f".{class_prefix}"
+                                    ):
+                                        qualified_names_to_register.append(opt_qualified)
 
-                            function_to_test_map[qualified_name_with_modules_from_root].add(
-                                FunctionCalledInTest(
-                                    tests_in_file=TestsInFile(
-                                        test_file=test_file,
-                                        test_class=test_func.test_class,
-                                        test_function=scope_test_function,
-                                        test_type=test_func.test_type,
-                                    ),
-                                    position=CodePosition(line_no=name.line, col_no=name.column),
+                        for qualified_name_with_modules_from_root in qualified_names_to_register:
+                            for test_func in test_functions_by_name[scope]:
+                                if test_func.parameters is not None:
+                                    if test_framework == "pytest":
+                                        scope_test_function = f"{test_func.function_name}[{test_func.parameters}]"
+                                    else:  # unittest
+                                        scope_test_function = f"{test_func.function_name}_{test_func.parameters}"
+                                else:
+                                    scope_test_function = test_func.function_name
+
+                                function_to_test_map[qualified_name_with_modules_from_root].add(
+                                    FunctionCalledInTest(
+                                        tests_in_file=TestsInFile(
+                                            test_file=test_file,
+                                            test_class=test_func.test_class,
+                                            test_function=scope_test_function,
+                                            test_type=test_func.test_type,
+                                        ),
+                                        position=CodePosition(line_no=name.line, col_no=name.column),
+                                    )
                                 )
-                            )
-                            tests_cache.insert_test(
-                                file_path=str(test_file),
-                                file_hash=file_hash,
-                                qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
-                                function_name=scope,
-                                test_class=test_func.test_class or "",
-                                test_function=scope_test_function,
-                                test_type=test_func.test_type,
-                                line_number=name.line,
-                                col_number=name.column,
-                            )
+                                tests_cache.insert_test(
+                                    file_path=str(test_file),
+                                    file_hash=file_hash,
+                                    qualified_name_with_modules_from_root=qualified_name_with_modules_from_root,
+                                    function_name=scope,
+                                    test_class=test_func.test_class or "",
+                                    test_function=scope_test_function,
+                                    test_type=test_func.test_type,
+                                    line_number=name.line,
+                                    col_number=name.column,
+                                )
 
-                            if test_func.test_type == TestType.REPLAY_TEST:
-                                num_discovered_replay_tests += 1
+                                if test_func.test_type == TestType.REPLAY_TEST:
+                                    num_discovered_replay_tests += 1
 
-                            num_discovered_tests += 1
+                                num_discovered_tests += 1
                 except Exception as e:
                     logger.debug(str(e))
                     continue
