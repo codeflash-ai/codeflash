@@ -18,122 +18,6 @@ from codeflash.verification.verification_utils import TestConfig
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-# =============================================================================
-# EXPECTED CODE STRINGS - Define exact expected outputs for strict comparison
-# =============================================================================
-
-# Expected code for the permutation method (with JSDoc)
-EXPECTED_PERMUTATION_CODE = """\
-    /**
-     * Calculate permutation using factorial helper.
-     * @param n - Total items
-     * @param r - Items to choose
-     * @returns Permutation result
-     */
-    permutation(n, r) {
-        if (n < r) return 0;
-        // Inefficient: calculates factorial(n) fully even when not needed
-        return factorial(n) / factorial(n - r);
-    }"""
-
-# Expected code for the calculateCompoundInterest method (with JSDoc)
-EXPECTED_COMPOUND_INTEREST_CODE = """\
-    /**
-     * Calculate compound interest with multiple helper dependencies.
-     * @param principal - Initial amount
-     * @param rate - Interest rate (as decimal)
-     * @param time - Time in years
-     * @param n - Compounding frequency per year
-     * @returns Compound interest result
-     */
-    calculateCompoundInterest(principal, rate, time, n) {
-        validateInput(principal, 'principal');
-        validateInput(rate, 'rate');
-
-        // Inefficient: recalculates power multiple times
-        let result = principal;
-        for (let i = 0; i < n * time; i++) {
-            result = multiply(result, add(1, rate / n));
-        }
-
-        const interest = result - principal;
-        this.history.push({ type: 'compound', result: interest });
-        return formatNumber(interest, this.precision);
-    }"""
-
-# Expected code for the factorial helper function
-EXPECTED_FACTORIAL_CODE = """\
-/**
- * Calculate factorial recursively.
- * @param n - Non-negative integer
- * @returns Factorial of n
- */
-function factorial(n) {
-    // Intentionally inefficient recursive implementation
-    if (n <= 1) return 1;
-    return n * factorial(n - 1);
-}"""
-
-# Expected code for the add helper function
-EXPECTED_ADD_CODE = """\
-/**
- * Add two numbers.
- * @param a - First number
- * @param b - Second number
- * @returns Sum of a and b
- */
-function add(a, b) {
-    return a + b;
-}"""
-
-# Expected code for the multiply helper function
-EXPECTED_MULTIPLY_CODE = """\
-/**
- * Multiply two numbers.
- * @param a - First number
- * @param b - Second number
- * @returns Product of a and b
- */
-function multiply(a, b) {
-    return a * b;
-}"""
-
-# Expected code for the formatNumber helper function
-EXPECTED_FORMAT_NUMBER_CODE = """\
-/**
- * Format a number to specified decimal places.
- * @param num - Number to format
- * @param decimals - Number of decimal places
- * @returns Formatted number
- */
-function formatNumber(num, decimals) {
-    return Number(num.toFixed(decimals));
-}"""
-
-# Expected code for the validateInput helper function
-EXPECTED_VALIDATE_INPUT_CODE = """\
-/**
- * Validate that input is a valid number.
- * @param value - Value to validate
- * @param name - Parameter name for error message
- * @throws Error if value is not a valid number
- */
-function validateInput(value, name) {
-    if (typeof value !== 'number' || isNaN(value)) {
-        throw new Error(`Invalid ${name}: must be a number`);
-    }
-}"""
-
-# Expected code for quickAdd static method
-EXPECTED_QUICK_ADD_CODE = """\
-    /**
-     * Static method for quick calculations.
-     */
-    static quickAdd(a, b) {
-        return add(a, b);
-    }"""
-
-
 class TestCodeExtractorCJS:
     """Tests for CommonJS module code extraction."""
 
@@ -180,10 +64,25 @@ class TestCodeExtractorCJS:
             function=permutation_func, project_root=cjs_project, module_root=cjs_project
         )
 
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate permutation using factorial helper.
+     * @param n - Total items
+     * @param r - Items to choose
+     * @returns Permutation result
+     */
+    permutation(n, r) {
+        if (n < r) return 0;
+        // Inefficient: calculates factorial(n) fully even when not needed
+        return factorial(n) / factorial(n - r);
+    }
+}"""
+
         assert context.target_code is not None, "target_code should not be None"
-        assert context.target_code.strip() == EXPECTED_PERMUTATION_CODE.strip(), (
+        assert context.target_code.strip() == expected_code.strip(), (
             f"Extracted code does not match expected.\n"
-            f"Expected:\n{EXPECTED_PERMUTATION_CODE}\n\n"
+            f"Expected:\n{expected_code}\n\n"
             f"Got:\n{context.target_code}"
         )
 
@@ -205,9 +104,21 @@ class TestCodeExtractorCJS:
 
         factorial_helper = helper_dict["factorial"]
 
-        assert factorial_helper.source_code.strip() == EXPECTED_FACTORIAL_CODE.strip(), (
+        expected_factorial_code = """\
+/**
+ * Calculate factorial recursively.
+ * @param n - Non-negative integer
+ * @returns Factorial of n
+ */
+function factorial(n) {
+    // Intentionally inefficient recursive implementation
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}"""
+
+        assert factorial_helper.source_code.strip() == expected_factorial_code.strip(), (
             f"Factorial helper code does not match expected.\n"
-            f"Expected:\n{EXPECTED_FACTORIAL_CODE}\n\n"
+            f"Expected:\n{expected_factorial_code}\n\n"
             f"Got:\n{factorial_helper.source_code}"
         )
 
@@ -227,9 +138,35 @@ class TestCodeExtractorCJS:
             function=compound_func, project_root=cjs_project, module_root=cjs_project
         )
 
-        assert context.target_code.strip() == EXPECTED_COMPOUND_INTEREST_CODE.strip(), (
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate compound interest with multiple helper dependencies.
+     * @param principal - Initial amount
+     * @param rate - Interest rate (as decimal)
+     * @param time - Time in years
+     * @param n - Compounding frequency per year
+     * @returns Compound interest result
+     */
+    calculateCompoundInterest(principal, rate, time, n) {
+        validateInput(principal, 'principal');
+        validateInput(rate, 'rate');
+
+        // Inefficient: recalculates power multiple times
+        let result = principal;
+        for (let i = 0; i < n * time; i++) {
+            result = multiply(result, add(1, rate / n));
+        }
+
+        const interest = result - principal;
+        this.history.push({ type: 'compound', result: interest });
+        return formatNumber(interest, this.precision);
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
             f"Extracted code does not match expected.\n"
-            f"Expected:\n{EXPECTED_COMPOUND_INTEREST_CODE}\n\n"
+            f"Expected:\n{expected_code}\n\n"
             f"Got:\n{context.target_code}"
         )
 
@@ -251,11 +188,57 @@ class TestCodeExtractorCJS:
         assert actual_helpers == expected_helpers, f"Expected helpers {expected_helpers}, got {actual_helpers}"
 
         # STRICT: Verify each helper's code exactly
+        expected_add_code = """\
+/**
+ * Add two numbers.
+ * @param a - First number
+ * @param b - Second number
+ * @returns Sum of a and b
+ */
+function add(a, b) {
+    return a + b;
+}"""
+
+        expected_multiply_code = """\
+/**
+ * Multiply two numbers.
+ * @param a - First number
+ * @param b - Second number
+ * @returns Product of a and b
+ */
+function multiply(a, b) {
+    return a * b;
+}"""
+
+        expected_format_number_code = """\
+/**
+ * Format a number to specified decimal places.
+ * @param num - Number to format
+ * @param decimals - Number of decimal places
+ * @returns Formatted number
+ */
+function formatNumber(num, decimals) {
+    return Number(num.toFixed(decimals));
+}"""
+
+        expected_validate_input_code = """\
+/**
+ * Validate that input is a valid number.
+ * @param value - Value to validate
+ * @param name - Parameter name for error message
+ * @throws Error if value is not a valid number
+ */
+function validateInput(value, name) {
+    if (typeof value !== 'number' || isNaN(value)) {
+        throw new Error(`Invalid ${name}: must be a number`);
+    }
+}"""
+
         helper_expectations = {
-            "add": (EXPECTED_ADD_CODE, "math_utils.js"),
-            "multiply": (EXPECTED_MULTIPLY_CODE, "math_utils.js"),
-            "formatNumber": (EXPECTED_FORMAT_NUMBER_CODE, "format.js"),
-            "validateInput": (EXPECTED_VALIDATE_INPUT_CODE, "format.js"),
+            "add": (expected_add_code, "math_utils.js"),
+            "multiply": (expected_multiply_code, "math_utils.js"),
+            "formatNumber": (expected_format_number_code, "format.js"),
+            "validateInput": (expected_validate_input_code, "format.js"),
         }
 
         for helper_name, (expected_code, expected_file) in helper_expectations.items():
@@ -282,14 +265,16 @@ class TestCodeExtractorCJS:
             function=compound_func, project_root=cjs_project, module_root=cjs_project
         )
 
-        imports_str = "\n".join(context.imports)
+        expected_imports = [
+            "const { add, multiply, factorial } = require('./math_utils');",
+            "const { formatNumber, validateInput } = require('./helpers/format');",
+        ]
 
-        # Should contain both require statements
-        assert "require('./math_utils')" in imports_str or "math_utils" in imports_str, (
-            f"math_utils import not found in imports:\n{imports_str}"
-        )
-        assert "require('./helpers/format')" in imports_str or "format" in imports_str, (
-            f"helpers/format import not found in imports:\n{imports_str}"
+        assert len(context.imports) == 2, f"Expected 2 imports, got {len(context.imports)}: {context.imports}"
+        assert context.imports == expected_imports, (
+            f"Imports do not match expected.\n"
+            f"Expected:\n{expected_imports}\n\n"
+            f"Got:\n{context.imports}"
         )
 
     def test_extract_static_method(self, js_support, cjs_project):
@@ -303,15 +288,40 @@ class TestCodeExtractorCJS:
             function=quick_add_func, project_root=cjs_project, module_root=cjs_project
         )
 
-        assert context.target_code.strip() == EXPECTED_QUICK_ADD_CODE.strip(), (
+        expected_code = """\
+class Calculator {
+    /**
+     * Static method for quick calculations.
+     */
+    static quickAdd(a, b) {
+        return add(a, b);
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
             f"Extracted code does not match expected.\n"
-            f"Expected:\n{EXPECTED_QUICK_ADD_CODE}\n\n"
+            f"Expected:\n{expected_code}\n\n"
             f"Got:\n{context.target_code}"
         )
 
-        # quickAdd uses add helper
-        helper_names = {h.name for h in context.helper_functions}
-        assert "add" in helper_names, f"add helper not found. Found: {helper_names}"
+        # quickAdd uses add helper from math_utils
+        helper_dict = {h.name: h for h in context.helper_functions}
+        assert set(helper_dict.keys()) == {"add"}, f"Expected 'add' helper, got: {list(helper_dict.keys())}"
+
+        expected_add_code = """\
+/**
+ * Add two numbers.
+ * @param a - First number
+ * @param b - Second number
+ * @returns Sum of a and b
+ */
+function add(a, b) {
+    return a + b;
+}"""
+
+        assert helper_dict["add"].source_code.strip() == expected_add_code.strip(), (
+            f"add helper code does not match.\nExpected:\n{expected_add_code}\n\nGot:\n{helper_dict['add'].source_code}"
+        )
 
 
 class TestCodeExtractorESM:
@@ -340,8 +350,8 @@ class TestCodeExtractorESM:
         expected_methods = {"calculateCompoundInterest", "permutation", "quickAdd"}
         assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
 
-    def test_esm_factorial_helper(self, js_support, esm_project):
-        """Test factorial helper extraction in ESM."""
+    def test_esm_permutation_extraction(self, js_support, esm_project):
+        """Test permutation method extraction in ESM."""
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
@@ -351,13 +361,44 @@ class TestCodeExtractorESM:
             function=permutation_func, project_root=esm_project, module_root=esm_project
         )
 
-        helper_names = {h.name for h in context.helper_functions}
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate permutation using factorial helper.
+     * @param n - Total items
+     * @param r - Items to choose
+     * @returns Permutation result
+     */
+    permutation(n, r) {
+        if (n < r) return 0;
+        // Inefficient: calculates factorial(n) fully even when not needed
+        return factorial(n) / factorial(n - r);
+    }
+}"""
 
-        # STRICT: factorial must be present
-        assert "factorial" in helper_names, f"factorial helper not found. Found helpers: {helper_names}"
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
 
-    def test_esm_import_syntax(self, js_support, esm_project):
-        """Test ESM uses import syntax, not require."""
+        # ESM permutation uses factorial helper
+        helper_dict = {h.name: h for h in context.helper_functions}
+        assert set(helper_dict.keys()) == {"factorial"}, f"Expected 'factorial' helper, got: {list(helper_dict.keys())}"
+
+        expected_factorial_code = """\
+export function factorial(n) {
+    // Intentionally inefficient recursive implementation
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}"""
+
+        assert helper_dict["factorial"].source_code.strip() == expected_factorial_code.strip(), (
+            f"factorial helper code does not match.\nExpected:\n{expected_factorial_code}\n\nGot:\n{helper_dict['factorial'].source_code}"
+        )
+
+    def test_esm_compound_interest_extraction(self, js_support, esm_project):
+        """Test calculateCompoundInterest extraction in ESM with import syntax."""
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
@@ -367,13 +408,91 @@ class TestCodeExtractorESM:
             function=compound_func, project_root=esm_project, module_root=esm_project
         )
 
-        imports_str = "\n".join(context.imports)
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate compound interest with multiple helper dependencies.
+     * @param principal - Initial amount
+     * @param rate - Interest rate (as decimal)
+     * @param time - Time in years
+     * @param n - Compounding frequency per year
+     * @returns Compound interest result
+     */
+    calculateCompoundInterest(principal, rate, time, n) {
+        validateInput(principal, 'principal');
+        validateInput(rate, 'rate');
 
-        # ESM should use import syntax
-        if context.imports:
-            # If imports are captured, they should be ESM style
-            assert "import" in imports_str or len(context.imports) > 0, (
-                f"ESM imports should use import syntax. Got:\n{imports_str}"
+        // Inefficient: recalculates power multiple times
+        let result = principal;
+        for (let i = 0; i < n * time; i++) {
+            result = multiply(result, add(1, rate / n));
+        }
+
+        const interest = result - principal;
+        this.history.push({ type: 'compound', result: interest });
+        return formatNumber(interest, this.precision);
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+        expected_imports = [
+            "import { add, multiply, factorial } from './math_utils.js';",
+            "import { formatNumber, validateInput } from './helpers/format.js';",
+        ]
+
+        assert len(context.imports) == 2, f"Expected 2 imports, got {len(context.imports)}: {context.imports}"
+        assert context.imports == expected_imports, (
+            f"Imports do not match expected.\n"
+            f"Expected:\n{expected_imports}\n\n"
+            f"Got:\n{context.imports}"
+        )
+
+        # ESM compound interest uses 4 helpers
+        helper_dict = {h.name: h for h in context.helper_functions}
+        expected_helper_names = {"validateInput", "formatNumber", "add", "multiply"}
+        assert set(helper_dict.keys()) == expected_helper_names, (
+            f"Expected helpers {expected_helper_names}, got: {set(helper_dict.keys())}"
+        )
+
+        expected_validate_input_code = """\
+export function validateInput(value, name) {
+    if (typeof value !== 'number' || isNaN(value)) {
+        throw new Error(`Invalid ${name}: must be a number`);
+    }
+}"""
+
+        expected_format_number_code = """\
+export function formatNumber(num, decimals) {
+    return Number(num.toFixed(decimals));
+}"""
+
+        expected_add_code = """\
+export function add(a, b) {
+    return a + b;
+}"""
+
+        expected_multiply_code = """\
+export function multiply(a, b) {
+    return a * b;
+}"""
+
+        helper_expectations = {
+            "validateInput": expected_validate_input_code,
+            "formatNumber": expected_format_number_code,
+            "add": expected_add_code,
+            "multiply": expected_multiply_code,
+        }
+
+        for helper_name, expected_code in helper_expectations.items():
+            assert helper_dict[helper_name].source_code.strip() == expected_code.strip(), (
+                f"{helper_name} helper code does not match.\n"
+                f"Expected:\n{expected_code}\n\n"
+                f"Got:\n{helper_dict[helper_name].source_code}"
             )
 
 
@@ -414,8 +533,8 @@ class TestCodeExtractorTypeScript:
         expected_methods = {"calculateCompoundInterest", "permutation", "getHistory", "quickAdd"}
         assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
 
-    def test_ts_factorial_helper(self, ts_support, ts_project):
-        """Test factorial helper extraction in TypeScript."""
+    def test_ts_permutation_extraction(self, ts_support, ts_project):
+        """Test permutation method extraction in TypeScript."""
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
@@ -425,13 +544,44 @@ class TestCodeExtractorTypeScript:
             function=permutation_func, project_root=ts_project, module_root=ts_project
         )
 
-        helper_names = {h.name for h in context.helper_functions}
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate permutation using factorial helper.
+     * @param n - Total items
+     * @param r - Items to choose
+     * @returns Permutation result
+     */
+    permutation(n: number, r: number): number {
+        if (n < r) return 0;
+        // Inefficient: calculates factorial(n) fully even when not needed
+        return factorial(n) / factorial(n - r);
+    }
+}"""
 
-        # STRICT: factorial must be present
-        assert "factorial" in helper_names, f"factorial helper not found. Found helpers: {helper_names}"
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
 
-    def test_ts_compound_interest_helpers(self, ts_support, ts_project):
-        """Test helper extraction in TypeScript."""
+        # TypeScript permutation uses factorial helper
+        helper_dict = {h.name: h for h in context.helper_functions}
+        assert set(helper_dict.keys()) == {"factorial"}, f"Expected 'factorial' helper, got: {list(helper_dict.keys())}"
+
+        expected_factorial_code = """\
+export function factorial(n: number): number {
+    // Intentionally inefficient recursive implementation
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}"""
+
+        assert helper_dict["factorial"].source_code.strip() == expected_factorial_code.strip(), (
+            f"factorial helper code does not match.\nExpected:\n{expected_factorial_code}\n\nGot:\n{helper_dict['factorial'].source_code}"
+        )
+
+    def test_ts_compound_interest_extraction(self, ts_support, ts_project):
+        """Test calculateCompoundInterest extraction in TypeScript."""
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
@@ -441,11 +591,80 @@ class TestCodeExtractorTypeScript:
             function=compound_func, project_root=ts_project, module_root=ts_project
         )
 
-        helper_names = {h.name for h in context.helper_functions}
+        expected_code = """\
+class Calculator {
+    /**
+     * Calculate compound interest with multiple helper dependencies.
+     * @param principal - Initial amount
+     * @param rate - Interest rate (as decimal)
+     * @param time - Time in years
+     * @param n - Compounding frequency per year
+     * @returns Compound interest result
+     */
+    calculateCompoundInterest(principal: number, rate: number, time: number, n: number): number {
+        validateInput(principal, 'principal');
+        validateInput(rate, 'rate');
 
-        # STRICT: Verify exact set of helpers
-        expected_helpers = {"add", "multiply", "formatNumber", "validateInput"}
-        assert helper_names == expected_helpers, f"Expected helpers {expected_helpers}, got {helper_names}"
+        // Inefficient: recalculates power multiple times
+        let result = principal;
+        for (let i = 0; i < n * time; i++) {
+            result = multiply(result, add(1, rate / n));
+        }
+
+        const interest = result - principal;
+        this.history.push({ type: 'compound', result: interest });
+        return formatNumber(interest, this.precision);
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+        # TypeScript compound interest uses 4 helpers
+        helper_dict = {h.name: h for h in context.helper_functions}
+        expected_helper_names = {"validateInput", "formatNumber", "add", "multiply"}
+        assert set(helper_dict.keys()) == expected_helper_names, (
+            f"Expected helpers {expected_helper_names}, got: {set(helper_dict.keys())}"
+        )
+
+        expected_validate_input_code = """\
+export function validateInput(value: unknown, name: string): asserts value is number {
+    if (typeof value !== 'number' || isNaN(value)) {
+        throw new Error(`Invalid ${name}: must be a number`);
+    }
+}"""
+
+        expected_format_number_code = """\
+export function formatNumber(num: number, decimals: number): number {
+    return Number(num.toFixed(decimals));
+}"""
+
+        expected_add_code = """\
+export function add(a: number, b: number): number {
+    return a + b;
+}"""
+
+        expected_multiply_code = """\
+export function multiply(a: number, b: number): number {
+    return a * b;
+}"""
+
+        helper_expectations = {
+            "validateInput": expected_validate_input_code,
+            "formatNumber": expected_format_number_code,
+            "add": expected_add_code,
+            "multiply": expected_multiply_code,
+        }
+
+        for helper_name, expected_code in helper_expectations.items():
+            assert helper_dict[helper_name].source_code.strip() == expected_code.strip(), (
+                f"{helper_name} helper code does not match.\n"
+                f"Expected:\n{expected_code}\n\n"
+                f"Got:\n{helper_dict[helper_name].source_code}"
+            )
 
 
 class TestCodeExtractorEdgeCases:
@@ -506,9 +725,22 @@ module.exports = { processArray };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
-        # STRICT: No helpers from external packages
+        expected_code = """\
+function processArray(arr) {
+    return _.map(arr, x => x * 2);
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
+        )
+
+        expected_imports = ["const _ = require('lodash');"]
+        assert context.imports == expected_imports, (
+            f"Imports do not match expected.\nExpected:\n{expected_imports}\n\nGot:\n{context.imports}"
+        )
+
         helper_names = {h.name for h in context.helper_functions}
-        assert len(helper_names) == 0, f"Expected no helpers for external package usage, got: {helper_names}"
+        assert helper_names == set(), f"Expected no helpers for external package usage, got: {helper_names}"
 
     def test_recursive_function(self, js_support, tmp_path):
         """Test recursive function doesn't list itself as helper."""
@@ -561,8 +793,19 @@ module.exports = { processValue };
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
+        expected_code = """\
+const processValue = (value) => {
+    return helper(value) + 1;
+};"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match.\nExpected:\n{expected_code}\n\nGot:\n{context.target_code}"
+        )
+
+        assert context.imports == [], f"Expected no imports, got: {context.imports}"
+
         helper_dict = {h.name: h for h in context.helper_functions}
-        assert "helper" in helper_dict, f"helper function not found. Found: {list(helper_dict.keys())}"
+        assert set(helper_dict.keys()) == {"helper"}, f"Expected only 'helper', got: {list(helper_dict.keys())}"
 
         expected_helper_code = "const helper = (x) => x * 2;"
         actual_helper_code = helper_dict["helper"].source_code.strip()
