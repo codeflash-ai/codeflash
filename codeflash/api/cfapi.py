@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -75,9 +76,12 @@ def make_cfapi_request(
         cfapi_headers.update(extra_headers)
     try:
         if method.upper() == "POST":
-            json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
-            cfapi_headers["Content-Type"] = "application/json"
-            response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
+            if _is_json_native(payload):
+                response = requests.post(url, json=payload, headers=cfapi_headers, timeout=60)
+            else:
+                json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
+                cfapi_headers["Content-Type"] = "application/json"
+                response = requests.post(url, data=json_payload, headers=cfapi_headers, timeout=60)
         else:
             response = requests.get(url, headers=cfapi_headers, params=params, timeout=60)
         response.raise_for_status()
@@ -448,3 +452,61 @@ def send_completion_email() -> Response:
         return response
     payload = {"owner": owner, "repo": repo}
     return make_cfapi_request(endpoint="/send-completion-email", method="POST", payload=payload)
+
+
+def _is_json_native(obj: Any) -> bool:
+    """Fast iterative check to determine whether `obj` consists only of
+    JSON-native Python types (str, int, float, bool, None, dict with str keys,
+    list/tuple of such types). This avoids expensive custom serialization
+    when requests' json= can handle it directly.
+    """
+    stack: deque[Any] = deque([obj])
+    while stack:
+        cur = stack.pop()
+        # Primitive JSON types
+        if cur is None or isinstance(cur, (str, int, float, bool)):
+            continue
+        # Mapping: keys must be strings
+        if isinstance(cur, dict):
+            for k, v in cur.items():
+                if not isinstance(k, str):
+                    return False
+                stack.append(v)
+            continue
+        # Sequences: lists and tuples are acceptable
+        if isinstance(cur, (list, tuple)):
+            for item in cur:
+                stack.append(item)
+            continue
+        # Any other type (set, custom object, etc.) is non-native
+        return False
+    return True
+
+
+def _is_json_native(obj: Any) -> bool:
+    """Fast iterative check to determine whether `obj` consists only of
+    JSON-native Python types (str, int, float, bool, None, dict with str keys,
+    list/tuple of such types). This avoids expensive custom serialization
+    when requests' json= can handle it directly.
+    """
+    stack: deque[Any] = deque([obj])
+    while stack:
+        cur = stack.pop()
+        # Primitive JSON types
+        if cur is None or isinstance(cur, (str, int, float, bool)):
+            continue
+        # Mapping: keys must be strings
+        if isinstance(cur, dict):
+            for k, v in cur.items():
+                if not isinstance(k, str):
+                    return False
+                stack.append(v)
+            continue
+        # Sequences: lists and tuples are acceptable
+        if isinstance(cur, (list, tuple)):
+            for item in cur:
+                stack.append(item)
+            continue
+        # Any other type (set, custom object, etc.) is non-native
+        return False
+    return True
