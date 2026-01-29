@@ -185,7 +185,7 @@ def _get_relative_import_path(target_path: Path, source_path: Path) -> str:
 
 def add_js_extension(module_path: str) -> str:
     """Add .js extension to relative module paths for ESM compatibility."""
-    if module_path.startswith(("./", "../")):  # noqa: SIM102
+    if module_path.startswith(("./", "../")):
         if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
             return module_path + ".js"
     return module_path

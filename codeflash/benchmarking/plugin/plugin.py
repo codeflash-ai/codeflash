@@ -200,7 +200,7 @@ class CodeFlashBenchmarkPlugin:
 
     # Pytest hooks
     @pytest.hookimpl
-    def pytest_sessionfinish(self, session, exitstatus) -> None:  # noqa: ANN001
+    def pytest_sessionfinish(self, session, exitstatus) -> None:
         """Execute after whole test run is completed."""
         # Write any remaining benchmark timings to the database
         codeflash_trace.close()
@@ -236,20 +236,20 @@ class CodeFlashBenchmarkPlugin:
         def __init__(self, request: pytest.FixtureRequest) -> None:
             self.request = request
 
-        def __call__(self, func, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN204
+        def __call__(self, func, *args, **kwargs):  # noqa: ANN002, ANN003, ANN204
             """Handle both direct function calls and decorator usage."""
             if args or kwargs:
                 # Used as benchmark(func, *args, **kwargs)
                 return self._run_benchmark(func, *args, **kwargs)
 
             # Used as @benchmark decorator
-            def wrapped_func(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+            def wrapped_func(*args, **kwargs):  # noqa: ANN002, ANN003
                 return func(*args, **kwargs)
 
             self._run_benchmark(func)
             return wrapped_func
 
-        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        def _run_benchmark(self, func, *args, **kwargs):  # noqa: ANN002, ANN003
             """Actual benchmark implementation."""
             node_path = getattr(self.request.node, "path", None) or getattr(self.request.node, "fspath", None)
             if node_path is None:

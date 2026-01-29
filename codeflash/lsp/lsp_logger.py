@@ -127,7 +127,7 @@ def enhanced_log(
 
 # Configure logging to stderr for VS Code output channel
 def setup_logging() -> logging.Logger:
-    global root_logger  # noqa: PLW0603
+    global root_logger
     if root_logger:
         return root_logger
     # Clear any existing handlers to prevent conflicts

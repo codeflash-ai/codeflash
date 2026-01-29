@@ -105,7 +105,7 @@ def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
     return "."
 
 
-def detect_test_runner(project_root: Path, package_data: dict[str, Any]) -> str:  # noqa: ARG001
+def detect_test_runner(project_root: Path, package_data: dict[str, Any]) -> str:
     """Detect test runner from devDependencies or scripts.test.
 
     Detection order:
@@ -144,7 +144,7 @@ def detect_test_runner(project_root: Path, package_data: dict[str, Any]) -> str:
     return "jest"
 
 
-def detect_formatter(project_root: Path, package_data: dict[str, Any]) -> list[str] | None:  # noqa: ARG001
+def detect_formatter(project_root: Path, package_data: dict[str, Any]) -> list[str] | None:
     """Detect formatter from devDependencies.
 
     Detection order:

@@ -51,10 +51,10 @@ def sync_perform_optimization(server: CodeflashLanguageServer, cancel_event: thr
     ctx_tests = contextvars.copy_context()
     ctx_opts = contextvars.copy_context()
 
-    def run_generate_tests():  # noqa: ANN202
+    def run_generate_tests():
         return function_optimizer.generate_and_instrument_tests(code_context)
 
-    def run_generate_optimizations():  # noqa: ANN202
+    def run_generate_optimizations():
         return function_optimizer.generate_optimizations(
             read_writable_code=code_context.read_writable_code,
             read_only_context_code=code_context.read_only_context_code,
