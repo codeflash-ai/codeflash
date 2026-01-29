@@ -242,9 +242,9 @@ def get_cross_platform_subprocess_run_args(
     cwd: Path | str | None = None,
     env: Mapping[str, str] | None = None,
     timeout: Optional[float] = None,
-    check: bool = False,  # noqa: FBT001, FBT002
-    text: bool = True,  # noqa: FBT001, FBT002
-    capture_output: bool = True,  # noqa: FBT001, FBT002 (only for non-Windows)
+    check: bool = False,
+    text: bool = True,
+    capture_output: bool = True,
 ) -> dict[str, str]:
     run_args = {"cwd": cwd, "env": env, "text": text, "timeout": timeout, "check": check}
     if sys.platform == "win32":

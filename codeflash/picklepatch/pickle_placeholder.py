@@ -31,7 +31,7 @@ class PicklePlaceholder:
         self.__dict__["error_msg"] = error_msg
         self.__dict__["path"] = path if path is not None else []
 
-    def __getattr__(self, name) -> Any:  # noqa: ANN001, ANN401
+    def __getattr__(self, name) -> Any:
         """Raise a custom error when any attribute is accessed."""
         path_str = ".".join(self.__dict__["path"]) if self.__dict__["path"] else "root object"
         msg = (
@@ -40,11 +40,11 @@ class PicklePlaceholder:
         )
         raise PicklePlaceholderAccessError(msg)
 
-    def __setattr__(self, name: str, value: Any) -> None:  # noqa: ANN401
+    def __setattr__(self, name: str, value: Any) -> None:
         """Prevent setting attributes."""
         self.__getattr__(name)  # This will raise our custom error
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401, ARG002
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Raise a custom error when the object is called."""
         path_str = ".".join(self.__dict__["path"]) if self.__dict__["path"] else "root object"
         msg = (

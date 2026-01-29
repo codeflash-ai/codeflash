@@ -53,7 +53,7 @@ class AddDecoratorTransformer(cst.CSTTransformer):
 
         return updated_node
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:  # noqa: ARG002
+    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
         # Create import statement for codeflash_trace
         if not self.added_codeflash_trace:
             return updated_node

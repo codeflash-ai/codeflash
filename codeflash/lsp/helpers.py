@@ -46,7 +46,7 @@ def report_to_markdown_table(report: dict[TestType, dict[str, int]], title: str)
     return table
 
 
-def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:  # noqa: FBT001, FBT002
+def simplify_worktree_paths(msg: str, highlight: bool = True) -> str:
     path_in_msg = worktree_path_regex.search(msg)
     if path_in_msg:
         # Use Path.name to handle both Unix and Windows path separators

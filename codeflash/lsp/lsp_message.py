@@ -27,7 +27,7 @@ class LspMessage:
     takes_time: bool = False
     message_id: Optional[str] = None
 
-    def _loop_through(self, obj: Any) -> Any:  # noqa: ANN401
+    def _loop_through(self, obj: Any) -> Any:
         if isinstance(obj, list):
             return [self._loop_through(i) for i in obj]
         if isinstance(obj, dict):

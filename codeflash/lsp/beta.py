@@ -409,7 +409,7 @@ def provide_api_key(params: ProvideApiKeyParams) -> dict[str, str]:
         _init()
         if not is_successful(result):
             return {"status": "error", "message": result.failure()}
-        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}  # noqa: TRY300
+        return {"status": "success", "message": "Api key saved successfully", "user_id": user_id}
     except Exception:
         return {"status": "error", "message": "something went wrong while saving the api key"}
 

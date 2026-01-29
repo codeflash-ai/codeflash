@@ -28,7 +28,7 @@ def path_belongs_to_site_packages(file_path: Path) -> bool:
 def is_git_repo(file_path: str) -> bool:
     try:
         git.Repo(file_path, search_parent_directories=True)
-        return True  # noqa: TRY300
+        return True
     except git.InvalidGitRepositoryError:
         return False
 

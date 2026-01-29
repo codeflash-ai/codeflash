@@ -164,8 +164,8 @@ def run_line_profile_tests(
     *,
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     pytest_timeout: int | None = None,
-    pytest_min_loops: int = 5,  # noqa: ARG001
-    pytest_max_loops: int = 100_000,  # noqa: ARG001
+    pytest_min_loops: int = 5,
+    pytest_max_loops: int = 100_000,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     if test_framework in {"pytest", "unittest"}:  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (

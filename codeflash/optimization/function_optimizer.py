@@ -1625,8 +1625,8 @@ class FunctionOptimizer:
         self,
         read_writable_code: CodeStringsMarkdown,
         read_only_context_code: str,
-        run_experiment: bool = False,  # noqa: FBT001, FBT002
-        is_numerical_code: bool | None = None,  # noqa: FBT001
+        run_experiment: bool = False,
+        is_numerical_code: bool | None = None,
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)

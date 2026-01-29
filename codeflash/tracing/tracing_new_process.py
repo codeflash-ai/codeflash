@@ -76,7 +76,7 @@ class Tracer:
         config: dict,
         result_pickle_file_path: Path,
         functions: list[str] | None = None,
-        disable: bool = False,  # noqa: FBT001, FBT002
+        disable: bool = False,
         project_root: Path | None = None,
         max_function_count: int = 256,
         timeout: int | None = None,  # seconds
@@ -309,7 +309,7 @@ class Tracer:
         with self.result_pickle_file_path.open("wb") as file:
             pickle.dump(pickle_data, file)
 
-    def tracer_logic(self, frame: FrameType, event: str) -> None:  # noqa: PLR0911
+    def tracer_logic(self, frame: FrameType, event: str) -> None:
         if event != "call":
             return
         if None is not self.timeout and (time.time() - self.start_time) > self.timeout:
@@ -470,7 +470,7 @@ class Tracer:
             # In multi-threaded contexts, we need to be more careful about frame comparisons
             if self.cur and frame.f_back is not self.cur[-2]:
                 # This happens when we're in a different thread
-                rpt, rit, ret, rfn, rframe, rcur = self.cur
+                _rpt, _rit, _ret, _rfn, rframe, _rcur = self.cur
 
                 # Only attempt to handle the frame mismatch if we have a valid rframe
                 if (
@@ -494,7 +494,7 @@ class Tracer:
                     class_name = arguments["self"].__class__.__name__
                 elif "cls" in arguments and hasattr(arguments["cls"], "__name__"):
                     class_name = arguments["cls"].__name__
-            except Exception:  # noqa: S110
+            except Exception:
                 pass
 
             fn = (fcode.co_filename, fcode.co_firstlineno, fcode.co_name, class_name)
@@ -505,7 +505,7 @@ class Tracer:
                 timings[fn] = cc, ns + 1, tt, ct, callers
             else:
                 timings[fn] = 0, 0, 0, 0, {}
-            return 1  # noqa: TRY300
+            return 1
         except Exception:
             # Handle any errors gracefully
             return 0

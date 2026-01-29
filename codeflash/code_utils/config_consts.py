@@ -91,7 +91,7 @@ EFFORT_VALUES: dict[str, dict[EffortLevel, Any]] = {
 }
 
 
-def get_effort_value(key: EffortKeys, effort: Union[EffortLevel, str]) -> Any:  # noqa: ANN401
+def get_effort_value(key: EffortKeys, effort: Union[EffortLevel, str]) -> Any:
     key_str = key.value
 
     if isinstance(effort, str):

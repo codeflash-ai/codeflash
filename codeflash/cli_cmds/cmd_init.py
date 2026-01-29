@@ -663,7 +663,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
         apologize_and_exit()
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:  # noqa: FBT001, FBT002
+def install_github_actions(override_formatter_check: bool = False) -> None:
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -1089,7 +1089,7 @@ def install_github_actions(override_formatter_check: bool = False) -> None:  # n
         apologize_and_exit()
 
 
-def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:  # noqa: PLR0911
+def determine_dependency_manager(pyproject_data: dict[str, Any]) -> DependencyManager:
     """Determine which dependency manager is being used based on pyproject.toml contents."""
     if (Path.cwd() / "poetry.lock").exists():
         return DependencyManager.POETRY
@@ -1251,10 +1251,7 @@ def collect_repo_files_for_workflow(git_root: Path) -> dict[str, Any]:
 
 
 def generate_dynamic_workflow_content(
-    optimize_yml_content: str,
-    config: tuple[dict[str, Any], Path],
-    git_root: Path,
-    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
+    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
 ) -> str:
     """Generate workflow content with dynamic steps from AI service, falling back to static template.
 
@@ -1378,10 +1375,7 @@ def generate_dynamic_workflow_content(
 
 
 def customize_codeflash_yaml_content(
-    optimize_yml_content: str,
-    config: tuple[dict[str, Any], Path],
-    git_root: Path,
-    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
+    optimize_yml_content: str, config: tuple[dict[str, Any], Path], git_root: Path, benchmark_mode: bool = False
 ) -> str:
     module_path = str(Path(config["module_root"]).relative_to(git_root) / "**")
     optimize_yml_content = optimize_yml_content.replace("{{ codeflash_module_path }}", module_path)

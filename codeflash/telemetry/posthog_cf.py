@@ -12,7 +12,7 @@ from codeflash.version import __version__
 _posthog = None
 
 
-def initialize_posthog(enabled: bool = True) -> None:  # noqa: FBT001, FBT002
+def initialize_posthog(enabled: bool = True) -> None:
     """Enable or disable PostHog.
 
     :param enabled: Whether to enable PostHog.

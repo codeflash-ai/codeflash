@@ -437,7 +437,7 @@ class PytestLoops:
             "importlib",
         }
 
-        def _clear_cache_for_object(obj: Any) -> None:  # noqa: ANN401
+        def _clear_cache_for_object(obj: Any) -> None:
             if obj in processed_functions:
                 return
             processed_functions.add(obj)
@@ -469,9 +469,9 @@ class PytestLoops:
                         for _, obj in inspect.getmembers(module):
                             if callable(obj):
                                 _clear_cache_for_object(obj)
-                except Exception:  # noqa: S110
+                except Exception:
                     pass
-        except Exception:  # noqa: S110
+        except Exception:
             pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
@@ -581,7 +581,7 @@ class PytestLoops:
         os.environ["CODEFLASH_TEST_FUNCTION"] = test_function_name
 
     @pytest.hookimpl(trylast=True)
-    def pytest_runtest_teardown(self, item: pytest.Item) -> None:  # noqa: ARG002
+    def pytest_runtest_teardown(self, item: pytest.Item) -> None:
         """Clean up test context environment variables after each test."""
         for var in ["CODEFLASH_TEST_MODULE", "CODEFLASH_TEST_CLASS", "CODEFLASH_TEST_FUNCTION"]:
             os.environ.pop(var, None)

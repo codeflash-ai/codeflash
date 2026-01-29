@@ -54,12 +54,7 @@ def instrument_codeflash_capture(
 
 
 def add_codeflash_capture_to_init(
-    target_classes: set[str],
-    fto_name: str,
-    tmp_dir_path: str,
-    code: str,
-    tests_root: Path,
-    is_fto: bool = False,  # noqa: FBT001, FBT002
+    target_classes: set[str], fto_name: str, tmp_dir_path: str, code: str, tests_root: Path, is_fto: bool = False
 ) -> str:
     """Add codeflash_capture decorator to __init__ function in the specified class."""
     tree = ast.parse(code)
@@ -76,12 +71,7 @@ class InitDecorator(ast.NodeTransformer):
     """AST transformer that adds codeflash_capture decorator to specific class's __init__."""
 
     def __init__(
-        self,
-        target_classes: set[str],
-        fto_name: str,
-        tmp_dir_path: str,
-        tests_root: Path,
-        is_fto=False,  # noqa: ANN001, FBT002
+        self, target_classes: set[str], fto_name: str, tmp_dir_path: str, tests_root: Path, is_fto=False
     ) -> None:
         self.target_classes = target_classes
         self.fto_name = fto_name

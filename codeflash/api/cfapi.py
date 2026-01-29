@@ -81,7 +81,7 @@ def make_cfapi_request(
         else:
             response = requests.get(url, headers=cfapi_headers, params=params, timeout=60)
         response.raise_for_status()
-        return response  # noqa: TRY300
+        return response
     except requests.exceptions.HTTPError:
         # response may be either a string or JSON, so we handle both cases
         error_message = ""
@@ -102,7 +102,7 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id(api_key: Optional[str] = None) -> Optional[str]:  # noqa: PLR0911
+def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :param api_key: The API key to use. If None, uses get_codeflash_api_key().
@@ -376,7 +376,7 @@ def get_blocklisted_functions() -> dict[str, set[str]] | dict[str, Any]:
 
 def is_function_being_optimized_again(
     owner: str, repo: str, pr_number: int, code_contexts: list[dict[str, str]]
-) -> Any:  # noqa: ANN401
+) -> Any:
     """Check if the function being optimized is being optimized again."""
     response = make_cfapi_request(
         "/is-already-optimized",
