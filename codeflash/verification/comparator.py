@@ -234,7 +234,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
 
             try:
                 insp = sqlalchemy.inspection.inspect(orig)
-                insp = sqlalchemy.inspection.inspect(new)  # noqa: F841
+                insp = sqlalchemy.inspection.inspect(new)
                 orig_keys = orig.__dict__
                 new_keys = new.__dict__
                 for key in list(orig_keys.keys()):

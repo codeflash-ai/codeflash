@@ -1872,7 +1872,7 @@ class JavaScriptSupport:
             # Write instrumented code to source file
             source_file_path.write_text(instrumented_source, encoding="utf-8")
             logger.debug("Wrote instrumented source to %s", source_file_path)
-            return True  # noqa: TRY300
+            return True
         except Exception as e:
             logger.warning("Failed to instrument source for line profiling: %s", e)
             return False
