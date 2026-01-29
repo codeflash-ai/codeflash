@@ -172,7 +172,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process overhead information
             for row in cursor.fetchall():
-                benchmark_file, benchmark_func, benchmark_line, total_overhead_ns = row
+                benchmark_file, benchmark_func, _benchmark_line, total_overhead_ns = row
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)
                 overhead_by_benchmark[benchmark_key] = total_overhead_ns or 0  # Handle NULL sum case
 

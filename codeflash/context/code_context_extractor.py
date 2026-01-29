@@ -994,7 +994,7 @@ def get_imported_names(import_node: cst.Import | cst.ImportFrom) -> set[str]:
 
 
 def remove_docstring_from_body(indented_block: cst.IndentedBlock) -> cst.CSTNode:
-    """Removes the docstring from an indented block if it exists."""  # noqa: D401
+    """Removes the docstring from an indented block if it exists."""
     if not isinstance(indented_block.body[0], cst.SimpleStatementLine):
         return indented_block
     first_stmt = indented_block.body[0].body[0]

@@ -121,7 +121,7 @@ class AiServiceClient:
             )
         return candidates
 
-    def optimize_code(  # noqa: D417
+    def optimize_code(
         self,
         source_code: str,
         dependency_code: str,
@@ -240,7 +240,7 @@ class AiServiceClient:
             n_candidates=n_candidates,
         )
 
-    def get_jit_rewritten_code(  # noqa: D417
+    def get_jit_rewritten_code(
         self, source_code: str, trace_id: str
     ) -> list[OptimizedCandidate]:
         """Rewrite the given python code for performance via jit compilation by making a request to the Django endpoint.
@@ -292,7 +292,7 @@ class AiServiceClient:
         console.rule()
         return []
 
-    def optimize_python_code_line_profiler(  # noqa: D417
+    def optimize_python_code_line_profiler(
         self,
         source_code: str,
         dependency_code: str,
@@ -522,7 +522,7 @@ class AiServiceClient:
         console.rule()
         return None
 
-    def get_new_explanation(  # noqa: D417
+    def get_new_explanation(
         self,
         source_code: str,
         optimized_code: str,
@@ -622,7 +622,7 @@ class AiServiceClient:
         console.rule()
         return ""
 
-    def generate_ranking(  # noqa: D417
+    def generate_ranking(
         self,
         trace_id: str,
         diffs: list[str],
@@ -674,7 +674,7 @@ class AiServiceClient:
         console.rule()
         return None
 
-    def log_results(  # noqa: D417
+    def log_results(
         self,
         function_trace_id: str,
         speedup_ratio: dict[str, float | None] | None,
@@ -715,7 +715,7 @@ class AiServiceClient:
         except requests.exceptions.RequestException as e:
             logger.exception(f"Error logging features: {e}")
 
-    def generate_regression_tests(  # noqa: D417
+    def generate_regression_tests(
         self,
         source_code_being_tested: str,
         function_to_optimize: FunctionToOptimize,

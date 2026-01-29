@@ -25,7 +25,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-    from codeflash.languages.base import LanguageSupport
+    from codeflash.languages.base import Language, LanguageSupport
+    from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
     from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, OptimizedCandidate, ValidCode
 
 ASTNodeT = TypeVar("ASTNodeT", bound=ast.AST)
@@ -703,8 +704,8 @@ def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitter
         if imports:
             # Find the last import's end line
             return max(imp.end_line for imp in imports)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"Exception occurred in _find_insertion_line_after_imports_js: {exc}")
 
     # Default: insert at beginning (after any shebang/directive comments)
     for i, line in enumerate(lines):
