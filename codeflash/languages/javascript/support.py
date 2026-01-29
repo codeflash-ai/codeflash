@@ -712,33 +712,273 @@ class JavaScriptSupport:
     def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
-        Uses text-based replacement with line numbers. Includes JSDoc comments
-        in the replacement region if present.
+        Uses node-based replacement to extract the method body from the optimized code
+        and replace only the body in the original code, preserving the original signature.
+
+        The new_source may be:
+        1. A full class definition with the optimized method inside
+        2. Just the method definition itself
 
         Args:
             source: Original source code.
             function: FunctionInfo identifying the function to replace.
-            new_source: New function source code.
+            new_source: New source code containing the optimized function.
 
         Returns:
-            Modified source code with function replaced.
+            Modified source code with function body replaced.
 
         """
         if function.start_line is None or function.end_line is None:
             logger.error(f"Function {function.name} has no line information")
             return source
 
+        # Get analyzer for parsing
+        if function.file_path:
+            analyzer = get_analyzer_for_file(function.file_path)
+        else:
+            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+        # Extract just the method body from the new source
+        new_body = self._extract_function_body(new_source, function.name, analyzer)
+        if new_body is None:
+            logger.warning(f"Could not extract body for {function.name} from optimized code, using full replacement")
+            return self._replace_function_text_based(source, function, new_source, analyzer)
+
+        # Find the original function and replace its body
+        return self._replace_function_body(source, function, new_body, analyzer)
+
+    def _extract_function_body(self, source: str, function_name: str, analyzer: TreeSitterAnalyzer) -> str | None:
+        """Extract the body of a function from source code.
+
+        Searches for the function by name (handles both standalone functions and class methods)
+        and extracts just the body content (between { and }).
+
+        Args:
+            source: Source code containing the function.
+            function_name: Name of the function to find.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            The function body content (including braces), or None if not found.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+
+        def find_function_node(node, target_name: str):
+            """Recursively find a function/method with the given name."""
+            # Check method definitions
+            if node.type == "method_definition":
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                    if name == target_name:
+                        return node
+
+            # Check function declarations
+            if node.type in ("function_declaration", "function"):
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                    if name == target_name:
+                        return node
+
+            # Check arrow functions assigned to variables
+            if node.type == "lexical_declaration":
+                for child in node.children:
+                    if child.type == "variable_declarator":
+                        name_node = child.child_by_field_name("name")
+                        value_node = child.child_by_field_name("value")
+                        if name_node and value_node and value_node.type == "arrow_function":
+                            name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                            if name == target_name:
+                                return value_node
+
+            # Recurse into children
+            for child in node.children:
+                result = find_function_node(child, target_name)
+                if result:
+                    return result
+
+            return None
+
+        func_node = find_function_node(tree.root_node, function_name)
+        if not func_node:
+            return None
+
+        # Find the body node
+        body_node = func_node.child_by_field_name("body")
+        if not body_node:
+            # For some node types, body might be a direct child
+            for child in func_node.children:
+                if child.type == "statement_block":
+                    body_node = child
+                    break
+
+        if not body_node:
+            return None
+
+        # Extract the body text (including braces)
+        return source_bytes[body_node.start_byte : body_node.end_byte].decode("utf8")
+
+    def _replace_function_body(
+        self, source: str, function: FunctionInfo, new_body: str, analyzer: TreeSitterAnalyzer
+    ) -> str:
+        """Replace the body of a function in source code with new body content.
+
+        Preserves the original function signature and only replaces the body.
+
+        Args:
+            source: Original source code.
+            function: FunctionInfo identifying the function to modify.
+            new_body: New body content (including braces).
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            Modified source code with function body replaced.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+
+        # Find the original function node
+        def find_function_at_line(node, target_name: str, target_line: int):
+            """Find a function with matching name and line number."""
+            if node.type == "method_definition":
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                    # Line numbers in tree-sitter are 0-indexed
+                    if name == target_name and (node.start_point[0] + 1) == target_line:
+                        return node
+
+            if node.type in ("function_declaration", "function"):
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                    if name == target_name and (node.start_point[0] + 1) == target_line:
+                        return node
+
+            if node.type == "lexical_declaration":
+                for child in node.children:
+                    if child.type == "variable_declarator":
+                        name_node = child.child_by_field_name("name")
+                        value_node = child.child_by_field_name("value")
+                        if name_node and value_node and value_node.type == "arrow_function":
+                            name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                            if name == target_name and (node.start_point[0] + 1) == target_line:
+                                return value_node
+
+            for child in node.children:
+                result = find_function_at_line(child, target_name, target_line)
+                if result:
+                    return result
+
+            return None
+
+        func_node = find_function_at_line(tree.root_node, function.name, function.start_line)
+        if not func_node:
+            logger.warning(f"Could not find function {function.name} at line {function.start_line}")
+            return source
+
+        # Find the body node in the original
+        body_node = func_node.child_by_field_name("body")
+        if not body_node:
+            for child in func_node.children:
+                if child.type == "statement_block":
+                    body_node = child
+                    break
+
+        if not body_node:
+            logger.warning(f"Could not find body for function {function.name}")
+            return source
+
+        # Get the indentation of the original body's opening brace
+        lines = source.splitlines(keepends=True)
+        body_start_line = body_node.start_point[0]  # 0-indexed
+        if body_start_line < len(lines):
+            # Find the position of the opening brace in the line
+            original_line = lines[body_start_line]
+            brace_col = body_node.start_point[1]
+        else:
+            brace_col = 0
+
+        # Adjust indentation of the new body to match original
+        new_body_lines = new_body.splitlines(keepends=True)
+        if new_body_lines:
+            # Get the indentation of the new body's first line (opening brace)
+            first_line = new_body_lines[0]
+            new_indent = len(first_line) - len(first_line.lstrip())
+
+            # Calculate the indentation of content lines in original (typically brace_col + 4)
+            # But for the brace itself, we use the column position
+            original_body_text = source_bytes[body_node.start_byte : body_node.end_byte].decode("utf8")
+            original_body_lines = original_body_text.splitlines(keepends=True)
+            if len(original_body_lines) > 1:
+                # Get indentation of the second line (first content line)
+                content_line = original_body_lines[1]
+                original_content_indent = len(content_line) - len(content_line.lstrip())
+            else:
+                original_content_indent = brace_col + 4  # Default to 4 spaces more than brace
+
+            # Get indentation of new body's content lines
+            if len(new_body_lines) > 1:
+                new_content_line = new_body_lines[1]
+                new_content_indent = len(new_content_line) - len(new_content_line.lstrip())
+            else:
+                new_content_indent = new_indent + 4
+
+            indent_diff = original_content_indent - new_content_indent
+
+            # Adjust indentation
+            adjusted_lines = []
+            for i, line in enumerate(new_body_lines):
+                if i == 0:
+                    # Opening brace - keep as is (will be placed at correct position by byte replacement)
+                    adjusted_lines.append(line.lstrip())
+                elif line.strip():
+                    if indent_diff > 0:
+                        adjusted_lines.append(" " * indent_diff + line)
+                    elif indent_diff < 0:
+                        current_indent = len(line) - len(line.lstrip())
+                        remove_amount = min(current_indent, abs(indent_diff))
+                        adjusted_lines.append(line[remove_amount:])
+                    else:
+                        adjusted_lines.append(line)
+                else:
+                    adjusted_lines.append(line)
+
+            new_body = "".join(adjusted_lines)
+
+        # Replace the body bytes
+        before = source_bytes[: body_node.start_byte]
+        after = source_bytes[body_node.end_byte :]
+
+        result = before + new_body.encode("utf8") + after
+        return result.decode("utf8")
+
+    def _replace_function_text_based(
+        self, source: str, function: FunctionInfo, new_source: str, analyzer: TreeSitterAnalyzer
+    ) -> str:
+        """Fallback text-based replacement when node-based replacement fails.
+
+        Uses line numbers to replace the entire function.
+
+        Args:
+            source: Original source code.
+            function: FunctionInfo identifying the function to replace.
+            new_source: New function source code.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            Modified source code with function replaced.
+
+        """
         lines = source.splitlines(keepends=True)
 
         # Handle case where source doesn't end with newline
         if lines and not lines[-1].endswith("\n"):
             lines[-1] += "\n"
-
-        # Find the FunctionNode to get doc_start_line for JSDoc inclusion
-        if function.file_path:
-            analyzer = get_analyzer_for_file(function.file_path)
-        else:
-            analyzer = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
         tree_functions = analyzer.find_functions(source, include_methods=True, include_arrow_functions=True)
         target_func = None
@@ -750,15 +990,14 @@ class JavaScriptSupport:
         # Use doc_start_line if available, otherwise fall back to start_line
         effective_start = (target_func.doc_start_line if target_func else None) or function.start_line
 
-        # Get indentation from original function's first line (declaration, not JSDoc)
+        # Get indentation from original function's first line
         if function.start_line <= len(lines):
             original_first_line = lines[function.start_line - 1]
             original_indent = len(original_first_line) - len(original_first_line.lstrip())
         else:
             original_indent = 0
 
-        # Get indentation from new function's first line
-        # Skip JSDoc lines to find the actual function declaration
+        # Skip JSDoc lines to find the actual function declaration in new source
         new_lines = new_source.splitlines(keepends=True)
         func_decl_line = new_lines[0] if new_lines else ""
         for line in new_lines:
@@ -773,15 +1012,13 @@ class JavaScriptSupport:
                 break
 
         new_indent = len(func_decl_line) - len(func_decl_line.lstrip())
-
-        # Calculate indent adjustment needed
         indent_diff = original_indent - new_indent
 
         # Adjust indentation of new function if needed
         if indent_diff != 0:
             adjusted_new_lines = []
             for line in new_lines:
-                if line.strip():  # Non-empty line
+                if line.strip():
                     if indent_diff > 0:
                         adjusted_new_lines.append(" " * indent_diff + line)
                     else:
@@ -796,7 +1033,7 @@ class JavaScriptSupport:
         if new_lines and not new_lines[-1].endswith("\n"):
             new_lines[-1] += "\n"
 
-        # Build result using effective_start (includes JSDoc)
+        # Build result
         before = lines[: effective_start - 1]
         after = lines[function.end_line :]
 

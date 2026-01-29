@@ -1238,3 +1238,400 @@ module.exports = { Calculator };
             if add_method:
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
                 assert js_support.validate_syntax(context.target_code) is True
+
+
+class TestExtractionReplacementRoundTrip:
+    """Tests for the full workflow of extracting code context and then replacing the function.
+
+    These tests verify that:
+    1. Extracted code includes constructor and fields for AI context
+    2. Optimized code (from AI) is the full class with the optimized method
+    3. Replacement extracts just the method body from optimized code and replaces in original
+    4. The round-trip produces valid, correct code
+    All assertions use exact string equality for strict verification.
+    """
+
+    def test_extract_context_then_replace_method(self, js_support):
+        """Test extracting code context and then replacing the method.
+
+        Simulates the full AI optimization workflow:
+        1. Extract code context (full class with constructor)
+        2. AI returns optimized code (full class with optimized method)
+        3. Replace extracts just the method body and replaces in original
+        """
+        original_source = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        this.count++;
+        return this.count;
+    }
+
+    decrement() {
+        this.count--;
+        return this.count;
+    }
+}
+
+module.exports = { Counter };
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(original_source)
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            increment_func = next(fn for fn in functions if fn.name == "increment")
+
+            # Step 1: Extract code context (includes constructor for AI context)
+            context = js_support.extract_code_context(increment_func, file_path.parent, file_path.parent)
+
+            # Verify extraction with exact string equality
+            expected_extraction = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        this.count++;
+        return this.count;
+    }
+}
+"""
+            assert context.target_code == expected_extraction, (
+                f"Extracted code does not match expected.\n"
+                f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
+            )
+
+            # Step 2: AI returns optimized code as FULL CLASS (not just method)
+            # This simulates what the AI would return - the full context with optimized method
+            optimized_code_from_ai = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        // Optimized: use prefix increment
+        return ++this.count;
+    }
+}
+"""
+
+            # Step 3: Replace extracts just the method body and replaces in original
+            result = js_support.replace_function(original_source, increment_func, optimized_code_from_ai)
+
+            # Verify result with exact string equality
+            expected_result = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        // Optimized: use prefix increment
+        return ++this.count;
+    }
+
+    decrement() {
+        this.count--;
+        return this.count;
+    }
+}
+
+module.exports = { Counter };
+"""
+            assert result == expected_result, (
+                f"Replacement result does not match expected.\n"
+                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+            )
+            assert js_support.validate_syntax(result) is True
+
+    def test_typescript_extract_context_then_replace_method(self):
+        """Test TypeScript extraction with fields and then replacement."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        original_source = """\
+class User {
+    private name: string;
+    private age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        return this.name;
+    }
+
+    getAge(): number {
+        return this.age;
+    }
+}
+
+export { User };
+"""
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            f.write(original_source)
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = ts_support.discover_functions(file_path)
+            get_name_func = next(fn for fn in functions if fn.name == "getName")
+
+            # Step 1: Extract code context (includes fields and constructor)
+            context = ts_support.extract_code_context(get_name_func, file_path.parent, file_path.parent)
+
+            # Verify extraction with exact string equality
+            expected_extraction = """\
+class User {
+    private name: string;
+    private age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        return this.name;
+    }
+}
+"""
+            assert context.target_code == expected_extraction, (
+                f"Extracted code does not match expected.\n"
+                f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
+            )
+
+            # Step 2: AI returns optimized code as FULL CLASS
+            optimized_code_from_ai = """\
+class User {
+    private name: string;
+    private age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        // Optimized getter
+        return this.name || '';
+    }
+}
+"""
+
+            # Step 3: Replace extracts just the method body and replaces in original
+            result = ts_support.replace_function(original_source, get_name_func, optimized_code_from_ai)
+
+            # Verify result with exact string equality
+            expected_result = """\
+class User {
+    private name: string;
+    private age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        // Optimized getter
+        return this.name || '';
+    }
+
+    getAge(): number {
+        return this.age;
+    }
+}
+
+export { User };
+"""
+            assert result == expected_result, (
+                f"Replacement result does not match expected.\n"
+                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+            )
+            assert ts_support.validate_syntax(result) is True
+
+    def test_extract_replace_preserves_other_methods(self, js_support):
+        """Test that replacing one method doesn't affect others."""
+        original_source = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return a + b;
+    }
+
+    subtract(a, b) {
+        return a - b;
+    }
+
+    multiply(a, b) {
+        return a * b;
+    }
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(original_source)
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_func = next(fn for fn in functions if fn.name == "add")
+
+            # Extract context for add
+            context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)
+
+            # Verify extraction with exact string equality
+            expected_extraction = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return a + b;
+    }
+}
+"""
+            assert context.target_code == expected_extraction, (
+                f"Extracted code does not match expected.\n"
+                f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
+            )
+
+            # AI returns optimized code as FULL CLASS
+            optimized_code_from_ai = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return (a + b) | 0;
+    }
+}
+"""
+            result = js_support.replace_function(original_source, add_func, optimized_code_from_ai)
+
+            # Verify result with exact string equality
+            expected_result = """\
+class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+    }
+
+    add(a, b) {
+        return (a + b) | 0;
+    }
+
+    subtract(a, b) {
+        return a - b;
+    }
+
+    multiply(a, b) {
+        return a * b;
+    }
+}
+"""
+            assert result == expected_result, (
+                f"Replacement result does not match expected.\n"
+                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+            )
+            assert js_support.validate_syntax(result) is True
+
+    def test_extract_static_method_then_replace(self, js_support):
+        """Test extracting and replacing a static method."""
+        original_source = """\
+class MathUtils {
+    constructor() {
+        this.cache = {};
+    }
+
+    static add(a, b) {
+        return a + b;
+    }
+
+    static multiply(a, b) {
+        return a * b;
+    }
+}
+
+module.exports = { MathUtils };
+"""
+        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+            f.write(original_source)
+            f.flush()
+            file_path = Path(f.name)
+
+            functions = js_support.discover_functions(file_path)
+            add_func = next(fn for fn in functions if fn.name == "add")
+
+            # Extract context
+            context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)
+
+            # Verify extraction with exact string equality
+            expected_extraction = """\
+class MathUtils {
+    constructor() {
+        this.cache = {};
+    }
+
+    static add(a, b) {
+        return a + b;
+    }
+}
+"""
+            assert context.target_code == expected_extraction, (
+                f"Extracted code does not match expected.\n"
+                f"Expected:\n{expected_extraction}\n\nGot:\n{context.target_code}"
+            )
+
+            # AI returns optimized code as FULL CLASS
+            optimized_code_from_ai = """\
+class MathUtils {
+    constructor() {
+        this.cache = {};
+    }
+
+    static add(a, b) {
+        // Optimized bitwise
+        return (a + b) | 0;
+    }
+}
+"""
+            result = js_support.replace_function(original_source, add_func, optimized_code_from_ai)
+
+            # Verify result with exact string equality
+            expected_result = """\
+class MathUtils {
+    constructor() {
+        this.cache = {};
+    }
+
+    static add(a, b) {
+        // Optimized bitwise
+        return (a + b) | 0;
+    }
+
+    static multiply(a, b) {
+        return a * b;
+    }
+}
+
+module.exports = { MathUtils };
+"""
+            assert result == expected_result, (
+                f"Replacement result does not match expected.\n"
+                f"Expected:\n{expected_result}\n\nGot:\n{result}"
+            )
+            assert js_support.validate_syntax(result) is True
