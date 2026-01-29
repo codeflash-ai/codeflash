@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from codeflash.discovery.functions_to_optimize import find_all_functions_in_file, get_files_for_language
 from codeflash.languages.base import Language
 
@@ -23,7 +22,7 @@ class TestJavaScriptFunctionDiscovery:
     def js_project_dir(self):
         """Get the JavaScript sample project directory."""
         project_root = Path(__file__).parent.parent.parent
-        js_dir = project_root / "code_to_optimize_js"
+        js_dir = project_root / "code_to_optimize" / "js" / "code_to_optimize_js"
         if not js_dir.exists():
             pytest.skip("code_to_optimize_js directory not found")
         return js_dir
@@ -84,7 +83,7 @@ class TestJavaScriptCodeContext:
     def js_project_dir(self):
         """Get the JavaScript sample project directory."""
         project_root = Path(__file__).parent.parent.parent
-        js_dir = project_root / "code_to_optimize_js"
+        js_dir = project_root / "code_to_optimize" / "js" / "code_to_optimize_js"
         if not js_dir.exists():
             pytest.skip("code_to_optimize_js directory not found")
         return js_dir
@@ -161,7 +160,7 @@ class TestJavaScriptTestDiscovery:
     def js_project_dir(self):
         """Get the JavaScript sample project directory."""
         project_root = Path(__file__).parent.parent.parent
-        js_dir = project_root / "code_to_optimize_js"
+        js_dir = project_root / "code_to_optimize" / "js" / "code_to_optimize_js"
         if not js_dir.exists():
             pytest.skip("code_to_optimize_js directory not found")
         return js_dir
