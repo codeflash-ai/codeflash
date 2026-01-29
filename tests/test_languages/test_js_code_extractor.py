@@ -66,6 +66,11 @@ class TestCodeExtractorCJS:
 
         expected_code = """\
 class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate permutation using factorial helper.
      * @param n - Total items
@@ -140,6 +145,11 @@ function factorial(n) {
 
         expected_code = """\
 class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate compound interest with multiple helper dependencies.
      * @param principal - Initial amount
@@ -290,6 +300,11 @@ function validateInput(value, name) {
 
         expected_code = """\
 class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Static method for quick calculations.
      */
@@ -363,6 +378,11 @@ class TestCodeExtractorESM:
 
         expected_code = """\
 class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate permutation using factorial helper.
      * @param n - Total items
@@ -410,6 +430,11 @@ export function factorial(n) {
 
         expected_code = """\
 class Calculator {
+    constructor(precision = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate compound interest with multiple helper dependencies.
      * @param principal - Initial amount
@@ -546,6 +571,14 @@ class TestCodeExtractorTypeScript:
 
         expected_code = """\
 class Calculator {
+    private precision: number;
+    private history: HistoryEntry[];
+
+    constructor(precision: number = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate permutation using factorial helper.
      * @param n - Total items
@@ -593,6 +626,14 @@ export function factorial(n: number): number {
 
         expected_code = """\
 class Calculator {
+    private precision: number;
+    private history: HistoryEntry[];
+
+    constructor(precision: number = 2) {
+        this.precision = precision;
+        this.history = [];
+    }
+
     /**
      * Calculate compound interest with multiple helper dependencies.
      * @param principal - Initial amount
@@ -811,6 +852,284 @@ const processValue = (value) => {
         actual_helper_code = helper_dict["helper"].source_code.strip()
         assert actual_helper_code == expected_helper_code, (
             f"Helper code does not match.\nExpected:\n{expected_helper_code}\n\nGot:\n{actual_helper_code}"
+        )
+
+
+class TestClassContextExtraction:
+    """Tests for class constructor and field extraction in code context."""
+
+    @pytest.fixture
+    def js_support(self):
+        """Create JavaScriptSupport instance."""
+        return JavaScriptSupport()
+
+    @pytest.fixture
+    def ts_support(self):
+        """Create TypeScriptSupport instance."""
+        return TypeScriptSupport()
+
+    def test_method_extraction_includes_constructor(self, js_support, tmp_path):
+        """Test that extracting a class method includes the constructor."""
+        source = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        this.count++;
+        return this.count;
+    }
+}
+
+module.exports = { Counter };
+"""
+        test_file = tmp_path / "counter.js"
+        test_file.write_text(source)
+
+        functions = js_support.discover_functions(test_file)
+        increment_func = next(f for f in functions if f.name == "increment")
+
+        context = js_support.extract_code_context(
+            function=increment_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class Counter {
+    constructor(initial = 0) {
+        this.count = initial;
+    }
+
+    increment() {
+        this.count++;
+        return this.count;
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+    def test_method_extraction_class_without_constructor(self, js_support, tmp_path):
+        """Test extracting a method from a class that has no constructor."""
+        source = """\
+class MathUtils {
+    add(a, b) {
+        return a + b;
+    }
+
+    multiply(a, b) {
+        return a * b;
+    }
+}
+
+module.exports = { MathUtils };
+"""
+        test_file = tmp_path / "math_utils.js"
+        test_file.write_text(source)
+
+        functions = js_support.discover_functions(test_file)
+        add_func = next(f for f in functions if f.name == "add")
+
+        context = js_support.extract_code_context(
+            function=add_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class MathUtils {
+    add(a, b) {
+        return a + b;
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+    def test_typescript_method_extraction_includes_fields(self, ts_support, tmp_path):
+        """Test that TypeScript method extraction includes class fields."""
+        source = """\
+class User {
+    private name: string;
+    public age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        return this.name;
+    }
+}
+
+export { User };
+"""
+        test_file = tmp_path / "user.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        get_name_func = next(f for f in functions if f.name == "getName")
+
+        context = ts_support.extract_code_context(
+            function=get_name_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class User {
+    private name: string;
+    public age: number;
+
+    constructor(name: string, age: number) {
+        this.name = name;
+        this.age = age;
+    }
+
+    getName(): string {
+        return this.name;
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+    def test_typescript_fields_only_no_constructor(self, ts_support, tmp_path):
+        """Test TypeScript class with fields but no constructor."""
+        source = """\
+class Config {
+    readonly apiUrl: string = "https://api.example.com";
+    timeout: number = 5000;
+
+    getUrl(): string {
+        return this.apiUrl;
+    }
+}
+
+export { Config };
+"""
+        test_file = tmp_path / "config.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        get_url_func = next(f for f in functions if f.name == "getUrl")
+
+        context = ts_support.extract_code_context(
+            function=get_url_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class Config {
+    readonly apiUrl: string = "https://api.example.com";
+    timeout: number = 5000;
+
+    getUrl(): string {
+        return this.apiUrl;
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+    def test_constructor_with_jsdoc(self, js_support, tmp_path):
+        """Test that constructor with JSDoc is fully extracted."""
+        source = """\
+class Logger {
+    /**
+     * Create a new Logger instance.
+     * @param {string} prefix - The prefix to use for log messages.
+     */
+    constructor(prefix) {
+        this.prefix = prefix;
+    }
+
+    getPrefix() {
+        return this.prefix;
+    }
+}
+
+module.exports = { Logger };
+"""
+        test_file = tmp_path / "logger.js"
+        test_file.write_text(source)
+
+        functions = js_support.discover_functions(test_file)
+        get_prefix_func = next(f for f in functions if f.name == "getPrefix")
+
+        context = js_support.extract_code_context(
+            function=get_prefix_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class Logger {
+    /**
+     * Create a new Logger instance.
+     * @param {string} prefix - The prefix to use for log messages.
+     */
+    constructor(prefix) {
+        this.prefix = prefix;
+    }
+
+    getPrefix() {
+        return this.prefix;
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
+        )
+
+    def test_static_method_includes_constructor(self, js_support, tmp_path):
+        """Test that static method extraction also includes constructor context."""
+        source = """\
+class Factory {
+    constructor(config) {
+        this.config = config;
+    }
+
+    static create(type) {
+        return new Factory({ type: type });
+    }
+}
+
+module.exports = { Factory };
+"""
+        test_file = tmp_path / "factory.js"
+        test_file.write_text(source)
+
+        functions = js_support.discover_functions(test_file)
+        create_func = next(f for f in functions if f.name == "create")
+
+        context = js_support.extract_code_context(
+            function=create_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        expected_code = """\
+class Factory {
+    constructor(config) {
+        this.config = config;
+    }
+
+    static create(type) {
+        return new Factory({ type: type });
+    }
+}"""
+
+        assert context.target_code.strip() == expected_code.strip(), (
+            f"Extracted code does not match expected.\n"
+            f"Expected:\n{expected_code}\n\n"
+            f"Got:\n{context.target_code}"
         )
 
 

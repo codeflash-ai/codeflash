@@ -331,15 +331,24 @@ class JavaScriptSupport:
                     break
 
             if class_name:
-                # Find the class definition in the source to get proper indentation and any class JSDoc
-                class_info = self._find_class_definition(source, class_name, analyzer)
+                # Find the class definition in the source to get proper indentation, JSDoc, constructor, and fields
+                class_info = self._find_class_definition(source, class_name, analyzer, function.name)
                 if class_info:
-                    class_jsdoc, class_indent = class_info
-                    # Wrap the method in a minimal class definition
+                    class_jsdoc, class_indent, constructor_code, fields_code = class_info
+                    # Build the class body with fields, constructor, and target method
+                    class_body_parts = []
+                    if fields_code:
+                        class_body_parts.append(fields_code)
+                    if constructor_code:
+                        class_body_parts.append(constructor_code)
+                    class_body_parts.append(target_code)
+                    class_body = "\n".join(class_body_parts)
+
+                    # Wrap the method in a class definition with context
                     if class_jsdoc:
-                        target_code = f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{target_code}{class_indent}}}\n"
+                        target_code = f"{class_jsdoc}\n{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
                     else:
-                        target_code = f"{class_indent}class {class_name} {{\n{target_code}{class_indent}}}\n"
+                        target_code = f"{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
                 else:
                     # Fallback: wrap with no indentation
                     target_code = f"class {class_name} {{\n{target_code}}}\n"
@@ -380,17 +389,19 @@ class JavaScriptSupport:
         )
 
     def _find_class_definition(
-        self, source: str, class_name: str, analyzer: TreeSitterAnalyzer
-    ) -> tuple[str, str] | None:
-        """Find a class definition and extract its JSDoc comment and indentation.
+        self, source: str, class_name: str, analyzer: TreeSitterAnalyzer, target_method_name: str | None = None
+    ) -> tuple[str, str, str, str] | None:
+        """Find a class definition and extract its JSDoc, indentation, constructor, and fields.
 
         Args:
             source: The source code to search.
             class_name: The name of the class to find.
             analyzer: TreeSitterAnalyzer for parsing.
+            target_method_name: Name of the target method (to exclude from extracted context).
 
         Returns:
-            Tuple of (jsdoc_comment, indentation) or None if not found.
+            Tuple of (jsdoc_comment, indentation, constructor_code, fields_code) or None if not found.
+            Constructor and fields are included to provide context for method optimization.
 
         """
         source_bytes = source.encode("utf8")
@@ -432,7 +443,83 @@ class JavaScriptSupport:
             if comment_text.strip().startswith("/**"):
                 jsdoc = comment_text
 
-        return (jsdoc, indentation)
+        # Find class body and extract constructor and fields
+        constructor_code = ""
+        fields_code = ""
+
+        body_node = class_node.child_by_field_name("body")
+        if body_node:
+            constructor_code, fields_code = self._extract_class_context(
+                body_node, source_bytes, lines, target_method_name
+            )
+
+        return (jsdoc, indentation, constructor_code, fields_code)
+
+    def _extract_class_context(
+        self, body_node: Any, source_bytes: bytes, lines: list[str], target_method_name: str | None
+    ) -> tuple[str, str]:
+        """Extract constructor and field declarations from a class body.
+
+        Args:
+            body_node: Tree-sitter node for the class body.
+            source_bytes: Source code as bytes.
+            lines: Source code split into lines.
+            target_method_name: Name of the target method to exclude.
+
+        Returns:
+            Tuple of (constructor_code, fields_code).
+
+        """
+        constructor_parts: list[str] = []
+        field_parts: list[str] = []
+
+        for child in body_node.children:
+            # Skip braces and the target method
+            if child.type in ("{", "}"):
+                continue
+
+            # Handle method definitions (including constructor)
+            if child.type == "method_definition":
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    method_name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+
+                    # Extract constructor (but not the target method)
+                    if method_name == "constructor":
+                        # Get start line, check for preceding JSDoc
+                        start_line = child.start_point[0]
+                        end_line = child.end_point[0]
+
+                        # Look for JSDoc comment before constructor
+                        jsdoc_start = start_line
+                        prev_sibling = child.prev_named_sibling
+                        if prev_sibling and prev_sibling.type == "comment":
+                            comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+                            if comment_text.strip().startswith("/**"):
+                                jsdoc_start = prev_sibling.start_point[0]
+
+                        constructor_lines = lines[jsdoc_start : end_line + 1]
+                        constructor_parts.append("".join(constructor_lines))
+
+            # Handle public field definitions (class properties)
+            # In JS/TS: public_field_definition, field_definition
+            elif child.type in ("public_field_definition", "field_definition"):
+                start_line = child.start_point[0]
+                end_line = child.end_point[0]
+
+                # Look for preceding comment
+                comment_start = start_line
+                prev_sibling = child.prev_named_sibling
+                if prev_sibling and prev_sibling.type == "comment":
+                    comment_start = prev_sibling.start_point[0]
+
+                field_lines = lines[comment_start : end_line + 1]
+                field_parts.append("".join(field_lines))
+
+        constructor_code = "".join(constructor_parts)
+        fields_code = "".join(field_parts)
+
+        return (constructor_code, fields_code)
 
     def _find_helper_functions(
         self, function: FunctionInfo, source: str, analyzer: TreeSitterAnalyzer, imports: list[Any], module_root: Path
