@@ -107,6 +107,19 @@ class ModuleLevelDeclaration:
     is_exported: bool  # Whether the declaration is exported
 
 
+@dataclass
+class TypeDefinition:
+    """Represents a type definition (interface, type alias, class, or enum)."""
+
+    name: str  # Type name
+    definition_type: str  # "interface", "type", "class", "enum"
+    source_code: str  # Full definition source code
+    start_line: int
+    end_line: int
+    is_exported: bool  # Whether the definition is exported
+    file_path: Path | None = None  # File where the type is defined
+
+
 class TreeSitterAnalyzer:
     """Cross-language code analysis using tree-sitter.
 
@@ -1157,6 +1170,291 @@ class TreeSitterAnalyzer:
                 return True
 
         return False
+
+    def extract_type_annotations(self, source: str, function_name: str, function_line: int) -> set[str]:
+        """Extract type annotation names from a function's parameters and return type.
+
+        Finds the function by name and line number, then extracts all user-defined type names
+        from its type annotations (parameters and return type).
+
+        Args:
+            source: The source code to analyze.
+            function_name: Name of the function to find.
+            function_line: Start line of the function (1-indexed).
+
+        Returns:
+            Set of type names found in the function's annotations.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        type_names: set[str] = set()
+
+        # Find the function node
+        func_node = self._find_function_node(tree.root_node, source_bytes, function_name, function_line)
+        if not func_node:
+            return type_names
+
+        # Extract type annotations from parameters
+        params_node = func_node.child_by_field_name("parameters")
+        if params_node:
+            self._extract_type_names_from_node(params_node, source_bytes, type_names)
+
+        # Extract return type annotation
+        return_type_node = func_node.child_by_field_name("return_type")
+        if return_type_node:
+            self._extract_type_names_from_node(return_type_node, source_bytes, type_names)
+
+        return type_names
+
+    def extract_class_field_types(self, source: str, class_name: str) -> set[str]:
+        """Extract type annotation names from class field declarations.
+
+        Args:
+            source: The source code to analyze.
+            class_name: Name of the class to analyze.
+
+        Returns:
+            Set of type names found in class field annotations.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        type_names: set[str] = set()
+
+        # Find the class node
+        class_node = self._find_class_node(tree.root_node, source_bytes, class_name)
+        if not class_node:
+            return type_names
+
+        # Find class body and extract field type annotations
+        body_node = class_node.child_by_field_name("body")
+        if body_node:
+            for child in body_node.children:
+                # Handle public_field_definition (JS/TS class fields)
+                if child.type in ("public_field_definition", "field_definition"):
+                    type_annotation = child.child_by_field_name("type")
+                    if type_annotation:
+                        self._extract_type_names_from_node(type_annotation, source_bytes, type_names)
+
+        return type_names
+
+    def _find_function_node(self, node: Node, source_bytes: bytes, function_name: str, function_line: int) -> Node | None:
+        """Find a function/method node by name and line number."""
+        if node.type in ("function_declaration", "method_definition", "function_expression", "generator_function_declaration"):
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                name = self.get_node_text(name_node, source_bytes)
+                # Line is 1-indexed, tree-sitter is 0-indexed
+                if name == function_name and (node.start_point[0] + 1) == function_line:
+                    return node
+
+        # Check arrow functions assigned to variables
+        if node.type == "lexical_declaration":
+            for child in node.children:
+                if child.type == "variable_declarator":
+                    name_node = child.child_by_field_name("name")
+                    value_node = child.child_by_field_name("value")
+                    if name_node and value_node and value_node.type == "arrow_function":
+                        name = self.get_node_text(name_node, source_bytes)
+                        if name == function_name and (node.start_point[0] + 1) == function_line:
+                            return value_node
+
+        # Recurse into children
+        for child in node.children:
+            result = self._find_function_node(child, source_bytes, function_name, function_line)
+            if result:
+                return result
+
+        return None
+
+    def _find_class_node(self, node: Node, source_bytes: bytes, class_name: str) -> Node | None:
+        """Find a class node by name."""
+        if node.type in ("class_declaration", "class"):
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                name = self.get_node_text(name_node, source_bytes)
+                if name == class_name:
+                    return node
+
+        for child in node.children:
+            result = self._find_class_node(child, source_bytes, class_name)
+            if result:
+                return result
+
+        return None
+
+    def _extract_type_names_from_node(self, node: Node, source_bytes: bytes, type_names: set[str]) -> None:
+        """Recursively extract type names from a type annotation node.
+
+        Handles various TypeScript type annotation patterns:
+        - Simple types: number, string, Point
+        - Generic types: Array<T>, Promise<T>
+        - Union types: A | B
+        - Intersection types: A & B
+        - Array types: T[]
+        - Tuple types: [A, B]
+        - Object/mapped types: { key: Type }
+
+        Args:
+            node: Tree-sitter node to analyze.
+            source_bytes: Source code as bytes.
+            type_names: Set to add found type names to.
+
+        """
+        # Handle type identifiers (the actual type name references)
+        if node.type == "type_identifier":
+            type_name = self.get_node_text(node, source_bytes)
+            # Skip primitive types
+            if type_name not in ("number", "string", "boolean", "void", "null", "undefined", "any", "never", "unknown", "object", "symbol", "bigint"):
+                type_names.add(type_name)
+            return
+
+        # Handle regular identifiers in type position (can happen in some contexts)
+        if node.type == "identifier" and node.parent and node.parent.type in ("type_annotation", "generic_type"):
+            type_name = self.get_node_text(node, source_bytes)
+            if type_name not in ("number", "string", "boolean", "void", "null", "undefined", "any", "never", "unknown", "object", "symbol", "bigint"):
+                type_names.add(type_name)
+            return
+
+        # Handle nested_type_identifier (e.g., Namespace.Type)
+        if node.type == "nested_type_identifier":
+            # Get the full qualified name
+            type_name = self.get_node_text(node, source_bytes)
+            # Add both the full name and the first part (namespace)
+            type_names.add(type_name)
+            # Also extract the module/namespace part
+            module_node = node.child_by_field_name("module")
+            if module_node:
+                type_names.add(self.get_node_text(module_node, source_bytes))
+            return
+
+        # Recurse into all children for compound types
+        for child in node.children:
+            self._extract_type_names_from_node(child, source_bytes, type_names)
+
+    def find_type_definitions(self, source: str) -> list[TypeDefinition]:
+        """Find all type definitions (interface, type, class, enum) in source code.
+
+        Args:
+            source: The source code to analyze.
+
+        Returns:
+            List of TypeDefinition objects.
+
+        """
+        source_bytes = source.encode("utf8")
+        tree = self.parse(source_bytes)
+        definitions: list[TypeDefinition] = []
+
+        # Walk through top-level nodes
+        for child in tree.root_node.children:
+            self._extract_type_definition(child, source_bytes, definitions)
+
+        return definitions
+
+    def _extract_type_definition(
+        self, node: Node, source_bytes: bytes, definitions: list[TypeDefinition], is_exported: bool = False
+    ) -> None:
+        """Extract type definitions from a node."""
+        # Handle export statements - unwrap to get the actual definition
+        if node.type == "export_statement":
+            for child in node.children:
+                if child.type in ("interface_declaration", "type_alias_declaration", "class_declaration", "enum_declaration"):
+                    self._extract_type_definition(child, source_bytes, definitions, is_exported=True)
+            return
+
+        # Extract interface definitions
+        if node.type == "interface_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                # Look for preceding JSDoc comment
+                jsdoc = ""
+                prev_sibling = node.prev_named_sibling
+                if prev_sibling and prev_sibling.type == "comment":
+                    comment_text = self.get_node_text(prev_sibling, source_bytes)
+                    if comment_text.strip().startswith("/**"):
+                        jsdoc = comment_text + "\n"
+
+                definitions.append(
+                    TypeDefinition(
+                        name=self.get_node_text(name_node, source_bytes),
+                        definition_type="interface",
+                        source_code=jsdoc + self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
+
+        # Extract type alias definitions
+        elif node.type == "type_alias_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                # Look for preceding JSDoc comment
+                jsdoc = ""
+                prev_sibling = node.prev_named_sibling
+                if prev_sibling and prev_sibling.type == "comment":
+                    comment_text = self.get_node_text(prev_sibling, source_bytes)
+                    if comment_text.strip().startswith("/**"):
+                        jsdoc = comment_text + "\n"
+
+                definitions.append(
+                    TypeDefinition(
+                        name=self.get_node_text(name_node, source_bytes),
+                        definition_type="type",
+                        source_code=jsdoc + self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
+
+        # Extract enum definitions
+        elif node.type == "enum_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                # Look for preceding JSDoc comment
+                jsdoc = ""
+                prev_sibling = node.prev_named_sibling
+                if prev_sibling and prev_sibling.type == "comment":
+                    comment_text = self.get_node_text(prev_sibling, source_bytes)
+                    if comment_text.strip().startswith("/**"):
+                        jsdoc = comment_text + "\n"
+
+                definitions.append(
+                    TypeDefinition(
+                        name=self.get_node_text(name_node, source_bytes),
+                        definition_type="enum",
+                        source_code=jsdoc + self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
+
+        # Extract class definitions (as types)
+        elif node.type == "class_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                # Look for preceding JSDoc comment
+                jsdoc = ""
+                prev_sibling = node.prev_named_sibling
+                if prev_sibling and prev_sibling.type == "comment":
+                    comment_text = self.get_node_text(prev_sibling, source_bytes)
+                    if comment_text.strip().startswith("/**"):
+                        jsdoc = comment_text + "\n"
+
+                definitions.append(
+                    TypeDefinition(
+                        name=self.get_node_text(name_node, source_bytes),
+                        definition_type="class",
+                        source_code=jsdoc + self.get_node_text(node, source_bytes),
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        is_exported=is_exported,
+                    )
+                )
 
 
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:

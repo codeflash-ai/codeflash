@@ -23,7 +23,7 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
+from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, TypeDefinition, get_analyzer_for_file
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -364,10 +364,32 @@ class JavaScriptSupport:
             imp_lines = lines[imp.start_line - 1 : imp.end_line]
             import_lines.append("".join(imp_lines).strip())
 
-        # Find module-level declarations (global variables/constants) referenced by the function
-        read_only_context = self._find_referenced_globals(
-            target_code=target_code, helpers=helpers, source=source, analyzer=analyzer, imports=imports
+        # Extract type definitions for function parameters and class fields
+        type_definitions_context, type_definition_names = self._extract_type_definitions_context(
+            function=function,
+            source=source,
+            analyzer=analyzer,
+            imports=imports,
+            module_root=module_root,
         )
+
+        # Find module-level declarations (global variables/constants) referenced by the function
+        # Exclude type definitions that are already included above to avoid duplication
+        read_only_context = self._find_referenced_globals(
+            target_code=target_code,
+            helpers=helpers,
+            source=source,
+            analyzer=analyzer,
+            imports=imports,
+            exclude_names=type_definition_names,
+        )
+
+        # Combine type definitions with other read-only context
+        if type_definitions_context:
+            if read_only_context:
+                read_only_context = type_definitions_context + "\n\n" + read_only_context
+            else:
+                read_only_context = type_definitions_context
 
         # Validate that the extracted code is syntactically valid
         # If not, raise an error to fail the optimization early
@@ -612,6 +634,7 @@ class JavaScriptSupport:
         source: str,
         analyzer: TreeSitterAnalyzer,
         imports: list[Any],
+        exclude_names: set[str] | None = None,
     ) -> str:
         """Find module-level declarations referenced by the target function and its helpers.
 
@@ -621,11 +644,15 @@ class JavaScriptSupport:
             source: Full source code of the file.
             analyzer: TreeSitterAnalyzer for parsing.
             imports: List of ImportInfo objects.
+            exclude_names: Names to exclude from the result (e.g., type definitions).
 
         Returns:
             String containing all referenced global declarations.
 
         """
+        if exclude_names is None:
+            exclude_names = set()
+
         # Find all module-level declarations in the source file
         module_declarations = analyzer.find_module_level_declarations(source)
 
@@ -646,8 +673,8 @@ class JavaScriptSupport:
         decl_map: dict[str, Any] = {}
         for decl in module_declarations:
             # Skip function declarations (they are handled as helpers)
-            # Also skip if it's an import
-            if decl.name not in imported_names:
+            # Also skip if it's an import or an excluded name (type definitions)
+            if decl.name not in imported_names and decl.name not in exclude_names:
                 decl_map[decl.name] = decl
 
         if not decl_map:
@@ -686,6 +713,172 @@ class JavaScriptSupport:
         # Build the context string
         global_lines = [decl.source_code for decl in referenced_globals]
         return "\n".join(global_lines)
+
+    def _extract_type_definitions_context(
+        self,
+        function: FunctionInfo,
+        source: str,
+        analyzer: TreeSitterAnalyzer,
+        imports: list[Any],
+        module_root: Path,
+    ) -> tuple[str, set[str]]:
+        """Extract type definitions used by the function for read-only context.
+
+        Finds user-defined types referenced in:
+        1. Function parameters
+        2. Function return type
+        3. Class fields (if the function is a class method)
+
+        Then looks up these type definitions in:
+        1. The same file
+        2. Imported files
+
+        Args:
+            function: The target function to analyze.
+            source: Source code of the file.
+            analyzer: TreeSitterAnalyzer for parsing.
+            imports: List of ImportInfo objects.
+            module_root: Root directory of the module.
+
+        Returns:
+            Tuple of (type definitions string, set of found type names).
+
+        """
+        # Extract type names from function parameters and return type
+        type_names = analyzer.extract_type_annotations(source, function.name, function.start_line or 1)
+
+        # If this is a class method, also extract types from class fields
+        if function.is_method and function.parents:
+            for parent in function.parents:
+                if parent.type == "ClassDef":
+                    field_types = analyzer.extract_class_field_types(source, parent.name)
+                    type_names.update(field_types)
+
+        if not type_names:
+            return "", set()
+
+        # Find type definitions in the same file
+        same_file_definitions = analyzer.find_type_definitions(source)
+        found_definitions: list[TypeDefinition] = []
+
+        # Build a map of type name -> definition for same-file types
+        same_file_type_map = {defn.name: defn for defn in same_file_definitions}
+
+        # Track which types we've found (avoid duplicates)
+        found_type_names: set[str] = set()
+
+        # First, look for types defined in the same file
+        for type_name in type_names:
+            if type_name in same_file_type_map and type_name not in found_type_names:
+                found_definitions.append(same_file_type_map[type_name])
+                found_type_names.add(type_name)
+
+        # For types not found in same file, look in imported files
+        remaining_types = type_names - found_type_names
+        if remaining_types:
+            imported_definitions = self._find_imported_type_definitions(
+                remaining_types, imports, module_root, function.file_path
+            )
+            for defn in imported_definitions:
+                found_definitions.append(defn)
+                found_type_names.add(defn.name)
+
+        if not found_definitions:
+            return "", found_type_names
+
+        # Sort by file path and line number for consistent ordering
+        found_definitions.sort(key=lambda d: (str(d.file_path or ""), d.start_line))
+
+        # Build the type definitions context string
+        # Group by file for better organization
+        type_def_parts: list[str] = []
+        current_file: Path | None = None
+
+        for defn in found_definitions:
+            if defn.file_path and defn.file_path != current_file:
+                current_file = defn.file_path
+                # Add a comment indicating the source file
+                type_def_parts.append(f"// From {current_file.name}")
+
+            type_def_parts.append(defn.source_code)
+
+        return "\n\n".join(type_def_parts), found_type_names
+
+    def _find_imported_type_definitions(
+        self,
+        type_names: set[str],
+        imports: list[Any],
+        module_root: Path,
+        source_file_path: Path,
+    ) -> list[TypeDefinition]:
+        """Find type definitions in imported files.
+
+        Args:
+            type_names: Set of type names to look for.
+            imports: List of ImportInfo objects from the source file.
+            module_root: Root directory of the module.
+            source_file_path: Path to the source file (for resolving relative imports).
+
+        Returns:
+            List of TypeDefinition objects found in imported files.
+
+        """
+        found_definitions: list[TypeDefinition] = []
+
+        # Build a map of type names to their import info and original names
+        type_import_map: dict[str, tuple[Any, str]] = {}  # local_name -> (ImportInfo, original_name)
+        for imp in imports:
+            # Check if any of our type names are imported from this module
+            for name, alias in imp.named_imports:
+                # The type could be imported with an alias
+                local_name = alias if alias else name
+                if local_name in type_names:
+                    type_import_map[local_name] = (imp, name)  # (ImportInfo, original_name)
+
+        if not type_import_map:
+            return found_definitions
+
+        # Resolve imports and find type definitions
+        from codeflash.languages.javascript.import_resolver import ImportResolver
+
+        try:
+            import_resolver = ImportResolver(module_root)
+        except Exception:
+            logger.debug("Failed to create ImportResolver for type definition lookup")
+            return found_definitions
+
+        for local_name, (import_info, original_name) in type_import_map.items():
+            try:
+                # Resolve the import to an actual file path
+                resolved_import = import_resolver.resolve_import(import_info, source_file_path)
+                if not resolved_import or not resolved_import.file_path.exists():
+                    continue
+
+                resolved_path = resolved_import.file_path
+
+                # Read the source file and find type definitions
+                try:
+                    imported_source = resolved_path.read_text(encoding="utf-8")
+                except Exception:
+                    continue
+
+                # Get analyzer for the imported file
+                imported_analyzer = get_analyzer_for_file(resolved_path)
+                type_defs = imported_analyzer.find_type_definitions(imported_source)
+
+                # Find the type we're looking for
+                for defn in type_defs:
+                    if defn.name == original_name:
+                        # Add file path info to the definition
+                        defn.file_path = resolved_path
+                        found_definitions.append(defn)
+                        break
+
+            except Exception as e:
+                logger.debug(f"Failed to resolve type definition for {local_name}: {e}")
+                continue
+
+        return found_definitions
 
     def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function.

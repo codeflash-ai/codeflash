@@ -1188,3 +1188,401 @@ class TestCodeExtractorIntegration:
         # FunctionSource uses only_function_name, not name
         helper_names = {h.only_function_name for h in context.helper_functions}
         assert "factorial" in helper_names, f"factorial helper not found. Found: {helper_names}"
+
+
+class TestTypeDefinitionExtraction:
+    """Tests for TypeScript type definition extraction in read-only context."""
+
+    @pytest.fixture
+    def ts_support(self):
+        """Create TypeScriptSupport instance."""
+        return TypeScriptSupport()
+
+    @pytest.fixture
+    def ts_types_project(self, tmp_path):
+        """Create a temporary TypeScript project with type definitions."""
+        project_dir = tmp_path / "ts_types_project"
+        project_dir.mkdir()
+
+        # Create types.ts with type definitions
+        types_file = project_dir / "types.ts"
+        types_file.write_text("""\
+/**
+ * Configuration options for calculations.
+ */
+export interface CalculationConfig {
+    precision: number;
+    enableCaching: boolean;
+}
+
+/**
+ * Point in 2D space.
+ */
+export interface Point {
+    x: number;
+    y: number;
+}
+
+/**
+ * Rounding mode enum.
+ */
+export enum RoundingMode {
+    FLOOR = 'floor',
+    CEIL = 'ceil',
+    ROUND = 'round',
+}
+
+/**
+ * Result type alias.
+ */
+export type Result<T> = {
+    value: T;
+    success: boolean;
+};
+""")
+        return project_dir
+
+    def test_extract_same_file_interface_from_parameter(self, ts_support, tmp_path):
+        """Test extracting interface type definition when used in function parameter."""
+        source = """\
+interface Point {
+    x: number;
+    y: number;
+}
+
+function distance(p1: Point, p2: Point): number {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+export { distance };
+"""
+        test_file = tmp_path / "geometry.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        distance_func = next(f for f in functions if f.name == "distance")
+
+        context = ts_support.extract_code_context(
+            function=distance_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # Type definition should be in read-only context with exact match
+        expected_read_only = """\
+interface Point {
+    x: number;
+    y: number;
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_extract_same_file_enum_from_parameter(self, ts_support, tmp_path):
+        """Test extracting enum type definition when used in function parameter."""
+        source = """\
+enum Status {
+    PENDING = 'pending',
+    SUCCESS = 'success',
+    FAILURE = 'failure',
+}
+
+function processStatus(status: Status): string {
+    switch (status) {
+        case Status.PENDING:
+            return 'Processing...';
+        case Status.SUCCESS:
+            return 'Done!';
+        case Status.FAILURE:
+            return 'Failed!';
+    }
+}
+
+export { processStatus };
+"""
+        test_file = tmp_path / "status.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        process_func = next(f for f in functions if f.name == "processStatus")
+
+        context = ts_support.extract_code_context(
+            function=process_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # Enum should be in read-only context with exact match
+        expected_read_only = """\
+enum Status {
+    PENDING = 'pending',
+    SUCCESS = 'success',
+    FAILURE = 'failure',
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_extract_same_file_type_alias_from_return_type(self, ts_support, tmp_path):
+        """Test extracting type alias when used in function return type."""
+        source = """\
+type Result<T> = {
+    value: T;
+    success: boolean;
+};
+
+function compute(x: number): Result<number> {
+    return { value: x * 2, success: true };
+}
+
+export { compute };
+"""
+        test_file = tmp_path / "compute.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        compute_func = next(f for f in functions if f.name == "compute")
+
+        context = ts_support.extract_code_context(
+            function=compute_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # Type alias should be in read-only context with exact match
+        expected_read_only = """\
+type Result<T> = {
+    value: T;
+    success: boolean;
+};"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_extract_class_field_types(self, ts_support, tmp_path):
+        """Test extracting type definitions used in class fields."""
+        source = """\
+interface Config {
+    timeout: number;
+    retries: number;
+}
+
+class Service {
+    private config: Config;
+
+    constructor(config: Config) {
+        this.config = config;
+    }
+
+    getTimeout(): number {
+        return this.config.timeout;
+    }
+}
+
+export { Service };
+"""
+        test_file = tmp_path / "service.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        get_timeout_func = next(f for f in functions if f.name == "getTimeout")
+
+        context = ts_support.extract_code_context(
+            function=get_timeout_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # Config interface should be in read-only context with exact match
+        expected_read_only = """\
+interface Config {
+    timeout: number;
+    retries: number;
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_primitive_types_not_included(self, ts_support, tmp_path):
+        """Test that primitive types (number, string, etc.) are not extracted."""
+        source = """\
+function add(a: number, b: number): number {
+    return a + b;
+}
+
+export { add };
+"""
+        test_file = tmp_path / "add.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        add_func = next(f for f in functions if f.name == "add")
+
+        context = ts_support.extract_code_context(
+            function=add_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # No type definitions should be extracted for primitives - exact empty match
+        assert context.read_only_context == "", (
+            f"Should not extract type definitions for primitive types.\n"
+            f"Expected empty string, got:\n{context.read_only_context}"
+        )
+
+    def test_extract_multiple_types(self, ts_support, tmp_path):
+        """Test extracting multiple type definitions from same file."""
+        source = """\
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface Size {
+    width: number;
+    height: number;
+}
+
+function createRect(origin: Point, size: Size): { origin: Point; size: Size } {
+    return { origin, size };
+}
+
+export { createRect };
+"""
+        test_file = tmp_path / "rect.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        create_rect_func = next(f for f in functions if f.name == "createRect")
+
+        context = ts_support.extract_code_context(
+            function=create_rect_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # Both Point and Size should be in read-only context with exact match
+        expected_read_only = """\
+interface Point {
+    x: number;
+    y: number;
+}
+
+interface Size {
+    width: number;
+    height: number;
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_extract_imported_type_definition(self, ts_support, ts_types_project):
+        """Test extracting type definitions from imported files."""
+        # Create a file that imports types from types.ts
+        geometry_file = ts_types_project / "geometry.ts"
+        geometry_file.write_text("""\
+import { Point, CalculationConfig } from './types';
+
+function calculateDistance(p1: Point, p2: Point, config: CalculationConfig): number {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (config.precision > 0) {
+        const factor = Math.pow(10, config.precision);
+        return Math.round(distance * factor) / factor;
+    }
+    return distance;
+}
+
+export { calculateDistance };
+""")
+
+        functions = ts_support.discover_functions(geometry_file)
+        calc_distance_func = next(f for f in functions if f.name == "calculateDistance")
+
+        context = ts_support.extract_code_context(
+            function=calc_distance_func, project_root=ts_types_project, module_root=ts_types_project
+        )
+
+        # Imported type definitions should be in read-only context with exact match
+        # Types are sorted by file path and line number, with file comments
+        # Note: The extraction uses tree-sitter which doesn't capture JSDoc for interface
+        # definitions in separate files - this is a known limitation
+        expected_read_only = """\
+// From types.ts
+
+interface CalculationConfig {
+    precision: number;
+    enableCaching: boolean;
+}
+
+interface Point {
+    x: number;
+    y: number;
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
+
+    def test_type_with_jsdoc_included(self, ts_support, tmp_path):
+        """Test that JSDoc comments are included with type definitions."""
+        source = """\
+/**
+ * Represents a user in the system.
+ * @property id - Unique identifier
+ * @property name - Display name
+ */
+interface User {
+    id: string;
+    name: string;
+}
+
+function greetUser(user: User): string {
+    return `Hello, ${user.name}!`;
+}
+
+export { greetUser };
+"""
+        test_file = tmp_path / "user.ts"
+        test_file.write_text(source)
+
+        functions = ts_support.discover_functions(test_file)
+        greet_func = next(f for f in functions if f.name == "greetUser")
+
+        context = ts_support.extract_code_context(
+            function=greet_func, project_root=tmp_path, module_root=tmp_path
+        )
+
+        # JSDoc should be included with the interface - exact match
+        expected_read_only = """\
+/**
+ * Represents a user in the system.
+ * @property id - Unique identifier
+ * @property name - Display name
+ */
+interface User {
+    id: string;
+    name: string;
+}"""
+
+        assert context.read_only_context is not None, "read_only_context should not be None"
+        assert context.read_only_context.strip() == expected_read_only.strip(), (
+            f"Read-only context does not match expected.\n"
+            f"Expected:\n{expected_read_only}\n\n"
+            f"Got:\n{context.read_only_context}"
+        )
