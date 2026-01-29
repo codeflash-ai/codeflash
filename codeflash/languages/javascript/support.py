@@ -978,6 +978,62 @@ class JavaScriptSupport:
 
         return None
 
+    def get_module_path(
+        self, source_file: Path, project_root: Path, tests_root: Path | None = None
+    ) -> str:
+        """Get the module path for importing a JavaScript source file from tests.
+
+        For JavaScript, this returns a relative path from the tests directory to the source file
+        (e.g., '../fibonacci' for source at /project/fibonacci.js and tests at /project/tests/).
+
+        Args:
+            source_file: Path to the source file.
+            project_root: Root of the project.
+            tests_root: Root directory for tests (required for JS relative path calculation).
+
+        Returns:
+            Relative path string for importing the module from tests.
+
+        """
+        import os
+
+        from codeflash.cli_cmds.console import logger
+
+        if tests_root is None:
+            tests_root = self.find_test_root(project_root) or project_root
+
+        try:
+            # Resolve both paths to absolute to ensure consistent relative path calculation
+            source_file_abs = source_file.resolve().with_suffix("")
+            tests_root_abs = tests_root.resolve()
+
+            # Find the project root using language support
+            project_root_from_lang = self.find_test_root(project_root)
+
+            # Validate that tests_root is within the same project as the source file
+            if project_root_from_lang:
+                try:
+                    tests_root_abs.relative_to(project_root_from_lang)
+                except ValueError:
+                    # tests_root is outside the project - use default
+                    logger.warning(
+                        f"Configured tests_root {tests_root_abs} is outside project {project_root_from_lang}. "
+                        f"Using default: {project_root_from_lang / 'tests'}"
+                    )
+                    tests_root_abs = project_root_from_lang / "tests"
+                    if not tests_root_abs.exists():
+                        tests_root_abs = project_root_from_lang
+
+            # Use os.path.relpath to compute relative path from tests_root to source file
+            rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
+            logger.debug(
+                f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
+            )
+            return rel_path
+        except ValueError:
+            # Fallback if paths are on different drives (Windows)
+            rel_path = source_file.relative_to(project_root)
+            return "../" + rel_path.with_suffix("").as_posix()
 
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.

@@ -79,7 +79,7 @@ from codeflash.discovery.functions_to_optimize import was_function_previously_op
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
 from codeflash.languages.base import FunctionInfo, Language
-from codeflash.languages.current import is_typescript
+from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
@@ -449,8 +449,7 @@ class FunctionOptimizer:
             if function_to_optimize_source_code
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
-        # Get language support for non-Python languages
-        self.language_support = None if is_python() else get_language_support(function_to_optimize.language)
+        self.language_support = current_language_support()
         if not function_to_optimize_ast:
             # Skip Python AST parsing for non-Python languages
             if not is_python():
@@ -472,50 +471,12 @@ class FunctionOptimizer:
 
         self.args = args  # Check defaults for these
         self.function_trace_id: str = str(uuid.uuid4())
-        # For non-Python languages, we need a relative path from the test file to the source file
-        # For Python, we use dot-separated module paths
-        if not is_python():
-            # Compute relative path from tests directory to source file
-            # e.g., for source at /project/fibonacci.js and tests at /project/tests/
-            # the relative path should be ../fibonacci
-            try:
-                # Resolve both paths to absolute to ensure consistent relative path calculation
-                source_file_abs = self.function_to_optimize.file_path.resolve().with_suffix("")
-                tests_root_abs = test_cfg.tests_root.resolve()
-
-                # Find the project root using language support
-                # For JavaScript/TypeScript, use the js_project_root if available
-                lang_project_root = test_cfg.js_project_root if test_cfg.js_project_root else self.project_root
-                project_root_from_lang = self.language_support.find_test_root(lang_project_root)
-
-                # Validate that tests_root is within the same project as the source file
-                if project_root_from_lang:
-                    try:
-                        tests_root_abs.relative_to(project_root_from_lang)
-                    except ValueError:
-                        # tests_root is outside the project - use default
-                        logger.warning(
-                            f"Configured tests_root {tests_root_abs} is outside project {project_root_from_lang}. "
-                            f"Using default: {project_root_from_lang / 'tests'}"
-                        )
-                        tests_root_abs = project_root_from_lang / "tests"
-                        if not tests_root_abs.exists():
-                            tests_root_abs = project_root_from_lang
-
-                # Use os.path.relpath to compute relative path from tests_root to source file
-                rel_path = os.path.relpath(str(source_file_abs), str(tests_root_abs))
-                self.original_module_path = rel_path
-                logger.debug(
-                    f"!lsp|Module path: source={source_file_abs}, tests_root={tests_root_abs}, rel_path={rel_path}"
-                )
-            except ValueError:
-                # Fallback if paths are on different drives (Windows)
-                rel_path = self.function_to_optimize.file_path.relative_to(self.project_root)
-                self.original_module_path = "../" + rel_path.with_suffix("").as_posix()
-        else:
-            self.original_module_path = module_name_from_file_path(
-                self.function_to_optimize.file_path, self.project_root
-            )
+        # Get module path using language support (handles Python vs JavaScript differences)
+        self.original_module_path = self.language_support.get_module_path(
+            source_file=self.function_to_optimize.file_path,
+            project_root=self.project_root,
+            tests_root=test_cfg.tests_root,
+        )
 
         self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
         self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
@@ -646,7 +607,7 @@ class FunctionOptimizer:
 
             logger.info(f"Generated test {i + 1}/{count_tests}:")
             # Use correct extension based on language
-            test_ext = self.language_support.get_test_file_suffix() if not is_python() else ".py"
+            test_ext = self.language_support.get_test_file_suffix()
             code_print(
                 generated_test.generated_original_test_source,
                 file_name=f"test_{i + 1}{test_ext}",
@@ -1068,7 +1029,7 @@ class FunctionOptimizer:
         logger.info(f"h3|Optimization candidate {candidate_index}/{total_candidates}:")
         candidate = candidate_node.candidate
         # Use correct extension based on language
-        ext = ".py" if is_python() else self.language_support.file_extensions[0]
+        ext = self.language_support.file_extensions[0]
         code_print(
             candidate.source_code.flat,
             file_name=f"candidate_{candidate_index}{ext}",
@@ -1999,7 +1960,7 @@ class FunctionOptimizer:
             if best_optimization:
                 logger.info("h2|Best candidate 🚀")
                 # Use correct extension based on language
-                best_ext = ".py" if is_python() else self.language_support.file_extensions[0]
+                best_ext = self.language_support.file_extensions[0]
                 code_print(
                     best_optimization.candidate.source_code.flat,
                     file_name=f"best_candidate{best_ext}",

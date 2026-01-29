@@ -370,6 +370,7 @@ class MockInvocationId:
 class MockTestsInFile:
     """Mocks a part of codeflash.models.models.FunctionCalledInTest"""
     test_file: Path
+    test_type: str = "EXISTING_UNIT_TEST"
 
 
 @dataclass(frozen=True)

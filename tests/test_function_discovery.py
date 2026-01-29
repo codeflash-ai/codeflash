@@ -588,5 +588,5 @@ def test_function_in_tests_dir():
             assert "not_in_checkpoint_function" in remaining_functions
             assert "propagate_attributes" not in remaining_functions
             assert "vanilla_function" not in remaining_functions
-        files_and_funcs = get_all_files_and_functions(module_root_path=temp_dir)
+        files_and_funcs = get_all_files_and_functions(module_root_path=temp_dir, ignore_paths=[])
         assert len(files_and_funcs) == 6

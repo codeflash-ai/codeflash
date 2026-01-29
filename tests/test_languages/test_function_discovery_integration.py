@@ -29,7 +29,7 @@ class TestGetFilesForLanguage:
         (tmp_path / "test.js").write_text("const x = 1;")
         (tmp_path / "test.txt").write_text("hello")
 
-        files = get_files_for_language(tmp_path, Language.PYTHON)
+        files = get_files_for_language(tmp_path, ignore_paths=[], language=Language.PYTHON)
         names = {f.name for f in files}
 
         assert "test.py" in names
@@ -42,7 +42,7 @@ class TestGetFilesForLanguage:
         (tmp_path / "test.js").write_text("const x = 1;")
         (tmp_path / "test.jsx").write_text("const App = () => <div/>;")
 
-        files = get_files_for_language(tmp_path, Language.JAVASCRIPT)
+        files = get_files_for_language(tmp_path, ignore_paths=[], language=Language.JAVASCRIPT)
         names = {f.name for f in files}
 
         assert "test.py" not in names
@@ -55,7 +55,7 @@ class TestGetFilesForLanguage:
         (tmp_path / "test.js").write_text("const x = 1;")
         (tmp_path / "test.txt").write_text("hello")
 
-        files = get_files_for_language(tmp_path, language=None)
+        files = get_files_for_language(tmp_path, ignore_paths=[], language=None)
         names = {f.name for f in files}
 
         assert "test.py" in names
@@ -160,7 +160,7 @@ def add(a, b):
     return a + b
 """)
 
-        functions = get_all_files_and_functions(tmp_path)
+        functions = get_all_files_and_functions(tmp_path, ignore_paths=[])
         assert len(functions) == 1
 
     def test_discovers_javascript_files_when_specified(self, tmp_path):
@@ -171,7 +171,7 @@ function add(a, b) {
 }
 """)
 
-        functions = get_all_files_and_functions(tmp_path, language=Language.JAVASCRIPT)
+        functions = get_all_files_and_functions(tmp_path, ignore_paths=[], language=Language.JAVASCRIPT)
         assert len(functions) == 1
 
     def test_discovers_both_languages_when_none_specified(self, tmp_path):
@@ -186,7 +186,7 @@ function jsFunc() {
 }
 """)
 
-        functions = get_all_files_and_functions(tmp_path, language=None)
+        functions = get_all_files_and_functions(tmp_path, ignore_paths=[], language=None)
 
         # Should find both files
         assert len(functions) == 2
