@@ -303,6 +303,12 @@ class TreeSitterAnalyzer:
             name_node = node.child_by_field_name("name")
             if name_node:
                 name = self.get_node_text(name_node, source_bytes)
+            else:
+                # Fallback: search for identifier child (some tree-sitter versions)
+                for child in node.children:
+                    if child.type == "identifier":
+                        name = self.get_node_text(child, source_bytes)
+                        break
         elif node.type == "method_definition":
             is_method = True
             name_node = node.child_by_field_name("name")
@@ -1108,9 +1114,14 @@ class TreeSitterAnalyzer:
             if parent.type == "export_specifier":
                 return
 
-            # Skip parameter names in function definitions
-            if parent.type in {"formal_parameters", "required_parameter"}:
+            # Skip parameter names in function definitions (but NOT default values)
+            if parent.type == "formal_parameters":
                 return
+            if parent.type == "required_parameter":
+                # Only skip if this is the parameter name (pattern field), not the default value
+                if parent.child_by_field_name("pattern") == node:
+                    return
+                # If it's the value field (default value), it's a reference - don't skip
 
             # This is a reference
             references.add(self.get_node_text(node, source_bytes))
@@ -1132,6 +1143,10 @@ class TreeSitterAnalyzer:
 
         """
         source_bytes = source.encode("utf8")
+
+        # Generator functions always implicitly return a Generator/Iterator
+        if function_node.is_generator:
+            return True
 
         # For arrow functions with expression body, there's an implicit return
         if function_node.is_arrow:

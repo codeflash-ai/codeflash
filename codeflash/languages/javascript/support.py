@@ -723,6 +723,7 @@ class JavaScriptSupport:
         1. Function parameters
         2. Function return type
         3. Class fields (if the function is a class method)
+        4. Types referenced within other type definitions (recursive)
 
         Then looks up these type definitions in:
         1. The same file
@@ -762,21 +763,46 @@ class JavaScriptSupport:
         # Track which types we've found (avoid duplicates)
         found_type_names: set[str] = set()
 
-        # First, look for types defined in the same file
-        for type_name in type_names:
-            if type_name in same_file_type_map and type_name not in found_type_names:
-                found_definitions.append(same_file_type_map[type_name])
-                found_type_names.add(type_name)
+        # Recursively find types - including types referenced within type definitions
+        types_to_find = set(type_names)
+        processed_types: set[str] = set()
+        max_iterations = 10  # Prevent infinite loops
 
-        # For types not found in same file, look in imported files
-        remaining_types = type_names - found_type_names
-        if remaining_types:
-            imported_definitions = self._find_imported_type_definitions(
-                remaining_types, imports, module_root, function.file_path
-            )
-            for defn in imported_definitions:
-                found_definitions.append(defn)
-                found_type_names.add(defn.name)
+        for _ in range(max_iterations):
+            if not types_to_find:
+                break
+
+            new_types_to_find: set[str] = set()
+            types_not_in_same_file: set[str] = set()
+
+            for type_name in types_to_find:
+                if type_name in processed_types:
+                    continue
+                processed_types.add(type_name)
+
+                # Look in same file first
+                if type_name in same_file_type_map and type_name not in found_type_names:
+                    defn = same_file_type_map[type_name]
+                    found_definitions.append(defn)
+                    found_type_names.add(type_name)
+                    # Extract types referenced in this type definition
+                    referenced_types = self._extract_types_from_definition(defn.source_code, analyzer)
+                    new_types_to_find.update(referenced_types - found_type_names - processed_types)
+                elif type_name not in same_file_type_map and type_name not in found_type_names:
+                    # Type not found in same file, needs to be looked up in imports
+                    types_not_in_same_file.add(type_name)
+
+            # For types not found in same file, look in imported files
+            if types_not_in_same_file:
+                imported_definitions = self._find_imported_type_definitions(
+                    types_not_in_same_file, imports, module_root, function.file_path
+                )
+                for defn in imported_definitions:
+                    if defn.name not in found_type_names:
+                        found_definitions.append(defn)
+                        found_type_names.add(defn.name)
+
+            types_to_find = new_types_to_find
 
         if not found_definitions:
             return "", found_type_names
@@ -798,6 +824,48 @@ class JavaScriptSupport:
             type_def_parts.append(defn.source_code)
 
         return "\n\n".join(type_def_parts), found_type_names
+
+    def _extract_types_from_definition(self, type_source: str, analyzer: TreeSitterAnalyzer) -> set[str]:
+        """Extract type names referenced in a type definition's source code.
+
+        Args:
+            type_source: Source code of the type definition.
+            analyzer: TreeSitterAnalyzer for parsing.
+
+        Returns:
+            Set of type names found in the definition.
+
+        """
+        # Parse the type definition and find type identifiers
+        source_bytes = type_source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        type_names: set[str] = set()
+
+        def walk_for_types(node):
+            # Look for type_identifier nodes (user-defined types)
+            if node.type == "type_identifier":
+                type_name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
+                # Skip primitive types
+                if type_name not in (
+                    "number",
+                    "string",
+                    "boolean",
+                    "void",
+                    "null",
+                    "undefined",
+                    "any",
+                    "never",
+                    "unknown",
+                    "object",
+                    "symbol",
+                    "bigint",
+                ):
+                    type_names.add(type_name)
+            for child in node.children:
+                walk_for_types(child)
+
+        walk_for_types(tree.root_node)
+        return type_names
 
     def _find_imported_type_definitions(
         self, type_names: set[str], imports: list[Any], module_root: Path, source_file_path: Path
