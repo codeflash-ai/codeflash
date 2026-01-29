@@ -534,7 +534,9 @@ def replace_function_definitions_for_language(
             language=language,
         )
         # Extract just the target function from the optimized code
-        optimized_func = _extract_function_from_code(lang_support, code_to_apply, function_to_optimize.function_name)
+        optimized_func = _extract_function_from_code(
+            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+        )
         if optimized_func:
             new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
         else:
@@ -565,7 +567,7 @@ def replace_function_definitions_for_language(
                 continue
 
             # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name)
+            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
             if optimized_func:
                 new_code = lang_support.replace_function(new_code, func, optimized_func)
                 modified = True
@@ -582,7 +584,9 @@ def replace_function_definitions_for_language(
     return True
 
 
-def _extract_function_from_code(lang_support: LanguageSupport, source_code: str, function_name: str) -> str | None:
+def _extract_function_from_code(
+    lang_support: LanguageSupport, source_code: str, function_name: str, file_path: Path | None = None
+) -> str | None:
     """Extract a specific function's source code from a code string.
 
     Includes JSDoc/docstring comments if present.
@@ -591,6 +595,7 @@ def _extract_function_from_code(lang_support: LanguageSupport, source_code: str,
         lang_support: Language support instance.
         source_code: The full source code containing the function.
         function_name: Name of the function to extract.
+        file_path: Optional file path for language detection (e.g., .ts vs .js).
 
     Returns:
         The function's source code (including doc comments), or None if not found.
@@ -598,7 +603,8 @@ def _extract_function_from_code(lang_support: LanguageSupport, source_code: str,
     """
     try:
         # Use the language support to find functions in the source
-        functions = lang_support.discover_functions_from_source(source_code, None)
+        # Pass file_path for correct language detection (e.g., TypeScript vs JavaScript)
+        functions = lang_support.discover_functions_from_source(source_code, file_path)
         for func in functions:
             if func.name == function_name:
                 # Extract the function's source using line numbers
