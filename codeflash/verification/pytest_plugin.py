@@ -469,9 +469,9 @@ class PytestLoops:
                         for _, obj in inspect.getmembers(module):
                             if callable(obj):
                                 _clear_cache_for_object(obj)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     def _set_nodeid(self, nodeid: str, count: int) -> str:
