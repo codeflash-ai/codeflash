@@ -219,7 +219,7 @@ target-version = "py39"
 line-length = 120
 fix = true
 show-fixes = true
-extend-exclude = ["code_to_optimize/", "pie_test_set/", "tests/"]
+extend-exclude = ["code_to_optimize/", "pie_test_set/", "tests/", "experiments/"]
 
 [tool.ruff.lint]
 select = ["ALL"]
