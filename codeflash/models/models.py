@@ -8,6 +8,7 @@ import libcst as cst
 from rich.tree import Tree
 
 from codeflash.cli_cmds.console import DEBUG_MODE, lsp_log
+from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table
 from codeflash.lsp.lsp_message import LspMarkdownMessage
 from codeflash.models.test_type import TestType
@@ -21,10 +22,10 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import Annotated, NamedTuple, Optional, cast
+from typing import NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
@@ -35,6 +36,11 @@ from codeflash.verification.comparator import comparator
 
 @dataclass(frozen=True)
 class AIServiceRefinerRequest:
+    """Request model for code refinement API.
+
+    Supports multi-language optimization refinement with optional multi-file context.
+    """
+
     optimization_id: str
     original_source_code: str
     read_only_dependency_code: str
@@ -48,6 +54,11 @@ class AIServiceRefinerRequest:
     optimized_line_profiler_results: str
     function_references: str | None = None
     call_sequence: int | None = None
+    # Multi-language support
+    language: str = "python"  # 'python', 'javascript', 'typescript'
+    language_version: str | None = None  # e.g., '3.11.0' for Python, 'ES2022' for JS
+    # Multi-file context support
+    additional_context_files: dict[str, str] | None = None  # {filepath: content} for imported modules
 
 
 # this should be possible to auto serialize
@@ -94,6 +105,7 @@ class AIServiceCodeRepairRequest:
     modified_source_code: str
     trace_id: str
     test_diffs: list[TestDiff]
+    language: str = "python"
 
 
 class OptimizationReviewResult(NamedTuple):
@@ -130,7 +142,7 @@ class FunctionSource:
     fully_qualified_name: str
     only_function_name: str
     source_code: str
-    jedi_definition: Name
+    jedi_definition: Name | None = None  # None for non-Python languages
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FunctionSource):
@@ -224,27 +236,49 @@ class ProcessedBenchmarkInfo:
 
 
 class CodeString(BaseModel):
-    code: Annotated[str, AfterValidator(validate_python_code)]
+    code: str
     file_path: Optional[Path] = None
+    language: str = "python"  # Language for validation - only Python code is validated
+
+    @model_validator(mode="after")
+    def validate_code_syntax(self) -> CodeString:
+        """Validate code syntax for Python only."""
+        if self.language == "python":
+            validate_python_code(self.code)
+        return self
 
 
-def get_code_block_splitter(file_path: Path) -> str:
-    return f"# file: {file_path.as_posix()}"
+def get_comment_prefix(file_path: Path) -> str:
+    """Get the comment prefix for a given language."""
+    support = get_language_support(file_path)
+    return support.comment_prefix
 
 
-markdown_pattern = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
+def get_code_block_splitter(file_path: Path | None) -> str:
+    if file_path is None:
+        return ""
+    comment_prefix = get_comment_prefix(file_path)
+    return f"{comment_prefix} file: {file_path.as_posix()}"
+
+
+# Pattern to match markdown code blocks with optional language tag and file path
+# Matches: ```language:filepath\ncode\n``` or ```language\ncode\n```
+markdown_pattern = re.compile(r"```(\w+)(?::([^\n]+))?\n(.*?)\n```", re.DOTALL)
+# Legacy pattern for backward compatibility (only python)
+markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.DOTALL)
 
 
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
+    language: str = "python"  # Language for markdown code block tags
     _cache: dict = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
-        """Returns the combined Python module from all code blocks.
+        """Returns the combined source code module from all code blocks.
 
         Each block is prefixed by a file path comment to indicate its origin.
-        This representation is syntactically valid Python code.
+        The comment prefix is determined by the language attribute.
 
         Returns:
             str: The concatenated code of all blocks with file path annotations.
@@ -267,7 +301,9 @@ class CodeStringsMarkdown(BaseModel):
         """Returns a Markdown-formatted string containing all code blocks.
 
         Each block is enclosed in a triple-backtick code block with an optional
-        file path suffix (e.g., ```python:filename.py).
+        file path suffix (e.g., ```python:filename.py or ```javascript:file.js).
+
+        The language tag is determined by the `language` attribute.
 
         Returns:
             str: Markdown representation of the code blocks.
@@ -275,7 +311,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         return "\n".join(
             [
-                f"```python{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
+                f"```{self.language}{':' + code_string.file_path.as_posix() if code_string.file_path else ''}\n{code_string.code.strip()}\n```"
                 for code_string in self.code_strings
             ]
         )
@@ -295,13 +331,14 @@ class CodeStringsMarkdown(BaseModel):
         return self._cache["file_to_path"]
 
     @staticmethod
-    def parse_markdown_code(markdown_code: str) -> CodeStringsMarkdown:
+    def parse_markdown_code(markdown_code: str, expected_language: str = "python") -> CodeStringsMarkdown:
         """Parse a Markdown string into a CodeStringsMarkdown object.
 
         Extracts code blocks and their associated file paths and constructs a new CodeStringsMarkdown instance.
 
         Args:
             markdown_code (str): The Markdown-formatted string to parse.
+            expected_language (str): The expected language of code blocks (default: "python").
 
         Returns:
             CodeStringsMarkdown: Parsed object containing code blocks.
@@ -309,14 +346,22 @@ class CodeStringsMarkdown(BaseModel):
         """
         matches = markdown_pattern.findall(markdown_code)
         code_string_list = []
+        detected_language = expected_language
         try:
-            for file_path, code in matches:
-                path = file_path.strip()
-                code_string_list.append(CodeString(code=code, file_path=Path(path)))
-            return CodeStringsMarkdown(code_strings=code_string_list)
+            for language, file_path, code in matches:
+                # Use the first detected language or the expected language
+                if language:
+                    detected_language = language
+                if file_path:
+                    path = file_path.strip()
+                    code_string_list.append(CodeString(code=code, file_path=Path(path), language=detected_language))
+                else:
+                    # No file path specified - skip this block or create with None
+                    code_string_list.append(CodeString(code=code, file_path=None, language=detected_language))
+            return CodeStringsMarkdown(code_strings=code_string_list, language=detected_language)
         except ValidationError:
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
-            return CodeStringsMarkdown()
+            return CodeStringsMarkdown(language=expected_language)
 
 
 class CodeOptimizationContext(BaseModel):

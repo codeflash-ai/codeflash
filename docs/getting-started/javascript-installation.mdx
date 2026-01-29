@@ -1,0 +1,370 @@
+---
+title: "JavaScript Installation"
+description: "Install and configure Codeflash for your JavaScript/TypeScript project"
+icon: "node-js"
+---
+
+Codeflash now supports JavaScript and TypeScript projects with optimized test data serialization using V8 native serialization.
+
+### Prerequisites
+
+Before installing Codeflash for JavaScript, ensure you have:
+
+1. **Node.js 16 or above** installed
+2. **A JavaScript/TypeScript project** with a package manager (npm, yarn, pnpm, or bun)
+3. **Project dependencies installed**
+
+Good to have (optional):
+
+1. **Unit Tests** that Codeflash uses to ensure correctness of the optimizations
+
+<Warning>
+**Node.js Runtime Required**
+
+Codeflash JavaScript support uses V8 serialization API, which is available natively in Node.js. Make sure you're running on Node.js 16+ for optimal compatibility.
+
+```bash
+node --version  # Should show v16.0.0 or higher
+```
+
+</Warning>
+
+<Steps>
+<Step title="Install Codeflash CLI">
+
+Install Codeflash globally or as a development dependency in your project:
+
+<CodeGroup>
+```bash npm
+npm install --save-dev codeflash
+```
+
+```bash yarn
+yarn add --dev codeflash
+```
+
+```bash pnpm
+pnpm add --save-dev codeflash
+```
+
+```bash bun
+bun add --dev codeflash
+```
+
+```bash global
+npm install -g codeflash
+```
+</CodeGroup>
+
+<Tip>
+**Development Dependency Recommended**
+
+Codeflash is intended for development and CI workflows. Installing as a dev dependency keeps your production bundle clean.
+
+</Tip>
+</Step>
+
+<Step title="Run Automatic Configuration">
+Navigate to your project's root directory (where your `package.json` file is) and run:
+
+```bash
+codeflash init
+```
+
+When running `codeflash init`, you will see the following prompts:
+
+```text
+1. Enter your Codeflash API key (or login with Codeflash)
+2. Which JavaScript/TypeScript module do you want me to optimize? (e.g. src/)
+3. Where are your tests located? (e.g. tests/, __tests__/, *.test.js)
+4. Which test framework do you use? (jest/vitest/mocha/ava/other)
+5. Which code formatter do you use? (prettier/eslint/biome/disabled)
+6. Which git remote should Codeflash use for Pull Requests? (if multiple remotes exist)
+7. Help us improve Codeflash by sharing anonymous usage data?
+8. Install the GitHub app
+9. Install GitHub actions for Continuous optimization?
+```
+
+After you have answered these questions, the Codeflash configuration will be saved in a `codeflash.config.js` file.
+
+<Info>
+**Test Data Serialization Strategy**
+
+Codeflash uses **V8 serialization** for JavaScript test data capture. This provides:
+- ⚡ **Best performance**: 2-3x faster than alternatives
+- 🎯 **Perfect type preservation**: Maintains Date, Map, Set, TypedArrays, and more
+- 📦 **Compact binary storage**: Smallest file sizes
+- 🔄 **Framework agnostic**: Works with React, Vue, Angular, Svelte, and vanilla JS
+
+</Info>
+
+</Step>
+
+<Step title="Generate a Codeflash API Key">
+Codeflash uses cloud-hosted AI models and integrations with GitHub. If you haven't created one already, you'll need to create an API key to authorize your access.
+
+1. Visit the [Codeflash Web App](https://app.codeflash.ai/)
+2. Sign up with your GitHub account (free)
+3. Navigate to the [API Key](https://app.codeflash.ai/app/apikeys) page to generate your API key
+
+<Note>
+**Free Tier Available**
+
+Codeflash offers a **free tier** with a limited number of optimizations. Perfect for trying it out on small projects!
+
+</Note>
+</Step>
+
+<Step title="Install the Codeflash GitHub App">
+
+Finally, if you have not done so already, Codeflash will ask you to install the GitHub App in your repository.
+The Codeflash GitHub App allows the codeflash-ai bot to open PRs, review code, and provide optimization suggestions.
+
+Please [install the Codeflash GitHub
+app](https://github.com/apps/codeflash-ai/installations/select_target) by choosing the repository you want to install
+Codeflash on.
+
+</Step>
+
+</Steps>
+
+## Framework Support
+
+Codeflash JavaScript support works seamlessly with all major frameworks and testing libraries:
+
+<CardGroup cols={2}>
+  <Card title="Frontend Frameworks" icon="react">
+    - React
+    - Vue.js
+    - Angular
+    - Svelte
+    - Solid.js
+  </Card>
+
+  <Card title="Test Frameworks" icon="flask">
+    - Jest
+    - Vitest
+    - Mocha
+    - AVA
+    - Playwright
+    - Cypress
+  </Card>
+
+  <Card title="Backend" icon="server">
+    - Express
+    - NestJS
+    - Fastify
+    - Koa
+    - Hono
+  </Card>
+
+  <Card title="Runtimes" icon="gears">
+    - Node.js ✅ (Recommended)
+    - Bun (Coming soon)
+    - Deno (Coming soon)
+  </Card>
+</CardGroup>
+
+## Understanding V8 Serialization
+
+Codeflash uses Node.js's native V8 serialization API to capture and compare test data. Here's what makes it powerful:
+
+### Type Preservation
+
+Unlike JSON serialization, V8 serialization preserves JavaScript-specific types:
+
+```javascript
+// These types are preserved perfectly:
+const testData = {
+  date: new Date(),                    // ✅ Date objects
+  map: new Map([['key', 'value']]),   // ✅ Map instances
+  set: new Set([1, 2, 3]),            // ✅ Set instances
+  buffer: Buffer.from('hello'),        // ✅ Buffers
+  typed: new Uint8Array([1, 2, 3]),   // ✅ TypedArrays
+  bigint: 9007199254740991n,          // ✅ BigInt
+  regex: /pattern/gi,                  // ✅ RegExp
+  undef: undefined,                    // ✅ undefined (not null!)
+  circular: {}                         // ✅ Circular references
+};
+testData.circular.self = testData.circular;
+```
+
+<Warning>
+**Why Not JSON?**
+
+JSON serialization would cause bugs to slip through:
+- `Date` becomes string → date arithmetic fails silently
+- `Map` becomes `{}` → `.get()` calls return undefined
+- `undefined` becomes `null` → type checks break
+- TypedArrays become plain objects → binary operations fail
+
+V8 serialization catches these issues during optimization verification.
+</Warning>
+
+## Try It Out!
+
+<Tabs>
+<Tab title="Quick Start">
+Once configured, you can start optimizing your JavaScript/TypeScript code immediately:
+
+```bash
+# Optimize a specific function
+codeflash --file path/to/your/file.js --function functionName
+
+# Or optimize all functions in your codebase
+codeflash --all
+```
+
+</Tab>
+
+<Tab title="TypeScript Support">
+Codeflash fully supports TypeScript projects:
+
+```bash
+# Optimize TypeScript files directly
+codeflash --file src/utils.ts --function processData
+
+# Works with TSX for React components
+codeflash --file src/components/DataTable.tsx --function DataTable
+```
+
+<Info>
+Codeflash preserves TypeScript types during optimization. Your type annotations and interfaces remain intact.
+</Info>
+
+</Tab>
+
+<Tab title="Test Framework Examples">
+
+<Accordion title="Jest Example">
+```javascript
+// sum.test.js
+test('adds 1 + 2 to equal 3', () => {
+  expect(sum(1, 2)).toBe(3);
+});
+
+// Optimize the sum function
+codeflash --file sum.js --function sum
+```
+</Accordion>
+
+<Accordion title="Vitest Example">
+```javascript
+// calculator.test.js
+import { describe, it, expect } from 'vitest';
+
+describe('calculator', () => {
+  it('should multiply correctly', () => {
+    expect(multiply(2, 3)).toBe(6);
+  });
+});
+
+// Optimize the multiply function
+codeflash --file calculator.js --function multiply
+```
+</Accordion>
+
+</Tab>
+</Tabs>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="📦 Module not found errors">
+    Make sure:
+    - ✅ All project dependencies are installed
+    - ✅ Your `node_modules` directory exists
+
+    ```bash
+    # Reinstall dependencies
+    npm install
+    # or
+    yarn install
+    ```
+  </Accordion>
+
+  <Accordion title="🔧 V8 serialization errors">
+    If you encounter serialization errors:
+
+    **Functions and classes** cannot be serialized:
+    ```javascript
+    // ❌ Won't work - contains function
+    const data = { callback: () => {} };
+
+    // ✅ Works - pure data
+    const data = { value: 42, items: [1, 2, 3] };
+    ```
+
+    **Symbols** are not serializable:
+    ```javascript
+    // ❌ Won't work
+    const data = { [Symbol('key')]: 'value' };
+
+    // ✅ Use string keys
+    const data = { key: 'value' };
+    ```
+  </Accordion>
+
+  <Accordion title="🧪 No optimizations found">
+    Not all functions can be optimized - some code is already optimal. This is expected.
+
+    Use the `--verbose` flag for detailed output:
+    ```bash
+    codeflash optimize --verbose
+    ```
+
+    This will show:
+    - 🔍 Which functions are being analyzed
+    - 🚫 Why certain functions were skipped
+    - ⚠️ Detailed error messages
+    - 📊 Performance analysis results
+  </Accordion>
+
+  <Accordion title="🔍 Test discovery issues">
+    Verify:
+    - 📁 Your test directory path is correct in `codeflash.config.js`
+    - 🔍 Tests are discoverable by your test framework
+    - 📝 Test files follow naming conventions (`*.test.js`, `*.spec.js`)
+
+    ```bash
+    # Test if your test framework can discover tests
+    npm test -- --listTests  # Jest
+    # or
+    npx vitest list  # Vitest
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+Your `codeflash.config.js` file controls how Codeflash analyzes your JavaScript project:
+
+```javascript
+module.exports = {
+  // Source code to optimize
+  module: 'src',
+
+  // Test location
+  tests: 'tests',
+
+  // Test framework
+  testFramework: 'jest',
+
+  // Serialization strategy (automatically set to 'v8')
+  serialization: 'v8',
+
+  // Formatter
+  formatter: 'prettier',
+
+  // Additional options
+  exclude: ['node_modules', 'dist', 'build'],
+  verbose: false
+};
+```
+
+### Next Steps
+
+- Learn about [Codeflash Concepts](/codeflash-concepts/how-codeflash-works)
+- Explore [Optimization workflows](/optimizing-with-codeflash/one-function)
+- Set up [Pull Request Optimization](/optimizing-with-codeflash/codeflash-github-actions)
+- Read [configuration options](/configuration) for advanced setups

@@ -20,7 +20,7 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", help="Sub-commands")
 
-    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for a Python project.")
+    init_parser = subparsers.add_parser("init", help="Initialize Codeflash for your project.")
     init_parser.set_defaults(func=init_codeflash)
 
     subparsers.add_parser("vscode-install", help="Install the Codeflash VSCode extension")
@@ -28,7 +28,7 @@ def parse_args() -> Namespace:
     init_actions_parser = subparsers.add_parser("init-actions", help="Initialize GitHub Actions workflow")
     init_actions_parser.set_defaults(func=install_github_actions)
 
-    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize a Python project.")
+    trace_optimize = subparsers.add_parser("optimize", help="Trace and optimize your project.")
 
     from codeflash.tracer import main as tracer_main
 
@@ -70,8 +70,8 @@ def parse_args() -> Namespace:
     parser.add_argument(
         "--module-root",
         type=str,
-        help="Path to the project's Python module that you want to optimize."
-        " This is the top-level root directory where all the Python source code is located.",
+        help="Path to the project's module that you want to optimize."
+        " This is the top-level root directory where all the source code is located.",
     )
     parser.add_argument(
         "--tests-root", type=str, help="Path to the test directory of the project, where all the tests are located."
@@ -206,7 +206,21 @@ def process_pyproject_config(args: Namespace) -> Namespace:
             setattr(args, key.replace("-", "_"), pyproject_config[key])
     assert args.module_root is not None, "--module-root must be specified"
     assert Path(args.module_root).is_dir(), f"--module-root {args.module_root} must be a valid directory"
-    assert args.tests_root is not None, "--tests-root must be specified"
+
+    # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
+    # Default to module_root if not specified
+    is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+    if args.tests_root is None:
+        if is_js_ts_project:
+            # Try common JS test directories, or default to module_root
+            for test_dir in ["test", "tests", "__tests__"]:
+                if Path(test_dir).is_dir():
+                    args.tests_root = test_dir
+                    break
+            if args.tests_root is None:
+                args.tests_root = args.module_root
+        else:
+            raise AssertionError("--tests-root must be specified")
     assert Path(args.tests_root).is_dir(), f"--tests-root {args.tests_root} must be a valid directory"
     if args.benchmark:
         assert args.benchmarks_root is not None, "--benchmarks-root must be specified when running with --benchmark"

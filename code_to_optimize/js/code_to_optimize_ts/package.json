@@ -1,0 +1,33 @@
+{
+  "name": "codeflash-ts-test",
+  "version": "1.0.0",
+  "description": "Sample TypeScript project for codeflash optimization testing",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "build": "tsc"
+  },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests"
+  },
+  "keywords": [
+    "codeflash",
+    "optimization",
+    "testing",
+    "typescript"
+  ],
+  "author": "CodeFlash Inc.",
+  "license": "BSL 1.1",
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "codeflash": "file:../../../packages/codeflash",
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

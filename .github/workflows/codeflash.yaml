@@ -1,0 +1,41 @@
+name: Codeflash
+
+on:
+  pull_request:
+    paths:
+      # So that this workflow only runs when code within the target module is modified
+      - 'code_to_optimize_js_esm/**'
+  workflow_dispatch:
+
+concurrency:
+  # Any new push to the PR will cancel the previous run, so that only the latest code is optimized
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  optimize:
+    name: Optimize new code
+    # Don't run codeflash on codeflash-ai[bot] commits, prevent duplicate optimizations
+    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+    defaults:
+      run:
+        working-directory: ./code_to_optimize_js_esm
+    steps:
+      - name: 🛎️ Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: 📦 Install Dependencies
+        run: npm ci
+      
+      - name: ⚡️ Codeflash Optimization
+        run: npx codeflash

@@ -1,0 +1,23 @@
+{
+  "name": "code-to-optimize-js-esm",
+  "version": "1.0.0",
+  "description": "ES Module JavaScript test project for Codeflash E2E testing",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "codeflash": "file:../../../packages/codeflash",
+    "eslint": "^9.39.2",
+    "globals": "^17.1.0",
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0"
+  },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests",
+    "disableTelemetry": true
+  }
+}

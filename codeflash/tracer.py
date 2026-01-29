@@ -214,8 +214,13 @@ def main(args: Namespace | None = None) -> ArgumentParser:
                 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
                 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO
                 from codeflash.cli_cmds.console import paneled_text
+                from codeflash.languages import set_current_language
+                from codeflash.languages.base import Language
                 from codeflash.telemetry import posthog_cf
                 from codeflash.telemetry.sentry import init_sentry
+
+                # Set the language to Python since the tracer is Python-specific
+                set_current_language(Language.PYTHON)
 
                 sys.argv = ["codeflash", "--replay-test", *replay_test_paths]
                 args = parse_args()
