@@ -89,7 +89,7 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
         if ext_lower in _EXTENSION_REGISTRY:
             existing = _EXTENSION_REGISTRY[ext_lower]
             logger.warning(
-                f"Extension '{ext}' already registered to {existing.__name__}, overwriting with {cls.__name__}"
+                "Extension '%s' already registered to %s, overwriting with %s", ext, existing.__name__, cls.__name__
             )
         _EXTENSION_REGISTRY[ext_lower] = cls
 
@@ -97,11 +97,11 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
     if language in _LANGUAGE_REGISTRY:
         existing = _LANGUAGE_REGISTRY[language]
         logger.warning(
-            f"Language '{language}' already registered to {existing.__name__}, overwriting with {cls.__name__}"
+            "Language '%s' already registered to %s, overwriting with %s", language, existing.__name__, cls.__name__
         )
     _LANGUAGE_REGISTRY[language] = cls
 
-    logger.debug(f"Registered {cls.__name__} for language '{language}' with extensions {extensions}")
+    logger.debug("Registered %s for language '%s' with extensions %s", cls.__name__, language, extensions)
 
     return cls
 
@@ -241,7 +241,7 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
     for ext, count in sorted(extension_counts.items(), key=lambda x: -x[1]):
         if ext in _EXTENSION_REGISTRY:
             cls = _EXTENSION_REGISTRY[ext]
-            logger.info(f"Detected language: {cls().language} (found {count} '{ext}' files)")
+            logger.info("Detected language: %s (found %d '%s' files)", cls().language, count, ext)
             return cls().language
 
     msg = f"No supported language detected in {module_root}"

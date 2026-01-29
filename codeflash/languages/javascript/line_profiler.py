@@ -194,7 +194,7 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             tree = analyzer.parse(source.encode("utf8"))
             executable_lines = self._find_executable_lines(tree.root_node, source.encode("utf8"))
         except Exception as e:
-            logger.warning(f"Failed to parse function {func.name}: {e}")
+            logger.warning("Failed to parse function %s: %s", func.name, e)
             return func_lines
 
         # Add profiling to each executable line
@@ -329,5 +329,5 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             }
 
         except Exception as e:
-            logger.exception(f"Failed to parse line profile results: {e}")
+            logger.exception("Failed to parse line profile results: %s", e)
             return {"timings": {}, "unit": 1e-9, "functions": {}}

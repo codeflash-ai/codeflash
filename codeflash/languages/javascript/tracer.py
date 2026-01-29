@@ -326,7 +326,7 @@ process.on('exit', () => {{
         # For methods, we wrap by reassigning them after definition
         # This is complex, so for now we'll return unwrapped
         # TODO: Implement method wrapping
-        logger.warning(f"Method wrapping not fully implemented for {func_name}")
+        logger.warning("Method wrapping not fully implemented for %s", func_name)
         return func_lines
 
     def _wrap_regular_function(
@@ -366,7 +366,7 @@ process.on('exit', () => {{
                 with json_file.open("r") as f:
                     return json.load(f)
             except Exception as e:
-                logger.exception(f"Failed to parse trace JSON: {e}")
+                logger.exception("Failed to parse trace JSON: %s", e)
                 return []
 
         # Try SQLite database
@@ -398,5 +398,5 @@ process.on('exit', () => {{
             return traces
 
         except Exception as e:
-            logger.exception(f"Failed to parse trace database: {e}")
+            logger.exception("Failed to parse trace database: %s", e)
             return []

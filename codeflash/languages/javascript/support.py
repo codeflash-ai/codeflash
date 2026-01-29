@@ -84,7 +84,7 @@ class JavaScriptSupport:
         try:
             source = file_path.read_text(encoding="utf-8")
         except Exception as e:
-            logger.warning(f"Failed to read {file_path}: {e}")
+            logger.warning("Failed to read %s: %s", file_path, e)
             return []
 
         try:
@@ -129,7 +129,7 @@ class JavaScriptSupport:
             return functions
 
         except Exception as e:
-            logger.warning(f"Failed to parse {file_path}: {e}")
+            logger.warning("Failed to parse %s: %s", file_path, e)
             return []
 
     def discover_functions_from_source(self, source: str, file_path: Path | None = None) -> list[FunctionInfo]:
@@ -184,7 +184,7 @@ class JavaScriptSupport:
             return functions
 
         except Exception as e:
-            logger.warning(f"Failed to parse source: {e}")
+            logger.warning("Failed to parse source: %s", e)
             return []
 
     def _get_test_patterns(self) -> list[str]:
@@ -248,7 +248,7 @@ class JavaScriptSupport:
                                 TestInfo(test_name=test_name, test_file=test_file, test_class=None)
                             )
             except Exception as e:
-                logger.debug(f"Failed to analyze test file {test_file}: {e}")
+                logger.debug("Failed to analyze test file %s: %s", test_file, e)
 
         return result
 
@@ -299,7 +299,7 @@ class JavaScriptSupport:
         try:
             source = function.file_path.read_text()
         except Exception as e:
-            logger.exception(f"Failed to read {function.file_path}: {e}")
+            logger.exception("Failed to read %s: %s", function.file_path, e)
             return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVASCRIPT)
 
         # Find imports and helper functions
@@ -623,7 +623,7 @@ class JavaScriptSupport:
                     helpers.extend(file_helpers)
 
         except Exception as e:
-            logger.debug(f"Failed to find cross-file helpers: {e}")
+            logger.debug("Failed to find cross-file helpers: %s", e)
 
         return helpers
 
@@ -866,7 +866,7 @@ class JavaScriptSupport:
                         break
 
             except Exception as e:
-                logger.debug(f"Failed to resolve type definition for {local_name}: {e}")
+                logger.debug("Failed to resolve type definition for %s: %s", local_name, e)
                 continue
 
         return found_definitions
@@ -888,7 +888,7 @@ class JavaScriptSupport:
             imports = analyzer.find_imports(source)
             return self._find_helper_functions(function, source, analyzer, imports, project_root)
         except Exception as e:
-            logger.warning(f"Failed to find helpers for {function.name}: {e}")
+            logger.warning("Failed to find helpers for %s: %s", function.name, e)
             return []
 
     # === Code Transformation ===
@@ -913,7 +913,7 @@ class JavaScriptSupport:
 
         """
         if function.start_line is None or function.end_line is None:
-            logger.error(f"Function {function.name} has no line information")
+            logger.error("Function %s has no line information", function.name)
             return source
 
         # Get analyzer for parsing
@@ -925,7 +925,7 @@ class JavaScriptSupport:
         # Extract just the method body from the new source
         new_body = self._extract_function_body(new_source, function.name, analyzer)
         if new_body is None:
-            logger.warning(f"Could not extract body for {function.name} from optimized code, using full replacement")
+            logger.warning("Could not extract body for %s from optimized code, using full replacement", function.name)
             return self._replace_function_text_based(source, function, new_source, analyzer)
 
         # Find the original function and replace its body
@@ -1062,7 +1062,7 @@ class JavaScriptSupport:
 
         func_node = find_function_at_line(tree.root_node, function.name, function.start_line)
         if not func_node:
-            logger.warning(f"Could not find function {function.name} at line {function.start_line}")
+            logger.warning("Could not find function %s at line %s", function.name, function.start_line)
             return source
 
         # Find the body node in the original
@@ -1074,7 +1074,7 @@ class JavaScriptSupport:
                     break
 
         if not body_node:
-            logger.warning(f"Could not find body for function {function.name}")
+            logger.warning("Could not find body for function %s", function.name)
             return source
 
         # Get the indentation of the original body's opening brace
@@ -1250,7 +1250,7 @@ class JavaScriptSupport:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         except Exception as e:
-            logger.debug(f"Prettier formatting failed: {e}")
+            logger.debug("Prettier formatting failed: %s", e)
 
         return source
 
@@ -1300,10 +1300,10 @@ class JavaScriptSupport:
             return results, junit_xml
 
         except subprocess.TimeoutExpired:
-            logger.warning(f"Test execution timed out after {timeout}s")
+            logger.warning("Test execution timed out after %ss", timeout)
             return [], junit_xml
         except Exception as e:
-            logger.exception(f"Test execution failed: {e}")
+            logger.exception("Test execution failed: %s", e)
             return [], junit_xml
 
     def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
@@ -1363,7 +1363,7 @@ class JavaScriptSupport:
                     )
                 )
         except Exception as e:
-            logger.warning(f"Failed to parse JUnit XML: {e}")
+            logger.warning("Failed to parse JUnit XML: %s", e)
 
         return results
 
@@ -1731,10 +1731,10 @@ class JavaScriptSupport:
 
             # Write instrumented code to source file
             source_file_path.write_text(instrumented_source, encoding="utf-8")
-            logger.debug(f"Wrote instrumented source to {source_file_path}")  # noqa: G004
+            logger.debug("Wrote instrumented source to %s", source_file_path)
             return True  # noqa: TRY300
         except Exception as e:
-            logger.warning(f"Failed to instrument source for line profiling: {e}")  # noqa: G004
+            logger.warning("Failed to instrument source for line profiling: %s", e)
             return False
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
@@ -1746,7 +1746,7 @@ class JavaScriptSupport:
                 # Format output string for display
                 str_out = self._format_js_line_profile_output(parsed_results)
                 return {"timings": parsed_results.get("timings", {}), "unit": 1e-9, "str_out": str_out}
-        logger.warning(f"No line profiler output file found at {line_profiler_output_file}")  # noqa: G004
+        logger.warning("No line profiler output file found at %s", line_profiler_output_file)
         return {"timings": {}, "unit": 0, "str_out": ""}
 
     def _format_js_line_profile_output(self, parsed_results: dict) -> str:
@@ -1984,6 +1984,6 @@ class TypeScriptSupport(JavaScriptSupport):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         except Exception as e:
-            logger.debug(f"Prettier formatting failed: {e}")
+            logger.debug("Prettier formatting failed: %s", e)
 
         return source

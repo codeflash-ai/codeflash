@@ -61,7 +61,7 @@ class ImportResolver:
 
         # Skip external packages (node_modules)
         if self._is_external_package(module_path):
-            logger.debug(f"Skipping external package: {module_path}")
+            logger.debug("Skipping external package: %s", module_path)
             return None
 
         # Check cache
@@ -79,7 +79,7 @@ class ImportResolver:
         self._resolution_cache[cache_key] = resolved_path
 
         if resolved_path is None:
-            logger.debug(f"Could not resolve import: {module_path} from {source_file}")
+            logger.debug("Could not resolve import: %s from %s", module_path, source_file)
             return None
 
         return self._build_resolved_import(import_info, resolved_path)
@@ -145,7 +145,7 @@ class ImportResolver:
         try:
             base_path.relative_to(self.project_root)
         except ValueError:
-            logger.debug(f"Import path outside project root: {base_path}")
+            logger.debug("Import path outside project root: %s", base_path)
             return None
 
         # If the path already has an extension, try it directly first
@@ -439,7 +439,7 @@ class MultiFileHelperFinder:
         try:
             source = file_path.read_text(encoding="utf-8")
         except Exception as e:
-            logger.warning(f"Failed to read {file_path}: {e}")
+            logger.warning("Failed to read %s: %s", file_path, e)
             return None
 
         # Get analyzer for this file type
@@ -488,7 +488,7 @@ class MultiFileHelperFinder:
                     end_line=func.end_line,
                 )
 
-        logger.debug(f"Function {function_name} not found in {file_path}")
+        logger.debug("Function %s not found in %s", function_name, file_path)
         return None
 
     def _find_helpers_recursive(
@@ -518,7 +518,7 @@ class MultiFileHelperFinder:
         try:
             source = file_path.read_text(encoding="utf-8")
         except Exception as e:
-            logger.warning(f"Failed to read {file_path}: {e}")
+            logger.warning("Failed to read %s: %s", file_path, e)
             return {}
 
         # Get analyzer and imports for this file

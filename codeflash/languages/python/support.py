@@ -128,7 +128,7 @@ class PythonSupport:
             return functions
 
         except Exception as e:
-            logger.warning(f"Failed to discover functions in {file_path}: {e}")
+            logger.warning("Failed to discover functions in %s: %s", file_path, e)
             return []
 
     def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
@@ -183,7 +183,7 @@ class PythonSupport:
         try:
             source = function.file_path.read_text()
         except Exception as e:
-            logger.exception(f"Failed to read {function.file_path}: {e}")
+            logger.exception("Failed to read %s: %s", function.file_path, e)
             return CodeContext(target_code="", target_file=function.file_path, language=Language.PYTHON)
 
         # Extract the function source
@@ -285,7 +285,7 @@ class PythonSupport:
                         )
 
         except Exception as e:
-            logger.warning(f"Failed to find helpers for {function.name}: {e}")
+            logger.warning("Failed to find helpers for %s: %s", function.name, e)
 
         return helpers
 
@@ -319,7 +319,7 @@ class PythonSupport:
                 preexisting_objects=set(),
             )
         except Exception as e:
-            logger.warning(f"Failed to replace function {function.name}: {e}")
+            logger.warning("Failed to replace function %s: %s", function.name, e)
             return source
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
@@ -345,7 +345,7 @@ class PythonSupport:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         except Exception as e:
-            logger.debug(f"Ruff formatting failed: {e}")
+            logger.debug("Ruff formatting failed: %s", e)
 
         # Try black as fallback
         try:
@@ -357,7 +357,7 @@ class PythonSupport:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
         except Exception as e:
-            logger.debug(f"Black formatting failed: {e}")
+            logger.debug("Black formatting failed: %s", e)
 
         return source
 
@@ -395,10 +395,10 @@ class PythonSupport:
             return results, junit_xml
 
         except subprocess.TimeoutExpired:
-            logger.warning(f"Test execution timed out after {timeout}s")
+            logger.warning("Test execution timed out after %ss", timeout)
             return [], junit_xml
         except Exception as e:
-            logger.exception(f"Test execution failed: {e}")
+            logger.exception("Test execution failed: %s", e)
             return [], junit_xml
 
     def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
@@ -459,7 +459,7 @@ class PythonSupport:
                     )
                 )
         except Exception as e:
-            logger.warning(f"Failed to parse JUnit XML: {e}")
+            logger.warning("Failed to parse JUnit XML: %s", e)
 
         return results
 

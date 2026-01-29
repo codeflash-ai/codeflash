@@ -73,7 +73,7 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
                     return ModuleSystem.COMMONJS
 
         except Exception as e:
-            logger.warning(f"Failed to parse package.json: {e}")
+            logger.warning("Failed to parse package.json: %s", e)
 
     # Strategy 2: Check file extension
     if file_path:
@@ -108,7 +108,7 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
                     return ModuleSystem.COMMONJS
 
             except Exception as e:
-                logger.warning(f"Failed to analyze file {file_path}: {e}")
+                logger.warning("Failed to analyze file %s: %s", file_path, e)
 
     # Default to CommonJS (more common and backward compatible)
     logger.debug("Defaulting to CommonJS")
