@@ -94,7 +94,13 @@ class Args:
 
 
 def test_js_replcement() -> None:
+    from codeflash.languages import current as lang_current
+    from codeflash.languages.base import Language
+
     try:
+        # Force set language to JavaScript for proper context extraction routing
+        lang_current._current_language = Language.JAVASCRIPT
+
         root_dir = Path(__file__).parent.parent.parent.resolve()
 
         main_file = (root_dir / "code_to_optimize/js/code_to_optimize_js/calculator.js").resolve()
@@ -132,7 +138,6 @@ def test_js_replcement() -> None:
             function_to_optimize=func, test_cfg=test_config, aiservice_client=MagicMock()
         )
         result = func_optimizer.get_code_optimization_context()
-
         code_context: CodeOptimizationContext = result.unwrap()
 
         original_helper_code: dict[Path, str] = {}

@@ -91,6 +91,11 @@ class TestJavaScriptCodeContext:
     def test_extract_code_context_for_javascript(self, js_project_dir):
         """Test extracting code context for a JavaScript function."""
         from codeflash.context.code_context_extractor import get_code_optimization_context
+        from codeflash.languages import current as lang_current
+        from codeflash.languages.base import Language
+
+        # Force set language to JavaScript for proper context extraction routing
+        lang_current._current_language = Language.JAVASCRIPT
 
         fib_file = js_project_dir / "fibonacci.js"
         if not fib_file.exists():
