@@ -15,7 +15,7 @@ def run_test() -> bool:
         function_name="fibonacci",
         min_improvement_x=0.5,  # Expect at least 50% improvement
         expected_improvement_pct=50,
-        expected_test_files=1,
+        expected_test_files=1,  # At least one test file should be instrumented
     )
 
     cwd = (

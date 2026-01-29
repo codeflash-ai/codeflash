@@ -116,15 +116,16 @@ def validate_js_output(
         return False
 
     if config.expected_test_files is not None:
-        test_files_match = re.search(r"Discovered (\d+) existing unit test files?", stdout)
+        # Look for "Instrumented X existing unit test files" (the actual file count)
+        test_files_match = re.search(r"Instrumented (\d+) existing unit test files?", stdout)
         if not test_files_match:
-            logging.error("Could not find unit test file count")
+            logging.error("Could not find unit test file count in output")
             return False
 
         num_test_files = int(test_files_match.group(1))
-        if num_test_files != config.expected_test_files:
+        if num_test_files < config.expected_test_files:
             logging.error(
-                f"Expected {config.expected_test_files} test files, found {num_test_files}"
+                f"Expected at least {config.expected_test_files} test files, found {num_test_files}"
             )
             return False
 

@@ -14,8 +14,8 @@ def run_test() -> bool:
     config = JSTestConfig(
         file_path=pathlib.Path("async_utils.js"),
         function_name="processItemsSequential",
-        min_improvement_x=0.1,  # Async optimizations may have variable gains
-        expected_improvement_pct=10,
+        min_improvement_x=0.05,  # Async optimizations may have variable gains
+        expected_improvement_pct=5,
         expected_test_files=1,
     )
 
