@@ -1474,11 +1474,7 @@ def customize_codeflash_yaml_content(
     return _customize_python_workflow_content(optimize_yml_content, git_root, benchmark_mode)
 
 
-def _customize_python_workflow_content(
-    optimize_yml_content: str,
-    git_root: Path,
-    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
-) -> str:
+def _customize_python_workflow_content(optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False) -> str:
     """Customize workflow content for Python projects."""
     # Get dependency installation commands
     toml_path = Path.cwd() / "pyproject.toml"
@@ -1513,11 +1509,7 @@ def _customize_python_workflow_content(
 
 
 # TODO:{claude} Refactor and move to support for language specific
-def _customize_js_workflow_content(
-    optimize_yml_content: str,
-    git_root: Path,
-    benchmark_mode: bool = False,  # noqa: FBT001, FBT002
-) -> str:
+def _customize_js_workflow_content(optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False) -> str:
     """Customize workflow content for JavaScript/TypeScript projects."""
     from codeflash.cli_cmds.init_javascript import (
         get_js_codeflash_install_step,
