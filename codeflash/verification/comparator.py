@@ -30,20 +30,25 @@ HAS_NUMBA = find_spec("numba") is not None
 # These paths vary between test runs but are logically equivalent
 PYTEST_TEMP_PATH_PATTERN = re.compile(r"/tmp/pytest-of-[^/]+/pytest-\d+/")  # noqa: S108
 
+# Pattern to match Python tempfile directories: /tmp/tmp<random>/
+# Created by tempfile.mkdtemp() or tempfile.TemporaryDirectory()
+PYTHON_TEMPFILE_PATTERN = re.compile(r"/tmp/tmp[a-zA-Z0-9_]+/")  # noqa: S108
+
 
 def _normalize_temp_path(path: str) -> str:
     """Normalize temporary file paths by replacing session-specific components.
 
-    Pytest creates temp directories like /tmp/pytest-of-<user>/pytest-<N>/
-    where N is a session number that increments. When comparing return values
-    from different test runs, these paths should be considered equivalent.
+    Handles two types of temp paths:
+    - Pytest: /tmp/pytest-of-<user>/pytest-<N>/ -> /tmp/pytest-temp/
+    - Python tempfile: /tmp/tmp<random>/ -> /tmp/python-temp/
     """
-    return PYTEST_TEMP_PATH_PATTERN.sub("/tmp/pytest-temp/", path)  # noqa: S108
+    path = PYTEST_TEMP_PATH_PATTERN.sub("/tmp/pytest-temp/", path)  # noqa: S108
+    return PYTHON_TEMPFILE_PATTERN.sub("/tmp/python-temp/", path)  # noqa: S108
 
 
 def _is_temp_path(s: str) -> bool:
-    """Check if a string looks like a pytest temp path."""
-    return PYTEST_TEMP_PATH_PATTERN.search(s) is not None
+    """Check if a string looks like a temp path (pytest or Python tempfile)."""
+    return PYTEST_TEMP_PATH_PATTERN.search(s) is not None or PYTHON_TEMPFILE_PATTERN.search(s) is not None
 
 
 def _extract_exception_from_message(msg: str) -> Optional[BaseException]:  # noqa: FA100
