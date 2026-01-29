@@ -80,7 +80,7 @@ class JavaScriptSupport:
         criteria = filter_criteria or FunctionFilterCriteria()
 
         try:
-            source = file_path.read_text()
+            source = file_path.read_text(encoding="utf-8")
         except Exception as e:
             logger.warning(f"Failed to read {file_path}: {e}")
             return []
