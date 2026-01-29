@@ -23,15 +23,12 @@ from codeflash.languages.base import (
     TestResult,
 )
 from codeflash.languages.registry import register_language
-from codeflash.languages.treesitter_utils import (
-    TreeSitterAnalyzer,
-    TreeSitterLanguage,
-    TypeDefinition,
-    get_analyzer_for_file,
-)
+from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from codeflash.languages.treesitter_utils import TypeDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +299,7 @@ class JavaScriptSupport:
         try:
             source = function.file_path.read_text()
         except Exception as e:
-            logger.error(f"Failed to read {function.file_path}: {e}")
+            logger.exception(f"Failed to read {function.file_path}: {e}")
             return CodeContext(target_code="", target_file=function.file_path, language=Language.JAVASCRIPT)
 
         # Find imports and helper functions
@@ -1306,7 +1303,7 @@ class JavaScriptSupport:
             logger.warning(f"Test execution timed out after {timeout}s")
             return [], junit_xml
         except Exception as e:
-            logger.error(f"Test execution failed: {e}")
+            logger.exception(f"Test execution failed: {e}")
             return [], junit_xml
 
     def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
@@ -1920,14 +1917,7 @@ class TypeScriptSupport(JavaScriptSupport):
             List of glob patterns for test files.
 
         """
-        return [
-            "*.test.ts",
-            "*.test.tsx",
-            "*.spec.ts",
-            "*.spec.tsx",
-            "__tests__/**/*.ts",
-            "__tests__/**/*.tsx",
-        ] + super()._get_test_patterns()
+        return ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx", "__tests__/**/*.ts", "__tests__/**/*.tsx", *super()._get_test_patterns()]
 
     def get_test_file_suffix(self) -> str:
         """Get the test file suffix for TypeScript.
@@ -1970,10 +1960,7 @@ class TypeScriptSupport(JavaScriptSupport):
         """
         try:
             # Determine file extension for prettier
-            if file_path:
-                stdin_filepath = str(file_path.name)
-            else:
-                stdin_filepath = "file.ts"
+            stdin_filepath = str(file_path.name) if file_path else "file.ts"
 
             # Try to use prettier via npx
             result = subprocess.run(

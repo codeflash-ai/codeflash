@@ -707,10 +707,7 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
     # Check for method calls: obj.funcName( or this.funcName(
     # This handles class methods called on instances
     method_call_pattern = rf"\w+\.{re.escape(func_name)}\s*\("
-    if re.search(method_call_pattern, code):
-        return True
-
-    return False
+    return bool(re.search(method_call_pattern, code))
 
 
 def _instrument_js_test_code(
@@ -967,7 +964,7 @@ def instrument_generated_js_test(
 
     # Use the internal instrumentation function with assertion removal enabled
     # Generated tests are treated as regression tests, so we remove LLM-generated assertions
-    instrumented_code = _instrument_js_test_code(
+    return _instrument_js_test_code(
         code=test_code,
         func_name=function_name,
         test_file_path="generated_test",
@@ -976,4 +973,3 @@ def instrument_generated_js_test(
         remove_assertions=True,
     )
 
-    return instrumented_code

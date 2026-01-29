@@ -128,7 +128,7 @@ def compare_test_results(
             return False, []
 
         # Check for unexpected exit codes (not 0 or 1)
-        if result.returncode != 0 and result.returncode != 1:
+        if result.returncode not in {0, 1}:
             logger.error(f"JavaScript comparator failed with exit code {result.returncode}")
             if result.stderr:
                 logger.error(f"stderr: {result.stderr}")

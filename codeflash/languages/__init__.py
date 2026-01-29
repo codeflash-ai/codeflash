@@ -62,15 +62,15 @@ __all__ = [
     # Current language singleton
     "current_language",
     "current_language_support",
-    "is_javascript",
-    "is_python",
-    "is_typescript",
-    "reset_current_language",
-    "set_current_language",
     # Registry functions
     "detect_project_language",
     "get_language_support",
     "get_supported_extensions",
     "get_supported_languages",
+    "is_javascript",
+    "is_python",
+    "is_typescript",
     "register_language",
+    "reset_current_language",
+    "set_current_language",
 ]

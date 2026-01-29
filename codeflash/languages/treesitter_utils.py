@@ -9,13 +9,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Parser
 
 if TYPE_CHECKING:
-    from tree_sitter import Tree
+    from pathlib import Path
+
+    from tree_sitter import Node, Tree
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ class TreeSitterAnalyzer:
     finding functions, imports, and other code structures.
     """
 
-    def __init__(self, language: TreeSitterLanguage | str):
+    def __init__(self, language: TreeSitterLanguage | str) -> None:
         """Initialize the analyzer for a specific language.
 
         Args:
@@ -235,7 +236,7 @@ class TreeSitterAnalyzer:
         new_class = current_class
         new_function = current_function
 
-        if node.type == "class_declaration" or node.type == "class":
+        if node.type in {"class_declaration", "class"}:
             # Get class name
             name_node = node.child_by_field_name("name")
             if name_node:
@@ -683,12 +684,9 @@ class TreeSitterAnalyzer:
             if child.type == "default":
                 # Find what's being exported as default
                 for sibling in node.children:
-                    if sibling.type == "function_declaration" or sibling.type == "class_declaration":
+                    if sibling.type in {"function_declaration", "class_declaration"}:
                         name_node = sibling.child_by_field_name("name")
-                        if name_node:
-                            default_export = self.get_node_text(name_node, source_bytes)
-                        else:
-                            default_export = "default"
+                        default_export = self.get_node_text(name_node, source_bytes) if name_node else "default"
                     elif sibling.type == "identifier":
                         default_export = self.get_node_text(sibling, source_bytes)
                     elif sibling.type in ("arrow_function", "function_expression", "object", "array"):
@@ -771,13 +769,10 @@ class TreeSitterAnalyzer:
 
         if left_text == "module.exports":
             # module.exports = something
-            if right_node.type == "function_expression" or right_node.type == "arrow_function":
+            if right_node.type in {"function_expression", "arrow_function"}:
                 # module.exports = function foo() {} or module.exports = () => {}
                 name_node = right_node.child_by_field_name("name")
-                if name_node:
-                    default_export = self.get_node_text(name_node, source_bytes)
-                else:
-                    default_export = "default"
+                default_export = self.get_node_text(name_node, source_bytes) if name_node else "default"
             elif right_node.type == "identifier":
                 # module.exports = someFunction
                 default_export = self.get_node_text(right_node, source_bytes)
@@ -1045,7 +1040,7 @@ class TreeSitterAnalyzer:
         identifiers: list[str] = []
 
         def walk(n: Node) -> None:
-            if n.type == "identifier" or n.type == "shorthand_property_identifier_pattern":
+            if n.type in {"identifier", "shorthand_property_identifier_pattern"}:
                 identifiers.append(self.get_node_text(n, source_bytes))
             for child in n.children:
                 walk(child)
@@ -1091,22 +1086,19 @@ class TreeSitterAnalyzer:
                     return
 
             # Skip variable declarator names (left side of declaration)
-            if parent.type == "variable_declarator":
-                if parent.child_by_field_name("name") == node:
-                    # Don't recurse - the value will be visited when we visit the declarator
-                    return
+            if parent.type == "variable_declarator" and parent.child_by_field_name("name") == node:
+                # Don't recurse - the value will be visited when we visit the declarator
+                return
 
             # Skip property names in object literals (keys)
-            if parent.type == "pair":
-                if parent.child_by_field_name("key") == node:
-                    # Don't recurse - the value will be visited when we visit the pair
-                    return
+            if parent.type == "pair" and parent.child_by_field_name("key") == node:
+                # Don't recurse - the value will be visited when we visit the pair
+                return
 
             # Skip property access property names (obj.property - skip 'property')
-            if parent.type == "member_expression":
-                if parent.child_by_field_name("property") == node:
-                    # Don't recurse - the object will be visited when we visit the member_expression
-                    return
+            if parent.type == "member_expression" and parent.child_by_field_name("property") == node:
+                # Don't recurse - the object will be visited when we visit the member_expression
+                return
 
             # Skip import specifier names
             if parent.type in ("import_specifier", "import_clause", "namespace_import"):
@@ -1117,7 +1109,7 @@ class TreeSitterAnalyzer:
                 return
 
             # Skip parameter names in function definitions
-            if parent.type == "formal_parameters" or parent.type == "required_parameter":
+            if parent.type in {"formal_parameters", "required_parameter"}:
                 return
 
             # This is a reference
@@ -1165,11 +1157,7 @@ class TreeSitterAnalyzer:
                         return True
             return False
 
-        for child in node.children:
-            if self._node_has_return(child):
-                return True
-
-        return False
+        return any(self._node_has_return(child) for child in node.children)
 
     def extract_type_annotations(self, source: str, function_name: str, function_line: int) -> set[str]:
         """Extract type annotation names from a function's parameters and return type.

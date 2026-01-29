@@ -11,10 +11,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import Language, LanguageSupport
+from codeflash.languages.base import Language
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from codeflash.languages.base import LanguageSupport
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ _SUPPORT_CACHE: dict[Language, LanguageSupport] = {}
 class UnsupportedLanguageError(Exception):
     """Raised when attempting to use an unsupported language."""
 
-    def __init__(self, identifier: str | Path, supported: Iterable[str] | None = None):
+    def __init__(self, identifier: str | Path, supported: Iterable[str] | None = None) -> None:
         self.identifier = identifier
         self.supported = list(supported) if supported else []
         msg = f"Unsupported language: {identifier}"
@@ -74,10 +76,13 @@ def register_language(cls: type[LanguageSupport]) -> type[LanguageSupport]:
         language = instance.language
         extensions = instance.file_extensions
     except Exception as e:
-        raise ValueError(
+        msg = (
             f"Failed to instantiate {cls.__name__} for registration. "
             f"Language support classes must be instantiable without arguments. "
             f"Error: {e}"
+        )
+        raise ValueError(
+            msg
         ) from e
 
     # Register by extension
@@ -241,7 +246,8 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
             logger.info(f"Detected language: {cls().language} (found {count} '{ext}' files)")
             return cls().language
 
-    raise UnsupportedLanguageError(f"No supported language detected in {module_root}", get_supported_languages())
+    msg = f"No supported language detected in {module_root}"
+    raise UnsupportedLanguageError(msg, get_supported_languages())
 
 
 def get_supported_languages() -> list[str]:

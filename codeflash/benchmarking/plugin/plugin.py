@@ -110,7 +110,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process each row
             for row in cursor.fetchall():
-                module_name, class_name, function_name, benchmark_file, benchmark_func, benchmark_line, time_ns = row
+                module_name, class_name, function_name, benchmark_file, benchmark_func, _benchmark_line, time_ns = row
 
                 # Create the function key (module_name.class_name.function_name)
                 if class_name:
@@ -184,7 +184,7 @@ class CodeFlashBenchmarkPlugin:
 
             # Process each row and subtract overhead
             for row in cursor.fetchall():
-                benchmark_file, benchmark_func, benchmark_line, time_ns = row
+                benchmark_file, benchmark_func, _benchmark_line, time_ns = row
 
                 # Create the benchmark key (file::function::line)
                 benchmark_key = BenchmarkKey(module_path=benchmark_file, function_name=benchmark_func)

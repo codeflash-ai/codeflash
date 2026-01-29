@@ -677,7 +677,7 @@ def _add_global_declarations_for_language(
         # Insert declarations
         before = lines[:insertion_line]
         after = lines[insertion_line:]
-        result_lines = before + [new_decl_code] + after
+        result_lines = [*before, new_decl_code, *after]
 
         return "".join(result_lines)
 
@@ -702,8 +702,7 @@ def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitter
         imports = analyzer.find_imports(source)
         if imports:
             # Find the last import's end line
-            last_import_end = max(imp.end_line for imp in imports)
-            return last_import_end  # 0-based index = end_line (since end_line is 1-indexed)
+            return max(imp.end_line for imp in imports)
     except Exception:
         pass
 

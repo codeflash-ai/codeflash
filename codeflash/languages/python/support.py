@@ -183,7 +183,7 @@ class PythonSupport:
         try:
             source = function.file_path.read_text()
         except Exception as e:
-            logger.error(f"Failed to read {function.file_path}: {e}")
+            logger.exception(f"Failed to read {function.file_path}: {e}")
             return CodeContext(target_code="", target_file=function.file_path, language=Language.PYTHON)
 
         # Extract the function source
@@ -201,7 +201,7 @@ class PythonSupport:
         import_lines = []
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith("import ") or stripped.startswith("from "):
+            if stripped.startswith(("import ", "from ")):
                 import_lines.append(stripped)
             elif stripped and not stripped.startswith("#"):
                 # Stop at first non-import, non-comment line
@@ -312,13 +312,12 @@ class PythonSupport:
             original_function_names = [function.qualified_name]
 
             # Use the existing replacer
-            result = replace_functions_in_file(
+            return replace_functions_in_file(
                 source_code=source,
                 original_function_names=original_function_names,
                 optimized_code=new_source,
                 preexisting_objects=set(),
             )
-            return result
         except Exception as e:
             logger.warning(f"Failed to replace function {function.name}: {e}")
             return source
@@ -399,7 +398,7 @@ class PythonSupport:
             logger.warning(f"Test execution timed out after {timeout}s")
             return [], junit_xml
         except Exception as e:
-            logger.error(f"Test execution failed: {e}")
+            logger.exception(f"Test execution failed: {e}")
             return [], junit_xml
 
     def parse_test_results(self, junit_xml_path: Path, stdout: str) -> list[TestResult]:
@@ -567,7 +566,7 @@ class PythonSupport:
         import libcst as cst
 
         class TestFunctionRemover(cst.CSTTransformer):
-            def __init__(self, names_to_remove: list[str]):
+            def __init__(self, names_to_remove: list[str]) -> None:
                 self.names_to_remove = set(names_to_remove)
 
             def leave_FunctionDef(

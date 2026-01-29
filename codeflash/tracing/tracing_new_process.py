@@ -470,7 +470,7 @@ class Tracer:
             # In multi-threaded contexts, we need to be more careful about frame comparisons
             if self.cur and frame.f_back is not self.cur[-2]:
                 # This happens when we're in a different thread
-                rpt, rit, ret, rfn, rframe, rcur = self.cur
+                _rpt, _rit, _ret, _rfn, rframe, _rcur = self.cur
 
                 # Only attempt to handle the frame mismatch if we have a valid rframe
                 if (

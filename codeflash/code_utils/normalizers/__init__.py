@@ -87,7 +87,7 @@ def get_normalizer_for_extension(extension: str) -> CodeNormalizer | None:
     if not extension.startswith("."):
         extension = f".{extension}"
 
-    for language, normalizer_class in _NORMALIZERS.items():
+    for language in _NORMALIZERS:
         normalizer = get_normalizer(language)
         if extension in normalizer.supported_extensions:
             return normalizer

@@ -36,7 +36,7 @@ class ImportResolver:
     # Supported extensions in resolution order (prefer TS over JS)
     EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path) -> None:
         """Initialize the resolver.
 
         Args:
@@ -289,7 +289,7 @@ class MultiFileHelperFinder:
 
     DEFAULT_MAX_DEPTH = 2  # Target → helpers → helpers of helpers
 
-    def __init__(self, project_root: Path, import_resolver: ImportResolver):
+    def __init__(self, project_root: Path, import_resolver: ImportResolver) -> None:
         """Initialize the finder.
 
         Args:
@@ -343,7 +343,7 @@ class MultiFileHelperFinder:
         # Find helpers from imported modules
         results: dict[Path, list[HelperFunction]] = {}
 
-        for call_name, (import_info, actual_name) in call_to_import.items():
+        for (import_info, actual_name) in call_to_import.values():
             # Resolve the import to a file path
             resolved = self.import_resolver.resolve_import(import_info, function.file_path)
             if resolved is None:

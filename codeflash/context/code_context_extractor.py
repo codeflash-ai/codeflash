@@ -106,7 +106,7 @@ def get_code_optimization_context(
         qualified_names.update({f"{qn.rsplit('.', 1)[0]}.__init__" for qn in qualified_names if "." in qn})
 
     # Get FunctionSource representation of helpers of helpers of FTO
-    helpers_of_helpers_dict, helpers_of_helpers_list = get_function_sources_from_jedi(
+    helpers_of_helpers_dict, _helpers_of_helpers_list = get_function_sources_from_jedi(
         helpers_of_fto_qualified_names_dict, project_root_path
     )
 

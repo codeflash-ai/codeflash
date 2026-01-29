@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import sqlite3
@@ -457,7 +458,7 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                         file_path = base_path.replace(".", os.sep) + extension
                         # Check if the module path includes the tests directory name
                         tests_dir_name = test_config.tests_project_rootdir.name
-                        if file_path.startswith(tests_dir_name + os.sep) or file_path.startswith(tests_dir_name + "/"):
+                        if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
                             # Module path includes "tests." - use project root parent
                             test_file_path = test_config.tests_project_rootdir.parent / file_path
                         else:
@@ -845,10 +846,8 @@ def parse_jest_test_xml(
                     runtime = None
                     if end_match:
                         # Duration is in the 6th group (index 5)
-                        try:
+                        with contextlib.suppress(ValueError, IndexError):
                             runtime = int(end_match.group(6))
-                        except (ValueError, IndexError):
-                            pass
                     test_results.add(
                         FunctionTestInvocation(
                             loop_index=loop_index,

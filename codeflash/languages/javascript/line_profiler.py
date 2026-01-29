@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.languages.treesitter_utils import get_analyzer_for_file
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.languages.base import FunctionInfo
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class JavaScriptLineProfiler:
     - Total execution time per function
     """
 
-    def __init__(self, output_file: Path):
+    def __init__(self, output_file: Path) -> None:
         """Initialize the line profiler.
 
         Args:
@@ -64,7 +65,7 @@ class JavaScriptLineProfiler:
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
-        for func in reversed(sorted(functions, key=lambda f: f.start_line)):
+        for func in sorted(functions, key=lambda f: f.start_line, reverse=True):
             func_lines = self._instrument_function(func, lines, file_path)
             start_idx = func.start_line - 1
             end_idx = func.end_line
@@ -271,7 +272,7 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             "await_expression",
         }
 
-        def walk(n):
+        def walk(n) -> None:
             if n.type in executable_types:
                 # Add the starting line (1-indexed)
                 executable_lines.add(n.start_point[0] + 1)
@@ -328,5 +329,5 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             }
 
         except Exception as e:
-            logger.error(f"Failed to parse line profile results: {e}")
+            logger.exception(f"Failed to parse line profile results: {e}")
             return {"timings": {}, "unit": 1e-9, "functions": {}}

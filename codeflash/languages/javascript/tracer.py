@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from codeflash.languages.base import FunctionInfo
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class JavaScriptTracer:
     - Execution time
     """
 
-    def __init__(self, output_db: Path):
+    def __init__(self, output_db: Path) -> None:
         """Initialize the tracer.
 
         Args:
@@ -63,7 +64,7 @@ class JavaScriptTracer:
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
-        for func in reversed(sorted(functions, key=lambda f: f.start_line)):
+        for func in sorted(functions, key=lambda f: f.start_line, reverse=True):
             instrumented = self._instrument_function(func, lines, file_path)
             start_idx = func.start_line - 1
             end_idx = func.end_line
@@ -365,7 +366,7 @@ process.on('exit', () => {{
                 with json_file.open("r") as f:
                     return json.load(f)
             except Exception as e:
-                logger.error(f"Failed to parse trace JSON: {e}")
+                logger.exception(f"Failed to parse trace JSON: {e}")
                 return []
 
         # Try SQLite database
@@ -397,5 +398,5 @@ process.on('exit', () => {{
             return traces
 
         except Exception as e:
-            logger.error(f"Failed to parse trace database: {e}")
+            logger.exception(f"Failed to parse trace database: {e}")
             return []

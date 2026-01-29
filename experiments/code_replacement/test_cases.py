@@ -9,6 +9,8 @@ Each test case includes:
 - description: What edge case this tests
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 

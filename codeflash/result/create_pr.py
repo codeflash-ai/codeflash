@@ -124,7 +124,7 @@ def existing_tests_source_for(
             file_path = base_path.replace(".", os.sep) + matched_ext
             # Check if the module path includes the tests directory name
             tests_dir_name = test_cfg.tests_project_rootdir.name
-            if file_path.startswith(tests_dir_name + os.sep) or file_path.startswith(tests_dir_name + "/"):
+            if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
                 # Module path includes "tests." - use project root parent
                 instrumented_abs_path = (test_cfg.tests_project_rootdir.parent / file_path).resolve()
             else:

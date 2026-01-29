@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -96,15 +99,13 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
                 has_module_exports = "module.exports" in content or "exports." in content
 
                 # Determine based on what we found
-                if has_import or has_export:
-                    if not (has_require or has_module_exports):
-                        logger.debug("Detected ES Module from import/export statements")
-                        return ModuleSystem.ES_MODULE
+                if (has_import or has_export) and not (has_require or has_module_exports):
+                    logger.debug("Detected ES Module from import/export statements")
+                    return ModuleSystem.ES_MODULE
 
-                if has_require or has_module_exports:
-                    if not (has_import or has_export):
-                        logger.debug("Detected CommonJS from require/module.exports")
-                        return ModuleSystem.COMMONJS
+                if (has_require or has_module_exports) and not (has_import or has_export):
+                    logger.debug("Detected CommonJS from require/module.exports")
+                    return ModuleSystem.COMMONJS
 
             except Exception as e:
                 logger.warning(f"Failed to analyze file {file_path}: {e}")
@@ -270,7 +271,7 @@ def convert_esm_to_commonjs(code: str) -> str:
     default_import = re.compile(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];?")
 
     # Replace named imports with destructured requires
-    def replace_named(match):
+    def replace_named(match) -> str:
         names = match.group(1).strip()
         module_path = match.group(2)
         # Remove .js extension for CommonJS (optional but cleaner)
@@ -278,7 +279,7 @@ def convert_esm_to_commonjs(code: str) -> str:
         return f"const {{ {names} }} = require('{module_path}');"
 
     # Replace default imports with simple requires
-    def replace_default(match):
+    def replace_default(match) -> str:
         name = match.group(1)
         module_path = match.group(2)
         # Remove .js extension for CommonJS
@@ -287,9 +288,8 @@ def convert_esm_to_commonjs(code: str) -> str:
 
     # Apply conversions (named first as it's more specific)
     code = named_import.sub(replace_named, code)
-    code = default_import.sub(replace_default, code)
+    return default_import.sub(replace_default, code)
 
-    return code
 
 
 def ensure_module_system_compatibility(code: str, target_module_system: str) -> str:

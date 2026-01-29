@@ -4,6 +4,8 @@ This script tests all three approaches against the test cases and generates
 a comparison report.
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass, field
 from pathlib import Path

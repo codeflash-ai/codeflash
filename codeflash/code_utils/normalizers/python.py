@@ -116,9 +116,8 @@ class VariableNormalizer(ast.NodeTransformer):
                 and node.id not in self.nonlocal_vars
             ):
                 node.id = self.get_normalized_name(node.id)
-        elif isinstance(node.ctx, ast.Load):
-            if node.id in self.var_mapping:
-                node.id = self.var_mapping[node.id]
+        elif isinstance(node.ctx, ast.Load) and node.id in self.var_mapping:
+            node.id = self.var_mapping[node.id]
         return node
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> ast.ExceptHandler:

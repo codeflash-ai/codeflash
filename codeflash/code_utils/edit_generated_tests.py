@@ -204,7 +204,7 @@ def unique_inv_id(inv_id_runtimes: dict[InvocationId, list[int]], tests_project_
                 file_path = base_path.replace(".", os.sep) + matched_ext
                 # Check if the module path includes the tests directory name
                 tests_dir_name = tests_project_rootdir.name
-                if file_path.startswith(tests_dir_name + os.sep) or file_path.startswith(tests_dir_name + "/"):
+                if file_path.startswith((tests_dir_name + os.sep, tests_dir_name + "/")):
                     # Module path includes "tests." - use parent directory
                     abs_path = tests_project_rootdir.parent / Path(file_path)
                 else:
@@ -358,8 +358,7 @@ def normalize_codeflash_imports(source: str) -> str:
     # Replace CommonJS require
     source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
     # Replace ES module import
-    source = _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
-    return source
+    return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
 
 
 def inject_test_globals(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
