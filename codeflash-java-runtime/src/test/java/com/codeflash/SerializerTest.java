@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -247,6 +248,97 @@ class SerializerTest {
             Date date = new Date(0); // Epoch
             String json = Serializer.toJson(date);
             assertTrue(json.contains("1970"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Map Key Collision")
+    class MapKeyCollisionTests {
+
+        @Test
+        @DisplayName("should handle duplicate toString keys without losing data")
+        void testDuplicateToStringKeys() {
+            Map<Object, String> map = new LinkedHashMap<>();
+            map.put(new SameToString("A"), "first");
+            map.put(new SameToString("B"), "second");
+
+            String json = Serializer.toJson(map);
+            // Both values should be present, not overwritten
+            assertTrue(json.contains("first"), "First value should be present, got: " + json);
+            assertTrue(json.contains("second"), "Second value should be present, got: " + json);
+        }
+
+        @Test
+        @DisplayName("should append index to duplicate keys")
+        void testDuplicateKeysGetIndex() {
+            Map<Object, String> map = new LinkedHashMap<>();
+            map.put(new SameToString("A"), "first");
+            map.put(new SameToString("B"), "second");
+            map.put(new SameToString("C"), "third");
+
+            String json = Serializer.toJson(map);
+            // Should have same-key, same-key_1, same-key_2
+            assertTrue(json.contains("\"same-key\""), "Original key should be present");
+            assertTrue(json.contains("\"same-key_1\""), "First duplicate should have _1 suffix");
+            assertTrue(json.contains("\"same-key_2\""), "Second duplicate should have _2 suffix");
+        }
+    }
+
+    static class SameToString {
+        String internalValue;
+
+        SameToString(String value) {
+            this.internalValue = value;
+        }
+
+        @Override
+        public String toString() {
+            return "same-key";
+        }
+    }
+
+    @Nested
+    @DisplayName("Class and Proxy Types")
+    class ClassAndProxyTests {
+
+        @Test
+        @DisplayName("should serialize Class objects cleanly")
+        void testClassObject() {
+            String json = Serializer.toJson(String.class);
+            // Should output just the class name, not internal JVM fields
+            assertEquals("\"java.lang.String\"", json);
+        }
+
+        @Test
+        @DisplayName("should serialize primitive Class objects")
+        void testPrimitiveClassObject() {
+            String json = Serializer.toJson(int.class);
+            assertEquals("\"int\"", json);
+        }
+
+        @Test
+        @DisplayName("should serialize array Class objects")
+        void testArrayClassObject() {
+            String json = Serializer.toJson(String[].class);
+            assertEquals("\"java.lang.String[]\"", json);
+        }
+
+        @Test
+        @DisplayName("should handle dynamic proxy")
+        void testProxy() {
+            Runnable proxy = (Runnable) Proxy.newProxyInstance(
+                Runnable.class.getClassLoader(),
+                new Class<?>[] { Runnable.class },
+                (p, method, args) -> null
+            );
+            String json = Serializer.toJson(proxy);
+            assertNotNull(json);
+            // Should indicate it's a proxy cleanly, not dump handler internals or error
+            // Current behavior: produces __serialization_error__ due to module access
+            assertFalse(json.contains("__serialization_error__"),
+                "Proxy should be serialized cleanly, got: " + json);
+            assertTrue(json.contains("proxy") || json.contains("Proxy"),
+                "Proxy should be identified as such, got: " + json);
         }
     }
 

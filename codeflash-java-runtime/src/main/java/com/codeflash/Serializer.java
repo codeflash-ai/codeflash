@@ -10,11 +10,13 @@ import com.google.gson.JsonPrimitive;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -135,6 +137,26 @@ public final class Serializer {
             return new JsonPrimitive((String) obj);
         }
 
+        // Class objects - serialize as class name string
+        if (obj instanceof Class) {
+            return new JsonPrimitive(getClassName((Class<?>) obj));
+        }
+
+        // Dynamic proxies - serialize cleanly without reflection
+        if (Proxy.isProxyClass(clazz)) {
+            JsonObject proxyObj = new JsonObject();
+            proxyObj.addProperty("__proxy__", true);
+            Class<?>[] interfaces = clazz.getInterfaces();
+            if (interfaces.length > 0) {
+                JsonArray interfaceNames = new JsonArray();
+                for (Class<?> iface : interfaces) {
+                    interfaceNames.add(iface.getName());
+                }
+                proxyObj.add("interfaces", interfaceNames);
+            }
+            return proxyObj;
+        }
+
         // Check for circular reference (only for reference types)
         if (seen.containsKey(obj)) {
             JsonObject circular = new JsonObject();
@@ -235,6 +257,7 @@ public final class Serializer {
 
     private static JsonElement serializeMap(Map<?, ?> map, IdentityHashMap<Object, Boolean> seen, int depth) {
         JsonObject jsonObject = new JsonObject();
+        Map<String, Integer> keyCount = new HashMap<>();
         int count = 0;
 
         for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -242,7 +265,8 @@ public final class Serializer {
                 jsonObject.addProperty("__truncated__", map.size() - count + " more entries");
                 break;
             }
-            String key = entry.getKey() != null ? entry.getKey().toString() : "null";
+            String baseKey = entry.getKey() != null ? entry.getKey().toString() : "null";
+            String key = getUniqueKey(baseKey, keyCount);
             jsonObject.add(key, serialize(entry.getValue(), seen, depth + 1));
             count++;
         }
@@ -278,5 +302,28 @@ public final class Serializer {
         }
 
         return jsonObject;
+    }
+
+    /**
+     * Get a readable class name, handling arrays and primitives.
+     */
+    private static String getClassName(Class<?> clazz) {
+        if (clazz.isArray()) {
+            return getClassName(clazz.getComponentType()) + "[]";
+        }
+        return clazz.getName();
+    }
+
+    /**
+     * Get a unique key for map serialization, appending _N suffix for duplicates.
+     */
+    private static String getUniqueKey(String baseKey, Map<String, Integer> keyCount) {
+        int count = keyCount.getOrDefault(baseKey, 0);
+        keyCount.put(baseKey, count + 1);
+
+        if (count == 0) {
+            return baseKey;
+        }
+        return baseKey + "_" + count;
     }
 }
