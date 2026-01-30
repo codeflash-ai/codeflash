@@ -57,19 +57,10 @@ codeflash/
 └── result/                 # Result types and handling
 ```
 
-### Key Patterns
+### Key Points
 
-**Either/Result pattern for errors:**
-```python
-from codeflash.either import is_successful, Success, Failure
-result = some_operation()
-if is_successful(result):
-    value = result.unwrap()
-else:
-    error = result.failure()
-```
-
-**Use libcst, not ast** - Always use `libcst` for code parsing/modification to preserve formatting.
+- Use libcst, not ast - For Python, always use `libcst` for code parsing/modification to preserve formatting.
+- Code context extraction and replacement test must always assert for full string equality, no substring matching.
 
 ## Code Style
 
