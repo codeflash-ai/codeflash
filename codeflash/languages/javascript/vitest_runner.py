@@ -51,6 +51,22 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
     return None
 
 
+def _is_vitest_coverage_available(project_root: Path) -> bool:
+    """Check if Vitest coverage package is available.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if @vitest/coverage-v8 or @vitest/coverage-istanbul is installed.
+
+    """
+    node_modules = project_root / "node_modules"
+    return (node_modules / "@vitest" / "coverage-v8").exists() or (
+        node_modules / "@vitest" / "coverage-istanbul"
+    ).exists()
+
+
 def _ensure_runtime_files(project_root: Path) -> None:
     """Ensure JavaScript runtime package is installed in the project.
 
@@ -217,15 +233,19 @@ def run_vitest_behavioral_tests(
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
-    # Coverage output directory
+    # Coverage output directory - only enable if coverage package is available
     coverage_dir = get_run_tmp_file(Path("vitest_coverage"))
-    coverage_json_path = coverage_dir / "coverage-final.json" if enable_coverage else None
+    coverage_available = _is_vitest_coverage_available(effective_cwd) if enable_coverage else False
+    coverage_json_path = coverage_dir / "coverage-final.json" if coverage_available else None
+
+    if enable_coverage and not coverage_available:
+        logger.debug("Vitest coverage package not installed, running without coverage")
 
     # Build Vitest command
     vitest_cmd = _build_vitest_behavioral_command(test_files=test_files, timeout=timeout, output_file=result_file_path)
 
-    # Add coverage flags if enabled
-    if enable_coverage:
+    # Add coverage flags only if coverage is available
+    if coverage_available:
         vitest_cmd.extend(["--coverage", "--coverage.reporter=json", f"--coverage.reportsDirectory={coverage_dir}"])
 
     # Set up environment

@@ -1925,7 +1925,7 @@ class JavaScriptSupport:
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
-        test_framework: str = "jest",
+        test_framework: str | None = None,
     ) -> tuple[Path, Any, Path | None, Path | None]:
         """Run behavioral tests using the detected test framework.
 
@@ -1937,13 +1937,17 @@ class JavaScriptSupport:
             project_root: Project root directory.
             enable_coverage: Whether to collect coverage information.
             candidate_index: Index of the candidate being tested.
-            test_framework: Test framework to use ("jest" or "vitest").
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
 
         """
-        if test_framework == "vitest":
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
 
             return run_vitest_behavioral_tests(
@@ -1978,7 +1982,7 @@ class JavaScriptSupport:
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
-        test_framework: str = "jest",
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests using the detected test framework.
 
@@ -1991,13 +1995,17 @@ class JavaScriptSupport:
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
-            test_framework: Test framework to use ("jest" or "vitest").
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
-        if test_framework == "vitest":
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
 
             return run_vitest_benchmarking_tests(
@@ -2032,7 +2040,7 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
-        test_framework: str = "jest",
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
         """Run tests for line profiling using the detected test framework.
 
@@ -2043,13 +2051,17 @@ class JavaScriptSupport:
             timeout: Optional timeout in seconds.
             project_root: Project root directory.
             line_profile_output_file: Path where line profile results will be written.
-            test_framework: Test framework to use ("jest" or "vitest").
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
-        if test_framework == "vitest":
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_line_profile_tests
 
             return run_vitest_line_profile_tests(
