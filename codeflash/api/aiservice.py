@@ -14,7 +14,7 @@ from codeflash.cli_cmds.console import console, logger
 from codeflash.code_utils.env_utils import get_codeflash_api_key
 from codeflash.code_utils.git_utils import get_last_commit_author_if_pr_exists, get_repo_owner_and_name
 from codeflash.code_utils.time_utils import humanize_runtime
-from codeflash.languages import is_javascript, is_python
+from codeflash.languages import is_java, is_javascript, is_python
 from codeflash.models.ExperimentMetadata import ExperimentMetadata
 from codeflash.models.models import (
     AIServiceRefinerRequest,
@@ -182,6 +182,8 @@ class AiServiceClient:
         payload["python_version"] = platform.python_version()
         if is_python():
             pass  # python_version already set
+        elif is_java():
+            payload["language_version"] = language_version or "17"  # Default Java version
         else:
             payload["language_version"] = language_version or "ES2022"
             # Add module system for JavaScript/TypeScript (esm or commonjs)
@@ -785,6 +787,8 @@ class AiServiceClient:
         payload["python_version"] = platform.python_version()
         if is_python():
             pass  # python_version already set
+        elif is_java():
+            payload["language_version"] = language_version or "17"  # Default Java version
         else:
             payload["language_version"] = language_version or "ES2022"
             # Add module system for JavaScript/TypeScript (esm or commonjs)

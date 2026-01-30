@@ -106,6 +106,16 @@ def is_typescript() -> bool:
     return _current_language == Language.TYPESCRIPT
 
 
+def is_java() -> bool:
+    """Check if the current language is Java.
+
+    Returns:
+        True if the current language is Java.
+
+    """
+    return _current_language == Language.JAVA
+
+
 def current_language_support() -> LanguageSupport:
     """Get the LanguageSupport instance for the current language.
 

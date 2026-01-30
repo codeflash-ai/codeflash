@@ -273,6 +273,20 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 def project_root_from_module_root(module_root: Path, pyproject_file_path: Path) -> Path:
     if pyproject_file_path.parent == module_root:
         return module_root
+
+    # For Java projects, find the directory containing pom.xml or build.gradle
+    # This handles the case where module_root is src/main/java
+    current = module_root
+    while current != current.parent:
+        if (current / "pom.xml").exists():
+            return current.resolve()
+        if (current / "build.gradle").exists() or (current / "build.gradle.kts").exists():
+            return current.resolve()
+        # Check for config file (pyproject.toml for Python, codeflash.toml for other languages)
+        if (current / "codeflash.toml").exists():
+            return current.resolve()
+        current = current.parent
+
     return module_root.parent.resolve()
 
 

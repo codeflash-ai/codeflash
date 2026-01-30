@@ -6,14 +6,19 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from codeflash.languages import current_language_support, is_javascript
+from codeflash.languages import current_language_support, is_java, is_javascript
 
 
 def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
     # Use appropriate file extension based on language
-    extension = current_language_support().get_test_file_suffix() if is_javascript() else ".py"
+    if is_javascript():
+        extension = current_language_support().get_test_file_suffix()
+    elif is_java():
+        extension = ".java"
+    else:
+        extension = ".py"
     path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
     if path.exists():
         return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
@@ -86,10 +91,12 @@ class TestConfig:
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.
 
-        Returns 'jest' for JavaScript/TypeScript, 'pytest' for Python (default).
+        Returns 'jest' for JavaScript/TypeScript, 'junit5' for Java, 'pytest' for Python (default).
         """
         if is_javascript():
             return "jest"
+        if is_java():
+            return "junit5"
         return "pytest"
 
     def set_language(self, language: str) -> None:
