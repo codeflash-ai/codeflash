@@ -7,6 +7,7 @@ test_framework parameter or singleton.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,7 @@ import pytest
 
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 from codeflash.languages.test_framework import reset_test_framework, set_current_test_framework
+from codeflash.models.models import TestFile, TestFiles, TestType
 
 
 @pytest.fixture
@@ -29,185 +31,218 @@ def ts_support() -> TypeScriptSupport:
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton() -> None:
+def reset_singleton():
     """Reset the test framework singleton before each test."""
     reset_test_framework()
     yield
     reset_test_framework()
 
 
-@pytest.fixture
-def mock_test_paths() -> MagicMock:
-    """Create a mock TestFiles object."""
-    mock = MagicMock()
-    mock_file = MagicMock()
-    mock_file.instrumented_behavior_file_path = Path("/project/tests/test_func.test.ts")
-    mock_file.benchmarking_file_path = Path("/project/tests/test_func__perf.test.ts")
-    mock.test_files = [mock_file]
-    return mock
+def create_test_files(tmp_path: Path) -> TestFiles:
+    """Create a TestFiles object with real file paths."""
+    test_file = tmp_path / "tests" / "test_func.test.ts"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.write_text("// test file")
+
+    perf_file = tmp_path / "tests" / "test_func__perf.test.ts"
+    perf_file.write_text("// perf test file")
+
+    return TestFiles(
+        test_files=[
+            TestFile(
+                instrumented_behavior_file_path=test_file,
+                benchmarking_file_path=perf_file,
+                test_type=TestType.GENERATED_REGRESSION,
+            )
+        ]
+    )
 
 
 class TestBehavioralTestsDispatch:
     """Tests for run_behavioral_tests dispatch logic."""
 
     @patch("codeflash.languages.javascript.test_runner.run_jest_behavioral_tests")
-    def test_dispatches_to_jest_by_default(
-        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_jest_by_default(self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Jest when test_framework is not specified."""
-        mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_behavioral_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        mock_jest_runner.assert_called_once()
+            js_support.run_behavioral_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_jest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.test_runner.run_jest_behavioral_tests")
-    def test_dispatches_to_jest_explicitly(
-        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_jest_explicitly(self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Jest when test_framework='jest'."""
-        mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_behavioral_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="jest"
-        )
+            mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        mock_jest_runner.assert_called_once()
+            js_support.run_behavioral_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="jest"
+            )
+
+            mock_jest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_behavioral_tests")
-    def test_dispatches_to_vitest(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_vitest(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Vitest when test_framework='vitest'."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_behavioral_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_behavioral_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
+            )
+
+            mock_vitest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_behavioral_tests")
     def test_typescript_support_dispatches_to_vitest(
-        self, mock_vitest_runner: MagicMock, ts_support: TypeScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
+        self, mock_vitest_runner: MagicMock, ts_support: TypeScriptSupport
     ) -> None:
         """TypeScriptSupport should also dispatch to Vitest when test_framework='vitest'."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        ts_support.run_behavioral_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        mock_vitest_runner.assert_called_once()
+            ts_support.run_behavioral_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
+            )
+
+            mock_vitest_runner.assert_called_once()
 
 
 class TestBenchmarkingTestsDispatch:
     """Tests for run_benchmarking_tests dispatch logic."""
 
     @patch("codeflash.languages.javascript.test_runner.run_jest_benchmarking_tests")
-    def test_dispatches_to_jest_by_default(
-        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_jest_by_default(self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Jest when test_framework is not specified."""
-        mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_benchmarking_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        mock_jest_runner.assert_called_once()
+            js_support.run_benchmarking_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_jest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_benchmarking_tests")
-    def test_dispatches_to_vitest(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_vitest(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Vitest when test_framework='vitest'."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_benchmarking_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_benchmarking_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
+            )
+
+            mock_vitest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_benchmarking_tests")
-    def test_passes_loop_parameters(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_passes_loop_parameters(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should pass loop parameters to Vitest runner."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_benchmarking_tests(
-            test_paths=mock_test_paths,
-            test_env={},
-            cwd=tmp_path,
-            project_root=tmp_path,
-            test_framework="vitest",
-            min_loops=10,
-            max_loops=50,
-            target_duration_seconds=5.0,
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        call_kwargs = mock_vitest_runner.call_args.kwargs
-        assert call_kwargs["min_loops"] == 10
-        assert call_kwargs["max_loops"] == 50
-        assert call_kwargs["target_duration_ms"] == 5000
+            js_support.run_benchmarking_tests(
+                test_paths=test_files,
+                test_env={},
+                cwd=tmp_path,
+                project_root=tmp_path,
+                test_framework="vitest",
+                min_loops=10,
+                max_loops=50,
+                target_duration_seconds=5.0,
+            )
+
+            call_kwargs = mock_vitest_runner.call_args.kwargs
+            assert call_kwargs["min_loops"] == 10
+            assert call_kwargs["max_loops"] == 50
+            assert call_kwargs["target_duration_ms"] == 5000
 
 
 class TestLineProfileTestsDispatch:
     """Tests for run_line_profile_tests dispatch logic."""
 
     @patch("codeflash.languages.javascript.test_runner.run_jest_line_profile_tests")
-    def test_dispatches_to_jest_by_default(
-        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_jest_by_default(self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Jest when test_framework is not specified."""
-        mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_line_profile_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        mock_jest_runner.assert_called_once()
+            js_support.run_line_profile_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_jest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_line_profile_tests")
-    def test_dispatches_to_vitest(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_dispatches_to_vitest(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """Should dispatch to Vitest when test_framework='vitest'."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        js_support.run_line_profile_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_line_profile_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="vitest"
+            )
+
+            mock_vitest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_line_profile_tests")
     def test_passes_line_profile_output_file(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
+        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport
     ) -> None:
         """Should pass line_profile_output_file to Vitest runner."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
-        output_file = tmp_path / "line_profile.json"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
+            output_file = tmp_path / "line_profile.json"
 
-        js_support.run_line_profile_tests(
-            test_paths=mock_test_paths,
-            test_env={},
-            cwd=tmp_path,
-            project_root=tmp_path,
-            test_framework="vitest",
-            line_profile_output_file=output_file,
-        )
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        call_kwargs = mock_vitest_runner.call_args.kwargs
-        assert call_kwargs["line_profile_output_file"] == output_file
+            js_support.run_line_profile_tests(
+                test_paths=test_files,
+                test_env={},
+                cwd=tmp_path,
+                project_root=tmp_path,
+                test_framework="vitest",
+                line_profile_output_file=output_file,
+            )
+
+            call_kwargs = mock_vitest_runner.call_args.kwargs
+            assert call_kwargs["line_profile_output_file"] == output_file
 
 
 class TestTestFrameworkProperty:
@@ -227,65 +262,73 @@ class TestTestFrameworkSingleton:
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_behavioral_tests")
     def test_uses_singleton_when_param_not_provided(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
+        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport
     ) -> None:
         """Should use singleton test_framework when parameter is not provided."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        # Set singleton to vitest
-        set_current_test_framework("vitest")
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        # Don't pass test_framework parameter - should use singleton
-        js_support.run_behavioral_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            set_current_test_framework("vitest")
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_behavioral_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_vitest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.test_runner.run_jest_behavioral_tests")
     def test_explicit_param_overrides_singleton(
-        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
+        self, mock_jest_runner: MagicMock, js_support: JavaScriptSupport
     ) -> None:
         """Explicit test_framework parameter should override singleton."""
-        mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        # Set singleton to vitest
-        set_current_test_framework("vitest")
+            mock_jest_runner.return_value = (tmp_path / "result.xml", MagicMock(), None, None)
 
-        # Pass explicit test_framework=jest - should override singleton
-        js_support.run_behavioral_tests(
-            test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="jest"
-        )
+            set_current_test_framework("vitest")
 
-        mock_jest_runner.assert_called_once()
+            js_support.run_behavioral_tests(
+                test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path, test_framework="jest"
+            )
+
+            mock_jest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_benchmarking_tests")
-    def test_benchmarking_uses_singleton(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_benchmarking_uses_singleton(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """run_benchmarking_tests should use singleton when param not provided."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        set_current_test_framework("vitest")
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        js_support.run_benchmarking_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            set_current_test_framework("vitest")
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_benchmarking_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_vitest_runner.assert_called_once()
 
     @patch("codeflash.languages.javascript.vitest_runner.run_vitest_line_profile_tests")
-    def test_line_profile_uses_singleton(
-        self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport, mock_test_paths: MagicMock, tmp_path: Path
-    ) -> None:
+    def test_line_profile_uses_singleton(self, mock_vitest_runner: MagicMock, js_support: JavaScriptSupport) -> None:
         """run_line_profile_tests should use singleton when param not provided."""
-        mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
-        (tmp_path / "package.json").write_text('{"name": "test"}')
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            (tmp_path / "package.json").write_text('{"name": "test"}')
+            test_files = create_test_files(tmp_path)
 
-        set_current_test_framework("vitest")
+            mock_vitest_runner.return_value = (tmp_path / "result.xml", MagicMock())
 
-        js_support.run_line_profile_tests(test_paths=mock_test_paths, test_env={}, cwd=tmp_path, project_root=tmp_path)
+            set_current_test_framework("vitest")
 
-        mock_vitest_runner.assert_called_once()
+            js_support.run_line_profile_tests(test_paths=test_files, test_env={}, cwd=tmp_path, project_root=tmp_path)
+
+            mock_vitest_runner.assert_called_once()
 
 
 class TestTestFrameworkSingletonModule:
@@ -309,7 +352,7 @@ class TestTestFrameworkSingletonModule:
         from codeflash.languages.test_framework import current_test_framework, set_current_test_framework
 
         set_current_test_framework("jest")
-        set_current_test_framework("vitest")  # Should be ignored
+        set_current_test_framework("vitest")
         assert current_test_framework() == "jest"
 
     def test_is_jest(self) -> None:

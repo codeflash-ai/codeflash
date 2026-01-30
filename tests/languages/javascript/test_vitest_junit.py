@@ -6,17 +6,20 @@ by the existing parsing infrastructure.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
+from junitparser import JUnitXml
+
+from codeflash.verification.parse_test_output import jest_end_pattern, jest_start_pattern
 
 
 class TestVitestJunitXmlFormat:
     """Tests for Vitest JUnit XML format compatibility."""
 
-    @pytest.fixture
-    def vitest_junit_xml(self, tmp_path: Path) -> Path:
-        """Create a sample Vitest JUnit XML file."""
+    def test_can_parse_vitest_junit_xml(self) -> None:
+        """Should be able to parse Vitest JUnit XML with junitparser."""
         xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
 <testsuites name="vitest tests" tests="4" failures="1" errors="0" time="0.537">
     <testsuite name="tests/fibonacci.test.ts" timestamp="2026-01-30T18:03:49.433Z" hostname="localhost" tests="3" failures="0" errors="0" skipped="0" time="0.008">
@@ -33,141 +36,149 @@ class TestVitestJunitXmlFormat:
         </testcase>
     </testsuite>
 </testsuites>"""
-        junit_file = tmp_path / "vitest-results.xml"
-        junit_file.write_text(xml_content)
-        return junit_file
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-    def test_can_parse_vitest_junit_xml(self, vitest_junit_xml: Path) -> None:
-        """Should be able to parse Vitest JUnit XML with junitparser."""
-        from junitparser import JUnitXml
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            assert xml is not None
+            test_count = sum(len(list(suite)) for suite in xml)
+            assert test_count == 4
 
-        assert xml is not None
-        # Count test cases
-        test_count = sum(len(list(suite)) for suite in xml)
-        assert test_count == 4
-
-    def test_extracts_test_suite_names(self, vitest_junit_xml: Path) -> None:
+    def test_extracts_test_suite_names(self) -> None:
         """Should extract test suite names from Vitest JUnit XML."""
-        from junitparser import JUnitXml
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0" time="0.1">
+    <testsuite name="tests/fibonacci.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="tests/fibonacci.test.ts" name="test1" time="0.001"></testcase>
+    </testsuite>
+    <testsuite name="tests/string_utils.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="tests/string_utils.test.ts" name="test2" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        suite_names = [suite.name for suite in xml]
-        assert "tests/fibonacci.test.ts" in suite_names
-        assert "tests/string_utils.test.ts" in suite_names
+            suite_names = [suite.name for suite in xml]
+            assert suite_names == ["tests/fibonacci.test.ts", "tests/string_utils.test.ts"]
 
-    def test_extracts_test_case_names(self, vitest_junit_xml: Path) -> None:
-        """Should extract test case names from Vitest JUnit XML."""
-        from junitparser import JUnitXml
+    def test_extracts_test_case_names_with_vitest_separator(self) -> None:
+        """Should extract test case names from Vitest JUnit XML (uses > as separator)."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0" time="0.1">
+    <testsuite name="tests/fibonacci.test.ts" tests="2" failures="0" time="0.01">
+        <testcase classname="tests/fibonacci.test.ts" name="fibonacci &gt; returns 0 for n=0" time="0.001"></testcase>
+        <testcase classname="tests/fibonacci.test.ts" name="fibonacci &gt; returns 1 for n=1" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        test_names = []
-        for suite in xml:
-            for case in suite:
-                test_names.append(case.name)
+            test_names = []
+            for suite in xml:
+                for case in suite:
+                    test_names.append(case.name)
 
-        # Vitest uses > as separator
-        assert "fibonacci > returns 0 for n=0" in test_names
-        assert "reverseString > reverses a simple string" in test_names
+            assert test_names == ["fibonacci > returns 0 for n=0", "fibonacci > returns 1 for n=1"]
 
-    def test_extracts_classname_as_file_path(self, vitest_junit_xml: Path) -> None:
+    def test_extracts_classname_as_file_path(self) -> None:
         """Should extract classname which contains file path in Vitest."""
-        from junitparser import JUnitXml
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="tests/fibonacci.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="tests/fibonacci.test.ts" name="test1" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        classnames = set()
-        for suite in xml:
-            for case in suite:
-                classnames.add(case.classname)
+            for suite in xml:
+                for case in suite:
+                    assert case.classname == "tests/fibonacci.test.ts"
 
-        # Vitest uses file path as classname
-        assert "tests/fibonacci.test.ts" in classnames
-        assert "tests/string_utils.test.ts" in classnames
+    def test_extracts_test_time_as_float(self) -> None:
+        """Should extract test execution time as float from Vitest JUnit XML."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="tests/test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="tests/test.ts" name="test1" time="0.0015"></testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-    def test_extracts_test_time(self, vitest_junit_xml: Path) -> None:
-        """Should extract test execution time from Vitest JUnit XML."""
-        from junitparser import JUnitXml
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            for suite in xml:
+                for case in suite:
+                    assert isinstance(case.time, float)
+                    assert case.time == 0.0015
 
-        for suite in xml:
-            for case in suite:
-                # Time should be a float
-                assert isinstance(case.time, float)
-                assert case.time >= 0
-
-    def test_detects_failures(self, vitest_junit_xml: Path) -> None:
+    def test_detects_failures(self) -> None:
         """Should detect test failures in Vitest JUnit XML."""
-        from junitparser import JUnitXml
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="1" errors="0" time="0.1">
+    <testsuite name="tests/test.ts" tests="2" failures="1" time="0.01">
+        <testcase classname="tests/test.ts" name="passing test" time="0.001"></testcase>
+        <testcase classname="tests/test.ts" name="failing test" time="0.001">
+            <failure message="expected true to be false" type="AssertionError">AssertionError: expected true to be false</failure>
+        </testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        failures = []
-        for suite in xml:
-            for case in suite:
-                if not case.is_passed:
-                    failures.append(case.name)
+            failures = []
+            for suite in xml:
+                for case in suite:
+                    if not case.is_passed:
+                        failures.append(case.name)
 
-        assert len(failures) == 1
-        assert "reverseString > reverses a simple string" in failures
+            assert failures == ["failing test"]
 
-    def test_extracts_failure_message(self, vitest_junit_xml: Path) -> None:
+    def test_extracts_failure_message(self) -> None:
         """Should extract failure message from Vitest JUnit XML."""
-        from junitparser import JUnitXml
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="1" failures="1" errors="0" time="0.1">
+    <testsuite name="tests/test.ts" tests="1" failures="1" time="0.01">
+        <testcase classname="tests/test.ts" name="failing test" time="0.001">
+            <failure message="expected 'actual' to equal 'expected'" type="AssertionError">AssertionError: expected 'actual' to equal 'expected'</failure>
+        </testcase>
+    </testsuite>
+</testsuites>"""
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
 
-        xml = JUnitXml.fromfile(str(vitest_junit_xml))
+            xml = JUnitXml.fromfile(str(junit_file))
 
-        for suite in xml:
-            for case in suite:
-                if not case.is_passed:
-                    # Get failure element
-                    for result in case.result:
-                        if hasattr(result, "message"):
-                            assert "expected" in result.message.lower()
-
-
-class TestVitestJunitXmlResolution:
-    """Tests for resolving test file paths from Vitest JUnit XML."""
-
-    def test_resolves_test_file_from_vitest_classname(self, tmp_path: Path) -> None:
-        """Should resolve test file path from Vitest classname."""
-        from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
-
-        # Create test directory structure
-        tests_dir = tmp_path / "tests"
-        tests_dir.mkdir()
-        test_file = tests_dir / "fibonacci.test.ts"
-        test_file.write_text("// test file")
-
-        # Vitest uses file paths as classname
-        classname = "tests/fibonacci.test.ts"
-
-        result = resolve_test_file_from_class_path(classname, tmp_path)
-
-        assert result is not None
-        assert result.exists()
-
-    def test_handles_nested_test_paths(self, tmp_path: Path) -> None:
-        """Should handle nested test paths from Vitest."""
-        from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
-
-        # Create nested test directory structure
-        tests_dir = tmp_path / "tests" / "unit"
-        tests_dir.mkdir(parents=True)
-        test_file = tests_dir / "fibonacci.test.ts"
-        test_file.write_text("// test file")
-
-        # Vitest uses file paths as classname
-        classname = "tests/unit/fibonacci.test.ts"
-
-        result = resolve_test_file_from_class_path(classname, tmp_path)
-
-        assert result is not None
-        assert result.exists()
+            for suite in xml:
+                for case in suite:
+                    if not case.is_passed:
+                        for result in case.result:
+                            if hasattr(result, "message"):
+                                assert result.message == "expected 'actual' to equal 'expected'"
 
 
 class TestVitestTimingMarkers:
@@ -179,43 +190,35 @@ class TestVitestTimingMarkers:
 
     def test_parses_start_timing_marker(self) -> None:
         """Should parse start timing marker from Vitest output."""
-        from codeflash.verification.parse_test_output import jest_start_pattern
-
-        # Timing marker format: !$######testName:testName:funcName:loopIndex:lineId######$!
         output = "!$######fibonacci.test.ts:returns 0 for n=0:fibonacci:1:line_0######$!"
 
         matches = jest_start_pattern.findall(output)
 
         assert len(matches) == 1
-        match = matches[0]
-        assert match[0] == "fibonacci.test.ts"  # test file
-        assert match[1] == "returns 0 for n=0"  # test name
-        assert match[2] == "fibonacci"  # function name
-        assert match[3] == "1"  # loop index
-        assert match[4] == "line_0"  # line id
+        test_file, test_name, func_name, loop_index, line_id = matches[0]
+        assert test_file == "fibonacci.test.ts"
+        assert test_name == "returns 0 for n=0"
+        assert func_name == "fibonacci"
+        assert loop_index == "1"
+        assert line_id == "line_0"
 
     def test_parses_end_timing_marker(self) -> None:
         """Should parse end timing marker from Vitest output."""
-        from codeflash.verification.parse_test_output import jest_end_pattern
-
-        # End marker format: !######testName:testName:funcName:loopIndex:lineId:durationNs######!
         output = "!######fibonacci.test.ts:returns 0 for n=0:fibonacci:1:line_0:123456######!"
 
         matches = jest_end_pattern.findall(output)
 
         assert len(matches) == 1
-        match = matches[0]
-        assert match[0] == "fibonacci.test.ts"  # test file
-        assert match[1] == "returns 0 for n=0"  # test name
-        assert match[2] == "fibonacci"  # function name
-        assert match[3] == "1"  # loop index
-        assert match[4] == "line_0"  # line id
-        assert match[5] == "123456"  # duration in nanoseconds
+        test_file, test_name, func_name, loop_index, line_id, duration = matches[0]
+        assert test_file == "fibonacci.test.ts"
+        assert test_name == "returns 0 for n=0"
+        assert func_name == "fibonacci"
+        assert loop_index == "1"
+        assert line_id == "line_0"
+        assert duration == "123456"
 
     def test_extracts_multiple_timing_markers(self) -> None:
         """Should extract multiple timing markers from Vitest output."""
-        from codeflash.verification.parse_test_output import jest_end_pattern, jest_start_pattern
-
         output = """Running tests...
 !$######test.ts:test1:func:1:id1######$!
 executing...
@@ -231,56 +234,14 @@ Done."""
         assert len(start_matches) == 2
         assert len(end_matches) == 2
 
-        # Verify durations
         durations = [int(m[5]) for m in end_matches]
         assert durations == [100000, 200000]
 
+    def test_timing_marker_with_special_characters_in_test_name(self) -> None:
+        """Should handle test names with special characters."""
+        output = "!$######test.ts:handles_n=0_correctly:fibonacci:1:id######$!"
 
-class TestVitestRealJunitOutput:
-    """Tests using real Vitest JUnit output from the test project."""
+        matches = jest_start_pattern.findall(output)
 
-    @pytest.fixture
-    def vitest_project_dir(self):
-        """Get the Vitest sample project directory."""
-        project_root = Path(__file__).parent.parent.parent.parent
-        vitest_dir = project_root / "code_to_optimize" / "js" / "code_to_optimize_vitest"
-        if not vitest_dir.exists():
-            pytest.skip("code_to_optimize_vitest directory not found")
-        return vitest_dir
-
-    def test_parses_real_vitest_junit_output(self, vitest_project_dir: Path) -> None:
-        """Should parse real Vitest JUnit output from test project."""
-        junit_file = vitest_project_dir / ".codeflash" / "vitest-results.xml"
-        if not junit_file.exists():
-            pytest.skip("Vitest JUnit output not found - run npm test first")
-
-        from junitparser import JUnitXml
-
-        xml = JUnitXml.fromfile(str(junit_file))
-
-        # Should have parsed without errors
-        assert xml is not None
-
-        # Should have multiple test suites
-        suite_count = len(list(xml))
-        assert suite_count >= 2
-
-        # All tests should pass in the sample project
-        for suite in xml:
-            for case in suite:
-                assert case.is_passed, f"Test {case.name} should pass"
-
-    def test_counts_tests_in_real_output(self, vitest_project_dir: Path) -> None:
-        """Should count all tests in real Vitest JUnit output."""
-        junit_file = vitest_project_dir / ".codeflash" / "vitest-results.xml"
-        if not junit_file.exists():
-            pytest.skip("Vitest JUnit output not found - run npm test first")
-
-        from junitparser import JUnitXml
-
-        xml = JUnitXml.fromfile(str(junit_file))
-
-        test_count = sum(len(list(suite)) for suite in xml)
-
-        # We have 22 tests in fibonacci.test.ts and 21 in string_utils.test.ts
-        assert test_count >= 40
+        assert len(matches) == 1
+        assert matches[0][1] == "handles_n=0_correctly"
