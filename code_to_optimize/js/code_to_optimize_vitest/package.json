@@ -1,0 +1,23 @@
+{
+  "name": "codeflash-vitest-test",
+  "version": "1.0.0",
+  "description": "Sample TypeScript project with Vitest for codeflash optimization testing",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "build": "tsc"
+  },
+  "codeflash": {
+    "moduleRoot": ".",
+    "testsRoot": "tests"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "codeflash": "file:../../../packages/codeflash",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

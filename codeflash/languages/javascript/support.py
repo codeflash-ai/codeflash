@@ -1872,7 +1872,7 @@ class JavaScriptSupport:
             # Write instrumented code to source file
             source_file_path.write_text(instrumented_source, encoding="utf-8")
             logger.debug("Wrote instrumented source to %s", source_file_path)
-            return True  # noqa: TRY300
+            return True
         except Exception as e:
             logger.warning("Failed to instrument source for line profiling: %s", e)
             return False
@@ -1925,8 +1925,9 @@ class JavaScriptSupport:
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
+        test_framework: str = "jest",
     ) -> tuple[Path, Any, Path | None, Path | None]:
-        """Run Jest behavioral tests.
+        """Run behavioral tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1936,11 +1937,25 @@ class JavaScriptSupport:
             project_root: Project root directory.
             enable_coverage: Whether to collect coverage information.
             candidate_index: Index of the candidate being tested.
+            test_framework: Test framework to use ("jest" or "vitest").
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
 
         """
+        if test_framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
+
+            return run_vitest_behavioral_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                enable_coverage=enable_coverage,
+                candidate_index=candidate_index,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -1963,8 +1978,9 @@ class JavaScriptSupport:
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        test_framework: str = "jest",
     ) -> tuple[Path, Any]:
-        """Run Jest benchmarking tests.
+        """Run benchmarking tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1975,11 +1991,26 @@ class JavaScriptSupport:
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            test_framework: Test framework to use ("jest" or "vitest").
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        if test_framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
+
+            return run_vitest_benchmarking_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                min_loops=min_loops,
+                max_loops=max_loops,
+                target_duration_ms=int(target_duration_seconds * 1000),
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -2001,8 +2032,9 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
+        test_framework: str = "jest",
     ) -> tuple[Path, Any]:
-        """Run Jest tests for line profiling.
+        """Run tests for line profiling using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -2011,11 +2043,24 @@ class JavaScriptSupport:
             timeout: Optional timeout in seconds.
             project_root: Project root directory.
             line_profile_output_file: Path where line profile results will be written.
+            test_framework: Test framework to use ("jest" or "vitest").
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        if test_framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_line_profile_tests
+
+            return run_vitest_line_profile_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                line_profile_output_file=line_profile_output_file,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 
         return run_jest_line_profile_tests(
