@@ -1507,56 +1507,6 @@ class JavaScriptSupport:
 
         return results
 
-    # === Instrumentation ===
-
-    def instrument_for_behavior(
-        self, source: str, functions: Sequence[FunctionInfo], output_file: Path | None = None
-    ) -> str:
-        """Add behavior instrumentation to capture inputs/outputs.
-
-        For JavaScript, this wraps functions to capture their arguments
-        and return values.
-
-        Args:
-            source: Source code to instrument.
-            functions: Functions to add tracing to.
-            output_file: Optional output file for traces.
-
-        Returns:
-            Instrumented source code.
-
-        """
-        if not functions:
-            return source
-
-        from codeflash.languages.javascript.tracer import JavaScriptTracer
-
-        # Use first function's file path if output_file not specified
-        if output_file is None:
-            file_path = functions[0].file_path
-            output_file = file_path.parent / ".codeflash" / "traces.db"
-
-        tracer = JavaScriptTracer(output_file)
-        return tracer.instrument_source(source, functions[0].file_path, list(functions))
-
-    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
-        """Add timing instrumentation to test code.
-
-        For JavaScript/Jest, we can use Jest's built-in timing or add custom timing.
-
-        Args:
-            test_source: Test source code to instrument.
-            target_function: Function being benchmarked.
-
-        Returns:
-            Instrumented test source code.
-
-        """
-        # For benchmarking, we rely on Jest's built-in timing
-        # which is captured in the JUnit XML output
-        # No additional instrumentation needed
-        return test_source
-
     # === Validation ===
 
     def validate_syntax(self, source: str) -> bool:

@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_file_path
+from codeflash.code_utils.code_utils import (
+    get_run_tmp_file,
+    log_something,
+    module_name_from_file_path,
+    unified_diff_strings,
+)
 from codeflash.languages import is_javascript
 from codeflash.verification.verification_utils import ModifyInspiredTests, delete_multiple_if_name_main
 
@@ -75,12 +80,23 @@ def generate_tests(
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
 
+            log_something("og_test", generated_test_source)
+
+
+            og1 = generated_test_source
             # First validate and fix import styles
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
+            diff = unified_diff_strings(og1, generated_test_source)
+            log_something("validate_and_fix_import_style", diff)
 
+            og2 = generated_test_source
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
             generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
+            diff = unified_diff_strings(og2, generated_test_source)
+            log_something("ensure_module_system_compatibility", diff)
 
+
+            og3 = generated_test_source
             # Instrument for behavior verification (writes to SQLite)
             instrumented_behavior_test_source = instrument_generated_js_test(
                 test_code=generated_test_source,
@@ -88,14 +104,18 @@ def generate_tests(
                 qualified_name=qualified_name,
                 mode=TestingMode.BEHAVIOR,
             )
-
+            diff = unified_diff_strings(og3, instrumented_behavior_test_source)
+            log_something("instrumentation_behavior", diff)
             # Instrument for performance measurement (prints to stdout)
+            og4 = instrumented_behavior_test_source
             instrumented_perf_test_source = instrument_generated_js_test(
                 test_code=generated_test_source,
                 function_name=func_name,
                 qualified_name=qualified_name,
                 mode=TestingMode.PERFORMANCE,
             )
+            diff = unified_diff_strings(og4, instrumented_perf_test_source)
+            log_something("instrumentation_performance", diff)
 
             logger.debug(f"Instrumented JS/TS tests locally for {func_name}")
         else:

@@ -41,6 +41,7 @@ from codeflash.code_utils.code_utils import (
     extract_unique_errors,
     file_name_from_test_module_name,
     get_run_tmp_file,
+    log_something,
     normalize_by_max,
     restore_conftest,
     unified_diff_strings,
@@ -148,6 +149,10 @@ if TYPE_CHECKING:
 
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
     """Log optimization context details when in verbose mode using Rich formatting."""
+    log_something("read_writable_code", code_context.read_writable_code.markdown)
+    log_something("read_only_context_code", code_context.read_only_context_code)
+    for i, h in enumerate(code_context.helper_functions):
+        log_something(f"helper_functions_{i}", h.qualified_name)
     if logger.getEffectiveLevel() > logging.DEBUG:
         return
 
@@ -495,6 +500,7 @@ class FunctionOptimizer:
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
+        log_something("trace_id", self.function_trace_id)
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()

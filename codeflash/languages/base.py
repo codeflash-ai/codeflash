@@ -413,34 +413,6 @@ class LanguageSupport(Protocol):
         """
         ...
 
-    # === Instrumentation ===
-
-    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionInfo]) -> str:
-        """Add behavior instrumentation to capture inputs/outputs.
-
-        Args:
-            source: Source code to instrument.
-            functions: Functions to add behavior capture.
-
-        Returns:
-            Instrumented source code.
-
-        """
-        ...
-
-    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
-        """Add timing instrumentation to test code.
-
-        Args:
-            test_source: Test source code to instrument.
-            target_function: Function being benchmarked.
-
-        Returns:
-            Instrumented test source code.
-
-        """
-        ...
-
     # === Validation ===
 
     def validate_syntax(self, source: str) -> bool:

@@ -135,37 +135,6 @@ function multiply(x, y) {
 
 class TestJavaScriptSupportInstrumentation:
     """Integration tests for JavaScript support instrumentation methods."""
-
-    def test_javascript_support_instrument_for_behavior(self):
-        """Test JavaScriptSupport.instrument_for_behavior method."""
-        from codeflash.languages import get_language_support
-
-        js_support = get_language_support(Language.JAVASCRIPT)
-
-        source = """
-function greet(name) {
-    return "Hello, " + name;
-}
-"""
-
-        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
-            f.write(source)
-            f.flush()
-            file_path = Path(f.name)
-
-        func_info = FunctionInfo(
-            name="greet", file_path=file_path, start_line=2, end_line=4, language=Language.JAVASCRIPT
-        )
-
-        output_file = file_path.parent / ".codeflash" / "traces.db"
-        instrumented = js_support.instrument_for_behavior(source, [func_info], output_file=output_file)
-
-        assert "__codeflash_tracer__" in instrumented
-        assert "wrap" in instrumented
-
-        # Clean up
-        file_path.unlink()
-
     def test_javascript_support_instrument_for_line_profiling(self):
         """Test JavaScriptSupport.instrument_source_for_line_profiler method."""
         from codeflash.languages import get_language_support

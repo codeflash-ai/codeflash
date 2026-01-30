@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
-from codeflash.code_utils.code_utils import get_run_tmp_file
+from codeflash.code_utils.code_utils import get_run_tmp_file, log_something
 from codeflash.code_utils.config_consts import STABILITY_CENTER_TOLERANCE, STABILITY_SPREAD_TOLERANCE
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
@@ -318,6 +318,7 @@ def run_jest_behavioral_tests(
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
         logger.debug(f"Jest behavioral tests completed in {wall_clock_ns / 1e9:.2f}s")
 
+    log_something("jest_behavioral_tests_stdout", result.stdout)
     return result_file_path, result, coverage_json_path, None
 
 

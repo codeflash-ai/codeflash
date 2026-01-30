@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.code_utils.code_utils import log_something, unified_diff_strings
 
 if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition

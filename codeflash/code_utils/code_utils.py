@@ -489,3 +489,7 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
     if error_msg:
         return False, error_msg
     return True, ""
+
+
+def log_something(header: str, content: str) -> None:
+    print(f"<cf_log:{header}>\n{content}\n</cf_log:{header}>")

@@ -511,7 +511,7 @@ class Optimizer:
                     prepared_modules[original_module_path] = module_prep_result
 
                 validated_original_code, original_module_ast = prepared_modules[original_module_path]
-
+                print("================================== START ==================================")
                 function_iterator_count = i + 1
                 logger.info(
                     f"Optimizing function {function_iterator_count} of {len(globally_ranked_functions)}: "

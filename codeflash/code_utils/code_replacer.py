@@ -15,6 +15,7 @@ from codeflash.code_utils.code_extractor import (
     add_needed_imports_from_module,
     find_insertion_index_after_imports,
 )
+from codeflash.code_utils.code_utils import log_something, unified_diff_strings
 from codeflash.code_utils.config_parser import find_conftest_files
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
@@ -499,6 +500,7 @@ def replace_function_definitions_for_language(
     from codeflash.languages.base import FunctionInfo, Language, ParentInfo
 
     original_source_code: str = module_abspath.read_text(encoding="utf8")
+    og = original_source_code
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
 
     if not code_to_apply.strip():
@@ -580,6 +582,8 @@ def replace_function_definitions_for_language(
     if original_source_code.strip() == new_code.strip():
         return False
 
+    unified_diff = unified_diff_strings(og, new_code)
+    log_something("code_replacement_diff", unified_diff)
     module_abspath.write_text(new_code, encoding="utf8")
     return True
 
