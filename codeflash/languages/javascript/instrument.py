@@ -51,6 +51,11 @@ class StandaloneCallMatch:
     has_trailing_semicolon: bool
 
 
+codeflash_import_pattern = re.compile(
+    r"(import\s+codeflash\s+from\s+['\"]codeflash['\"])|(const\s+codeflash\s*=\s*require\(['\"]codeflash['\"]\))"
+)
+
+
 class StandaloneCallTransformer:
     """Transforms standalone func(...) calls in JavaScript test code.
 
@@ -730,7 +735,7 @@ def _instrument_js_test_code(
     """
     # Add codeflash helper import if not already present
     # Support both npm package (codeflash) and legacy local file (codeflash-jest-helper)
-    has_codeflash_import = "codeflash" in code
+    has_codeflash_import = codeflash_import_pattern.search(code)
     if not has_codeflash_import:
         # Detect module system: ESM uses "import ... from", CommonJS uses "require()"
         is_esm = bool(re.search(r"^\s*import\s+.+\s+from\s+['\"]", code, re.MULTILINE))
