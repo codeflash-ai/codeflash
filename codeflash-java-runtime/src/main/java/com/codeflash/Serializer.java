@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -256,6 +257,7 @@ public final class Serializer {
 
     private static JsonElement serializeMap(Map<?, ?> map, IdentityHashMap<Object, Boolean> seen, int depth) {
         JsonObject jsonObject = new JsonObject();
+        Map<String, Integer> keyCount = new HashMap<>();
         int count = 0;
 
         for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -263,7 +265,8 @@ public final class Serializer {
                 jsonObject.addProperty("__truncated__", map.size() - count + " more entries");
                 break;
             }
-            String key = entry.getKey() != null ? entry.getKey().toString() : "null";
+            String baseKey = entry.getKey() != null ? entry.getKey().toString() : "null";
+            String key = getUniqueKey(baseKey, keyCount);
             jsonObject.add(key, serialize(entry.getValue(), seen, depth + 1));
             count++;
         }
@@ -311,4 +314,16 @@ public final class Serializer {
         return clazz.getName();
     }
 
+    /**
+     * Get a unique key for map serialization, appending _N suffix for duplicates.
+     */
+    private static String getUniqueKey(String baseKey, Map<String, Integer> keyCount) {
+        int count = keyCount.getOrDefault(baseKey, 0);
+        keyCount.put(baseKey, count + 1);
+
+        if (count == 0) {
+            return baseKey;
+        }
+        return baseKey + "_" + count;
+    }
 }

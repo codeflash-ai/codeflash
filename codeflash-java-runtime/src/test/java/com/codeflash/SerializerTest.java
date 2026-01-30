@@ -252,6 +252,52 @@ class SerializerTest {
     }
 
     @Nested
+    @DisplayName("Map Key Collision")
+    class MapKeyCollisionTests {
+
+        @Test
+        @DisplayName("should handle duplicate toString keys without losing data")
+        void testDuplicateToStringKeys() {
+            Map<Object, String> map = new LinkedHashMap<>();
+            map.put(new SameToString("A"), "first");
+            map.put(new SameToString("B"), "second");
+
+            String json = Serializer.toJson(map);
+            // Both values should be present, not overwritten
+            assertTrue(json.contains("first"), "First value should be present, got: " + json);
+            assertTrue(json.contains("second"), "Second value should be present, got: " + json);
+        }
+
+        @Test
+        @DisplayName("should append index to duplicate keys")
+        void testDuplicateKeysGetIndex() {
+            Map<Object, String> map = new LinkedHashMap<>();
+            map.put(new SameToString("A"), "first");
+            map.put(new SameToString("B"), "second");
+            map.put(new SameToString("C"), "third");
+
+            String json = Serializer.toJson(map);
+            // Should have same-key, same-key_1, same-key_2
+            assertTrue(json.contains("\"same-key\""), "Original key should be present");
+            assertTrue(json.contains("\"same-key_1\""), "First duplicate should have _1 suffix");
+            assertTrue(json.contains("\"same-key_2\""), "Second duplicate should have _2 suffix");
+        }
+    }
+
+    static class SameToString {
+        String internalValue;
+
+        SameToString(String value) {
+            this.internalValue = value;
+        }
+
+        @Override
+        public String toString() {
+            return "same-key";
+        }
+    }
+
+    @Nested
     @DisplayName("Class and Proxy Types")
     class ClassAndProxyTests {
 
