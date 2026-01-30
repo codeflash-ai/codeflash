@@ -29,8 +29,8 @@ public class Calculator {
         assert len(functions) == 1
 
         func_source = extract_function_source(source, functions[0])
-        assert "public int add" in func_source
-        assert "return a + b" in func_source
+        expected = "    public int add(int a, int b) {\n        return a + b;\n    }\n"
+        assert func_source == expected
 
     def test_extract_method_with_javadoc(self):
         """Test extracting method including Javadoc."""
@@ -51,8 +51,17 @@ public class Calculator {
         assert len(functions) == 1
 
         func_source = extract_function_source(source, functions[0])
-        # Should include Javadoc
-        assert "/**" in func_source or "Adds two numbers" in func_source
+        expected = """    /**
+     * Adds two numbers.
+     * @param a first number
+     * @param b second number
+     * @return sum
+     */
+    public int add(int a, int b) {
+        return a + b;
+    }
+"""
+        assert func_source == expected
 
 
 class TestExtractCodeContext:
@@ -88,8 +97,9 @@ public class Calculator {
         context = extract_code_context(add_func, tmp_path)
 
         assert context.language == Language.JAVA
-        assert "add" in context.target_code
         assert context.target_file == java_file
+        expected_target_code = "    public int add(int a, int b) {\n        return a + b + base;\n    }\n"
+        assert context.target_code == expected_target_code
 
 
 class TestExtractReadOnlyContext:
@@ -115,6 +125,5 @@ public class Calculator {
         assert add_func is not None
 
         context = extract_read_only_context(source, add_func, analyzer)
-
-        # Should include field declarations
-        assert "base" in context or "PI" in context or context == ""
+        expected = "private int base;\nprivate static final double PI = 3.14159;"
+        assert context == expected
