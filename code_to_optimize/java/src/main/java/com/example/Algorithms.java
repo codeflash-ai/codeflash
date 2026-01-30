@@ -4,25 +4,42 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Collection of algorithms.
+ * Collection of algorithms that can be optimized by Codeflash.
  */
 public class Algorithms {
 
-    /**
-     * Calculate Fibonacci number using recursive approach.
-     *
-     * @param n The position in Fibonacci sequence (0-indexed)
-     * @return The nth Fibonacci number
-     */
     public long fibonacci(int n) {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Fast doubling iterative method (O(log n) time, O(1) space)
+        long a = 0; // F(0)
+        long b = 1; // F(1)
+
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n);
+        for (int i = highestBit; i >= 0; i--) {
+            // Compute:
+            // c = F(2k) = F(k) * (2*F(k+1) - F(k))
+            // d = F(2k+1) = F(k)^2 + F(k+1)^2
+            long twoBminusA = (b << 1) - a;
+            long c = a * twoBminusA;
+            long d = a * a + b * b;
+
+            int mask = 1 << i;
+            if ((n & mask) == 0) {
+                a = c;
+                b = d;
+            } else {
+                a = d;
+                b = c + d;
+            }
+        }
+        return a;
     }
 
     /**
-     * Find all prime numbers up to n.
+     * Find all prime numbers up to n using naive approach.
+     * This can be optimized with Sieve of Eratosthenes.
      *
      * @param n Upper bound for finding primes
      * @return List of all prime numbers <= n
@@ -38,7 +55,7 @@ public class Algorithms {
     }
 
     /**
-     * Check if a number is prime using trial division.
+     * Check if a number is prime using naive trial division.
      *
      * @param num Number to check
      * @return true if num is prime
@@ -54,7 +71,8 @@ public class Algorithms {
     }
 
     /**
-     * Find duplicates in an array using nested loops.
+     * Find duplicates in an array using O(n^2) nested loops.
+     * This can be optimized with HashSet to O(n).
      *
      * @param arr Input array
      * @return List of duplicate elements
@@ -72,7 +90,7 @@ public class Algorithms {
     }
 
     /**
-     * Calculate factorial recursively.
+     * Calculate factorial recursively without tail optimization.
      *
      * @param n Number to calculate factorial for
      * @return n!
@@ -86,6 +104,7 @@ public class Algorithms {
 
     /**
      * Concatenate strings in a loop using String concatenation.
+     * Should be optimized to use StringBuilder.
      *
      * @param items List of strings to concatenate
      * @return Concatenated result
@@ -103,6 +122,7 @@ public class Algorithms {
 
     /**
      * Calculate sum of squares using a loop.
+     * This is already efficient but shows a simple example.
      *
      * @param n Upper bound
      * @return Sum of squares from 1 to n
