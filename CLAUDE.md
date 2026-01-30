@@ -60,7 +60,7 @@ codeflash/
 ### Key Points
 
 - Use libcst, not ast - For Python, always use `libcst` for code parsing/modification to preserve formatting.
-- Code context extraction and replacement test must always assert for full string equality, no substring matching.
+- Code context extraction and replacement tests must always assert for full string equality, no substring matching.
 
 ## Code Style
 
