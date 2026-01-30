@@ -10,6 +10,7 @@ import com.google.gson.JsonPrimitive;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -133,6 +134,26 @@ public final class Serializer {
         }
         if (obj instanceof String) {
             return new JsonPrimitive((String) obj);
+        }
+
+        // Class objects - serialize as class name string
+        if (obj instanceof Class) {
+            return new JsonPrimitive(getClassName((Class<?>) obj));
+        }
+
+        // Dynamic proxies - serialize cleanly without reflection
+        if (Proxy.isProxyClass(clazz)) {
+            JsonObject proxyObj = new JsonObject();
+            proxyObj.addProperty("__proxy__", true);
+            Class<?>[] interfaces = clazz.getInterfaces();
+            if (interfaces.length > 0) {
+                JsonArray interfaceNames = new JsonArray();
+                for (Class<?> iface : interfaces) {
+                    interfaceNames.add(iface.getName());
+                }
+                proxyObj.add("interfaces", interfaceNames);
+            }
+            return proxyObj;
         }
 
         // Check for circular reference (only for reference types)
@@ -279,4 +300,15 @@ public final class Serializer {
 
         return jsonObject;
     }
+
+    /**
+     * Get a readable class name, handling arrays and primitives.
+     */
+    private static String getClassName(Class<?> clazz) {
+        if (clazz.isArray()) {
+            return getClassName(clazz.getComponentType()) + "[]";
+        }
+        return clazz.getName();
+    }
+
 }

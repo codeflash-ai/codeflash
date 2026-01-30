@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Proxy;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -247,6 +248,51 @@ class SerializerTest {
             Date date = new Date(0); // Epoch
             String json = Serializer.toJson(date);
             assertTrue(json.contains("1970"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Class and Proxy Types")
+    class ClassAndProxyTests {
+
+        @Test
+        @DisplayName("should serialize Class objects cleanly")
+        void testClassObject() {
+            String json = Serializer.toJson(String.class);
+            // Should output just the class name, not internal JVM fields
+            assertEquals("\"java.lang.String\"", json);
+        }
+
+        @Test
+        @DisplayName("should serialize primitive Class objects")
+        void testPrimitiveClassObject() {
+            String json = Serializer.toJson(int.class);
+            assertEquals("\"int\"", json);
+        }
+
+        @Test
+        @DisplayName("should serialize array Class objects")
+        void testArrayClassObject() {
+            String json = Serializer.toJson(String[].class);
+            assertEquals("\"java.lang.String[]\"", json);
+        }
+
+        @Test
+        @DisplayName("should handle dynamic proxy")
+        void testProxy() {
+            Runnable proxy = (Runnable) Proxy.newProxyInstance(
+                Runnable.class.getClassLoader(),
+                new Class<?>[] { Runnable.class },
+                (p, method, args) -> null
+            );
+            String json = Serializer.toJson(proxy);
+            assertNotNull(json);
+            // Should indicate it's a proxy cleanly, not dump handler internals or error
+            // Current behavior: produces __serialization_error__ due to module access
+            assertFalse(json.contains("__serialization_error__"),
+                "Proxy should be serialized cleanly, got: " + json);
+            assertTrue(json.contains("proxy") || json.contains("Proxy"),
+                "Proxy should be identified as such, got: " + json);
         }
     }
 
