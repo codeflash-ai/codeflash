@@ -176,6 +176,20 @@ codeflash --all # optimize the entire repo
 </Tab>
 </Tabs>
 
+### Common CLI flags
+
+For everyday use, these are the most important flags:
+
+- **`--file PATH`**: Optimize only this file.
+- **`--function NAME`**: Optimize only this function (requires `--file`).
+- **`--all [PATH]`**: Optimize all functions, optionally under a path.
+- **`--no-pr`**: Apply changes locally instead of creating a pull request.
+- **`--no-gen-tests`**: Use only existing tests, skip test generation.
+- **`--benchmark` / `--benchmarks-root PATH`**: Enable benchmark mode and point to the benchmarks directory.
+- **`--verbose` / `-v`**: Show detailed logs of what Codeflash is doing.
+- **`--verify-setup`**: Run a sample optimization to verify your installation.
+- **`--version`**: Print the Codeflash CLI version.
+
 ## Troubleshooting
 
 <AccordionGroup>
