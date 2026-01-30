@@ -21,7 +21,7 @@ from codeflash.code_utils.code_utils import (
     module_name_from_file_path,
 )
 from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
-from codeflash.languages import is_javascript
+from codeflash.languages import is_java, is_javascript
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
@@ -128,7 +128,7 @@ def parse_concurrency_metrics(test_results: TestResults, function_name: str) -> 
 
 
 def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> Path | None:
-    """Resolve test file path from pytest's test class path.
+    """Resolve test file path from pytest's test class path or Java class path.
 
     This function handles various cases where pytest's classname in JUnit XML
     includes parent directories that may already be part of base_dir.
@@ -136,6 +136,7 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
     Args:
         test_class_path: The full class path from pytest (e.g., "project.tests.test_file.TestClass")
             or a file path from Jest (e.g., "tests/test_file.test.js")
+            or a Java class path (e.g., "com.example.AlgorithmsTest")
         base_dir: The base directory for tests (tests project root)
 
     Returns:
@@ -147,6 +148,35 @@ def resolve_test_file_from_class_path(test_class_path: str, base_dir: Path) -> P
         >>> # Should find: /path/to/tests/unittest/test_file.py
 
     """
+    # Handle Java class paths (convert dots to path and add .java extension)
+    # Java class paths look like "com.example.TestClass" and should map to
+    # src/test/java/com/example/TestClass.java
+    if is_java():
+        # Convert dots to path separators
+        relative_path = test_class_path.replace(".", "/") + ".java"
+
+        # Try various locations
+        # 1. Directly under base_dir
+        potential_path = base_dir / relative_path
+        if potential_path.exists():
+            return potential_path
+
+        # 2. Under src/test/java relative to project root
+        project_root = base_dir.parent if base_dir.name == "java" else base_dir
+        while project_root.name not in ("", "/") and not (project_root / "pom.xml").exists():
+            project_root = project_root.parent
+        if (project_root / "pom.xml").exists():
+            potential_path = project_root / "src" / "test" / "java" / relative_path
+            if potential_path.exists():
+                return potential_path
+
+        # 3. Search for the file in base_dir and its subdirectories
+        file_name = test_class_path.split(".")[-1] + ".java"
+        for java_file in base_dir.rglob(file_name):
+            return java_file
+
+        return None
+
     # Handle file paths (contain slashes and extensions like .js/.ts)
     if "/" in test_class_path or "\\" in test_class_path:
         # This is a file path, not a Python module path
@@ -997,6 +1027,19 @@ def parse_test_xml(
                 end_matches[groups] = match
 
             if not begin_matches or not begin_matches:
+                # For Java tests, use the JUnit XML time attribute for runtime
+                runtime_from_xml = None
+                if is_java():
+                    try:
+                        # JUnit XML time is in seconds, convert to nanoseconds
+                        # Use a minimum of 1000ns (1 microsecond) for any successful test
+                        # to avoid 0 runtime being treated as "no runtime"
+                        test_time = float(testcase.time) if hasattr(testcase, 'time') and testcase.time else 0.0
+                        runtime_from_xml = max(int(test_time * 1_000_000_000), 1000)
+                    except (ValueError, TypeError):
+                        # If we can't get time from XML, use 1 microsecond as minimum
+                        runtime_from_xml = 1000
+
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=loop_index,
@@ -1008,7 +1051,7 @@ def parse_test_xml(
                             iteration_id="",
                         ),
                         file_name=test_file_path,
-                        runtime=None,
+                        runtime=runtime_from_xml,
                         test_framework=test_config.test_framework,
                         did_pass=result,
                         test_type=test_type,

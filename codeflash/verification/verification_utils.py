@@ -9,9 +9,16 @@ from pydantic.dataclasses import dataclass
 from codeflash.languages import current_language_support, is_java, is_javascript
 
 
-def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
+def get_test_file_path(
+    test_dir: Path,
+    function_name: str,
+    iteration: int = 0,
+    test_type: str = "unit",
+    package_name: str | None = None,
+    class_name: str | None = None,
+) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
-    function_name = function_name.replace(".", "_")
+    function_name_safe = function_name.replace(".", "_")
     # Use appropriate file extension based on language
     if is_javascript():
         extension = current_language_support().get_test_file_suffix()
@@ -19,9 +26,25 @@ def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, t
         extension = ".java"
     else:
         extension = ".py"
-    path = test_dir / f"test_{function_name}__{test_type}_test_{iteration}{extension}"
+
+    if is_java() and package_name:
+        # For Java, create package directory structure
+        # e.g., com.example -> com/example/
+        package_path = package_name.replace(".", "/")
+        java_class_name = class_name or f"{function_name_safe.title()}Test"
+        # Add suffix to avoid conflicts
+        if test_type == "perf":
+            java_class_name = f"{java_class_name}__perfonlyinstrumented"
+        elif test_type == "unit":
+            java_class_name = f"{java_class_name}__perfinstrumented"
+        path = test_dir / package_path / f"{java_class_name}{extension}"
+        # Create package directory if needed
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        path = test_dir / f"test_{function_name_safe}__{test_type}_test_{iteration}{extension}"
+
     if path.exists():
-        return get_test_file_path(test_dir, function_name, iteration + 1, test_type)
+        return get_test_file_path(test_dir, function_name, iteration + 1, test_type, package_name, class_name)
     return path
 
 

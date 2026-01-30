@@ -98,6 +98,12 @@ class JavaSupport(LanguageSupport):
         """Find all optimizable functions in a Java file."""
         return discover_functions(file_path, filter_criteria, self._analyzer)
 
+    def discover_functions_from_source(
+        self, source: str, file_path: Path | None = None, filter_criteria: FunctionFilterCriteria | None = None
+    ) -> list[FunctionInfo]:
+        """Find all optimizable functions in Java source code."""
+        return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
+
     def discover_tests(
         self, test_root: Path, source_functions: Sequence[FunctionInfo]
     ) -> dict[str, list[TestInfo]]:

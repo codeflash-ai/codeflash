@@ -76,7 +76,7 @@ from codeflash.context import code_context_extractor
 from codeflash.context.unused_definition_remover import detect_unused_helper_functions, revert_unused_helper_functions
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
-from codeflash.languages import is_python
+from codeflash.languages import is_java, is_python
 from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
@@ -577,17 +577,29 @@ class FunctionOptimizer:
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
         for i, generated_test in enumerate(generated_tests.generated_tests):
+            behavior_path = generated_test.behavior_file_path
+            perf_path = generated_test.perf_file_path
+
+            # For Java, fix paths to match package structure
+            if is_java():
+                behavior_path, perf_path = self._fix_java_test_paths(
+                    generated_test.instrumented_behavior_test_source,
+                    generated_test.instrumented_perf_test_source,
+                )
+                generated_test.behavior_file_path = behavior_path
+                generated_test.perf_file_path = perf_path
+
             logger.debug(
-                f"[PIPELINE] Test {i + 1}: behavior_path={generated_test.behavior_file_path}, perf_path={generated_test.perf_file_path}"
+                f"[PIPELINE] Test {i + 1}: behavior_path={behavior_path}, perf_path={perf_path}"
             )
 
-            with generated_test.behavior_file_path.open("w", encoding="utf8") as f:
+            with behavior_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_behavior_test_source)
-            logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
+            logger.debug(f"[PIPELINE] Wrote behavioral test to {behavior_path}")
 
-            with generated_test.perf_file_path.open("w", encoding="utf8") as f:
+            with perf_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
-            logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
+            logger.debug(f"[PIPELINE] Wrote perf test to {perf_path}")
 
             # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
             test_file_obj = TestFile(
@@ -639,6 +651,55 @@ class FunctionOptimizer:
                 original_conftest_content,
             )
         )
+
+    def _fix_java_test_paths(
+        self, behavior_source: str, perf_source: str
+    ) -> tuple[Path, Path]:
+        """Fix Java test file paths to match package structure.
+
+        Java requires test files to be in directories matching their package.
+        This method extracts the package and class from the generated tests
+        and returns correct paths.
+
+        Args:
+            behavior_source: Source code of the behavior test.
+            perf_source: Source code of the performance test.
+
+        Returns:
+            Tuple of (behavior_path, perf_path) with correct package structure.
+
+        """
+        import re
+
+        # Extract package from behavior source
+        package_match = re.search(r'^\s*package\s+([\w.]+)\s*;', behavior_source, re.MULTILINE)
+        package_name = package_match.group(1) if package_match else ""
+
+        # Extract class name from behavior source
+        class_match = re.search(r'\bclass\s+(\w+)', behavior_source)
+        behavior_class = class_match.group(1) if class_match else "GeneratedTest"
+
+        # Extract class name from perf source
+        perf_class_match = re.search(r'\bclass\s+(\w+)', perf_source)
+        perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
+
+        # Build paths with package structure
+        test_dir = self.test_cfg.tests_root
+
+        if package_name:
+            package_path = package_name.replace(".", "/")
+            behavior_path = test_dir / package_path / f"{behavior_class}.java"
+            perf_path = test_dir / package_path / f"{perf_class}.java"
+        else:
+            behavior_path = test_dir / f"{behavior_class}.java"
+            perf_path = test_dir / f"{perf_class}.java"
+
+        # Create directories if needed
+        behavior_path.parent.mkdir(parents=True, exist_ok=True)
+        perf_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
+        return behavior_path, perf_path
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:

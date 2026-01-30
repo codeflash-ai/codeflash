@@ -4,6 +4,7 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
@@ -732,12 +733,29 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
-            module_optimized_code = ""
+            # Fallback: try to match by just the filename (for Java/JS where the AI
+            # might return just the class name like "Algorithms.java" instead of
+            # the full path like "src/main/java/com/example/Algorithms.java")
+            target_filename = relative_path.name
+            for file_path_str, code in file_to_code_context.items():
+                if file_path_str and Path(file_path_str).name == target_filename:
+                    module_optimized_code = code
+                    logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
+                    break
+
+            if module_optimized_code is None:
+                # Also try matching if there's only one code file
+                if len(file_to_code_context) == 1:
+                    only_key = next(iter(file_to_code_context.keys()))
+                    module_optimized_code = file_to_code_context[only_key]
+                    logger.debug(f"Using only code block {only_key} for {relative_path}")
+                else:
+                    logger.warning(
+                        f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                        "re-check your 'markdown code structure'"
+                        f"existing files are {file_to_code_context.keys()}"
+                    )
+                    module_optimized_code = ""
     return module_optimized_code
 
 

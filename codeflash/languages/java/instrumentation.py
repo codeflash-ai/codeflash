@@ -3,6 +3,13 @@
 This module provides functionality to instrument Java code for:
 1. Behavior capture - recording inputs/outputs for verification
 2. Benchmarking - measuring execution time
+
+Timing instrumentation adds System.nanoTime() calls around the function being tested
+and prints timing markers in a format compatible with Python/JS implementations:
+  Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
+  End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+
+This allows codeflash to extract timing data from stdout for accurate benchmarking.
 """
 
 from __future__ import annotations
@@ -30,54 +37,21 @@ def _get_function_name(func: Any) -> str:
         return func.function_name
     raise AttributeError(f"Cannot get function name from {type(func)}")
 
-# Template for behavior capture instrumentation
-BEHAVIOR_CAPTURE_IMPORT = "import com.codeflash.CodeFlash;"
 
-BEHAVIOR_CAPTURE_BEFORE = """
-        // CodeFlash behavior capture - start
-        long __codeflash_call_id_{call_id} = System.nanoTime();
-        CodeFlash.recordInput(__codeflash_call_id_{call_id}, "{method_id}", CodeFlash.serialize({args}));
-        long __codeflash_start_{call_id} = System.nanoTime();
-"""
-
-BEHAVIOR_CAPTURE_AFTER_RETURN = """
-        // CodeFlash behavior capture - end
-        long __codeflash_end_{call_id} = System.nanoTime();
-        CodeFlash.recordOutput(__codeflash_call_id_{call_id}, "{method_id}", CodeFlash.serialize(__codeflash_result_{call_id}), __codeflash_end_{call_id} - __codeflash_start_{call_id});
-"""
-
-BEHAVIOR_CAPTURE_AFTER_VOID = """
-        // CodeFlash behavior capture - end
-        long __codeflash_end_{call_id} = System.nanoTime();
-        CodeFlash.recordOutput(__codeflash_call_id_{call_id}, "{method_id}", "null", __codeflash_end_{call_id} - __codeflash_start_{call_id});
-"""
-
-# Template for benchmark instrumentation
-BENCHMARK_IMPORT = """import com.codeflash.Blackhole;
-import com.codeflash.BenchmarkContext;
-import com.codeflash.BenchmarkResult;"""
-
-BENCHMARK_WRAPPER_TEMPLATE = """
-    // CodeFlash benchmark wrapper
-    public void __codeflash_benchmark_{method_name}(int iterations) {{
-        // Warmup
-        for (int i = 0; i < Math.min(iterations / 10, 100); i++) {{
-            {warmup_call}
-        }}
-
-        // Measurement
-        long[] measurements = new long[iterations];
-        for (int i = 0; i < iterations; i++) {{
-            long start = System.nanoTime();
-            {measurement_call}
-            long end = System.nanoTime();
-            measurements[i] = end - start;
-        }}
-
-        BenchmarkResult result = new BenchmarkResult("{method_id}", measurements);
-        CodeFlash.recordBenchmarkResult("{method_id}", result);
-    }}
-"""
+def _get_qualified_name(func: Any) -> str:
+    """Get the qualified name from either FunctionInfo or FunctionToOptimize."""
+    if hasattr(func, "qualified_name"):
+        return func.qualified_name
+    # Build qualified name from function_name and parents
+    if hasattr(func, "function_name"):
+        parts = []
+        if hasattr(func, "parents") and func.parents:
+            for parent in func.parents:
+                if hasattr(parent, "name"):
+                    parts.append(parent.name)
+        parts.append(func.function_name)
+        return ".".join(parts)
+    return str(func)
 
 
 def instrument_for_behavior(
@@ -87,8 +61,9 @@ def instrument_for_behavior(
 ) -> str:
     """Add behavior instrumentation to capture inputs/outputs.
 
-    Wraps function calls to record arguments and return values
-    for behavioral verification.
+    For Java, we don't modify the test file for behavior capture.
+    Instead, we rely on JUnit test results (pass/fail) to verify correctness.
+    The test file is returned unchanged.
 
     Args:
         source: Source code to instrument.
@@ -96,23 +71,349 @@ def instrument_for_behavior(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
+        Source code (unchanged for Java).
+
+    """
+    # For Java, we don't need to instrument tests for behavior capture.
+    # The JUnit test results (pass/fail) serve as the verification mechanism.
+    if functions:
+        func_name = _get_function_name(functions[0])
+        logger.debug("Java behavior testing for %s - using JUnit pass/fail results", func_name)
+    return source
+
+
+def instrument_for_benchmarking(
+    test_source: str,
+    target_function: FunctionInfo,
+    analyzer: JavaAnalyzer | None = None,
+) -> str:
+    """Add timing instrumentation to test code.
+
+    For Java, we rely on Maven Surefire's timing information rather than
+    modifying the test code. The test file is returned unchanged.
+
+    Args:
+        test_source: Test source code to instrument.
+        target_function: Function being benchmarked.
+        analyzer: Optional JavaAnalyzer instance.
+
+    Returns:
+        Test source code (unchanged for Java).
+
+    """
+    func_name = _get_function_name(target_function)
+    logger.debug("Java benchmarking for %s - using Maven Surefire timing", func_name)
+    return test_source
+
+
+def instrument_existing_test(
+    test_path: Path,
+    call_positions: Sequence,
+    function_to_optimize: Any,  # FunctionInfo or FunctionToOptimize
+    tests_project_root: Path,
+    mode: str,  # "behavior" or "performance"
+    analyzer: JavaAnalyzer | None = None,
+    output_class_suffix: str | None = None,  # Suffix for renamed class
+) -> tuple[bool, str | None]:
+    """Inject profiling code into an existing test file.
+
+    For Java, this:
+    1. Renames the class to match the new file name (Java requires class name = file name)
+    2. Adds timing instrumentation to test methods (for performance mode)
+
+    Args:
+        test_path: Path to the test file.
+        call_positions: List of code positions where the function is called.
+        function_to_optimize: The function being optimized.
+        tests_project_root: Root directory of tests.
+        mode: Testing mode - "behavior" or "performance".
+        analyzer: Optional JavaAnalyzer instance.
+        output_class_suffix: Optional suffix for the renamed class.
+
+    Returns:
+        Tuple of (success, modified_source).
+
+    """
+    try:
+        source = test_path.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.error("Failed to read test file %s: %s", test_path, e)
+        return False, f"Failed to read test file: {e}"
+
+    func_name = _get_function_name(function_to_optimize)
+
+    # Get the original class name from the file name
+    original_class_name = test_path.stem  # e.g., "AlgorithmsTest"
+
+    # Determine the new class name based on mode
+    if mode == "behavior":
+        new_class_name = f"{original_class_name}__perfinstrumented"
+    else:
+        new_class_name = f"{original_class_name}__perfonlyinstrumented"
+
+    # Rename the class declaration in the source
+    # Pattern: "public class ClassName" or "class ClassName"
+    pattern = rf'\b(public\s+)?class\s+{re.escape(original_class_name)}\b'
+    replacement = rf'\1class {new_class_name}'
+    modified_source = re.sub(pattern, replacement, source)
+
+    # For performance mode, add timing instrumentation to test methods
+    if mode == "performance":
+        modified_source = _add_timing_instrumentation(
+            modified_source,
+            new_class_name,
+            func_name,
+        )
+
+    logger.debug(
+        "Java %s testing for %s: renamed class %s -> %s",
+        mode,
+        func_name,
+        original_class_name,
+        new_class_name,
+    )
+
+    return True, modified_source
+
+
+def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
+    """Add timing instrumentation to test methods.
+
+    For each @Test method, this adds:
+    1. Start timing marker printed at the beginning
+    2. End timing marker printed at the end (in a finally block)
+
+    Timing markers format:
+      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
+      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+
+    Args:
+        source: The test source code.
+        class_name: Name of the test class.
+        func_name: Name of the function being tested.
+
+    Returns:
         Instrumented source code.
 
     """
-    analyzer = analyzer or get_java_analyzer()
+    # Find all @Test methods and add timing around their bodies
+    # Pattern matches: @Test (with optional parameters) followed by method declaration
+    # We process line by line for cleaner handling
 
-    if not functions:
-        return source
+    lines = source.split('\n')
+    result = []
+    i = 0
+    iteration_counter = 0
 
-    # Add import if not present
-    if BEHAVIOR_CAPTURE_IMPORT not in source:
-        source = _add_import(source, BEHAVIOR_CAPTURE_IMPORT)
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
 
-    # Find and instrument each function
-    for func in functions:
-        source = _instrument_function_behavior(source, func, analyzer)
+        # Look for @Test annotation
+        if stripped.startswith('@Test'):
+            result.append(line)
+            i += 1
 
+            # Collect any additional annotations
+            while i < len(lines) and lines[i].strip().startswith('@'):
+                result.append(lines[i])
+                i += 1
+
+            # Now find the method signature and opening brace
+            method_lines = []
+            while i < len(lines):
+                method_lines.append(lines[i])
+                if '{' in lines[i]:
+                    break
+                i += 1
+
+            # Add the method signature lines
+            for ml in method_lines:
+                result.append(ml)
+            i += 1
+
+            # We're now inside the method body
+            iteration_counter += 1
+            iter_id = iteration_counter
+
+            # Add timing start code
+            indent = "        "
+            timing_start_code = [
+                f"{indent}// Codeflash timing instrumentation",
+                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX") != null ? System.getenv("CODEFLASH_LOOP_INDEX") : "1");',
+                f"{indent}int _cf_iter{iter_id} = {iter_id};",
+                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
+                f"{indent}long _cf_start{iter_id} = System.nanoTime();",
+                f"{indent}try {{",
+            ]
+            result.extend(timing_start_code)
+
+            # Collect method body until we find matching closing brace
+            brace_depth = 1
+            body_lines = []
+
+            while i < len(lines) and brace_depth > 0:
+                body_line = lines[i]
+                # Count braces (simple approach - doesn't handle strings/comments perfectly)
+                for ch in body_line:
+                    if ch == '{':
+                        brace_depth += 1
+                    elif ch == '}':
+                        brace_depth -= 1
+
+                if brace_depth > 0:
+                    body_lines.append(body_line)
+                    i += 1
+                else:
+                    # This line contains the closing brace, but we've hit depth 0
+                    # Add indented body lines
+                    for bl in body_lines:
+                        result.append("    " + bl)
+
+                    # Add finally block
+                    timing_end_code = [
+                        f"{indent}}} finally {{",
+                        f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
+                        f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+                        f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+                        f"{indent}}}",
+                        "    }",  # Method closing brace
+                    ]
+                    result.extend(timing_end_code)
+                    i += 1
+        else:
+            result.append(line)
+            i += 1
+
+    return '\n'.join(result)
+
+
+def create_benchmark_test(
+    target_function: FunctionInfo,
+    test_setup_code: str,
+    invocation_code: str,
+    iterations: int = 1000,
+) -> str:
+    """Create a benchmark test for a function.
+
+    Args:
+        target_function: The function to benchmark.
+        test_setup_code: Code to set up the test (create instances, etc.).
+        invocation_code: Code that invokes the function.
+        iterations: Number of benchmark iterations.
+
+    Returns:
+        Complete benchmark test source code.
+
+    """
+    method_name = _get_function_name(target_function)
+    method_id = _get_qualified_name(target_function)
+    class_name = getattr(target_function, "class_name", None) or "Target"
+
+    benchmark_code = f"""
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+
+/**
+ * Benchmark test for {method_name}.
+ * Generated by CodeFlash.
+ */
+public class {class_name}Benchmark {{
+
+    @Test
+    @DisplayName("Benchmark {method_name}")
+    public void benchmark{method_name.capitalize()}() {{
+        {test_setup_code}
+
+        // Warmup phase
+        for (int i = 0; i < {iterations // 10}; i++) {{
+            {invocation_code};
+        }}
+
+        // Measurement phase
+        long startTime = System.nanoTime();
+        for (int i = 0; i < {iterations}; i++) {{
+            {invocation_code};
+        }}
+        long endTime = System.nanoTime();
+
+        long totalNanos = endTime - startTime;
+        long avgNanos = totalNanos / {iterations};
+
+        System.out.println("CODEFLASH_BENCHMARK:{method_id}:total_ns=" + totalNanos + ",avg_ns=" + avgNanos + ",iterations={iterations}");
+    }}
+}}
+"""
+    return benchmark_code
+
+
+def remove_instrumentation(source: str) -> str:
+    """Remove CodeFlash instrumentation from source code.
+
+    For Java, since we don't add instrumentation, this is a no-op.
+
+    Args:
+        source: Source code.
+
+    Returns:
+        Source unchanged.
+
+    """
     return source
+
+
+def instrument_generated_java_test(
+    test_code: str,
+    function_name: str,
+    qualified_name: str,
+    mode: str,  # "behavior" or "performance"
+) -> str:
+    """Instrument a generated Java test for behavior or performance testing.
+
+    Args:
+        test_code: The generated test source code.
+        function_name: Name of the function being tested.
+        qualified_name: Fully qualified name of the function.
+        mode: "behavior" for behavior capture or "performance" for timing.
+
+    Returns:
+        Instrumented test source code.
+
+    """
+    # Extract class name from the test code
+    class_match = re.search(r'\bclass\s+(\w+)', test_code)
+    if not class_match:
+        logger.warning("Could not find class name in generated test")
+        return test_code
+
+    original_class_name = class_match.group(1)
+
+    # Rename class based on mode
+    if mode == "behavior":
+        new_class_name = f"{original_class_name}__perfinstrumented"
+    else:
+        new_class_name = f"{original_class_name}__perfonlyinstrumented"
+
+    # Rename the class in the source
+    modified_code = re.sub(
+        rf'\b(public\s+)?class\s+{re.escape(original_class_name)}\b',
+        rf'\1class {new_class_name}',
+        test_code,
+    )
+
+    # For performance mode, add timing instrumentation
+    if mode == "performance":
+        modified_code = _add_timing_instrumentation(
+            modified_code,
+            new_class_name,
+            function_name,
+        )
+
+    logger.debug("Instrumented generated Java test for %s (mode=%s)", function_name, mode)
+    return modified_code
 
 
 def _add_import(source: str, import_statement: str) -> str:
@@ -142,213 +443,3 @@ def _add_import(source: str, import_statement: str) -> str:
 
     lines.insert(insert_idx, import_statement + "\n")
     return "".join(lines)
-
-
-def _instrument_function_behavior(
-    source: str,
-    function: FunctionInfo,
-    analyzer: JavaAnalyzer,
-) -> str:
-    """Instrument a single function for behavior capture.
-
-    Args:
-        source: The source code.
-        function: The function to instrument.
-        analyzer: JavaAnalyzer instance.
-
-    Returns:
-        Source with function instrumented.
-
-    """
-    source_bytes = source.encode("utf8")
-    tree = analyzer.parse(source_bytes)
-
-    # Find the method node
-    methods = analyzer.find_methods(source)
-    target_method = None
-    func_name = _get_function_name(function)
-    for method in methods:
-        if method.name == func_name:
-            class_name = getattr(function, "class_name", None)
-            if class_name is None or method.class_name == class_name:
-                target_method = method
-                break
-
-    if not target_method:
-        logger.warning("Could not find method %s for instrumentation", func_name)
-        return source
-
-    # For now, we'll add instrumentation as a simple wrapper
-    # A full implementation would use AST transformation
-    method_id = function.qualified_name
-    call_id = hash(method_id) % 10000
-
-    # Build instrumented version
-    # This is a simplified approach - a full implementation would
-    # parse the method body and instrument each return statement
-    logger.debug("Instrumented method %s for behavior capture", function.name)
-
-    return source
-
-
-def instrument_for_benchmarking(
-    test_source: str,
-    target_function: FunctionInfo,
-    analyzer: JavaAnalyzer | None = None,
-) -> str:
-    """Add timing instrumentation to test code.
-
-    Args:
-        test_source: Test source code to instrument.
-        target_function: Function being benchmarked.
-
-    Returns:
-        Instrumented test source code.
-
-    """
-    analyzer = analyzer or get_java_analyzer()
-
-    # Add imports if not present
-    if "import com.codeflash" not in test_source:
-        test_source = _add_import(test_source, BENCHMARK_IMPORT)
-
-    # Find calls to the target function in the test and wrap them
-    # This is a simplified implementation
-    logger.debug("Instrumented test for benchmarking %s", _get_function_name(target_function))
-
-    return test_source
-
-
-def instrument_existing_test(
-    test_path: Path,
-    call_positions: Sequence,
-    function_to_optimize: FunctionInfo,
-    tests_project_root: Path,
-    mode: str,  # "behavior" or "performance"
-    analyzer: JavaAnalyzer | None = None,
-) -> tuple[bool, str | None]:
-    """Inject profiling code into an existing test file.
-
-    Args:
-        test_path: Path to the test file.
-        call_positions: List of code positions where the function is called.
-        function_to_optimize: The function being optimized.
-        tests_project_root: Root directory of tests.
-        mode: Testing mode - "behavior" or "performance".
-        analyzer: Optional JavaAnalyzer instance.
-
-    Returns:
-        Tuple of (success, instrumented_code or error message).
-
-    """
-    analyzer = analyzer or get_java_analyzer()
-
-    try:
-        source = test_path.read_text(encoding="utf-8")
-    except Exception as e:
-        return False, f"Failed to read test file: {e}"
-
-    try:
-        if mode == "behavior":
-            instrumented = instrument_for_behavior(source, [function_to_optimize], analyzer)
-        else:
-            instrumented = instrument_for_benchmarking(source, function_to_optimize, analyzer)
-
-        return True, instrumented
-
-    except Exception as e:
-        logger.exception("Failed to instrument test file: %s", e)
-        return False, str(e)
-
-
-def create_benchmark_test(
-    target_function: FunctionInfo,
-    test_setup_code: str,
-    invocation_code: str,
-    iterations: int = 1000,
-) -> str:
-    """Create a benchmark test for a function.
-
-    Args:
-        target_function: The function to benchmark.
-        test_setup_code: Code to set up the test (create instances, etc.).
-        invocation_code: Code that invokes the function.
-        iterations: Number of benchmark iterations.
-
-    Returns:
-        Complete benchmark test source code.
-
-    """
-    method_name = target_function.name
-    method_id = target_function.qualified_name
-
-    benchmark_code = f"""
-import com.codeflash.Blackhole;
-import com.codeflash.BenchmarkContext;
-import com.codeflash.BenchmarkResult;
-import com.codeflash.CodeFlash;
-import org.junit.jupiter.api.Test;
-
-public class {target_function.class_name or 'Target'}Benchmark {{
-
-    @Test
-    public void benchmark{method_name.capitalize()}() {{
-        {test_setup_code}
-
-        // Warmup phase
-        for (int i = 0; i < {iterations // 10}; i++) {{
-            Blackhole.consume({invocation_code});
-        }}
-
-        // Measurement phase
-        long[] measurements = new long[{iterations}];
-        for (int i = 0; i < {iterations}; i++) {{
-            long start = System.nanoTime();
-            Blackhole.consume({invocation_code});
-            long end = System.nanoTime();
-            measurements[i] = end - start;
-        }}
-
-        BenchmarkResult result = new BenchmarkResult("{method_id}", measurements);
-        CodeFlash.recordBenchmarkResult("{method_id}", result);
-
-        System.out.println("Benchmark complete: " + result);
-    }}
-}}
-"""
-    return benchmark_code
-
-
-def remove_instrumentation(source: str) -> str:
-    """Remove CodeFlash instrumentation from source code.
-
-    Args:
-        source: Instrumented source code.
-
-    Returns:
-        Source with instrumentation removed.
-
-    """
-    lines = source.splitlines(keepends=True)
-    result_lines = []
-    skip_until_end = False
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Skip CodeFlash instrumentation blocks
-        if "// CodeFlash" in stripped and "start" in stripped:
-            skip_until_end = True
-            continue
-        if skip_until_end:
-            if "// CodeFlash" in stripped and "end" in stripped:
-                skip_until_end = False
-            continue
-
-        # Skip CodeFlash imports
-        if "import com.codeflash" in stripped:
-            continue
-
-        result_lines.append(line)
-
-    return "".join(result_lines)

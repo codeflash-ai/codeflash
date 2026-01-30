@@ -756,6 +756,7 @@ class AiServiceClient:
         # Validate test framework based on language
         python_frameworks = ["pytest", "unittest"]
         javascript_frameworks = ["jest", "mocha", "vitest"]
+        java_frameworks = ["junit5", "junit4", "testng"]
         if is_python():
             assert test_framework in python_frameworks, (
                 f"Invalid test framework for Python, got {test_framework} but expected one of {python_frameworks}"
@@ -763,6 +764,10 @@ class AiServiceClient:
         elif is_javascript():
             assert test_framework in javascript_frameworks, (
                 f"Invalid test framework for JavaScript, got {test_framework} but expected one of {javascript_frameworks}"
+            )
+        elif is_java():
+            assert test_framework in java_frameworks, (
+                f"Invalid test framework for Java, got {test_framework} but expected one of {java_frameworks}"
             )
 
         payload: dict[str, Any] = {

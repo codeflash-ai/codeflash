@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -57,6 +58,7 @@ def run_behavioral_tests(
     """Run behavioral tests for Java code.
 
     This runs tests and captures behavior (inputs/outputs) for verification.
+    For Java, verification is based on JUnit test pass/fail results.
 
     Args:
         test_paths: TestFiles object or list of test file paths.
@@ -68,20 +70,17 @@ def run_behavioral_tests(
         candidate_index: Index of the candidate being tested.
 
     Returns:
-        Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
+        Tuple of (result_xml_path, subprocess_result, coverage_path, config_path).
 
     """
     project_root = project_root or cwd
 
-    # Generate unique result file path
-    result_id = uuid.uuid4().hex[:8]
-    result_file = Path(tempfile.gettempdir()) / f"codeflash_java_behavior_{result_id}.db"
-
-    # Set environment variables for CodeFlash runtime
+    # Set environment variables for timing instrumentation
     run_env = os.environ.copy()
     run_env.update(test_env)
-    run_env["CODEFLASH_RESULT_FILE"] = str(result_file)
+    run_env["CODEFLASH_LOOP_INDEX"] = "1"  # Single loop for behavior tests
     run_env["CODEFLASH_MODE"] = "behavior"
+    run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
 
     # Run Maven tests
     result = _run_maven_tests(
@@ -89,9 +88,14 @@ def run_behavioral_tests(
         test_paths,
         run_env,
         timeout=timeout or 300,
+        mode="behavior",
     )
 
-    return result_file, result, None, None
+    # Find or create the JUnit XML results file
+    surefire_dir = project_root / "target" / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+
+    return result_xml_path, result, None, None
 
 
 def run_benchmarking_tests(
@@ -101,12 +105,15 @@ def run_benchmarking_tests(
     timeout: int | None = None,
     project_root: Path | None = None,
     min_loops: int = 5,
-    max_loops: int = 100_000,
+    max_loops: int = 100,
     target_duration_seconds: float = 10.0,
 ) -> tuple[Path, Any]:
     """Run benchmarking tests for Java code.
 
-    This runs tests with performance measurement.
+    This runs tests multiple times with performance measurement.
+    The instrumented tests print timing markers that are parsed from stdout:
+      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
+      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
 
     Args:
         test_paths: TestFiles object or list of test file paths.
@@ -119,33 +126,182 @@ def run_benchmarking_tests(
         target_duration_seconds: Target duration for benchmarking in seconds.
 
     Returns:
-        Tuple of (result_file_path, subprocess_result).
+        Tuple of (result_file_path, subprocess_result with aggregated stdout).
 
     """
+    import time
+
     project_root = project_root or cwd
 
-    # Generate unique result file path
-    result_id = uuid.uuid4().hex[:8]
-    result_file = Path(tempfile.gettempdir()) / f"codeflash_java_benchmark_{result_id}.db"
+    # Collect stdout from all loops
+    all_stdout = []
+    all_stderr = []
+    total_start_time = time.time()
+    loop_count = 0
+    last_result = None
 
-    # Set environment variables
-    run_env = os.environ.copy()
-    run_env.update(test_env)
-    run_env["CODEFLASH_RESULT_FILE"] = str(result_file)
-    run_env["CODEFLASH_MODE"] = "benchmark"
-    run_env["CODEFLASH_MIN_LOOPS"] = str(min_loops)
-    run_env["CODEFLASH_MAX_LOOPS"] = str(max_loops)
-    run_env["CODEFLASH_TARGET_DURATION"] = str(target_duration_seconds)
+    # Run multiple loops until we hit target duration or max loops
+    for loop_idx in range(1, max_loops + 1):
+        # Set environment variables for this loop
+        run_env = os.environ.copy()
+        run_env.update(test_env)
+        run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
+        run_env["CODEFLASH_MODE"] = "performance"
+        run_env["CODEFLASH_TEST_ITERATION"] = "0"
 
-    # Run Maven tests
-    result = _run_maven_tests(
-        project_root,
-        test_paths,
-        run_env,
-        timeout=timeout or 600,  # Longer timeout for benchmarks
+        # Run Maven tests for this loop
+        result = _run_maven_tests(
+            project_root,
+            test_paths,
+            run_env,
+            timeout=timeout or 120,  # Per-loop timeout
+            mode="performance",
+        )
+
+        last_result = result
+        loop_count = loop_idx
+
+        # Collect stdout/stderr
+        if result.stdout:
+            all_stdout.append(result.stdout)
+        if result.stderr:
+            all_stderr.append(result.stderr)
+
+        # Check if we've hit the target duration
+        elapsed = time.time() - total_start_time
+        if loop_idx >= min_loops and elapsed >= target_duration_seconds:
+            logger.debug(
+                "Stopping benchmark after %d loops (%.2fs elapsed, target: %.2fs)",
+                loop_idx,
+                elapsed,
+                target_duration_seconds,
+            )
+            break
+
+        # Check if tests failed - don't continue looping
+        if result.returncode != 0:
+            logger.warning("Tests failed in loop %d, stopping benchmark", loop_idx)
+            break
+
+    # Create a combined result with all stdout
+    combined_stdout = "\n".join(all_stdout)
+    combined_stderr = "\n".join(all_stderr)
+
+    logger.debug(
+        "Completed %d benchmark loops in %.2fs",
+        loop_count,
+        time.time() - total_start_time,
     )
 
-    return result_file, result
+    # Create a combined subprocess result
+    combined_result = subprocess.CompletedProcess(
+        args=last_result.args if last_result else ["mvn", "test"],
+        returncode=last_result.returncode if last_result else -1,
+        stdout=combined_stdout,
+        stderr=combined_stderr,
+    )
+
+    # Find or create the JUnit XML results file (from last run)
+    surefire_dir = project_root / "target" / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)  # Use -1 for benchmark
+
+    return result_xml_path, combined_result
+
+
+def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
+    """Get or create a combined JUnit XML file from Surefire reports.
+
+    Args:
+        surefire_dir: Directory containing Surefire reports.
+        candidate_index: Index for unique naming.
+
+    Returns:
+        Path to the combined JUnit XML file.
+
+    """
+    # Create a temp file for the combined results
+    result_id = uuid.uuid4().hex[:8]
+    result_xml_path = Path(tempfile.gettempdir()) / f"codeflash_java_results_{candidate_index}_{result_id}.xml"
+
+    if not surefire_dir.exists():
+        # Create an empty results file
+        _write_empty_junit_xml(result_xml_path)
+        return result_xml_path
+
+    # Find all TEST-*.xml files
+    xml_files = list(surefire_dir.glob("TEST-*.xml"))
+
+    if not xml_files:
+        _write_empty_junit_xml(result_xml_path)
+        return result_xml_path
+
+    if len(xml_files) == 1:
+        # Copy the single file
+        shutil.copy(xml_files[0], result_xml_path)
+        return result_xml_path
+
+    # Combine multiple XML files into one
+    _combine_junit_xml_files(xml_files, result_xml_path)
+    return result_xml_path
+
+
+def _write_empty_junit_xml(path: Path) -> None:
+    """Write an empty JUnit XML results file."""
+    xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="NoTests" tests="0" failures="0" errors="0" skipped="0" time="0">
+</testsuite>
+'''
+    path.write_text(xml_content, encoding="utf-8")
+
+
+def _combine_junit_xml_files(xml_files: list[Path], output_path: Path) -> None:
+    """Combine multiple JUnit XML files into one.
+
+    Args:
+        xml_files: List of XML files to combine.
+        output_path: Path for the combined output.
+
+    """
+    total_tests = 0
+    total_failures = 0
+    total_errors = 0
+    total_skipped = 0
+    total_time = 0.0
+    all_testcases = []
+
+    for xml_file in xml_files:
+        try:
+            tree = ET.parse(xml_file)
+            root = tree.getroot()
+
+            # Get testsuite attributes
+            total_tests += int(root.get("tests", 0))
+            total_failures += int(root.get("failures", 0))
+            total_errors += int(root.get("errors", 0))
+            total_skipped += int(root.get("skipped", 0))
+            total_time += float(root.get("time", 0))
+
+            # Collect all testcases
+            for testcase in root.findall(".//testcase"):
+                all_testcases.append(testcase)
+
+        except Exception as e:
+            logger.warning("Failed to parse %s: %s", xml_file, e)
+
+    # Create combined XML
+    combined_root = ET.Element("testsuite")
+    combined_root.set("name", "CombinedTests")
+    combined_root.set("tests", str(total_tests))
+    combined_root.set("failures", str(total_failures))
+    combined_root.set("errors", str(total_errors))
+    combined_root.set("skipped", str(total_skipped))
+    combined_root.set("time", str(total_time))
+
+    for testcase in all_testcases:
+        combined_root.append(testcase)
+
+    tree = ET.ElementTree(combined_root)
+    tree.write(output_path, encoding="unicode", xml_declaration=True)
 
 
 def _run_maven_tests(
@@ -153,6 +309,7 @@ def _run_maven_tests(
     test_paths: Any,
     env: dict[str, str],
     timeout: int = 300,
+    mode: str = "behavior",
 ) -> subprocess.CompletedProcess:
     """Run Maven tests with Surefire.
 
@@ -161,6 +318,7 @@ def _run_maven_tests(
         test_paths: Test files or classes to run.
         env: Environment variables.
         timeout: Maximum execution time in seconds.
+        mode: Testing mode - "behavior" or "performance".
 
     Returns:
         CompletedProcess with test results.
@@ -177,13 +335,15 @@ def _run_maven_tests(
         )
 
     # Build test filter
-    test_filter = _build_test_filter(test_paths)
+    test_filter = _build_test_filter(test_paths, mode=mode)
 
     # Build Maven command
     cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
 
     if test_filter:
         cmd.append(f"-Dtest={test_filter}")
+
+    logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
     try:
         result = subprocess.run(
@@ -215,11 +375,12 @@ def _run_maven_tests(
         )
 
 
-def _build_test_filter(test_paths: Any) -> str:
+def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
     """Build a Maven Surefire test filter from test paths.
 
     Args:
         test_paths: Test files, classes, or methods to include.
+        mode: Testing mode - "behavior" or "performance".
 
     Returns:
         Surefire test filter string.
@@ -243,7 +404,21 @@ def _build_test_filter(test_paths: Any) -> str:
 
     # Handle TestFiles object (has test_files attribute)
     if hasattr(test_paths, "test_files"):
-        return _build_test_filter(list(test_paths.test_files))
+        filters = []
+        for test_file in test_paths.test_files:
+            # For performance mode, use benchmarking_file_path
+            if mode == "performance":
+                if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
+                    class_name = _path_to_class_name(test_file.benchmarking_file_path)
+                    if class_name:
+                        filters.append(class_name)
+            else:
+                # For behavior mode, use instrumented_behavior_file_path
+                if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                    class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
+                    if class_name:
+                        filters.append(class_name)
+        return ",".join(filters) if filters else ""
 
     return ""
 
@@ -263,19 +438,31 @@ def _path_to_class_name(path: Path) -> str | None:
 
     # Try to extract package from path
     # e.g., src/test/java/com/example/CalculatorTest.java -> com.example.CalculatorTest
-    parts = path.parts
+    parts = list(path.parts)
 
-    # Find 'java' in the path and take everything after
-    try:
-        java_idx = parts.index("java")
-        class_parts = parts[java_idx + 1 :]
+    # Look for standard Maven/Gradle source directories
+    # Find 'java' that comes after 'main' or 'test'
+    java_idx = None
+    for i, part in enumerate(parts):
+        if part == "java" and i > 0 and parts[i - 1] in ("main", "test"):
+            java_idx = i
+            break
+
+    # If no standard Maven structure, find the last 'java' in path
+    if java_idx is None:
+        for i in range(len(parts) - 1, -1, -1):
+            if parts[i] == "java":
+                java_idx = i
+                break
+
+    if java_idx is not None:
+        class_parts = parts[java_idx + 1:]
         # Remove .java extension from last part
-        class_parts = list(class_parts)
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
-    except ValueError:
-        # No 'java' directory, just use the file name
-        return path.stem
+
+    # Fallback: just use the file name
+    return path.stem
 
 
 def run_tests(
