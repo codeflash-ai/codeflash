@@ -313,6 +313,14 @@ def run_jest_behavioral_tests(
                 args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
             )
         logger.debug(f"Jest result: returncode={result.returncode}")
+        # Log Jest output at WARNING level if tests fail and no XML output will be created
+        # This helps debug issues like import errors that cause Jest to fail early
+        if result.returncode != 0 and not result_file_path.exists():
+            logger.warning(
+                f"Jest failed with returncode={result.returncode} and no XML output created.\n"
+                f"Jest stdout: {result.stdout[:2000] if result.stdout else '(empty)'}\n"
+                f"Jest stderr: {result.stderr[:500] if result.stderr else '(empty)'}"
+            )
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest tests timed out after {timeout}s")
         result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Test execution timed out")
