@@ -57,10 +57,11 @@ codeflash/
 └── result/                 # Result types and handling
 ```
 
-### Key Points
+### Key Rules to follow
 
 - Use libcst, not ast - For Python, always use `libcst` for code parsing/modification to preserve formatting.
 - Code context extraction and replacement tests must always assert for full string equality, no substring matching.
+- Any new feature or bug fix that can be tested automatically must have test cases.
 
 ## Code Style
 
