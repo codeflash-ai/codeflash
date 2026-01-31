@@ -158,10 +158,11 @@ def instrument_existing_test(
     modified_source = re.sub(pattern, replacement, source)
 
     # For performance mode, add timing instrumentation to test methods
+    # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
         modified_source = _add_timing_instrumentation(
             modified_source,
-            new_class_name,
+            original_class_name,  # Use original name in markers, not the renamed class
             func_name,
         )
 
@@ -236,11 +237,18 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             iteration_counter += 1
             iter_id = iteration_counter
 
+            # Detect indentation from method signature line (line with opening brace)
+            method_sig_line = method_lines[-1] if method_lines else ""
+            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
+            indent = " " * (base_indent + 4)  # Add one level of indentation
+
             # Add timing start code
-            indent = "        "
+            # Note: CODEFLASH_LOOP_INDEX must always be set - no null check, crash if missing
+            # Start marker is printed BEFORE timing starts
+            # System.nanoTime() immediately precedes try block with test code
             timing_start_code = [
                 f"{indent}// Codeflash timing instrumentation",
-                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX") != null ? System.getenv("CODEFLASH_LOOP_INDEX") : "1");',
+                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
                 f"{indent}int _cf_iter{iter_id} = {iter_id};",
                 f'{indent}String _cf_mod{iter_id} = "{class_name}";',
                 f'{indent}String _cf_cls{iter_id} = "{class_name}";',
@@ -274,13 +282,14 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                         result.append("    " + bl)
 
                     # Add finally block
+                    method_close_indent = " " * base_indent  # Same level as method signature
                     timing_end_code = [
                         f"{indent}}} finally {{",
                         f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
                         f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
                         f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
                         f"{indent}}}",
-                        "    }",  # Method closing brace
+                        f"{method_close_indent}}}",  # Method closing brace
                     ]
                     result.extend(timing_end_code)
                     i += 1
@@ -405,10 +414,11 @@ def instrument_generated_java_test(
     )
 
     # For performance mode, add timing instrumentation
+    # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
         modified_code = _add_timing_instrumentation(
             modified_code,
-            new_class_name,
+            original_class_name,  # Use original name in markers, not the renamed class
             function_name,
         )
 
