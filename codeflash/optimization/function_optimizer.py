@@ -676,11 +676,12 @@ class FunctionOptimizer:
         package_name = package_match.group(1) if package_match else ""
 
         # Extract class name from behavior source
-        class_match = re.search(r'\bclass\s+(\w+)', behavior_source)
+        # Use more specific pattern to avoid matching words like "command" or text in comments
+        class_match = re.search(r'^(?:public\s+)?class\s+(\w+)', behavior_source, re.MULTILINE)
         behavior_class = class_match.group(1) if class_match else "GeneratedTest"
 
         # Extract class name from perf source
-        perf_class_match = re.search(r'\bclass\s+(\w+)', perf_source)
+        perf_class_match = re.search(r'^(?:public\s+)?class\s+(\w+)', perf_source, re.MULTILINE)
         perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
 
         # Build paths with package structure
