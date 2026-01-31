@@ -167,12 +167,12 @@ class TestCommonJSToESMConversion:
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
 
-    def test_convert_relative_require_adds_extension(self):
-        """Test that relative imports get .js extension added - exact output."""
+    def test_convert_relative_require_preserves_path(self):
+        """Test that relative imports preserve the original path without adding extension."""
         code = "const { helper } = require('./utils');"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import { helper } from './utils.js';"
+        expected = "import { helper } from './utils';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -182,7 +182,7 @@ class TestCommonJSToESMConversion:
         code = "const myHelper = require('./utils').helperFunction;"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import { helperFunction as myHelper } from './utils.js';"
+        expected = "import { helperFunction as myHelper } from './utils';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -192,7 +192,7 @@ class TestCommonJSToESMConversion:
         code = "const MyClass = require('./class').default;"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import MyClass from './class.js';"
+        expected = "import MyClass from './class';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -207,7 +207,7 @@ const path = require('path');"""
         result = convert_commonjs_to_esm(code)
 
         expected = """\
-import { add, subtract } from './math.js';
+import { add, subtract } from './math';
 import lodash from 'lodash';
 import path from 'path';"""
 
@@ -316,7 +316,7 @@ function process() {
         result = ensure_module_system_compatibility(code, ModuleSystem.ES_MODULE)
 
         # Should convert require to import
-        assert "import { helper } from './helpers.js';" in result
+        assert "import { helper } from './helpers';" in result
         assert "require" not in result, f"require should be converted to import. Got:\n{result}"
 
     def test_convert_mixed_code_to_commonjs(self):
