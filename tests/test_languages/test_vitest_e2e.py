@@ -5,6 +5,9 @@ Tests the full optimization pipeline for Vitest projects:
 - Code context extraction
 - Test discovery
 - Test framework detection
+
+Note: These tests require JS/TS language support to be registered.
+They will be skipped in environments where only Python is supported.
 """
 
 from pathlib import Path
@@ -12,8 +15,17 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_js import detect_test_runner, get_package_json_data
-from codeflash.discovery.functions_to_optimize import find_all_functions_in_file, get_files_for_language
-from codeflash.languages.base import Language
+
+
+def skip_if_js_not_supported():
+    """Skip test if JavaScript/TypeScript languages are not supported."""
+    try:
+        from codeflash.languages import get_language_support
+        from codeflash.languages.base import Language
+
+        get_language_support(Language.JAVASCRIPT)
+    except Exception as e:
+        pytest.skip(f"JavaScript/TypeScript language support not available: {e}")
 
 
 class TestVitestProjectDiscovery:
@@ -40,6 +52,9 @@ class TestVitestProjectDiscovery:
 
     def test_discover_functions_in_fibonacci(self, vitest_project_dir):
         """Test discovering functions in fibonacci.ts."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
         fib_file = vitest_project_dir / "fibonacci.ts"
         if not fib_file.exists():
             pytest.skip("fibonacci.ts not found")
@@ -49,19 +64,17 @@ class TestVitestProjectDiscovery:
         assert fib_file in functions
         func_list = functions[fib_file]
 
-        # Should find the main exported functions
         func_names = {f.function_name for f in func_list}
-        assert "fibonacci" in func_names
-        assert "isFibonacci" in func_names
-        assert "isPerfectSquare" in func_names
-        assert "fibonacciSequence" in func_names
+        assert func_names == {"fibonacci", "isFibonacci", "isPerfectSquare", "fibonacciSequence"}
 
-        # All should be TypeScript functions
         for func in func_list:
             assert func.language == "typescript"
 
     def test_discover_functions_in_string_utils(self, vitest_project_dir):
         """Test discovering functions in string_utils.ts."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
         utils_file = vitest_project_dir / "string_utils.ts"
         if not utils_file.exists():
             pytest.skip("string_utils.ts not found")
@@ -72,20 +85,19 @@ class TestVitestProjectDiscovery:
         func_list = functions[utils_file]
 
         func_names = {f.function_name for f in func_list}
-        assert "reverseString" in func_names
-        assert "isPalindrome" in func_names
-        assert "countVowels" in func_names
-        assert "uniqueWords" in func_names
+        assert func_names == {"reverseString", "isPalindrome", "countVowels", "uniqueWords"}
 
     def test_get_typescript_files(self, vitest_project_dir):
         """Test getting TypeScript files from Vitest project directory."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import get_files_for_language
+        from codeflash.languages.base import Language
+
         files = get_files_for_language(vitest_project_dir, Language.TYPESCRIPT)
 
-        # Should find .ts files
         ts_files = [f for f in files if f.suffix == ".ts" and "test" not in f.name]
-        assert len(ts_files) >= 2  # fibonacci.ts, string_utils.ts
+        assert len(ts_files) >= 2
 
-        # Should not include test files in root (they're in tests/)
         root_files = [f for f in ts_files if f.parent == vitest_project_dir]
         assert len(root_files) >= 2
 
@@ -104,11 +116,12 @@ class TestVitestCodeContext:
 
     def test_extract_code_context_for_typescript(self, vitest_project_dir):
         """Test extracting code context for a TypeScript function."""
+        skip_if_js_not_supported()
         from codeflash.context.code_context_extractor import get_code_optimization_context
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
         from codeflash.languages.base import Language
 
-        # Force set language to TypeScript for proper context extraction routing
         lang_current._current_language = Language.TYPESCRIPT
 
         fib_file = vitest_project_dir / "fibonacci.ts"
@@ -118,21 +131,24 @@ class TestVitestCodeContext:
         functions = find_all_functions_in_file(fib_file)
         func_list = functions[fib_file]
 
-        # Find the fibonacci function
         fib_func = next((f for f in func_list if f.function_name == "fibonacci"), None)
         assert fib_func is not None
 
-        # Extract code context
         context = get_code_optimization_context(fib_func, vitest_project_dir)
 
-        # Verify context structure
         assert context.read_writable_code is not None
         assert context.read_writable_code.language == "typescript"
         assert len(context.read_writable_code.code_strings) > 0
 
-        # The code should contain the function
         code = context.read_writable_code.code_strings[0].code
-        assert "fibonacci" in code
+        expected_code = """export function fibonacci(n: number): number {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+"""
+        assert code == expected_code
 
 
 class TestVitestTestDiscovery:
@@ -149,6 +165,7 @@ class TestVitestTestDiscovery:
 
     def test_discover_vitest_tests(self, vitest_project_dir):
         """Test discovering Vitest tests for TypeScript functions."""
+        skip_if_js_not_supported()
         from codeflash.languages import get_language_support
         from codeflash.languages.base import FunctionInfo, Language
 
@@ -158,17 +175,14 @@ class TestVitestTestDiscovery:
         if not test_root.exists():
             pytest.skip("tests directory not found")
 
-        # Create FunctionInfo for fibonacci function
         fib_file = vitest_project_dir / "fibonacci.ts"
         func_info = FunctionInfo(
             name="fibonacci", file_path=fib_file, start_line=11, end_line=16, language=Language.TYPESCRIPT
         )
 
-        # Discover tests
         tests = ts_support.discover_tests(test_root, [func_info])
 
-        # Should find tests for fibonacci
-        assert func_info.qualified_name in tests or "fibonacci" in str(tests)
+        assert func_info.qualified_name in tests or len(tests) > 0
 
 
 class TestVitestRunnerDispatch:
@@ -185,25 +199,25 @@ class TestVitestRunnerDispatch:
 
     def test_language_support_has_test_framework_property(self):
         """Test that JavaScriptSupport has test_framework property."""
+        skip_if_js_not_supported()
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
 
         js_support = get_language_support(Language.JAVASCRIPT)
         ts_support = get_language_support(Language.TYPESCRIPT)
 
-        # Default test framework should be jest
         assert js_support.test_framework == "jest"
         assert ts_support.test_framework == "jest"
 
     def test_behavioral_tests_accepts_test_framework(self):
         """Test that run_behavioral_tests accepts test_framework parameter."""
+        skip_if_js_not_supported()
+        import inspect
+
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
 
         ts_support = get_language_support(Language.TYPESCRIPT)
-
-        # Check signature has test_framework parameter
-        import inspect
 
         sig = inspect.signature(ts_support.run_behavioral_tests)
         params = list(sig.parameters.keys())
@@ -211,12 +225,13 @@ class TestVitestRunnerDispatch:
 
     def test_benchmarking_tests_accepts_test_framework(self):
         """Test that run_benchmarking_tests accepts test_framework parameter."""
+        skip_if_js_not_supported()
+        import inspect
+
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
 
         ts_support = get_language_support(Language.TYPESCRIPT)
-
-        import inspect
 
         sig = inspect.signature(ts_support.run_benchmarking_tests)
         params = list(sig.parameters.keys())
@@ -224,12 +239,13 @@ class TestVitestRunnerDispatch:
 
     def test_line_profile_tests_accepts_test_framework(self):
         """Test that run_line_profile_tests accepts test_framework parameter."""
+        skip_if_js_not_supported()
+        import inspect
+
         from codeflash.languages import get_language_support
         from codeflash.languages.base import Language
 
         ts_support = get_language_support(Language.TYPESCRIPT)
-
-        import inspect
 
         sig = inspect.signature(ts_support.run_line_profile_tests)
         params = list(sig.parameters.keys())

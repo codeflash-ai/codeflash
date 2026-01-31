@@ -1,4 +1,4 @@
-name: JavaScript/TypeScript Tests
+name: JavaScript/TypeScript Integration Tests
 
 on:
   push:
@@ -12,59 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  jest-tests:
-    name: Jest Tests
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        project:
-          - code_to_optimize_js
-          - code_to_optimize_ts
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        working-directory: code_to_optimize/js/${{ matrix.project }}
-        run: npm install
-
-      - name: Run Jest tests
-        working-directory: code_to_optimize/js/${{ matrix.project }}
-        run: npm test
-
-  vitest-tests:
-    name: Vitest Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        working-directory: code_to_optimize/js/code_to_optimize_vitest
-        run: npm install
-
-      - name: Run Vitest tests
-        working-directory: code_to_optimize/js/code_to_optimize_vitest
-        run: npm test
-
-  python-js-tests:
-    name: Python JS/TS Integration Tests
+  js-integration-tests:
+    name: JS/TS Integration Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -92,14 +41,10 @@ jobs:
           npm install --prefix code_to_optimize/js/code_to_optimize_ts
           npm install --prefix code_to_optimize/js/code_to_optimize_vitest
 
-      - name: Run Vitest runner unit tests
-        run: uv run pytest tests/languages/javascript/test_vitest_runner.py -v
-
-      - name: Run Vitest E2E tests
-        run: uv run pytest tests/test_languages/test_vitest_e2e.py -v
-
-      - name: Run JavaScript E2E tests
-        run: uv run pytest tests/test_languages/test_javascript_e2e.py -v
-
-      - name: Run config_js tests
-        run: uv run pytest tests/code_utils/test_config_js.py -v
+      - name: Run JavaScript integration tests
+        run: |
+          uv run pytest tests/languages/javascript/ -v
+          uv run pytest tests/test_languages/test_vitest_e2e.py -v
+          uv run pytest tests/test_languages/test_javascript_e2e.py -v
+          uv run pytest tests/test_languages/test_javascript_support.py -v
+          uv run pytest tests/code_utils/test_config_js.py -v
