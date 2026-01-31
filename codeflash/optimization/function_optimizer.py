@@ -576,18 +576,23 @@ class FunctionOptimizer:
             generated_tests = normalize_generated_tests_imports(generated_tests)
 
         logger.debug(f"[PIPELINE] Processing {count_tests} generated tests")
+        used_behavior_paths: set[Path] = set()
         for i, generated_test in enumerate(generated_tests.generated_tests):
             behavior_path = generated_test.behavior_file_path
             perf_path = generated_test.perf_file_path
 
             # For Java, fix paths to match package structure
             if is_java():
-                behavior_path, perf_path = self._fix_java_test_paths(
+                behavior_path, perf_path, modified_behavior_source, modified_perf_source = self._fix_java_test_paths(
                     generated_test.instrumented_behavior_test_source,
                     generated_test.instrumented_perf_test_source,
+                    used_behavior_paths,
                 )
                 generated_test.behavior_file_path = behavior_path
                 generated_test.perf_file_path = perf_path
+                generated_test.instrumented_behavior_test_source = modified_behavior_source
+                generated_test.instrumented_perf_test_source = modified_perf_source
+                used_behavior_paths.add(behavior_path)
 
             logger.debug(
                 f"[PIPELINE] Test {i + 1}: behavior_path={behavior_path}, perf_path={perf_path}"
@@ -653,20 +658,23 @@ class FunctionOptimizer:
         )
 
     def _fix_java_test_paths(
-        self, behavior_source: str, perf_source: str
-    ) -> tuple[Path, Path]:
+        self, behavior_source: str, perf_source: str, used_paths: set[Path]
+    ) -> tuple[Path, Path, str, str]:
         """Fix Java test file paths to match package structure.
 
         Java requires test files to be in directories matching their package.
         This method extracts the package and class from the generated tests
-        and returns correct paths.
+        and returns correct paths. If the path would conflict with an already
+        used path, it renames the class by adding an index suffix.
 
         Args:
             behavior_source: Source code of the behavior test.
             perf_source: Source code of the performance test.
+            used_paths: Set of already used behavior file paths.
 
         Returns:
-            Tuple of (behavior_path, perf_path) with correct package structure.
+            Tuple of (behavior_path, perf_path, modified_behavior_source, modified_perf_source)
+            with correct package structure and unique class names.
 
         """
         import re
@@ -692,15 +700,55 @@ class FunctionOptimizer:
             behavior_path = test_dir / package_path / f"{behavior_class}.java"
             perf_path = test_dir / package_path / f"{perf_class}.java"
         else:
+            package_path = ""
             behavior_path = test_dir / f"{behavior_class}.java"
             perf_path = test_dir / f"{perf_class}.java"
+
+        # If path already used, rename class by adding index suffix
+        modified_behavior_source = behavior_source
+        modified_perf_source = perf_source
+        if behavior_path in used_paths:
+            # Find a unique index
+            index = 2
+            while True:
+                new_behavior_class = f"{behavior_class}_{index}"
+                new_perf_class = f"{perf_class}_{index}"
+                if package_path:
+                    new_behavior_path = test_dir / package_path / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / package_path / f"{new_perf_class}.java"
+                else:
+                    new_behavior_path = test_dir / f"{new_behavior_class}.java"
+                    new_perf_path = test_dir / f"{new_perf_class}.java"
+                if new_behavior_path not in used_paths:
+                    behavior_path = new_behavior_path
+                    perf_path = new_perf_path
+                    # Rename class in source code - replace the class declaration
+                    modified_behavior_source = re.sub(
+                        rf'^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)',
+                        rf'\g<1>{new_behavior_class}\g<2>',
+                        behavior_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    modified_perf_source = re.sub(
+                        rf'^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)',
+                        rf'\g<1>{new_perf_class}\g<2>',
+                        perf_source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    logger.debug(
+                        f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}"
+                    )
+                    break
+                index += 1
 
         # Create directories if needed
         behavior_path.parent.mkdir(parents=True, exist_ok=True)
         perf_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(f"[JAVA] Fixed paths: behavior={behavior_path}, perf={perf_path}")
-        return behavior_path, perf_path
+        return behavior_path, perf_path, modified_behavior_source, modified_perf_source
 
     # note: this isn't called by the lsp, only called by cli
     def optimize_function(self) -> Result[BestOptimization, str]:

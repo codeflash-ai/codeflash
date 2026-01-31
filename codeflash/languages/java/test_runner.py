@@ -183,22 +183,36 @@ def run_behavioral_tests(
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
     # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the source module (project_root), not the test module
+    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
     coverage_xml_path: Path | None = None
     if enable_coverage:
-        pom_path = project_root / "pom.xml"
-        if pom_path.exists():
-            if not is_jacoco_configured(pom_path):
-                logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
-                add_jacoco_plugin_to_pom(pom_path)
-            coverage_xml_path = get_jacoco_xml_path(project_root)
+        # Determine which pom.xml to configure JaCoCo in
+        if test_module:
+            # Multi-module project: add JaCoCo to test module
+            test_module_pom = maven_root / test_module / "pom.xml"
+            if test_module_pom.exists():
+                if not is_jacoco_configured(test_module_pom):
+                    logger.info(f"Adding JaCoCo plugin to test module pom.xml: {test_module_pom}")
+                    add_jacoco_plugin_to_pom(test_module_pom)
+                coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
+        else:
+            # Single module project
+            pom_path = project_root / "pom.xml"
+            if pom_path.exists():
+                if not is_jacoco_configured(pom_path):
+                    logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
+                    add_jacoco_plugin_to_pom(pom_path)
+                coverage_xml_path = get_jacoco_xml_path(project_root)
 
     # Run Maven tests from the appropriate root
+    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
+    min_timeout = 120 if enable_coverage else 60
+    effective_timeout = max(timeout or 300, min_timeout)
     result = _run_maven_tests(
         maven_root,
         test_paths,
         run_env,
-        timeout=timeout or 300,
+        timeout=effective_timeout,
         mode="behavior",
         enable_coverage=enable_coverage,
         test_module=test_module,
@@ -464,9 +478,14 @@ def _run_maven_tests(
     test_filter = _build_test_filter(test_paths, mode=mode)
 
     # Build Maven command
-    # Note: JaCoCo report is generated automatically during test phase via plugin execution binding
-    # We don't need to call jacoco:report explicitly since the plugin config binds it to test phase
-    cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
+    # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
+    # JaCoCo's report goal is bound to the verify phase to get post-test execution data
+    maven_goal = "verify" if enable_coverage else "test"
+    cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
+
+    # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
+    if enable_coverage:
+        cmd.append("-Dmaven.test.failure.ignore=true")
 
     # For multi-module projects, specify which module to test
     if test_module:

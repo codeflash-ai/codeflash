@@ -720,7 +720,7 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
           </execution>
           <execution>
             <id>report</id>
-            <phase>test</phase>
+            <phase>verify</phase>
             <goals>
               <goal>report</goal>
             </goals>
