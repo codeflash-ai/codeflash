@@ -31,4 +31,4 @@ jobs:
         run: uv sync --group ci
 
       - name: Unit tests
-        run: uv run pytest tests/ -n auto
+        run: uv run pytest tests/ -n auto --dist loadfile
