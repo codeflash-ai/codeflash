@@ -30,7 +30,7 @@ from codeflash.models.models import (
     TestType,
     VerificationType,
 )
-from codeflash.verification.coverage_utils import CoverageUtils, JestCoverageUtils
+from codeflash.verification.coverage_utils import CoverageUtils, JacocoCoverageUtils, JestCoverageUtils
 
 if TYPE_CHECKING:
     import subprocess
@@ -1473,6 +1473,14 @@ def parse_test_results(
             # Jest uses coverage-final.json (coverage_database_file points to this)
             coverage = JestCoverageUtils.load_from_jest_json(
                 coverage_json_path=coverage_database_file,
+                function_name=function_name,
+                code_context=code_context,
+                source_code_path=source_file,
+            )
+        elif is_java():
+            # Java uses JaCoCo XML report (coverage_database_file points to jacoco.xml)
+            coverage = JacocoCoverageUtils.load_from_jacoco_xml(
+                jacoco_xml_path=coverage_database_file,
                 function_name=function_name,
                 code_context=code_context,
                 source_code_path=source_file,

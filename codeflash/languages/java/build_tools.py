@@ -685,6 +685,9 @@ def is_jacoco_configured(pom_path: Path) -> bool:
 def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
     """Add JaCoCo Maven plugin to pom.xml for coverage collection.
 
+    Uses string manipulation to preserve the original XML format and avoid
+    namespace prefix issues that ElementTree causes.
+
     Args:
         pom_path: Path to the pom.xml file.
 
@@ -702,68 +705,59 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
         return True
 
     try:
-        tree = ET.parse(pom_path)
-        root = tree.getroot()
+        content = pom_path.read_text(encoding="utf-8")
 
-        # Handle Maven namespace
-        ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
+        # Basic validation that it's a Maven pom.xml
+        if "</project>" not in content:
+            logger.error("Invalid pom.xml: no closing </project> tag found")
+            return False
 
-        # Check if namespace is used
-        use_ns = root.tag.startswith("{")
-        if not use_ns:
-            ns_prefix = ""
+        # JaCoCo plugin XML to insert (indented for typical pom.xml format)
+        jacoco_plugin = f"""
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>{JACOCO_PLUGIN_VERSION}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>"""
 
-        # Find or create build section
-        build = root.find(f"{ns_prefix}build" if use_ns else "build")
-        if build is None:
-            build = ET.SubElement(root, f"{ns_prefix}build" if use_ns else "build")
+        # Check if <build> section exists
+        if "<build>" in content:
+            # Check if <plugins> section exists within build
+            if "<plugins>" in content:
+                # Insert before closing </plugins> tag
+                content = content.replace("</plugins>", f"{jacoco_plugin}\n        </plugins>", 1)
+            else:
+                # Insert <plugins> section before </build>
+                plugins_section = f"<plugins>{jacoco_plugin}\n        </plugins>\n    "
+                content = content.replace("</build>", f"{plugins_section}</build>", 1)
+        else:
+            # Insert <build> section before </project>
+            build_section = f"""<build>
+        <plugins>{jacoco_plugin}
+        </plugins>
+    </build>
+</project>"""
+            content = content.replace("</project>", build_section, 1)
 
-        # Find or create plugins section
-        plugins = build.find(f"{ns_prefix}plugins" if use_ns else "plugins")
-        if plugins is None:
-            plugins = ET.SubElement(build, f"{ns_prefix}plugins" if use_ns else "plugins")
-
-        # Create JaCoCo plugin element
-        plugin = ET.SubElement(plugins, f"{ns_prefix}plugin" if use_ns else "plugin")
-
-        group_id = ET.SubElement(plugin, f"{ns_prefix}groupId" if use_ns else "groupId")
-        group_id.text = "org.jacoco"
-
-        artifact_id = ET.SubElement(plugin, f"{ns_prefix}artifactId" if use_ns else "artifactId")
-        artifact_id.text = "jacoco-maven-plugin"
-
-        version = ET.SubElement(plugin, f"{ns_prefix}version" if use_ns else "version")
-        version.text = JACOCO_PLUGIN_VERSION
-
-        # Create executions section
-        executions = ET.SubElement(plugin, f"{ns_prefix}executions" if use_ns else "executions")
-
-        # Add prepare-agent execution
-        exec1 = ET.SubElement(executions, f"{ns_prefix}execution" if use_ns else "execution")
-        exec1_id = ET.SubElement(exec1, f"{ns_prefix}id" if use_ns else "id")
-        exec1_id.text = "prepare-agent"
-        exec1_goals = ET.SubElement(exec1, f"{ns_prefix}goals" if use_ns else "goals")
-        exec1_goal = ET.SubElement(exec1_goals, f"{ns_prefix}goal" if use_ns else "goal")
-        exec1_goal.text = "prepare-agent"
-
-        # Add report execution
-        exec2 = ET.SubElement(executions, f"{ns_prefix}execution" if use_ns else "execution")
-        exec2_id = ET.SubElement(exec2, f"{ns_prefix}id" if use_ns else "id")
-        exec2_id.text = "report"
-        exec2_phase = ET.SubElement(exec2, f"{ns_prefix}phase" if use_ns else "phase")
-        exec2_phase.text = "test"
-        exec2_goals = ET.SubElement(exec2, f"{ns_prefix}goals" if use_ns else "goals")
-        exec2_goal = ET.SubElement(exec2_goals, f"{ns_prefix}goal" if use_ns else "goal")
-        exec2_goal.text = "report"
-
-        # Write back to file
-        tree.write(pom_path, xml_declaration=True, encoding="utf-8")
+        pom_path.write_text(content, encoding="utf-8")
         logger.info("Added JaCoCo plugin to pom.xml")
         return True
 
-    except ET.ParseError as e:
-        logger.error("Failed to parse pom.xml: %s", e)
-        return False
     except Exception as e:
         logger.exception("Failed to add JaCoCo plugin to pom.xml: %s", e)
         return False
