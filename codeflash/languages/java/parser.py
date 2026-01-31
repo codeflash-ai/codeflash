@@ -188,8 +188,9 @@ class JavaAnalyzer:
         """Recursively walk the tree to find method definitions."""
         new_class = current_class
 
-        # Track class context
-        if node.type == "class_declaration":
+        # Track type context (class, interface, or enum)
+        type_declarations = ("class_declaration", "interface_declaration", "enum_declaration")
+        if node.type in type_declarations:
             name_node = node.child_by_field_name("name")
             if name_node:
                 new_class = self.get_node_text(name_node, source_bytes)
@@ -218,7 +219,7 @@ class JavaAnalyzer:
                 methods,
                 include_private=include_private,
                 include_static=include_static,
-                current_class=new_class if node.type == "class_declaration" else current_class,
+                current_class=new_class if node.type in type_declarations else current_class,
             )
 
     def _extract_method_info(

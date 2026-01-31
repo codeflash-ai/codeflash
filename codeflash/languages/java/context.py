@@ -14,12 +14,18 @@ from typing import TYPE_CHECKING
 from codeflash.languages.base import CodeContext, FunctionInfo, HelperFunction, Language
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.import_resolver import JavaImportResolver, find_helper_files
-from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
+from codeflash.languages.java.parser import JavaAnalyzer, JavaClassNode, get_java_analyzer
 
 if TYPE_CHECKING:
-    pass
+    from tree_sitter import Node
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidJavaSyntaxError(Exception):
+    """Raised when extracted Java code is not syntactically valid."""
+
+    pass
 
 
 def extract_code_context(
@@ -28,14 +34,15 @@ def extract_code_context(
     module_root: Path | None = None,
     max_helper_depth: int = 2,
     analyzer: JavaAnalyzer | None = None,
+    validate_syntax: bool = True,
 ) -> CodeContext:
     """Extract code context for a Java function.
 
     This extracts:
-    - The target function's source code
+    - The target function's source code (wrapped in class/interface/enum skeleton)
     - Import statements
     - Helper functions (project-internal dependencies)
-    - Read-only context (class fields, constants, etc.)
+    - Read-only context (only if not already in the skeleton)
 
     Args:
         function: The function to extract context for.
@@ -43,9 +50,13 @@ def extract_code_context(
         module_root: Root of the module (defaults to project_root).
         max_helper_depth: Maximum depth to trace helper functions.
         analyzer: Optional JavaAnalyzer instance.
+        validate_syntax: Whether to validate the extracted code syntax.
 
     Returns:
         CodeContext with target code and dependencies.
+
+    Raises:
+        InvalidJavaSyntaxError: If validate_syntax=True and the extracted code is invalid.
 
     """
     analyzer = analyzer or get_java_analyzer()
@@ -65,6 +76,18 @@ def extract_code_context(
     # Extract target function code
     target_code = extract_function_source(source, function)
 
+    # Track whether we wrapped in a skeleton (for read_only_context decision)
+    wrapped_in_skeleton = False
+
+    # Try to wrap the method in its parent type skeleton (class, interface, or enum)
+    # This provides necessary context for optimization
+    parent_type_name = _get_parent_type_name(function)
+    if parent_type_name:
+        type_skeleton = _extract_type_skeleton(source, parent_type_name, function.name, analyzer)
+        if type_skeleton:
+            target_code = _wrap_method_in_type_skeleton(target_code, type_skeleton)
+            wrapped_in_skeleton = True
+
     # Extract imports
     imports = analyzer.find_imports(source)
     import_statements = [_import_to_statement(imp) for imp in imports]
@@ -74,8 +97,19 @@ def extract_code_context(
         function, project_root, max_helper_depth, analyzer
     )
 
-    # Extract read-only context (class fields, constants, etc.)
-    read_only_context = extract_read_only_context(source, function, analyzer)
+    # Extract read-only context only if fields are NOT already in the skeleton
+    # Avoid duplication between target_code and read_only_context
+    read_only_context = ""
+    if not wrapped_in_skeleton:
+        read_only_context = extract_read_only_context(source, function, analyzer)
+
+    # Validate syntax if requested
+    if validate_syntax and target_code:
+        if not analyzer.validate_syntax(target_code):
+            logger.warning(
+                "Extracted code for %s may not be syntactically valid Java",
+                function.name,
+            )
 
     return CodeContext(
         target_code=target_code,
@@ -85,6 +119,444 @@ def extract_code_context(
         imports=import_statements,
         language=Language.JAVA,
     )
+
+
+def _get_parent_type_name(function: FunctionInfo) -> str | None:
+    """Get the parent type name (class, interface, or enum) for a function.
+
+    Args:
+        function: The function to get the parent for.
+
+    Returns:
+        The parent type name, or None if not found.
+
+    """
+    # First check class_name (set for class methods)
+    if function.class_name:
+        return function.class_name
+
+    # Check parents for interface/enum
+    if function.parents:
+        for parent in function.parents:
+            if parent.type in ("ClassDef", "InterfaceDef", "EnumDef"):
+                return parent.name
+
+    return None
+
+
+class TypeSkeleton:
+    """Represents a type skeleton (class, interface, or enum) for wrapping methods."""
+
+    def __init__(
+        self,
+        type_declaration: str,
+        type_javadoc: str | None,
+        fields_code: str,
+        constructors_code: str,
+        enum_constants: str,
+        type_indent: str,
+        type_kind: str,  # "class", "interface", or "enum"
+        outer_type_skeleton: "TypeSkeleton | None" = None,
+    ) -> None:
+        self.type_declaration = type_declaration
+        self.type_javadoc = type_javadoc
+        self.fields_code = fields_code
+        self.constructors_code = constructors_code
+        self.enum_constants = enum_constants
+        self.type_indent = type_indent
+        self.type_kind = type_kind
+        self.outer_type_skeleton = outer_type_skeleton
+
+
+# Keep ClassSkeleton as alias for backwards compatibility
+ClassSkeleton = TypeSkeleton
+
+
+def _extract_type_skeleton(
+    source: str,
+    type_name: str,
+    target_method_name: str,
+    analyzer: JavaAnalyzer,
+) -> TypeSkeleton | None:
+    """Extract the type skeleton (class, interface, or enum) for wrapping a method.
+
+    This extracts the type declaration, Javadoc, fields, and constructors
+    to provide context for method optimization.
+
+    Args:
+        source: The source code.
+        type_name: Name of the type containing the method.
+        target_method_name: Name of the target method (to exclude from skeleton).
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        TypeSkeleton object or None if type not found.
+
+    """
+    source_bytes = source.encode("utf8")
+    tree = analyzer.parse(source)
+    lines = source.splitlines(keepends=True)
+
+    # Find the type declaration node (class, interface, or enum)
+    type_node, type_kind = _find_type_node(tree.root_node, type_name, source_bytes)
+    if not type_node:
+        return None
+
+    # Check if this is an inner type and get outer type skeleton
+    outer_skeleton = _get_outer_type_skeleton(type_node, source_bytes, lines, target_method_name, analyzer)
+
+    # Get type indentation
+    type_line_idx = type_node.start_point[0]
+    if type_line_idx < len(lines):
+        type_line = lines[type_line_idx]
+        indent = len(type_line) - len(type_line.lstrip())
+        type_indent = " " * indent
+    else:
+        type_indent = ""
+
+    # Extract type declaration line (modifiers, name, extends, implements)
+    type_declaration = _extract_type_declaration(type_node, source_bytes, type_kind)
+
+    # Find preceding Javadoc for type
+    type_javadoc = _find_javadoc(type_node, source_bytes)
+
+    # Extract fields, constructors, and enum constants from body
+    body_node = type_node.child_by_field_name("body")
+    fields_code = ""
+    constructors_code = ""
+    enum_constants = ""
+
+    if body_node:
+        fields_code, constructors_code, enum_constants = _extract_type_body_context(
+            body_node, source_bytes, lines, target_method_name, type_kind
+        )
+
+    return TypeSkeleton(
+        type_declaration=type_declaration,
+        type_javadoc=type_javadoc,
+        fields_code=fields_code,
+        constructors_code=constructors_code,
+        enum_constants=enum_constants,
+        type_indent=type_indent,
+        type_kind=type_kind,
+        outer_type_skeleton=outer_skeleton,
+    )
+
+
+# Keep old function name as alias for backwards compatibility
+_extract_class_skeleton = _extract_type_skeleton
+
+
+def _find_type_node(node: Node, type_name: str, source_bytes: bytes) -> tuple[Node | None, str]:
+    """Recursively find a type declaration node (class, interface, or enum) with the given name.
+
+    Returns:
+        Tuple of (node, type_kind) where type_kind is "class", "interface", or "enum".
+
+    """
+    type_declarations = {
+        "class_declaration": "class",
+        "interface_declaration": "interface",
+        "enum_declaration": "enum",
+    }
+
+    if node.type in type_declarations:
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            node_name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+            if node_name == type_name:
+                return node, type_declarations[node.type]
+
+    for child in node.children:
+        result, kind = _find_type_node(child, type_name, source_bytes)
+        if result:
+            return result, kind
+
+    return None, ""
+
+
+# Keep old function name for backwards compatibility
+def _find_class_node(node: Node, class_name: str, source_bytes: bytes) -> Node | None:
+    """Recursively find a class declaration node with the given name."""
+    result, _ = _find_type_node(node, class_name, source_bytes)
+    return result
+
+
+def _get_outer_type_skeleton(
+    inner_type_node: Node,
+    source_bytes: bytes,
+    lines: list[str],
+    target_method_name: str,
+    analyzer: JavaAnalyzer,
+) -> TypeSkeleton | None:
+    """Get the outer type skeleton if this is an inner type.
+
+    Args:
+        inner_type_node: The inner type node.
+        source_bytes: Source code as bytes.
+        lines: Source code split into lines.
+        target_method_name: Name of target method.
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        TypeSkeleton for the outer type, or None if not an inner type.
+
+    """
+    # Walk up to find the parent type
+    parent = inner_type_node.parent
+    while parent:
+        if parent.type in ("class_declaration", "interface_declaration", "enum_declaration"):
+            # Found outer type - extract its skeleton
+            outer_name_node = parent.child_by_field_name("name")
+            if outer_name_node:
+                outer_name = source_bytes[outer_name_node.start_byte : outer_name_node.end_byte].decode("utf8")
+
+                type_declarations = {
+                    "class_declaration": "class",
+                    "interface_declaration": "interface",
+                    "enum_declaration": "enum",
+                }
+                outer_kind = type_declarations.get(parent.type, "class")
+
+                # Get outer type indentation
+                outer_line_idx = parent.start_point[0]
+                if outer_line_idx < len(lines):
+                    outer_line = lines[outer_line_idx]
+                    indent = len(outer_line) - len(outer_line.lstrip())
+                    outer_indent = " " * indent
+                else:
+                    outer_indent = ""
+
+                outer_declaration = _extract_type_declaration(parent, source_bytes, outer_kind)
+                outer_javadoc = _find_javadoc(parent, source_bytes)
+
+                # Note: We don't include fields/constructors from outer class in the skeleton
+                # to keep the context focused on the inner type
+                return TypeSkeleton(
+                    type_declaration=outer_declaration,
+                    type_javadoc=outer_javadoc,
+                    fields_code="",
+                    constructors_code="",
+                    enum_constants="",
+                    type_indent=outer_indent,
+                    type_kind=outer_kind,
+                    outer_type_skeleton=None,  # Could recurse for deeply nested, but keep simple for now
+                )
+        parent = parent.parent
+
+    return None
+
+
+def _extract_type_declaration(type_node: Node, source_bytes: bytes, type_kind: str) -> str:
+    """Extract the type declaration line (without body).
+
+    Returns something like: "public class MyClass extends Base implements Interface"
+
+    """
+    parts: list[str] = []
+
+    # Determine which body node type to look for
+    body_types = {
+        "class": "class_body",
+        "interface": "interface_body",
+        "enum": "enum_body",
+    }
+    body_type = body_types.get(type_kind, "class_body")
+
+    for child in type_node.children:
+        if child.type == body_type:
+            # Stop before the body
+            break
+        part_text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
+        parts.append(part_text)
+
+    return " ".join(parts).strip()
+
+
+# Keep old function name for backwards compatibility
+_extract_class_declaration = lambda node, source_bytes: _extract_type_declaration(node, source_bytes, "class")
+
+
+def _find_javadoc(node: Node, source_bytes: bytes) -> str | None:
+    """Find Javadoc comment immediately preceding a node."""
+    prev_sibling = node.prev_named_sibling
+
+    if prev_sibling and prev_sibling.type == "block_comment":
+        comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+        if comment_text.strip().startswith("/**"):
+            return comment_text
+
+    return None
+
+
+def _extract_type_body_context(
+    body_node: Node,
+    source_bytes: bytes,
+    lines: list[str],
+    target_method_name: str,
+    type_kind: str,
+) -> tuple[str, str, str]:
+    """Extract fields, constructors, and enum constants from a type body.
+
+    Args:
+        body_node: Tree-sitter node for the type body.
+        source_bytes: Source code as bytes.
+        lines: Source code split into lines.
+        target_method_name: Name of target method to exclude.
+        type_kind: Type kind ("class", "interface", or "enum").
+
+    Returns:
+        Tuple of (fields_code, constructors_code, enum_constants).
+
+    """
+    field_parts: list[str] = []
+    constructor_parts: list[str] = []
+    enum_constant_parts: list[str] = []
+
+    for child in body_node.children:
+        # Skip braces, semicolons, and commas
+        if child.type in ("{", "}", ";", ","):
+            continue
+
+        # Handle enum constants (only for enums)
+        # Extract just the constant name/text, not the whole line
+        if child.type == "enum_constant" and type_kind == "enum":
+            constant_text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
+            enum_constant_parts.append(constant_text)
+
+        # Handle field declarations
+        elif child.type == "field_declaration":
+            start_line = child.start_point[0]
+            end_line = child.end_point[0]
+
+            # Check for preceding Javadoc/comment
+            javadoc_start = start_line
+            prev_sibling = child.prev_named_sibling
+            if prev_sibling and prev_sibling.type == "block_comment":
+                comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+                if comment_text.strip().startswith("/**"):
+                    javadoc_start = prev_sibling.start_point[0]
+
+            field_lines = lines[javadoc_start : end_line + 1]
+            field_parts.append("".join(field_lines))
+
+        # Handle constant declarations (for interfaces)
+        elif child.type == "constant_declaration" and type_kind == "interface":
+            start_line = child.start_point[0]
+            end_line = child.end_point[0]
+            constant_lines = lines[start_line : end_line + 1]
+            field_parts.append("".join(constant_lines))
+
+        # Handle constructor declarations
+        elif child.type == "constructor_declaration":
+            start_line = child.start_point[0]
+            end_line = child.end_point[0]
+
+            # Check for preceding Javadoc
+            javadoc_start = start_line
+            prev_sibling = child.prev_named_sibling
+            if prev_sibling and prev_sibling.type == "block_comment":
+                comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+                if comment_text.strip().startswith("/**"):
+                    javadoc_start = prev_sibling.start_point[0]
+
+            constructor_lines = lines[javadoc_start : end_line + 1]
+            constructor_parts.append("".join(constructor_lines))
+
+    fields_code = "".join(field_parts)
+    constructors_code = "".join(constructor_parts)
+    # Join enum constants with commas
+    enum_constants = ", ".join(enum_constant_parts) if enum_constant_parts else ""
+
+    return (fields_code, constructors_code, enum_constants)
+
+
+# Keep old function name for backwards compatibility
+def _extract_class_body_context(
+    body_node: Node,
+    source_bytes: bytes,
+    lines: list[str],
+    target_method_name: str,
+) -> tuple[str, str]:
+    """Extract fields and constructors from a class body."""
+    fields, constructors, _ = _extract_type_body_context(
+        body_node, source_bytes, lines, target_method_name, "class"
+    )
+    return (fields, constructors)
+
+
+def _wrap_method_in_type_skeleton(method_code: str, skeleton: TypeSkeleton) -> str:
+    """Wrap a method in its type skeleton (class, interface, or enum).
+
+    Args:
+        method_code: The method source code.
+        skeleton: The type skeleton.
+
+    Returns:
+        The method wrapped in the type skeleton.
+
+    """
+    parts: list[str] = []
+
+    # If there's an outer type, wrap in that first
+    if skeleton.outer_type_skeleton:
+        outer = skeleton.outer_type_skeleton
+        if outer.type_javadoc:
+            parts.append(outer.type_javadoc)
+            parts.append("\n")
+        parts.append(f"{outer.type_indent}{outer.type_declaration} {{\n")
+
+    # Add type Javadoc if present
+    if skeleton.type_javadoc:
+        parts.append(skeleton.type_javadoc)
+        parts.append("\n")
+
+    # Add type declaration and opening brace
+    parts.append(f"{skeleton.type_indent}{skeleton.type_declaration} {{\n")
+
+    # For enums, add constants first
+    if skeleton.enum_constants:
+        # Calculate method indentation (one level deeper than type)
+        method_indent = skeleton.type_indent + "    "
+        parts.append(f"{method_indent}{skeleton.enum_constants};\n")
+        parts.append("\n")  # Blank line after enum constants
+
+    # Add fields if present
+    if skeleton.fields_code:
+        parts.append(skeleton.fields_code)
+        if not skeleton.fields_code.endswith("\n"):
+            parts.append("\n")
+
+    # Add constructors if present
+    if skeleton.constructors_code:
+        parts.append(skeleton.constructors_code)
+        if not skeleton.constructors_code.endswith("\n"):
+            parts.append("\n")
+
+    # Add blank line before method if there were fields or constructors
+    if skeleton.fields_code or skeleton.constructors_code or skeleton.enum_constants:
+        # Check if the method code doesn't already start with a blank line
+        if method_code and not method_code.lstrip().startswith("\n"):
+            # The fields/constructors already have their own newline, just ensure separation
+            pass
+
+    # Add the target method
+    parts.append(method_code)
+    if not method_code.endswith("\n"):
+        parts.append("\n")
+
+    # Add closing brace for this type
+    parts.append(f"{skeleton.type_indent}}}\n")
+
+    # Close outer type if present
+    if skeleton.outer_type_skeleton:
+        parts.append(f"{skeleton.outer_type_skeleton.type_indent}}}\n")
+
+    return "".join(parts)
+
+
+# Keep old function name for backwards compatibility
+_wrap_method_in_class_skeleton = _wrap_method_in_type_skeleton
 
 
 def extract_function_source(source: str, function: FunctionInfo) -> str:
