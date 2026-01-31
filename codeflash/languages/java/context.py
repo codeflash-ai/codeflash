@@ -103,12 +103,11 @@ def extract_code_context(
     if not wrapped_in_skeleton:
         read_only_context = extract_read_only_context(source, function, analyzer)
 
-    # Validate syntax if requested
+    # Validate syntax - extracted code must always be valid Java
     if validate_syntax and target_code:
         if not analyzer.validate_syntax(target_code):
-            logger.warning(
-                "Extracted code for %s may not be syntactically valid Java",
-                function.name,
+            raise InvalidJavaSyntaxError(
+                f"Extracted code for {function.name} is not syntactically valid Java:\n{target_code}"
             )
 
     return CodeContext(
