@@ -89,7 +89,7 @@ class InjectPerfOnly(ast.NodeTransformer):
         # it's much more efficient to visit nodes manually. We'll only descend into expressions/statements.
 
         # Helper for manual walk
-        def iter_ast_calls(node):  # noqa: ANN202
+        def iter_ast_calls(node):
             # Generator to yield each ast.Call in test_node, preserves node identity
             stack = [node]
             while stack:
@@ -102,7 +102,7 @@ class InjectPerfOnly(ast.NodeTransformer):
                     if isinstance(value, list):
                         for item in reversed(value):
                             if isinstance(item, ast.AST):
-                                stack.append(item)  # noqa: PERF401
+                                stack.append(item)
                     elif isinstance(value, ast.AST):
                         stack.append(value)
 

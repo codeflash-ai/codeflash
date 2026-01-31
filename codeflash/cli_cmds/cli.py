@@ -231,11 +231,22 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
     if args.tests_root is None:
         if is_js_ts_project:
-            # Try common JS test directories, or default to module_root
+            # Try common JS test directories at project root first
             for test_dir in ["test", "tests", "__tests__"]:
                 if Path(test_dir).is_dir():
                     args.tests_root = test_dir
                     break
+            # If not found at project root, try inside module_root (e.g., src/test, src/__tests__)
+            if args.tests_root is None and args.module_root:
+                module_root_path = Path(args.module_root)
+                for test_dir in ["test", "tests", "__tests__"]:
+                    test_path = module_root_path / test_dir
+                    if test_path.is_dir():
+                        args.tests_root = str(test_path)
+                        break
+            # Final fallback: default to module_root
+            # Note: This may cause issues if tests are colocated with source files
+            # In such cases, the user should explicitly configure testsRoot in package.json
             if args.tests_root is None:
                 args.tests_root = args.module_root
         else:

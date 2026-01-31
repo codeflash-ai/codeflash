@@ -46,8 +46,8 @@ def build_testgen_context(
     helpers_of_fto_dict: dict[Path, set[FunctionSource]],
     helpers_of_helpers_dict: dict[Path, set[FunctionSource]],
     project_root_path: Path,
-    remove_docstrings: bool,  # noqa: FBT001
-    include_imported_classes: bool,  # noqa: FBT001
+    remove_docstrings: bool,
+    include_imported_classes: bool,
 ) -> CodeStringsMarkdown:
     """Build testgen context with optional imported class definitions and external base inits."""
     testgen_context = extract_code_markdown_context_from_files(

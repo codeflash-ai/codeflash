@@ -216,6 +216,32 @@ def get_files_for_language(
     return files
 
 
+def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bool, str | None]:
+    """Check if a JavaScript/TypeScript function is exported from its module.
+
+    For JS/TS, functions that are not exported cannot be imported by tests,
+    making them impossible to optimize.
+
+    Args:
+        file_path: Path to the source file.
+        function_name: Name of the function to check.
+
+    Returns:
+        Tuple of (is_exported, export_name). export_name may be 'default' for default exports.
+
+    """
+    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+        analyzer = get_analyzer_for_file(file_path)
+        return analyzer.is_function_exported(source, function_name)
+    except Exception as e:
+        logger.debug(f"Failed to check export status for {function_name}: {e}")
+        # Return True to avoid blocking in case of errors
+        return True, None
+
+
 def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
     """Find all optimizable functions in a Python file using AST parsing.
 
@@ -338,6 +364,36 @@ def get_functions_to_optimize(
                     exit_with_message(
                         f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
+
+                # For JavaScript/TypeScript, verify that the function (or its parent class) is exported
+                # Non-exported functions cannot be imported by tests
+                if found_function.language in ("javascript", "typescript"):
+                    # For class methods, check if the parent class is exported
+                    # For standalone functions, check if the function itself is exported
+                    if found_function.parents:
+                        # It's a class method - check if the class is exported
+                        name_to_check = found_function.top_level_parent_name
+                    else:
+                        # It's a standalone function - check if the function is exported
+                        name_to_check = found_function.function_name
+
+                    is_exported, export_name = _is_js_ts_function_exported(file, name_to_check)
+                    if not is_exported:
+                        if found_function.parents:
+                            logger.debug(
+                                f"Class '{name_to_check}' containing method '{found_function.function_name}' "
+                                f"is not exported from {file}. "
+                                f"In JavaScript/TypeScript, only exported classes/functions can be optimized "
+                                f"because tests need to import them."
+                            )
+                        else:
+                            logger.debug(
+                                f"Function '{found_function.function_name}' is not exported from {file}. "
+                                f"In JavaScript/TypeScript, only exported functions can be optimized because "
+                                f"tests need to import them."
+                            )
+                        return {}, 0, None
+
                 functions[file] = [found_function]
         else:
             logger.info("Finding all functions modified in the current git diff ...")
