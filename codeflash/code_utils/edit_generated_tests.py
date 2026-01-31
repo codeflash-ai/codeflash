@@ -337,10 +337,12 @@ _CODEFLASH_REQUIRE_PATTERN = re.compile(
 )
 _CODEFLASH_IMPORT_PATTERN = re.compile(r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]")
 
-# Pattern to strip file extensions from import paths
+# Patterns to strip file extensions from import paths
 # Matches: from 'path/to/file.js' or from "path/to/file.ts" etc.
 _JS_EXTENSION_PATTERN = re.compile(r"""(from\s+['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"])""")
 _REQUIRE_EXTENSION_PATTERN = re.compile(r"""(require\s*\(\s*['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"]\s*\))""")
+# Also handle jest.mock/doMock paths
+_JEST_MOCK_EXTENSION_PATTERN = re.compile(r"""(jest\.(?:mock|doMock|unmock|requireActual|requireMock)\s*\(\s*['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"])""")
 
 
 def strip_js_extensions(source: str) -> str:
@@ -353,6 +355,7 @@ def strip_js_extensions(source: str) -> str:
     Examples:
         import { fn } from '../utils.js'  -> import { fn } from '../utils'
         require('../utils.ts')            -> require('../utils')
+        jest.mock('../utils.ts', ...)     -> jest.mock('../utils', ...)
 
     Args:
         source: JavaScript/TypeScript source code.
@@ -364,7 +367,9 @@ def strip_js_extensions(source: str) -> str:
     # Strip from ES module imports
     source = _JS_EXTENSION_PATTERN.sub(r"\1\2\4", source)
     # Strip from CommonJS require
-    return _REQUIRE_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+    source = _REQUIRE_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+    # Strip from jest.mock/doMock/unmock etc.
+    return _JEST_MOCK_EXTENSION_PATTERN.sub(r"\1\2\4", source)
 
 
 def normalize_codeflash_imports(source: str) -> str:
