@@ -24,7 +24,7 @@ from codeflash.code_utils.git_worktree_utils import (
 )
 from codeflash.code_utils.time_utils import humanize_runtime
 from codeflash.either import is_successful
-from codeflash.languages import is_javascript, set_current_language
+from codeflash.languages import is_java, is_javascript, set_current_language
 from codeflash.models.models import ValidCode
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.verification.verification_utils import TestConfig
@@ -229,8 +229,8 @@ class Optimizer:
 
         original_module_code: str = original_module_path.read_text(encoding="utf8")
 
-        # For JavaScript/TypeScript, skip Python-specific AST parsing
-        if is_javascript():
+        # For JavaScript/TypeScript/Java, skip Python-specific AST parsing
+        if is_javascript() or is_java():
             validated_original_code: dict[Path, ValidCode] = {
                 original_module_path: ValidCode(source_code=original_module_code, normalized_code=original_module_code)
             }

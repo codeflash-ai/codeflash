@@ -204,7 +204,16 @@ def quantity_of_tests_critic(candidate_result: OptimizedCandidateResult | Origin
 
 
 def coverage_critic(original_code_coverage: CoverageData | None) -> bool:
-    """Check if the coverage meets the threshold."""
+    """Check if the coverage meets the threshold.
+
+    For languages without coverage support (like JavaScript), returns True if no coverage data is available.
+    Java now uses JaCoCo for coverage collection and is subject to coverage threshold checks.
+    """
+    from codeflash.languages import is_javascript
+
     if original_code_coverage:
         return original_code_coverage.coverage >= COVERAGE_THRESHOLD
+    # For JavaScript, coverage is not implemented yet, so skip the check
+    if is_javascript():
+        return True
     return False

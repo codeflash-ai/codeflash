@@ -30,6 +30,7 @@ from codeflash.languages.base import (
 from codeflash.languages.current import (
     current_language,
     current_language_support,
+    is_java,
     is_javascript,
     is_python,
     is_typescript,
@@ -41,6 +42,10 @@ from codeflash.languages.javascript import JavaScriptSupport, TypeScriptSupport 
 # Import language support modules to trigger auto-registration
 # This ensures all supported languages are available when this package is imported
 from codeflash.languages.python import PythonSupport  # noqa: F401
+
+# Java language support
+# Importing the module triggers registration via @register_language decorator
+from codeflash.languages.java.support import JavaSupport  # noqa: F401
 from codeflash.languages.registry import (
     detect_project_language,
     get_language_support,
@@ -67,6 +72,7 @@ __all__ = [
     "get_language_support",
     "get_supported_extensions",
     "get_supported_languages",
+    "is_java",
     "is_javascript",
     "is_python",
     "is_typescript",

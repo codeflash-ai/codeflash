@@ -1,0 +1,41 @@
+name: Codeflash
+
+on:
+  pull_request:
+    paths:
+      # So that this workflow only runs when code within the target module is modified
+      - '{{ codeflash_module_path }}'
+  workflow_dispatch:
+
+concurrency:
+  # Any new push to the PR will cancel the previous run, so that only the latest code is optimized
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  optimize:
+    name: Optimize new code
+    # Don't run codeflash on codeflash-ai[bot] commits, prevent duplicate optimizations
+    if: ${{ github.actor != 'codeflash-ai[bot]' }}
+    runs-on: ubuntu-latest
+    env:
+      CODEFLASH_API_KEY: ${{ secrets.CODEFLASH_API_KEY }}
+    {{ working_directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: '{{ java_build_tool }}'
+      - name: Install Dependencies
+        run: {{ install_dependencies_command }}
+      - name: Install Codeflash
+        run: pip install codeflash
+      - name: Codeflash Optimization
+        run: codeflash
