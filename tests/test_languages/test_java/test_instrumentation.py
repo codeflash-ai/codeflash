@@ -2,14 +2,24 @@
 
 Tests the instrumentation functions with exact string equality assertions
 to ensure the generated code matches expected output exactly.
+
+Also includes end-to-end execution tests that:
+1. Instrument Java code
+2. Execute with Maven
+3. Parse JUnit XML and timing markers from stdout
+4. Verify the parsed results are correct
 """
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
     _add_timing_instrumentation,
@@ -1173,3 +1183,494 @@ public class InnerClassTest__perfonlyinstrumented {
 """
         assert success is True
         assert result == expected
+
+
+# Skip all E2E tests if Maven is not available
+requires_maven = pytest.mark.skipif(
+    find_maven_executable() is None,
+    reason="Maven not found - skipping execution tests",
+)
+
+
+@requires_maven
+class TestRunAndParseTests:
+    """End-to-end tests using the real run_and_parse_tests entry point."""
+
+    POM_CONTENT = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>codeflash-test</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.9.3</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.1.2</version>
+                <configuration>
+                    <redirectTestOutputToFile>false</redirectTestOutputToFile>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+"""
+
+    @pytest.fixture
+    def java_project(self, tmp_path: Path):
+        """Create a temporary Maven project and set up Java language context."""
+        from codeflash.languages.base import Language
+        from codeflash.languages.current import set_current_language
+
+        # Force set the language to Java (reset the singleton first)
+        import codeflash.languages.current as current_module
+        current_module._current_language = None
+        set_current_language(Language.JAVA)
+
+        # Create Maven project structure
+        src_dir = tmp_path / "src" / "main" / "java" / "com" / "example"
+        test_dir = tmp_path / "src" / "test" / "java" / "com" / "example"
+        src_dir.mkdir(parents=True)
+        test_dir.mkdir(parents=True)
+        (tmp_path / "pom.xml").write_text(self.POM_CONTENT, encoding="utf-8")
+
+        yield tmp_path, src_dir, test_dir
+
+        # Reset language back to Python
+        current_module._current_language = None
+        set_current_language(Language.PYTHON)
+
+    def test_run_and_parse_behavior_mode(self, java_project):
+        """Test run_and_parse_tests in BEHAVIOR mode."""
+        from argparse import Namespace
+
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
+        from codeflash.optimization.optimizer import Optimizer
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create source file
+        (src_dir / "Calculator.java").write_text("""package com.example;
+
+public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+""", encoding="utf-8")
+
+        # Create and instrument test
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class CalculatorTest {
+    @Test
+    public void testAdd() {
+        Calculator calc = new Calculator();
+        assertEquals(4, calc.add(2, 2));
+    }
+}
+"""
+        test_file = test_dir / "CalculatorTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func_info = FunctionInfo(
+            name="add",
+            file_path=src_dir / "Calculator.java",
+            start_line=4,
+            end_line=6,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="behavior"
+        )
+        assert success
+
+        instrumented_file = test_dir / "CalculatorTest__perfinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        # Create Optimizer and FunctionOptimizer
+        fto = FunctionToOptimize(
+            function_name="add",
+            file_path=src_dir / "Calculator.java",
+            parents=[],
+            language="java",
+        )
+
+        opt = Optimizer(Namespace(
+            project_root=project_root,
+            disable_telemetry=True,
+            tests_root=test_dir,
+            test_project_root=project_root,
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ))
+
+        func_optimizer = opt.create_function_optimizer(fto)
+        assert func_optimizer is not None
+
+        func_optimizer.test_files = TestFiles(test_files=[
+            TestFile(
+                instrumented_behavior_file_path=instrumented_file,
+                test_type=TestType.EXISTING_UNIT_TEST,
+                original_file_path=test_file,
+                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+            )
+        ])
+
+        # Run and parse tests
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+
+        test_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # Verify results
+        assert len(test_results.test_results) >= 1
+        result = test_results.test_results[0]
+        assert result.did_pass is True
+        assert result.runtime is not None
+        assert result.runtime > 0
+
+    def test_run_and_parse_performance_mode(self, java_project):
+        """Test run_and_parse_tests in PERFORMANCE mode with timing markers."""
+        from argparse import Namespace
+
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
+        from codeflash.optimization.optimizer import Optimizer
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create source file
+        (src_dir / "MathUtils.java").write_text("""package com.example;
+
+public class MathUtils {
+    public int multiply(int a, int b) {
+        return a * b;
+    }
+}
+""", encoding="utf-8")
+
+        # Create and instrument test
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class MathUtilsTest {
+    @Test
+    public void testMultiply() {
+        MathUtils math = new MathUtils();
+        assertEquals(6, math.multiply(2, 3));
+    }
+}
+"""
+        test_file = test_dir / "MathUtilsTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func_info = FunctionInfo(
+            name="multiply",
+            file_path=src_dir / "MathUtils.java",
+            start_line=4,
+            end_line=6,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="performance"
+        )
+        assert success
+
+        instrumented_file = test_dir / "MathUtilsTest__perfonlyinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        # Create Optimizer and FunctionOptimizer
+        fto = FunctionToOptimize(
+            function_name="multiply",
+            file_path=src_dir / "MathUtils.java",
+            parents=[],
+            language="java",
+        )
+
+        opt = Optimizer(Namespace(
+            project_root=project_root,
+            disable_telemetry=True,
+            tests_root=test_dir,
+            test_project_root=project_root,
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ))
+
+        func_optimizer = opt.create_function_optimizer(fto)
+        assert func_optimizer is not None
+
+        func_optimizer.test_files = TestFiles(test_files=[
+            TestFile(
+                instrumented_behavior_file_path=test_file,
+                test_type=TestType.EXISTING_UNIT_TEST,
+                original_file_path=test_file,
+                benchmarking_file_path=instrumented_file,
+            )
+        ])
+
+        # Run performance tests
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+
+        test_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.PERFORMANCE,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=3,
+            testing_time=1.0,
+        )
+
+        # Verify results
+        assert len(test_results.test_results) >= 1
+        for result in test_results.test_results:
+            assert result.did_pass is True
+            assert result.runtime is not None
+            assert result.runtime > 0
+
+    def test_run_and_parse_multiple_test_methods(self, java_project):
+        """Test run_and_parse_tests with multiple test methods."""
+        from argparse import Namespace
+
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
+        from codeflash.optimization.optimizer import Optimizer
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create source file
+        (src_dir / "StringUtils.java").write_text("""package com.example;
+
+public class StringUtils {
+    public String reverse(String s) {
+        return new StringBuilder(s).reverse().toString();
+    }
+}
+""", encoding="utf-8")
+
+        # Create test with multiple methods
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class StringUtilsTest {
+    @Test
+    public void testReverseHello() {
+        assertEquals("olleh", new StringUtils().reverse("hello"));
+    }
+
+    @Test
+    public void testReverseEmpty() {
+        assertEquals("", new StringUtils().reverse(""));
+    }
+
+    @Test
+    public void testReverseSingle() {
+        assertEquals("a", new StringUtils().reverse("a"));
+    }
+}
+"""
+        test_file = test_dir / "StringUtilsTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func_info = FunctionInfo(
+            name="reverse",
+            file_path=src_dir / "StringUtils.java",
+            start_line=4,
+            end_line=6,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="behavior"
+        )
+        assert success
+
+        instrumented_file = test_dir / "StringUtilsTest__perfinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="reverse",
+            file_path=src_dir / "StringUtils.java",
+            parents=[],
+            language="java",
+        )
+
+        opt = Optimizer(Namespace(
+            project_root=project_root,
+            disable_telemetry=True,
+            tests_root=test_dir,
+            test_project_root=project_root,
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ))
+
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(test_files=[
+            TestFile(
+                instrumented_behavior_file_path=instrumented_file,
+                test_type=TestType.EXISTING_UNIT_TEST,
+                original_file_path=test_file,
+                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+            )
+        ])
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+
+        test_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # Should have results for all 3 test methods
+        assert len(test_results.test_results) >= 3
+        for result in test_results.test_results:
+            assert result.did_pass is True
+
+    def test_run_and_parse_failing_test(self, java_project):
+        """Test run_and_parse_tests correctly reports failing tests."""
+        from argparse import Namespace
+
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.models.models import TestFile, TestFiles, TestingMode, TestType
+        from codeflash.optimization.optimizer import Optimizer
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create source file with a bug
+        (src_dir / "BrokenCalc.java").write_text("""package com.example;
+
+public class BrokenCalc {
+    public int add(int a, int b) {
+        return a + b + 1;  // Bug: adds extra 1
+    }
+}
+""", encoding="utf-8")
+
+        # Create test that will fail
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class BrokenCalcTest {
+    @Test
+    public void testAdd() {
+        BrokenCalc calc = new BrokenCalc();
+        assertEquals(4, calc.add(2, 2));  // Will fail: 5 != 4
+    }
+}
+"""
+        test_file = test_dir / "BrokenCalcTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func_info = FunctionInfo(
+            name="add",
+            file_path=src_dir / "BrokenCalc.java",
+            start_line=4,
+            end_line=6,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="behavior"
+        )
+        assert success
+
+        instrumented_file = test_dir / "BrokenCalcTest__perfinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        fto = FunctionToOptimize(
+            function_name="add",
+            file_path=src_dir / "BrokenCalc.java",
+            parents=[],
+            language="java",
+        )
+
+        opt = Optimizer(Namespace(
+            project_root=project_root,
+            disable_telemetry=True,
+            tests_root=test_dir,
+            test_project_root=project_root,
+            pytest_cmd="pytest",
+            experiment_id=None,
+        ))
+
+        func_optimizer = opt.create_function_optimizer(fto)
+        func_optimizer.test_files = TestFiles(test_files=[
+            TestFile(
+                instrumented_behavior_file_path=instrumented_file,
+                test_type=TestType.EXISTING_UNIT_TEST,
+                original_file_path=test_file,
+                benchmarking_file_path=instrumented_file,  # Use same file for behavior tests
+            )
+        ])
+
+        test_env = os.environ.copy()
+        test_env["CODEFLASH_TEST_ITERATION"] = "0"
+
+        test_results, _ = func_optimizer.run_and_parse_tests(
+            testing_type=TestingMode.BEHAVIOR,
+            test_env=test_env,
+            test_files=func_optimizer.test_files,
+            optimization_iteration=0,
+            pytest_min_loops=1,
+            pytest_max_loops=1,
+            testing_time=0.1,
+        )
+
+        # Should have result for the failing test
+        assert len(test_results.test_results) >= 1
+        result = test_results.test_results[0]
+        assert result.did_pass is False
