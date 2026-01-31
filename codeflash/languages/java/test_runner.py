@@ -29,6 +29,98 @@ from codeflash.languages.java.build_tools import (
 logger = logging.getLogger(__name__)
 
 
+def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
+    """Find the multi-module Maven parent root if tests are in a different module.
+
+    For multi-module Maven projects, tests may be in a separate module from the source code.
+    This function detects this situation and returns the parent project root along with
+    the module containing the tests.
+
+    Args:
+        project_root: The current project root (typically the source module).
+        test_paths: TestFiles object or list of test file paths.
+
+    Returns:
+        Tuple of (maven_root, test_module_name) where:
+        - maven_root: The directory to run Maven from (parent if multi-module, else project_root)
+        - test_module_name: The name of the test module if different from project_root, else None
+
+    """
+    # Get test file paths
+    test_file_paths: list[Path] = []
+    if hasattr(test_paths, "test_files"):
+        for test_file in test_paths.test_files:
+            if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                test_file_paths.append(test_file.instrumented_behavior_file_path)
+    elif isinstance(test_paths, (list, tuple)):
+        test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
+
+    if not test_file_paths:
+        return project_root, None
+
+    # Check if any test file is outside the project_root
+    test_outside_project = False
+    test_dir: Path | None = None
+    for test_path in test_file_paths:
+        try:
+            test_path.relative_to(project_root)
+        except ValueError:
+            # Test is outside project_root
+            test_outside_project = True
+            test_dir = test_path.parent
+            break
+
+    if not test_outside_project:
+        return project_root, None
+
+    # Find common parent that contains both project_root and test files
+    # and has a pom.xml with <modules> section
+    current = project_root.parent
+    while current != current.parent:
+        pom_path = current / "pom.xml"
+        if pom_path.exists():
+            # Check if this is a multi-module pom
+            try:
+                content = pom_path.read_text(encoding="utf-8")
+                if "<modules>" in content:
+                    # Found multi-module parent
+                    # Get the relative module name for the test directory
+                    if test_dir:
+                        try:
+                            test_module = test_dir.relative_to(current)
+                            # Get the top-level module name (first component)
+                            test_module_name = test_module.parts[0] if test_module.parts else None
+                            logger.debug(
+                                "Detected multi-module Maven project. Root: %s, Test module: %s",
+                                current,
+                                test_module_name,
+                            )
+                            return current, test_module_name
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
+        current = current.parent
+
+    return project_root, None
+
+
+def _get_test_module_target_dir(maven_root: Path, test_module: str | None) -> Path:
+    """Get the target directory for the test module.
+
+    Args:
+        maven_root: The Maven project root.
+        test_module: The test module name, or None if not a multi-module project.
+
+    Returns:
+        Path to the target directory where surefire reports will be.
+
+    """
+    if test_module:
+        return maven_root / test_module / "target"
+    return maven_root / "target"
+
+
 @dataclass
 class JavaTestRunResult:
     """Result of running Java tests."""
@@ -76,6 +168,9 @@ def run_behavioral_tests(
     """
     project_root = project_root or cwd
 
+    # Detect multi-module Maven projects where tests are in a different module
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
 
@@ -88,6 +183,7 @@ def run_behavioral_tests(
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
     # If coverage is enabled, ensure JaCoCo is configured
+    # For multi-module projects, add JaCoCo to the source module (project_root), not the test module
     coverage_xml_path: Path | None = None
     if enable_coverage:
         pom_path = project_root / "pom.xml"
@@ -97,18 +193,21 @@ def run_behavioral_tests(
                 add_jacoco_plugin_to_pom(pom_path)
             coverage_xml_path = get_jacoco_xml_path(project_root)
 
-    # Run Maven tests
+    # Run Maven tests from the appropriate root
     result = _run_maven_tests(
-        project_root,
+        maven_root,
         test_paths,
         run_env,
         timeout=timeout or 300,
         mode="behavior",
         enable_coverage=enable_coverage,
+        test_module=test_module,
     )
 
     # Find or create the JUnit XML results file
-    surefire_dir = project_root / "target" / "surefire-reports"
+    # For multi-module projects, look in the test module's target directory
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
     # Return coverage_xml_path as the fourth element when coverage is enabled
@@ -150,6 +249,9 @@ def run_benchmarking_tests(
 
     project_root = project_root or cwd
 
+    # Detect multi-module Maven projects where tests are in a different module
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
     # Collect stdout from all loops
     all_stdout = []
     all_stderr = []
@@ -168,11 +270,12 @@ def run_benchmarking_tests(
 
         # Run Maven tests for this loop
         result = _run_maven_tests(
-            project_root,
+            maven_root,
             test_paths,
             run_env,
             timeout=timeout or 120,  # Per-loop timeout
             mode="performance",
+            test_module=test_module,
         )
 
         last_result = result
@@ -219,7 +322,9 @@ def run_benchmarking_tests(
     )
 
     # Find or create the JUnit XML results file (from last run)
-    surefire_dir = project_root / "target" / "surefire-reports"
+    # For multi-module projects, look in the test module's target directory
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, -1)  # Use -1 for benchmark
 
     return result_xml_path, combined_result
@@ -328,6 +433,7 @@ def _run_maven_tests(
     timeout: int = 300,
     mode: str = "behavior",
     enable_coverage: bool = False,
+    test_module: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run Maven tests with Surefire.
 
@@ -338,6 +444,7 @@ def _run_maven_tests(
         timeout: Maximum execution time in seconds.
         mode: Testing mode - "behavior" or "performance".
         enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
 
     Returns:
         CompletedProcess with test results.
@@ -360,6 +467,13 @@ def _run_maven_tests(
     # Note: JaCoCo report is generated automatically during test phase via plugin execution binding
     # We don't need to call jacoco:report explicitly since the plugin config binds it to test phase
     cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
+
+    # For multi-module projects, specify which module to test
+    if test_module:
+        # -am = also make dependencies
+        # -DfailIfNoTests=false allows dependency modules without tests to pass
+        # -DskipTests=false overrides any skipTests=true in pom.xml
+        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
 
     if test_filter:
         cmd.append(f"-Dtest={test_filter}")
