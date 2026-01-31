@@ -1563,13 +1563,67 @@ def is_numerical_code(code_string: str, function_name: str | None = None) -> boo
 def get_opt_review_metrics(
     source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path, language: Language
 ) -> str:
+    """Get function reference metrics for optimization review.
+
+    Uses the LanguageSupport abstraction to find references, supporting both Python and JavaScript/TypeScript.
+
+    Args:
+        source_code: Source code of the file containing the function.
+        file_path: Path to the file.
+        qualified_name: Qualified name of the function (e.g., "module.ClassName.method").
+        project_root: Root of the project.
+        tests_root: Root of the tests directory.
+        language: The programming language.
+
+    Returns:
+        Markdown-formatted string with code blocks showing calling functions.
+    """
+    from codeflash.languages.base import FunctionInfo, ParentInfo, ReferenceInfo
+    from codeflash.languages.registry import get_language_support
+
     start_time = time.perf_counter()
 
-    if language == Language.PYTHON:
-        calling_fns_details = _get_python_references(source_code, file_path, qualified_name, project_root, tests_root)
-    elif language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-        calling_fns_details = _get_javascript_references(file_path, qualified_name, project_root, tests_root)
-    else:
+    try:
+        # Get the language support
+        lang_support = get_language_support(language)
+        if lang_support is None:
+            return ""
+
+        # Parse qualified name to get function name and class name
+        qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
+        if len(qualified_name_split) == 1:
+            function_name, class_name = qualified_name_split[0], None
+        else:
+            function_name, class_name = qualified_name_split[1], qualified_name_split[0]
+
+        # Create a FunctionInfo for the function
+        # We don't have full line info here, so we'll use defaults
+        parents = ()
+        if class_name:
+            parents = (ParentInfo(name=class_name, type="ClassDef"),)
+
+        func_info = FunctionInfo(
+            name=function_name,
+            file_path=file_path,
+            start_line=1,
+            end_line=1,
+            parents=parents,
+            language=language,
+        )
+
+        # Find references using language support
+        references = lang_support.find_references(func_info, project_root, tests_root, max_files=500)
+
+        if not references:
+            return ""
+
+        # Format references as markdown code blocks
+        calling_fns_details = _format_references_as_markdown(
+            references, file_path, project_root, language
+        )
+
+    except Exception as e:
+        logger.debug(f"Error getting function references: {e}")
         calling_fns_details = ""
 
     end_time = time.perf_counter()
@@ -1577,124 +1631,129 @@ def get_opt_review_metrics(
     return calling_fns_details
 
 
-def _get_python_references(
-    source_code: str, file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
+def _format_references_as_markdown(
+    references: list, file_path: Path, project_root: Path, language: Language
 ) -> str:
-    """Get function references for Python code using jedi."""
-    try:
-        qualified_name_split = qualified_name.rsplit(".", maxsplit=1)
-        if len(qualified_name_split) == 1:
-            target_function, target_class = qualified_name_split[0], None
-        else:
-            target_function, target_class = qualified_name_split[1], qualified_name_split[0]
-        matches = get_fn_references_jedi(
-            source_code, file_path, project_root, target_function, target_class
-        )  # jedi is not perfect, it doesn't capture aliased references
-        return find_occurances(qualified_name, str(file_path), matches, project_root, tests_root)
-    except Exception as e:
-        logger.debug(f"Error getting Python references: {e}")
-        return ""
+    """Format references as markdown code blocks with calling function code.
 
+    Args:
+        references: List of ReferenceInfo objects.
+        file_path: Path to the source file (to exclude).
+        project_root: Root of the project.
+        language: The programming language.
 
-def _get_javascript_references(
-    file_path: Path, qualified_name: str, project_root: Path, tests_root: Path
-) -> str:
-    """Get function references for JavaScript/TypeScript code using tree-sitter.
-
-    This function finds all call sites of a JavaScript/TypeScript function
-    across the codebase and formats them for the optimizer's context.
+    Returns:
+        Markdown-formatted string.
     """
+    # Group references by file
+    refs_by_file: dict[Path, list] = {}
+    for ref in references:
+        # Exclude the source file's definition/import references
+        if ref.file_path == file_path and ref.reference_type in ("import", "reexport"):
+            continue
+
+        if ref.file_path not in refs_by_file:
+            refs_by_file[ref.file_path] = []
+        refs_by_file[ref.file_path].append(ref)
+
+    fn_call_context = ""
+    context_len = 0
+
+    for ref_file, file_refs in refs_by_file.items():
+        if context_len > MAX_CONTEXT_LEN_REVIEW:
+            break
+
+        try:
+            path_relative = ref_file.relative_to(project_root)
+        except ValueError:
+            continue
+
+        # Get syntax highlighting language
+        ext = ref_file.suffix.lstrip(".")
+        if language == Language.PYTHON:
+            lang_hint = "python"
+        elif ext in ("ts", "tsx"):
+            lang_hint = "typescript"
+        else:
+            lang_hint = "javascript"
+
+        # Read the file to extract calling function context
+        try:
+            file_content = ref_file.read_text(encoding="utf-8")
+            lines = file_content.splitlines()
+        except Exception:
+            continue
+
+        # Get unique caller functions from this file
+        callers_seen: set[str] = set()
+        caller_contexts: list[str] = []
+
+        for ref in file_refs:
+            caller = ref.caller_function or "<module>"
+            if caller in callers_seen:
+                continue
+            callers_seen.add(caller)
+
+            # Extract context around the reference
+            if ref.caller_function:
+                # Try to extract the full calling function
+                func_code = _extract_calling_function(file_content, ref.caller_function, ref.line, language)
+                if func_code:
+                    caller_contexts.append(func_code)
+                    context_len += len(func_code)
+            else:
+                # Module-level call - show a few lines of context
+                start_line = max(0, ref.line - 3)
+                end_line = min(len(lines), ref.line + 2)
+                context_code = "\n".join(lines[start_line:end_line])
+                caller_contexts.append(context_code)
+                context_len += len(context_code)
+
+        if caller_contexts:
+            fn_call_context += f"```{lang_hint}:{path_relative}\n"
+            fn_call_context += "\n".join(caller_contexts)
+            fn_call_context += "\n```\n"
+
+    return fn_call_context
+
+
+def _extract_calling_function(source_code: str, function_name: str, ref_line: int, language: Language) -> str | None:
+    """Extract the source code of a calling function.
+
+    Args:
+        source_code: Full source code of the file.
+        function_name: Name of the function to extract.
+        ref_line: Line number where the reference is.
+        language: The programming language.
+
+    Returns:
+        Source code of the function, or None if not found.
+    """
+    if language == Language.PYTHON:
+        return _extract_calling_function_python(source_code, function_name, ref_line)
+    else:
+        return _extract_calling_function_js(source_code, function_name, ref_line)
+
+
+def _extract_calling_function_python(source_code: str, function_name: str, ref_line: int) -> str | None:
+    """Extract the source code of a calling function in Python."""
     try:
-        from codeflash.languages.javascript.find_references import ReferenceFinder
-        from codeflash.languages.treesitter_utils import get_analyzer_for_file
+        import ast
 
-        # Extract function name from qualified name
-        # Qualified name could be "functionName" or "ClassName.methodName"
-        function_name = qualified_name.rsplit(".", maxsplit=1)[-1]
+        tree = ast.parse(source_code)
+        lines = source_code.splitlines()
 
-        finder = ReferenceFinder(project_root)
-        references = finder.find_references(function_name, file_path, max_files=500)
-
-        if not references:
-            return ""
-
-        # Format references similar to Python format
-        fn_call_context = ""
-        context_len = 0
-
-        # Group references by file
-        refs_by_file: dict[Path, list] = {}
-        for ref in references:
-            # Exclude test files
-            try:
-                if ref.file_path.relative_to(tests_root):
-                    continue
-            except ValueError:
-                pass
-
-            # Exclude the source file's definition
-            if ref.file_path == file_path and ref.reference_type == "import":
-                continue
-
-            if ref.file_path not in refs_by_file:
-                refs_by_file[ref.file_path] = []
-            refs_by_file[ref.file_path].append(ref)
-
-        for ref_file, file_refs in refs_by_file.items():
-            if context_len > MAX_CONTEXT_LEN_REVIEW:
-                break
-
-            try:
-                path_relative = ref_file.relative_to(project_root)
-            except ValueError:
-                continue
-
-            # Get the file extension for syntax highlighting
-            ext = ref_file.suffix.lstrip(".")
-            lang = "typescript" if ext in ("ts", "tsx") else "javascript"
-
-            # Read the file to extract calling function context
-            try:
-                file_content = ref_file.read_text(encoding="utf-8")
-                lines = file_content.splitlines()
-            except Exception:
-                continue
-
-            # Get unique caller functions from this file
-            callers_seen = set()
-            caller_contexts = []
-
-            for ref in file_refs:
-                caller = ref.caller_function or "<module>"
-                if caller in callers_seen:
-                    continue
-                callers_seen.add(caller)
-
-                # Extract context around the reference (the calling function or surrounding lines)
-                if ref.caller_function:
-                    # Try to extract the full calling function
-                    func_code = _extract_calling_function_js(file_content, ref.caller_function, ref.line)
-                    if func_code:
-                        caller_contexts.append(func_code)
-                        context_len += len(func_code)
-                else:
-                    # Module-level call - just show a few lines of context
-                    start_line = max(0, ref.line - 3)
-                    end_line = min(len(lines), ref.line + 2)
-                    context_code = "\n".join(lines[start_line:end_line])
-                    caller_contexts.append(context_code)
-                    context_len += len(context_code)
-
-            if caller_contexts:
-                fn_call_context += f"```{lang}:{path_relative}\n"
-                fn_call_context += "\n".join(caller_contexts)
-                fn_call_context += "\n```\n"
-
-        return fn_call_context
-
-    except Exception as e:
-        logger.debug(f"Error getting JavaScript references: {e}")
-        return ""
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name == function_name:
+                    # Check if the reference line is within this function
+                    start_line = node.lineno
+                    end_line = node.end_lineno or start_line
+                    if start_line <= ref_line <= end_line:
+                        return "\n".join(lines[start_line - 1 : end_line])
+        return None
+    except Exception:
+        return None
 
 
 def _extract_calling_function_js(source_code: str, function_name: str, ref_line: int) -> str | None:
