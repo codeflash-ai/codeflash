@@ -13,6 +13,7 @@ from codeflash.languages.base import (
     HelperFunction,
     Language,
     ParentInfo,
+    ReferenceInfo,
     TestInfo,
     TestResult,
 )
@@ -288,6 +289,120 @@ class PythonSupport:
             logger.warning("Failed to find helpers for %s: %s", function.name, e)
 
         return helpers
+
+    def find_references(
+        self,
+        function: FunctionInfo,
+        project_root: Path,
+        tests_root: Path | None = None,
+        max_files: int = 500,
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        Uses jedi to find all places where a Python function is called.
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        try:
+            import jedi
+
+            source = function.file_path.read_text()
+
+            # Find the function position
+            script = jedi.Script(code=source, path=function.file_path)
+            names = script.get_names(all_scopes=True, definitions=True)
+
+            function_pos = None
+            for name in names:
+                if name.type == "function" and name.name == function.name:
+                    # Check for class parent if it's a method
+                    if function.class_name:
+                        parent = name.parent()
+                        if parent and parent.name == function.class_name and parent.type == "class":
+                            function_pos = (name.line, name.column)
+                            break
+                    else:
+                        function_pos = (name.line, name.column)
+                        break
+
+            if function_pos is None:
+                return []
+
+            # Get references using jedi
+            script = jedi.Script(code=source, path=function.file_path, project=jedi.Project(path=project_root))
+            references = script.get_references(line=function_pos[0], column=function_pos[1])
+
+            result: list[ReferenceInfo] = []
+            seen_locations: set[tuple[Path, int, int]] = set()
+
+            for ref in references:
+                if not ref.module_path:
+                    continue
+
+                ref_path = Path(ref.module_path)
+
+                # Skip the definition itself
+                if ref_path == function.file_path and ref.line == function_pos[0]:
+                    continue
+
+                # Skip test files
+                if tests_root:
+                    try:
+                        ref_path.relative_to(tests_root)
+                        continue
+                    except ValueError:
+                        pass
+
+                # Avoid duplicates
+                loc_key = (ref_path, ref.line, ref.column)
+                if loc_key in seen_locations:
+                    continue
+                seen_locations.add(loc_key)
+
+                # Get context line
+                try:
+                    ref_source = ref_path.read_text()
+                    lines = ref_source.splitlines()
+                    context = lines[ref.line - 1] if ref.line <= len(lines) else ""
+                except Exception:
+                    context = ""
+
+                # Determine caller function
+                caller_function = None
+                try:
+                    parent = ref.parent()
+                    if parent and parent.type == "function":
+                        caller_function = parent.name
+                except Exception:
+                    pass
+
+                result.append(
+                    ReferenceInfo(
+                        file_path=ref_path,
+                        line=ref.line,
+                        column=ref.column,
+                        end_line=ref.line,
+                        end_column=ref.column + len(function.name),
+                        context=context.strip(),
+                        reference_type="call",
+                        import_name=function.name,
+                        caller_function=caller_function,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            logger.warning("Failed to find references for %s: %s", function.name, e)
+            return []
 
     # === Code Transformation ===
 

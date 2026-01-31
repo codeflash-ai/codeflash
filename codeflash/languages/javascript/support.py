@@ -19,6 +19,7 @@ from codeflash.languages.base import (
     HelperFunction,
     Language,
     ParentInfo,
+    ReferenceInfo,
     TestInfo,
     TestResult,
 )
@@ -957,6 +958,66 @@ class JavaScriptSupport:
             return self._find_helper_functions(function, source, analyzer, imports, project_root)
         except Exception as e:
             logger.warning("Failed to find helpers for %s: %s", function.name, e)
+            return []
+
+    def find_references(
+        self,
+        function: FunctionInfo,
+        project_root: Path,
+        tests_root: Path | None = None,
+        max_files: int = 500,
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        Uses tree-sitter to find all places where a JavaScript/TypeScript function
+        is called, including direct calls, callbacks, memoized versions, and re-exports.
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        from codeflash.languages.base import ReferenceInfo
+        from codeflash.languages.javascript.find_references import ReferenceFinder
+
+        try:
+            finder = ReferenceFinder(project_root)
+            refs = finder.find_references(function.name, function.file_path, max_files=max_files)
+
+            # Convert to ReferenceInfo and filter out tests
+            result: list[ReferenceInfo] = []
+            for ref in refs:
+                # Exclude test files if tests_root is provided
+                if tests_root:
+                    try:
+                        ref.file_path.relative_to(tests_root)
+                        continue  # Skip if in tests_root
+                    except ValueError:
+                        pass  # Not in tests_root, include it
+
+                result.append(
+                    ReferenceInfo(
+                        file_path=ref.file_path,
+                        line=ref.line,
+                        column=ref.column,
+                        end_line=ref.end_line,
+                        end_column=ref.end_column,
+                        context=ref.context,
+                        reference_type=ref.reference_type,
+                        import_name=ref.import_name,
+                        caller_function=ref.caller_function,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            logger.warning("Failed to find references for %s: %s", function.name, e)
             return []
 
     # === Code Transformation ===
