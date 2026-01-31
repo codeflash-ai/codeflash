@@ -357,11 +357,9 @@ def _run_maven_tests(
     test_filter = _build_test_filter(test_paths, mode=mode)
 
     # Build Maven command
-    # When coverage is enabled, run both test and jacoco:report goals
-    if enable_coverage:
-        cmd = [mvn, "test", "jacoco:report", "-fae"]  # Fail at end to run all tests
-    else:
-        cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
+    # Note: JaCoCo report is generated automatically during test phase via plugin execution binding
+    # We don't need to call jacoco:report explicitly since the plugin config binds it to test phase
+    cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
 
     if test_filter:
         cmd.append(f"-Dtest={test_filter}")

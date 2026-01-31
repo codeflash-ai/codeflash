@@ -634,11 +634,13 @@ JACOCO_PLUGIN_VERSION = "0.8.11"
 def is_jacoco_configured(pom_path: Path) -> bool:
     """Check if JaCoCo plugin is already configured in pom.xml.
 
+    Checks both the main build section and any profile build sections.
+
     Args:
         pom_path: Path to the pom.xml file.
 
     Returns:
-        True if JaCoCo plugin is configured, False otherwise.
+        True if JaCoCo plugin is configured anywhere in the pom.xml, False otherwise.
 
     """
     if not pom_path.exists():
@@ -649,7 +651,6 @@ def is_jacoco_configured(pom_path: Path) -> bool:
         root = tree.getroot()
 
         # Handle Maven namespace
-        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
         ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
 
         # Check if namespace is used
@@ -657,20 +658,12 @@ def is_jacoco_configured(pom_path: Path) -> bool:
         if not use_ns:
             ns_prefix = ""
 
-        # Find build/plugins section
-        build = root.find(f"{ns_prefix}build" if use_ns else "build")
-        if build is None:
-            return False
-
-        plugins = build.find(f"{ns_prefix}plugins" if use_ns else "plugins")
-        if plugins is None:
-            return False
-
-        # Check for JaCoCo plugin
-        for plugin in plugins.findall(f"{ns_prefix}plugin" if use_ns else "plugin"):
-            group_id = plugin.find(f"{ns_prefix}groupId" if use_ns else "groupId")
+        # Search all build/plugins sections (including those in profiles)
+        # Using .// to search recursively for all plugin elements
+        for plugin in root.findall(f".//{ns_prefix}plugin" if use_ns else ".//plugin"):
             artifact_id = plugin.find(f"{ns_prefix}artifactId" if use_ns else "artifactId")
             if artifact_id is not None and artifact_id.text == "jacoco-maven-plugin":
+                group_id = plugin.find(f"{ns_prefix}groupId" if use_ns else "groupId")
                 # Verify groupId if present (it's optional for org.jacoco)
                 if group_id is None or group_id.text == "org.jacoco":
                     return True
@@ -713,46 +706,87 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
             return False
 
         # JaCoCo plugin XML to insert (indented for typical pom.xml format)
-        jacoco_plugin = f"""
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>{JACOCO_PLUGIN_VERSION}</version>
-                <executions>
-                    <execution>
-                        <id>prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>"""
+        jacoco_plugin = """
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>{version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>""".format(version=JACOCO_PLUGIN_VERSION)
 
-        # Check if <build> section exists
-        if "<build>" in content:
-            # Check if <plugins> section exists within build
-            if "<plugins>" in content:
-                # Insert before closing </plugins> tag
-                content = content.replace("</plugins>", f"{jacoco_plugin}\n        </plugins>", 1)
-            else:
-                # Insert <plugins> section before </build>
-                plugins_section = f"<plugins>{jacoco_plugin}\n        </plugins>\n    "
-                content = content.replace("</build>", f"{plugins_section}</build>", 1)
+        # Find the main <build> section (not inside <profiles>)
+        # We need to find a <build> that appears after </profiles> or before <profiles>
+        # or if there's no profiles section at all
+        profiles_start = content.find("<profiles>")
+        profiles_end = content.find("</profiles>")
+
+        # Find all <build> tags
+        import re
+
+        # Find the main build section - it's the one NOT inside profiles
+        # Strategy: Look for <build> that comes after </profiles> or before <profiles> (or no profiles)
+        if profiles_start == -1:
+            # No profiles, any <build> is the main one
+            build_start = content.find("<build>")
+            build_end = content.find("</build>")
         else:
-            # Insert <build> section before </project>
-            build_section = f"""<build>
-        <plugins>{jacoco_plugin}
-        </plugins>
-    </build>
-</project>"""
-            content = content.replace("</project>", build_section, 1)
+            # Has profiles - find <build> outside of profiles
+            # Check for <build> before <profiles>
+            build_before_profiles = content[:profiles_start].rfind("<build>")
+            # Check for <build> after </profiles>
+            build_after_profiles = content[profiles_end:].find("<build>") if profiles_end != -1 else -1
+            if build_after_profiles != -1:
+                build_after_profiles += profiles_end
+
+            if build_before_profiles != -1:
+                build_start = build_before_profiles
+                # Find corresponding </build> - need to handle nested builds
+                build_end = _find_closing_tag(content, build_start, "build")
+            elif build_after_profiles != -1:
+                build_start = build_after_profiles
+                build_end = _find_closing_tag(content, build_start, "build")
+            else:
+                build_start = -1
+                build_end = -1
+
+        if build_start != -1 and build_end != -1:
+            # Found main build section, find plugins within it
+            build_section = content[build_start:build_end + len("</build>")]
+            plugins_start_in_build = build_section.find("<plugins>")
+            plugins_end_in_build = build_section.rfind("</plugins>")
+
+            if plugins_start_in_build != -1 and plugins_end_in_build != -1:
+                # Insert before </plugins> within the main build section
+                absolute_plugins_end = build_start + plugins_end_in_build
+                content = content[:absolute_plugins_end] + jacoco_plugin + "\n    " + content[absolute_plugins_end:]
+            else:
+                # No plugins section in main build, add one before </build>
+                plugins_section = f"<plugins>{jacoco_plugin}\n    </plugins>\n  "
+                content = content[:build_end] + plugins_section + content[build_end:]
+        else:
+            # No main build section found, add one before </project>
+            project_end = content.rfind("</project>")
+            build_section = f"""
+  <build>
+    <plugins>{jacoco_plugin}
+    </plugins>
+  </build>
+"""
+            content = content[:project_end] + build_section + content[project_end:]
 
         pom_path.write_text(content, encoding="utf-8")
         logger.info("Added JaCoCo plugin to pom.xml")
@@ -761,6 +795,54 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
     except Exception as e:
         logger.exception("Failed to add JaCoCo plugin to pom.xml: %s", e)
         return False
+
+
+def _find_closing_tag(content: str, start_pos: int, tag_name: str) -> int:
+    """Find the position of the closing tag that matches the opening tag at start_pos.
+
+    Handles nested tags of the same name.
+
+    Args:
+        content: The XML content.
+        start_pos: Position of the opening tag.
+        tag_name: Name of the tag.
+
+    Returns:
+        Position of the closing tag, or -1 if not found.
+
+    """
+    open_tag = f"<{tag_name}>"
+    open_tag_short = f"<{tag_name} "  # For tags with attributes
+    close_tag = f"</{tag_name}>"
+
+    # Start searching after the opening tag we're matching
+    depth = 1  # We've already found the opening tag at start_pos
+    pos = start_pos + len(f"<{tag_name}")  # Move past the opening tag
+
+    while pos < len(content):
+        next_open = content.find(open_tag, pos)
+        next_open_short = content.find(open_tag_short, pos)
+        next_close = content.find(close_tag, pos)
+
+        if next_close == -1:
+            return -1
+
+        # Find the earliest opening tag (if any)
+        candidates = [x for x in [next_open, next_open_short] if x != -1 and x < next_close]
+        next_open_any = min(candidates) if candidates else len(content) + 1
+
+        if next_open_any < next_close:
+            # Found opening tag first - nested tag
+            depth += 1
+            pos = next_open_any + 1
+        else:
+            # Found closing tag first
+            depth -= 1
+            if depth == 0:
+                return next_close
+            pos = next_close + len(close_tag)
+
+    return -1
 
 
 def get_jacoco_xml_path(project_root: Path) -> Path:
