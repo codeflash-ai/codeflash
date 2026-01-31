@@ -117,10 +117,21 @@ function getInvocationLoopIndex(invocationKey) {
 }
 
 /**
- * Increment the batch counter. Called by loop-runner between test file runs.
+ * Increment the batch counter and reset per-invocation loop counts.
+ * Called by loop-runner between test file runs.
+ *
+ * IMPORTANT: We must reset invocationLoopCounts here because the globalIndex
+ * formula (currentBatch - 1) * PERF_BATCH_SIZE + localIndex assumes localIndex
+ * starts at 1 for each batch. Without this reset, localIndex would continue
+ * incrementing across batches, causing globalIndex to grow too fast and
+ * triggering early loop termination.
  */
 function incrementBatch() {
     sharedPerfState.currentBatch++;
+    // Reset per-invocation loop counts for the new batch
+    // This ensures localIndex starts at 1 for each batch, making the
+    // globalIndex calculation correct: (batch-1)*batchSize + localIndex
+    sharedPerfState.invocationLoopCounts = {};
 }
 
 /**
