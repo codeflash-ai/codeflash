@@ -34,8 +34,17 @@ function isFibonacci(num) {
  * @returns {boolean} True if n is a perfect square
  */
 function isPerfectSquare(n) {
-    const sqrt = Math.sqrt(n);
-    return sqrt === Math.floor(sqrt);
+    if (n < 0) return false;
+    if (n === 0) return true;
+    
+    // Integer square root using Newton's method (faster than Math.sqrt for this check)
+    let x = n;
+    let y = (x + 1) >> 1;
+    while (y < x) {
+        x = y;
+        y = (x + n / x) >> 1;
+    }
+    return x * x === n;
 }
 
 /**
