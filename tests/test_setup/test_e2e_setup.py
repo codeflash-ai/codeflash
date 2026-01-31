@@ -8,24 +8,19 @@ These tests validate the complete setup experience across different:
 """
 
 import json
-import os
 from argparse import Namespace
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import tomlkit
 
 from codeflash.setup import (
     CodeflashConfig,
-    DetectedProject,
     detect_project,
     handle_first_run,
     has_existing_config,
     is_first_run,
     write_config,
 )
-
 
 # =============================================================================
 # Fixtures for creating different project types
@@ -365,7 +360,7 @@ class TestE2EDetection:
 
         assert detected.language == "python"
         assert detected.project_root == python_src_layout
-        assert "myapp" in str(detected.module_root)
+        assert detected.module_root.name == "myapp"
         assert detected.tests_root == python_src_layout / "tests"
         assert detected.test_runner == "pytest"
         assert any("ruff" in cmd for cmd in detected.formatter_cmds)
@@ -376,7 +371,7 @@ class TestE2EDetection:
         detected = detect_project(python_flat_layout)
 
         assert detected.language == "python"
-        assert "myapp" in str(detected.module_root)
+        assert detected.module_root.name == "myapp"
         assert any("black" in cmd for cmd in detected.formatter_cmds)
 
     def test_python_setup_py_detection(self, python_setup_py_project):
@@ -384,7 +379,7 @@ class TestE2EDetection:
         detected = detect_project(python_setup_py_project)
 
         assert detected.language == "python"
-        assert "legacyapp" in str(detected.module_root)
+        assert detected.module_root.name == "legacyapp"
 
     def test_javascript_npm_detection(self, javascript_npm_project):
         """Should correctly detect JavaScript npm project."""
@@ -578,14 +573,14 @@ class TestE2EFirstRunExperience:
 
         assert result is not None
         assert result.language == "python"
-        assert "myapp" in result.module_root
+        assert result.module_root.endswith("myapp")
         assert result.tests_root is not None
-        assert "tests" in result.tests_root
+        assert result.tests_root.endswith("tests")
         assert result.pytest_cmd == "pytest"
 
         # Config should be written
         content = (python_src_layout / "pyproject.toml").read_text()
-        assert "codeflash" in content
+        assert "[tool.codeflash]" in content
 
     def test_first_run_javascript_project(self, javascript_npm_project, monkeypatch):
         """Should complete first-run for JavaScript project."""
@@ -596,7 +591,7 @@ class TestE2EFirstRunExperience:
 
         assert result is not None
         assert result.language == "javascript"
-        assert "src" in result.module_root
+        assert result.module_root.endswith("src")
         assert result.pytest_cmd == "jest"  # Maps to test_runner
 
     def test_first_run_typescript_project(self, typescript_project, monkeypatch):

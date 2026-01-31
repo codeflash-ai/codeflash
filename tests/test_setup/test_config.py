@@ -1,9 +1,7 @@
 """Tests for config schema and config writer."""
 
 import json
-from pathlib import Path
 
-import pytest
 import tomlkit
 
 from codeflash.setup.config_schema import CodeflashConfig
@@ -310,7 +308,7 @@ class TestWritePackageJson:
         success, message = _write_package_json(tmp_path, config)
 
         assert success is False
-        assert "No package.json" in message
+        assert message == f"No package.json found at {tmp_path}"
 
 
 class TestWriteConfig:
@@ -326,7 +324,7 @@ class TestWriteConfig:
         success, message = write_config(detected)
 
         assert success is True
-        assert "pyproject.toml" in message
+        assert message == f"Config saved to {tmp_path / 'pyproject.toml'}"
 
     def test_writes_to_package_json_for_js(self, tmp_path):
         """Should write to package.json for JavaScript projects."""
@@ -394,4 +392,4 @@ class TestCreatePyprojectToml:
         success, message = create_pyproject_toml(tmp_path)
 
         assert success is False
-        assert "already exists" in message
+        assert message == f"pyproject.toml already exists at {tmp_path / 'pyproject.toml'}"

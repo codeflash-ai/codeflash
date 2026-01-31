@@ -1,24 +1,15 @@
 """Tests for the universal project detector."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
-import tomlkit
 
 from codeflash.setup.detector import (
-    DetectedProject,
-    _detect_formatter,
     _detect_js_formatter,
     _detect_js_module_root,
     _detect_js_test_runner,
     _detect_language,
-    _detect_module_root,
     _detect_python_formatter,
     _detect_python_module_root,
     _detect_python_test_runner,
-    _detect_test_runner,
     _detect_tests_root,
     _find_project_root,
     detect_project,
@@ -124,7 +115,8 @@ class TestDetectModuleRoot:
 
         module_root, detail = _detect_python_module_root(tmp_path)
         assert module_root == src_dir
-        assert "src" in str(module_root)
+        assert module_root.name == "mypackage"
+        assert module_root.parent.name == "src"
 
     def test_python_detects_package_at_root(self, tmp_path):
         """Should detect package at project root."""

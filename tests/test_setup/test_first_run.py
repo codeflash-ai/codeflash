@@ -3,10 +3,7 @@
 import json
 import os
 from argparse import Namespace
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from codeflash.setup.first_run import (
     _handle_api_key,
@@ -247,15 +244,15 @@ class TestFirstRunIntegration:
 
         assert result is not None
         assert result.language == "python"
-        assert "myapp" in result.module_root
-        assert "tests" in result.tests_root
+        assert result.module_root.endswith("myapp")
+        assert result.tests_root.endswith("tests")
 
         # Verify config was written
         import tomlkit
 
         content = (tmp_path / "pyproject.toml").read_text()
         data = tomlkit.parse(content)
-        assert "codeflash" in data.get("tool", {})
+        assert "codeflash" in data["tool"]
 
     def test_full_javascript_first_run(self, tmp_path, monkeypatch):
         """Should complete full first-run for JavaScript project."""
@@ -274,7 +271,7 @@ class TestFirstRunIntegration:
 
         assert result is not None
         assert result.language == "javascript"
-        assert "src" in result.module_root
+        assert result.module_root.endswith("src")
         assert result.pytest_cmd == "jest"  # test_runner mapped to pytest_cmd
 
     def test_subsequent_run_uses_saved_config(self, tmp_path, monkeypatch):
