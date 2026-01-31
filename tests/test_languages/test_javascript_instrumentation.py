@@ -652,3 +652,111 @@ class TestInstrumentationFullStringEquality:
         expected = "        return codeflash.capture('Class.fibonacci', '1', this.fibonacci.bind(this), n - 1);"
         assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
         assert counter == 1
+
+
+class TestStripJsExtensions:
+    """Tests for stripping file extensions from import paths."""
+
+    def test_strip_js_extension_from_esm_import(self):
+        """Test stripping .js from ES module imports."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "import { getDifferences } from '../src/utils/DynamicBindingUtils.js';"
+        expected = "import { getDifferences } from '../src/utils/DynamicBindingUtils';"
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_strip_ts_extension_from_esm_import(self):
+        """Test stripping .ts from ES module imports."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "import { func } from './module.ts';"
+        expected = "import { func } from './module';"
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_strip_extension_from_require(self):
+        """Test stripping extensions from require() calls."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "const { func } = require('../utils/helper.js');"
+        expected = "const { func } = require('../utils/helper');"
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_strip_extension_from_jest_mock(self):
+        """Test stripping extensions from jest.mock() calls."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "jest.mock('../src/utils/DynamicBindingUtils.js');"
+        expected = "jest.mock('../src/utils/DynamicBindingUtils');"
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_strip_extension_from_jest_doMock(self):
+        """Test stripping extensions from jest.doMock() calls."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "jest.doMock('./helper.ts');"
+        expected = "jest.doMock('./helper');"
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_preserve_external_package_imports(self):
+        """Test that external package imports are not modified."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "import lodash from 'lodash';"
+
+        result = strip_js_extensions(code)
+        assert result == code  # Should be unchanged
+
+    def test_preserve_absolute_imports(self):
+        """Test that absolute/alias imports are not modified."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = "import { Component } from '@/components/Button';"
+
+        result = strip_js_extensions(code)
+        assert result == code  # Should be unchanged
+
+    def test_strip_multiple_extensions_in_file(self):
+        """Test stripping multiple extensions in a single file."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = """
+import { func1 } from '../utils/helper.js';
+import { func2 } from './local.ts';
+const { func3 } = require('../lib/util.tsx');
+jest.mock('../mocks/mock.jsx');
+"""
+        expected = """
+import { func1 } from '../utils/helper';
+import { func2 } from './local';
+const { func3 } = require('../lib/util');
+jest.mock('../mocks/mock');
+"""
+
+        result = strip_js_extensions(code)
+        assert result == expected
+
+    def test_strip_mjs_mts_extensions(self):
+        """Test stripping .mjs and .mts extensions."""
+        from codeflash.languages.javascript.instrument import strip_js_extensions
+
+        code = """
+import { a } from './module.mjs';
+import { b } from '../util.mts';
+"""
+        expected = """
+import { a } from './module';
+import { b } from '../util';
+"""
+
+        result = strip_js_extensions(code)
+        assert result == expected

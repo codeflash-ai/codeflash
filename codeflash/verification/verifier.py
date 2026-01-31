@@ -67,6 +67,7 @@ def generate_tests(
             from codeflash.languages.javascript.instrument import (
                 TestingMode,
                 instrument_generated_js_test,
+                strip_js_extensions,
                 validate_and_fix_import_style,
             )
             from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
@@ -75,7 +76,10 @@ def generate_tests(
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
 
-            # First validate and fix import styles
+            # Strip incorrect file extensions from import paths (LLMs sometimes add .js to .ts imports)
+            generated_test_source = strip_js_extensions(generated_test_source)
+
+            # Validate and fix import styles (default vs named exports)
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)

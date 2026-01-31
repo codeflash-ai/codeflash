@@ -18,6 +18,43 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
+# Patterns to strip file extensions from import paths
+# LLMs sometimes add .js extensions to TypeScript imports, which breaks module resolution
+_JS_EXTENSION_PATTERN = re.compile(
+    r"""(from\s+['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"])"""
+)
+_REQUIRE_EXTENSION_PATTERN = re.compile(
+    r"""(require\s*\(\s*['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"]\s*\))"""
+)
+_JEST_MOCK_EXTENSION_PATTERN = re.compile(
+    r"""(jest\.(?:mock|doMock|unmock|requireActual|requireMock)\s*\(\s*['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"])"""
+)
+
+
+def strip_js_extensions(source: str) -> str:
+    """Strip .js/.ts/.tsx/.jsx extensions from relative import paths.
+
+    TypeScript and Jest's module resolution automatically resolve file extensions,
+    so adding them explicitly can cause "Cannot find module" errors when the LLM
+    adds incorrect extensions (e.g., .js to a .ts file).
+
+    This function removes extensions from:
+    - ES module imports: import { x } from '../path/file.js'
+    - CommonJS requires: require('../path/file.js')
+    - Jest mocks: jest.mock('../path/file.js')
+
+    Args:
+        source: The test source code.
+
+    Returns:
+        Source code with extensions stripped from relative import paths.
+
+    """
+    source = _JS_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+    source = _REQUIRE_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+    return _JEST_MOCK_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+
+
 class TestingMode:
     """Testing mode constants."""
 
