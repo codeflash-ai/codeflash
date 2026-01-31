@@ -832,6 +832,7 @@ class AiServiceClient:
         replay_tests: str,
         calling_fn_details: str,
         language: str = "python",
+        **_kwargs: Any,
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
