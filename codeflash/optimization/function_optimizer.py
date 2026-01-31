@@ -490,6 +490,7 @@ class FunctionOptimizer:
         self.repair_counter = 0  # track how many repairs we did for each function
         self.adaptive_optimization_counter = 0  # track how many adaptive optimizations we did for each function
         self.is_numerical_code: bool | None = None
+        self.code_already_exists: bool = False
 
     def can_be_optimized(self) -> Result[tuple[bool, CodeOptimizationContext, dict[Path, str]], str]:
         should_run_experiment = self.experiment_id is not None
@@ -512,9 +513,8 @@ class FunctionOptimizer:
         # Random here means that we still attempt optimization with a fractional chance to see if
         # last time we could not find an optimization, maybe this time we do.
         # Random is before as a performance optimization, swapping the two 'and' statements has the same effect
-        if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and was_function_previously_optimized(  # noqa: S311
-            self.function_to_optimize, code_context, self.args
-        ):
+        self.code_already_exists = was_function_previously_optimized(self.function_to_optimize, code_context, self.args)
+        if random.random() > REPEAT_OPTIMIZATION_PROBABILITY and self.code_already_exists:  # noqa: S311
             return Failure("Function optimization previously attempted, skipping.")
 
         return Success((should_run_experiment, code_context, original_helper_code))
@@ -754,9 +754,9 @@ class FunctionOptimizer:
             function_references=function_references,
         )
 
-        # Add function to code context hash if in gh actions
-
-        add_code_context_hash(code_context.hashing_code_context_hash)
+        # Add function to code context hash if in gh actions and code doesn't already exist
+        if not self.code_already_exists:
+            add_code_context_hash(code_context.hashing_code_context_hash)
 
         if self.args.override_fixtures:
             restore_conftest(original_conftest_content)

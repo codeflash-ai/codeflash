@@ -28,9 +28,7 @@ def safe_repr(obj: object) -> str:
 
 
 def compare_test_results(
-    original_results: TestResults,
-    candidate_results: TestResults,
-    pass_fail_only: bool = False,  # noqa: FBT001, FBT002
+    original_results: TestResults, candidate_results: TestResults, pass_fail_only: bool = False
 ) -> tuple[bool, list[TestDiff]]:
     # This is meant to be only called with test results for the first loop index
     if len(original_results) == 0 or len(candidate_results) == 0:

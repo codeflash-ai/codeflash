@@ -383,7 +383,7 @@ class PytestLoops:
             count += 1
             loop_start = _ORIGINAL_PERF_COUNTER_NS()
             for index, item in enumerate(session.items):
-                item: pytest.Item = item  # noqa: PLW0127, PLW2901
+                item: pytest.Item = item  # noqa: PLW0127
                 item._report_sections.clear()  # clear reports for new test  # noqa: SLF001
 
                 if total_time > SHORTEST_AMOUNT_OF_TIME:

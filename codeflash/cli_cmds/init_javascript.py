@@ -66,7 +66,7 @@ class JSSetupInfo:
 
 
 # Import theme from cmd_init to avoid duplication
-def _get_theme():  # noqa: ANN202
+def _get_theme():
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
     from codeflash.cli_cmds.cmd_init import CodeflashTheme
 

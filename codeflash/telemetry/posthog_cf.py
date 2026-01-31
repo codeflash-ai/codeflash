@@ -20,7 +20,7 @@ def initialize_posthog(*, enabled: bool = True) -> None:
     if not enabled:
         return
 
-    global _posthog  # noqa: PLW0603
+    global _posthog
     _posthog = Posthog(project_api_key="phc_aUO790jHd7z1SXwsYCz8dRApxueplZlZWeDSpKc5hol", host="https://us.posthog.com")
     _posthog.log.setLevel(logging.CRITICAL)  # Suppress PostHog logging
     ph("cli-telemetry-enabled")
