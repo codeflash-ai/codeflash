@@ -115,7 +115,7 @@ function installCodeflash(uvBin) {
   try {
     // Use uv tool install to install codeflash in an isolated environment
     // This avoids conflicts with any existing Python environments
-    execSync(`"${uvBin}" tool install codeflash --force`, {
+    execSync(`"${uvBin}" tool install --force --python python3.12 codeflash`, {
       stdio: 'inherit',
       shell: true,
     });
