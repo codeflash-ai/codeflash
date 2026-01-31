@@ -607,7 +607,33 @@ def check_for_toml_or_setup_file() -> str | None:
     curdir = Path.cwd()
     pyproject_toml_path = curdir / "pyproject.toml"
     setup_py_path = curdir / "setup.py"
+    package_json_path = curdir / "package.json"
     project_name = None
+
+    # Check if this might be a JavaScript/TypeScript project that wasn't detected
+    if package_json_path.exists() and not pyproject_toml_path.exists() and not setup_py_path.exists():
+        js_redirect_panel = Panel(
+            Text(
+                f"📦 I found a package.json in {curdir}.\n\n"
+                "This looks like a JavaScript/TypeScript project!\n"
+                "Redirecting to JavaScript setup...",
+                style="cyan",
+            ),
+            title="🟨 JavaScript Project Detected",
+            border_style="bright_yellow",
+        )
+        console.print(js_redirect_panel)
+        console.print()
+        ph("cli-js-project-redirect")
+
+        # Redirect to JS init
+        from codeflash.cli_cmds.init_javascript import ProjectLanguage, detect_project_language, init_js_project
+
+        project_language = detect_project_language()
+        if project_language in (ProjectLanguage.JAVASCRIPT, ProjectLanguage.TYPESCRIPT):
+            init_js_project(project_language)
+            sys.exit(0)  # init_js_project handles its own exit, but ensure we don't continue
+
     if pyproject_toml_path.exists():
         try:
             pyproject_toml_content = pyproject_toml_path.read_text(encoding="utf8")
@@ -617,28 +643,44 @@ def check_for_toml_or_setup_file() -> str | None:
         except Exception:
             click.echo("✅ I found a pyproject.toml for your project.")
             ph("cli-pyproject-toml-found")
+    elif setup_py_path.exists():
+        setup_py_content = setup_py_path.read_text(encoding="utf8")
+        project_name_match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL)
+        if project_name_match:
+            project_name = project_name_match.group(1)
+            click.echo(f"✅ Found setup.py for your project {project_name}")
+            ph("cli-setup-py-found-name")
+        else:
+            click.echo("✅ Found setup.py.")
+            ph("cli-setup-py-found")
     else:
-        if setup_py_path.exists():
-            setup_py_content = setup_py_path.read_text(encoding="utf8")
-            project_name_match = re.search(r"setup\s*\([^)]*?name\s*=\s*['\"](.*?)['\"]", setup_py_content, re.DOTALL)
-            if project_name_match:
-                project_name = project_name_match.group(1)
-                click.echo(f"✅ Found setup.py for your project {project_name}")
-                ph("cli-setup-py-found-name")
-            else:
-                click.echo("✅ Found setup.py.")
-                ph("cli-setup-py-found")
-        toml_info_panel = Panel(
-            Text(
-                f"💡 No pyproject.toml found in {curdir}.\n\n"
-                "This file is essential for Codeflash to store its configuration.\n"
-                "Please ensure you are running `codeflash init` from your project's root directory.",
-                style="yellow",
-            ),
-            title="📋 pyproject.toml Required",
-            border_style="bright_yellow",
-        )
-        console.print(toml_info_panel)
+        # No Python config files found - show appropriate message
+        # Check again if this might be a JS project
+        if package_json_path.exists():
+            js_hint_panel = Panel(
+                Text(
+                    f"📦 I found a package.json but no pyproject.toml in {curdir}.\n\n"
+                    "If this is a JavaScript/TypeScript project, please run:\n"
+                    "  codeflash init\n\n"
+                    "from the project root directory.",
+                    style="yellow",
+                ),
+                title="🤔 Mixed Project?",
+                border_style="bright_yellow",
+            )
+            console.print(js_hint_panel)
+        else:
+            toml_info_panel = Panel(
+                Text(
+                    f"💡 No pyproject.toml found in {curdir}.\n\n"
+                    "This file is essential for Codeflash to store its configuration.\n"
+                    "Please ensure you are running `codeflash init` from your project's root directory.",
+                    style="yellow",
+                ),
+                title="📋 pyproject.toml Required",
+                border_style="bright_yellow",
+            )
+            console.print(toml_info_panel)
         console.print()
         ph("cli-no-pyproject-toml-or-setup-py")
 

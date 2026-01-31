@@ -90,13 +90,30 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
     has_package_json = (root / "package.json").exists()
     has_tsconfig = (root / "tsconfig.json").exists()
 
-    # TypeScript project
+    # TypeScript project (tsconfig.json is definitive)
     if has_tsconfig:
         return ProjectLanguage.TYPESCRIPT
 
-    # Pure JS project (has package.json but no Python files)
-    if has_package_json and not has_pyproject and not has_setup_py:
-        return ProjectLanguage.JAVASCRIPT
+    # JavaScript project - package.json without Python-specific files takes priority
+    # Note: If both package.json and pyproject.toml exist, check for typical JS project indicators
+    if has_package_json:
+        # If no Python config files, it's definitely JavaScript
+        if not has_pyproject and not has_setup_py:
+            return ProjectLanguage.JAVASCRIPT
+
+        # If package.json exists with Python files, check for JS-specific indicators
+        # Common React/Node patterns indicate a JS project
+        js_indicators = [
+            (root / "node_modules").exists(),
+            (root / ".npmrc").exists(),
+            (root / "yarn.lock").exists(),
+            (root / "package-lock.json").exists(),
+            (root / "pnpm-lock.yaml").exists(),
+            (root / "bun.lockb").exists(),
+            (root / "bun.lock").exists(),
+        ]
+        if any(js_indicators):
+            return ProjectLanguage.JAVASCRIPT
 
     # Python project (default)
     return ProjectLanguage.PYTHON
