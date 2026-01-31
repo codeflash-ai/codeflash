@@ -114,13 +114,45 @@ class TestConfig:
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.
 
-        Returns 'jest' for JavaScript/TypeScript, 'junit5' for Java, 'pytest' for Python (default).
+        Returns 'jest' for JavaScript/TypeScript, detected JUnit version for Java, 'pytest' for Python (default).
         """
         if is_javascript():
             return "jest"
         if is_java():
-            return "junit5"
+            return self._detect_java_test_framework()
         return "pytest"
+
+    def _detect_java_test_framework(self) -> str:
+        """Detect the Java test framework from the project configuration.
+
+        Returns 'junit4', 'junit5', or 'testng' based on project dependencies.
+        Checks both the project root and parent directories for multi-module projects.
+        Defaults to 'junit5' if detection fails.
+        """
+        try:
+            from codeflash.languages.java.config import detect_java_project
+
+            # First try the project root
+            config = detect_java_project(self.project_root_path)
+            if config and config.test_framework and (config.has_junit4 or config.has_junit5 or config.has_testng):
+                return config.test_framework
+
+            # For multi-module projects, check parent directories
+            current = self.project_root_path.parent
+            while current != current.parent:
+                pom_path = current / "pom.xml"
+                if pom_path.exists():
+                    parent_config = detect_java_project(current)
+                    if parent_config and (parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng):
+                        return parent_config.test_framework
+                current = current.parent
+
+            # Return whatever the initial detection found, or default
+            if config and config.test_framework:
+                return config.test_framework
+        except Exception:
+            pass
+        return "junit5"  # Default fallback
 
     def set_language(self, language: str) -> None:
         """Set the language for this test config.

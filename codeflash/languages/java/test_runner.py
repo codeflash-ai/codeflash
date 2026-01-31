@@ -15,19 +15,110 @@ import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    add_jacoco_plugin_to_pom,
     find_maven_executable,
-    find_test_root,
+    get_jacoco_xml_path,
+    is_jacoco_configured,
 )
 
-if TYPE_CHECKING:
-    pass
-
 logger = logging.getLogger(__name__)
+
+
+def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
+    """Find the multi-module Maven parent root if tests are in a different module.
+
+    For multi-module Maven projects, tests may be in a separate module from the source code.
+    This function detects this situation and returns the parent project root along with
+    the module containing the tests.
+
+    Args:
+        project_root: The current project root (typically the source module).
+        test_paths: TestFiles object or list of test file paths.
+
+    Returns:
+        Tuple of (maven_root, test_module_name) where:
+        - maven_root: The directory to run Maven from (parent if multi-module, else project_root)
+        - test_module_name: The name of the test module if different from project_root, else None
+
+    """
+    # Get test file paths
+    test_file_paths: list[Path] = []
+    if hasattr(test_paths, "test_files"):
+        for test_file in test_paths.test_files:
+            if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                test_file_paths.append(test_file.instrumented_behavior_file_path)
+    elif isinstance(test_paths, (list, tuple)):
+        test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
+
+    if not test_file_paths:
+        return project_root, None
+
+    # Check if any test file is outside the project_root
+    test_outside_project = False
+    test_dir: Path | None = None
+    for test_path in test_file_paths:
+        try:
+            test_path.relative_to(project_root)
+        except ValueError:
+            # Test is outside project_root
+            test_outside_project = True
+            test_dir = test_path.parent
+            break
+
+    if not test_outside_project:
+        return project_root, None
+
+    # Find common parent that contains both project_root and test files
+    # and has a pom.xml with <modules> section
+    current = project_root.parent
+    while current != current.parent:
+        pom_path = current / "pom.xml"
+        if pom_path.exists():
+            # Check if this is a multi-module pom
+            try:
+                content = pom_path.read_text(encoding="utf-8")
+                if "<modules>" in content:
+                    # Found multi-module parent
+                    # Get the relative module name for the test directory
+                    if test_dir:
+                        try:
+                            test_module = test_dir.relative_to(current)
+                            # Get the top-level module name (first component)
+                            test_module_name = test_module.parts[0] if test_module.parts else None
+                            logger.debug(
+                                "Detected multi-module Maven project. Root: %s, Test module: %s",
+                                current,
+                                test_module_name,
+                            )
+                            return current, test_module_name
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
+        current = current.parent
+
+    return project_root, None
+
+
+def _get_test_module_target_dir(maven_root: Path, test_module: str | None) -> Path:
+    """Get the target directory for the test module.
+
+    Args:
+        maven_root: The Maven project root.
+        test_module: The test module name, or None if not a multi-module project.
+
+    Returns:
+        Path to the target directory where surefire reports will be.
+
+    """
+    if test_module:
+        return maven_root / test_module / "target"
+    return maven_root / "target"
 
 
 @dataclass
@@ -72,10 +163,13 @@ def run_behavioral_tests(
         candidate_index: Index of the candidate being tested.
 
     Returns:
-        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, None).
+        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, coverage_xml_path).
 
     """
     project_root = project_root or cwd
+
+    # Detect multi-module Maven projects where tests are in a different module
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -88,21 +182,50 @@ def run_behavioral_tests(
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
-    # Run Maven tests
+    # If coverage is enabled, ensure JaCoCo is configured
+    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
+    coverage_xml_path: Path | None = None
+    if enable_coverage:
+        # Determine which pom.xml to configure JaCoCo in
+        if test_module:
+            # Multi-module project: add JaCoCo to test module
+            test_module_pom = maven_root / test_module / "pom.xml"
+            if test_module_pom.exists():
+                if not is_jacoco_configured(test_module_pom):
+                    logger.info(f"Adding JaCoCo plugin to test module pom.xml: {test_module_pom}")
+                    add_jacoco_plugin_to_pom(test_module_pom)
+                coverage_xml_path = get_jacoco_xml_path(maven_root / test_module)
+        else:
+            # Single module project
+            pom_path = project_root / "pom.xml"
+            if pom_path.exists():
+                if not is_jacoco_configured(pom_path):
+                    logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
+                    add_jacoco_plugin_to_pom(pom_path)
+                coverage_xml_path = get_jacoco_xml_path(project_root)
+
+    # Run Maven tests from the appropriate root
+    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
+    min_timeout = 120 if enable_coverage else 60
+    effective_timeout = max(timeout or 300, min_timeout)
     result = _run_maven_tests(
-        project_root,
+        maven_root,
         test_paths,
         run_env,
-        timeout=timeout or 300,
+        timeout=effective_timeout,
         mode="behavior",
+        enable_coverage=enable_coverage,
+        test_module=test_module,
     )
 
     # Find or create the JUnit XML results file
-    surefire_dir = project_root / "target" / "surefire-reports"
+    # For multi-module projects, look in the test module's target directory
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    # Return sqlite_db_path as the third element (was None before)
-    return result_xml_path, result, sqlite_db_path, None
+    # Return coverage_xml_path as the fourth element when coverage is enabled
+    return result_xml_path, result, sqlite_db_path, coverage_xml_path
 
 
 def run_benchmarking_tests(
@@ -140,6 +263,9 @@ def run_benchmarking_tests(
 
     project_root = project_root or cwd
 
+    # Detect multi-module Maven projects where tests are in a different module
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
     # Collect stdout from all loops
     all_stdout = []
     all_stderr = []
@@ -158,11 +284,12 @@ def run_benchmarking_tests(
 
         # Run Maven tests for this loop
         result = _run_maven_tests(
-            project_root,
+            maven_root,
             test_paths,
             run_env,
             timeout=timeout or 120,  # Per-loop timeout
             mode="performance",
+            test_module=test_module,
         )
 
         last_result = result
@@ -209,7 +336,9 @@ def run_benchmarking_tests(
     )
 
     # Find or create the JUnit XML results file (from last run)
-    surefire_dir = project_root / "target" / "surefire-reports"
+    # For multi-module projects, look in the test module's target directory
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, -1)  # Use -1 for benchmark
 
     return result_xml_path, combined_result
@@ -254,10 +383,10 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
 
 def _write_empty_junit_xml(path: Path) -> None:
     """Write an empty JUnit XML results file."""
-    xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="NoTests" tests="0" failures="0" errors="0" skipped="0" time="0">
 </testsuite>
-'''
+"""
     path.write_text(xml_content, encoding="utf-8")
 
 
@@ -317,6 +446,8 @@ def _run_maven_tests(
     env: dict[str, str],
     timeout: int = 300,
     mode: str = "behavior",
+    enable_coverage: bool = False,
+    test_module: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run Maven tests with Surefire.
 
@@ -326,6 +457,8 @@ def _run_maven_tests(
         env: Environment variables.
         timeout: Maximum execution time in seconds.
         mode: Testing mode - "behavior" or "performance".
+        enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
 
     Returns:
         CompletedProcess with test results.
@@ -345,7 +478,21 @@ def _run_maven_tests(
     test_filter = _build_test_filter(test_paths, mode=mode)
 
     # Build Maven command
-    cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
+    # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
+    # JaCoCo's report goal is bound to the verify phase to get post-test execution data
+    maven_goal = "verify" if enable_coverage else "test"
+    cmd = [mvn, maven_goal, "-fae"]  # Fail at end to run all tests
+
+    # When coverage is enabled, continue build even if tests fail so JaCoCo report is generated
+    if enable_coverage:
+        cmd.append("-Dmaven.test.failure.ignore=true")
+
+    # For multi-module projects, specify which module to test
+    if test_module:
+        # -am = also make dependencies
+        # -DfailIfNoTests=false allows dependency modules without tests to pass
+        # -DskipTests=false overrides any skipTests=true in pom.xml
+        cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
 
     if test_filter:
         cmd.append(f"-Dtest={test_filter}")
@@ -419,12 +566,11 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     class_name = _path_to_class_name(test_file.benchmarking_file_path)
                     if class_name:
                         filters.append(class_name)
-            else:
-                # For behavior mode, use instrumented_behavior_file_path
-                if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
-                    class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
-                    if class_name:
-                        filters.append(class_name)
+            # For behavior mode, use instrumented_behavior_file_path
+            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
+                if class_name:
+                    filters.append(class_name)
         return ",".join(filters) if filters else ""
 
     return ""
