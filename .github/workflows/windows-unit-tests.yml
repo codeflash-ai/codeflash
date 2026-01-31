@@ -28,7 +28,7 @@ jobs:
           python-version: "3.13"
 
       - name: install dependencies
-        run: uv sync
+        run: uv sync --group ci
 
       - name: Unit tests
-        run: uv run pytest tests/
+        run: uv run pytest tests/ -n auto

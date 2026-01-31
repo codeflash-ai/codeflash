@@ -81,6 +81,9 @@ dev = [
     "uv>=0.6.2",
     "pre-commit>=4.2.0,<5",
 ]
+ci = [
+    "pytest-xdist>=3.5.0",
+]
 tests = [
     "black>=25.9.0",
     "jax>=0.4.30",
