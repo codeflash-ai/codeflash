@@ -337,6 +337,35 @@ _CODEFLASH_REQUIRE_PATTERN = re.compile(
 )
 _CODEFLASH_IMPORT_PATTERN = re.compile(r"import\s+(?:\*\s+as\s+)?(\w+)\s+from\s+['\"]\.?/?codeflash-jest-helper['\"]")
 
+# Pattern to strip file extensions from import paths
+# Matches: from 'path/to/file.js' or from "path/to/file.ts" etc.
+_JS_EXTENSION_PATTERN = re.compile(r"""(from\s+['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"])""")
+_REQUIRE_EXTENSION_PATTERN = re.compile(r"""(require\s*\(\s*['"])(\.{0,2}/[^'"]+?)(\.(?:js|ts|tsx|jsx|mjs|mts))(['"]\s*\))""")
+
+
+def strip_js_extensions(source: str) -> str:
+    """Strip .js/.ts/.tsx/.jsx extensions from relative import paths.
+
+    TypeScript/Jest resolves extensions automatically, so explicit extensions
+    can cause module resolution failures. This is especially important when
+    LLMs add .js extensions to TypeScript files.
+
+    Examples:
+        import { fn } from '../utils.js'  -> import { fn } from '../utils'
+        require('../utils.ts')            -> require('../utils')
+
+    Args:
+        source: JavaScript/TypeScript source code.
+
+    Returns:
+        Source code with extensions stripped from relative import paths.
+
+    """
+    # Strip from ES module imports
+    source = _JS_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+    # Strip from CommonJS require
+    return _REQUIRE_EXTENSION_PATTERN.sub(r"\1\2\4", source)
+
 
 def normalize_codeflash_imports(source: str) -> str:
     """Normalize codeflash imports to use the npm package.
@@ -348,6 +377,8 @@ def normalize_codeflash_imports(source: str) -> str:
     With npm package imports:
         const codeflash = require('codeflash')
 
+    Also strips file extensions from relative import paths.
+
     Args:
         source: JavaScript/TypeScript source code.
 
@@ -355,6 +386,8 @@ def normalize_codeflash_imports(source: str) -> str:
         Source code with normalized imports.
 
     """
+    # Strip file extensions from relative imports
+    source = strip_js_extensions(source)
     # Replace CommonJS require
     source = _CODEFLASH_REQUIRE_PATTERN.sub(r"\1 \2 = require('codeflash')", source)
     # Replace ES module import
