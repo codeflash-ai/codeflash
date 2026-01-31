@@ -14,10 +14,6 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -198,23 +194,23 @@ def _extract_java_version_from_pom(root: ET.Element, ns: dict[str, str]) -> str 
     """
     # Check properties
     for prop_name in ("maven.compiler.source", "java.version", "maven.compiler.release"):
-        for props in [root.find(f"m:properties", ns), root.find("properties")]:
+        for props in [root.find("m:properties", ns), root.find("properties")]:
             if props is not None:
                 for prop in [props.find(f"m:{prop_name}", ns), props.find(prop_name)]:
                     if prop is not None and prop.text:
                         return prop.text
 
     # Check compiler plugin configuration
-    for build in [root.find(f"m:build", ns), root.find("build")]:
+    for build in [root.find("m:build", ns), root.find("build")]:
         if build is not None:
-            for plugins in [build.find(f"m:plugins", ns), build.find("plugins")]:
+            for plugins in [build.find("m:plugins", ns), build.find("plugins")]:
                 if plugins is not None:
-                    for plugin in plugins.findall(f"m:plugin", ns) + plugins.findall("plugin"):
-                        artifact_id = plugin.find(f"m:artifactId", ns) or plugin.find("artifactId")
+                    for plugin in plugins.findall("m:plugin", ns) + plugins.findall("plugin"):
+                        artifact_id = plugin.find("m:artifactId", ns) or plugin.find("artifactId")
                         if artifact_id is not None and artifact_id.text == "maven-compiler-plugin":
-                            config = plugin.find(f"m:configuration", ns) or plugin.find("configuration")
+                            config = plugin.find("m:configuration", ns) or plugin.find("configuration")
                             if config is not None:
-                                source = config.find(f"m:source", ns) or config.find("source")
+                                source = config.find("m:source", ns) or config.find("source")
                                 if source is not None and source.text:
                                     return source.text
 
@@ -554,9 +550,8 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
         if result.returncode == 0:
             logger.info("Successfully installed codeflash-runtime to local Maven repository")
             return True
-        else:
-            logger.error("Failed to install codeflash-runtime: %s", result.stderr)
-            return False
+        logger.error("Failed to install codeflash-runtime: %s", result.stderr)
+        return False
 
     except Exception as e:
         logger.exception("Failed to install codeflash-runtime: %s", e)
@@ -631,6 +626,160 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
     except Exception as e:
         logger.exception("Failed to add dependency to pom.xml: %s", e)
         return False
+
+
+JACOCO_PLUGIN_VERSION = "0.8.11"
+
+
+def is_jacoco_configured(pom_path: Path) -> bool:
+    """Check if JaCoCo plugin is already configured in pom.xml.
+
+    Args:
+        pom_path: Path to the pom.xml file.
+
+    Returns:
+        True if JaCoCo plugin is configured, False otherwise.
+
+    """
+    if not pom_path.exists():
+        return False
+
+    try:
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+
+        # Handle Maven namespace
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+        ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
+
+        # Check if namespace is used
+        use_ns = root.tag.startswith("{")
+        if not use_ns:
+            ns_prefix = ""
+
+        # Find build/plugins section
+        build = root.find(f"{ns_prefix}build" if use_ns else "build")
+        if build is None:
+            return False
+
+        plugins = build.find(f"{ns_prefix}plugins" if use_ns else "plugins")
+        if plugins is None:
+            return False
+
+        # Check for JaCoCo plugin
+        for plugin in plugins.findall(f"{ns_prefix}plugin" if use_ns else "plugin"):
+            group_id = plugin.find(f"{ns_prefix}groupId" if use_ns else "groupId")
+            artifact_id = plugin.find(f"{ns_prefix}artifactId" if use_ns else "artifactId")
+            if artifact_id is not None and artifact_id.text == "jacoco-maven-plugin":
+                # Verify groupId if present (it's optional for org.jacoco)
+                if group_id is None or group_id.text == "org.jacoco":
+                    return True
+
+        return False
+
+    except ET.ParseError as e:
+        logger.warning("Failed to parse pom.xml for JaCoCo check: %s", e)
+        return False
+
+
+def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
+    """Add JaCoCo Maven plugin to pom.xml for coverage collection.
+
+    Args:
+        pom_path: Path to the pom.xml file.
+
+    Returns:
+        True if plugin was added or already present, False on error.
+
+    """
+    if not pom_path.exists():
+        logger.error("pom.xml not found: %s", pom_path)
+        return False
+
+    # Check if already configured
+    if is_jacoco_configured(pom_path):
+        logger.info("JaCoCo plugin already configured in pom.xml")
+        return True
+
+    try:
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+
+        # Handle Maven namespace
+        ns_prefix = "{http://maven.apache.org/POM/4.0.0}"
+
+        # Check if namespace is used
+        use_ns = root.tag.startswith("{")
+        if not use_ns:
+            ns_prefix = ""
+
+        # Find or create build section
+        build = root.find(f"{ns_prefix}build" if use_ns else "build")
+        if build is None:
+            build = ET.SubElement(root, f"{ns_prefix}build" if use_ns else "build")
+
+        # Find or create plugins section
+        plugins = build.find(f"{ns_prefix}plugins" if use_ns else "plugins")
+        if plugins is None:
+            plugins = ET.SubElement(build, f"{ns_prefix}plugins" if use_ns else "plugins")
+
+        # Create JaCoCo plugin element
+        plugin = ET.SubElement(plugins, f"{ns_prefix}plugin" if use_ns else "plugin")
+
+        group_id = ET.SubElement(plugin, f"{ns_prefix}groupId" if use_ns else "groupId")
+        group_id.text = "org.jacoco"
+
+        artifact_id = ET.SubElement(plugin, f"{ns_prefix}artifactId" if use_ns else "artifactId")
+        artifact_id.text = "jacoco-maven-plugin"
+
+        version = ET.SubElement(plugin, f"{ns_prefix}version" if use_ns else "version")
+        version.text = JACOCO_PLUGIN_VERSION
+
+        # Create executions section
+        executions = ET.SubElement(plugin, f"{ns_prefix}executions" if use_ns else "executions")
+
+        # Add prepare-agent execution
+        exec1 = ET.SubElement(executions, f"{ns_prefix}execution" if use_ns else "execution")
+        exec1_id = ET.SubElement(exec1, f"{ns_prefix}id" if use_ns else "id")
+        exec1_id.text = "prepare-agent"
+        exec1_goals = ET.SubElement(exec1, f"{ns_prefix}goals" if use_ns else "goals")
+        exec1_goal = ET.SubElement(exec1_goals, f"{ns_prefix}goal" if use_ns else "goal")
+        exec1_goal.text = "prepare-agent"
+
+        # Add report execution
+        exec2 = ET.SubElement(executions, f"{ns_prefix}execution" if use_ns else "execution")
+        exec2_id = ET.SubElement(exec2, f"{ns_prefix}id" if use_ns else "id")
+        exec2_id.text = "report"
+        exec2_phase = ET.SubElement(exec2, f"{ns_prefix}phase" if use_ns else "phase")
+        exec2_phase.text = "test"
+        exec2_goals = ET.SubElement(exec2, f"{ns_prefix}goals" if use_ns else "goals")
+        exec2_goal = ET.SubElement(exec2_goals, f"{ns_prefix}goal" if use_ns else "goal")
+        exec2_goal.text = "report"
+
+        # Write back to file
+        tree.write(pom_path, xml_declaration=True, encoding="utf-8")
+        logger.info("Added JaCoCo plugin to pom.xml")
+        return True
+
+    except ET.ParseError as e:
+        logger.error("Failed to parse pom.xml: %s", e)
+        return False
+    except Exception as e:
+        logger.exception("Failed to add JaCoCo plugin to pom.xml: %s", e)
+        return False
+
+
+def get_jacoco_xml_path(project_root: Path) -> Path:
+    """Get the expected path to the JaCoCo XML report.
+
+    Args:
+        project_root: Root directory of the Maven project.
+
+    Returns:
+        Path to the JaCoCo XML report file.
+
+    """
+    return project_root / "target" / "site" / "jacoco" / "jacoco.xml"
 
 
 def find_test_root(project_root: Path) -> Path | None:

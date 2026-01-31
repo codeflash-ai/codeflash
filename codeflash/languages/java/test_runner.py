@@ -15,17 +15,16 @@ import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
+    add_jacoco_plugin_to_pom,
     find_maven_executable,
-    find_test_root,
+    get_jacoco_xml_path,
+    is_jacoco_configured,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,7 @@ def run_behavioral_tests(
         candidate_index: Index of the candidate being tested.
 
     Returns:
-        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, None).
+        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, coverage_xml_path).
 
     """
     project_root = project_root or cwd
@@ -88,6 +87,16 @@ def run_behavioral_tests(
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
+    # If coverage is enabled, ensure JaCoCo is configured
+    coverage_xml_path: Path | None = None
+    if enable_coverage:
+        pom_path = project_root / "pom.xml"
+        if pom_path.exists():
+            if not is_jacoco_configured(pom_path):
+                logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
+                add_jacoco_plugin_to_pom(pom_path)
+            coverage_xml_path = get_jacoco_xml_path(project_root)
+
     # Run Maven tests
     result = _run_maven_tests(
         project_root,
@@ -95,14 +104,15 @@ def run_behavioral_tests(
         run_env,
         timeout=timeout or 300,
         mode="behavior",
+        enable_coverage=enable_coverage,
     )
 
     # Find or create the JUnit XML results file
     surefire_dir = project_root / "target" / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    # Return sqlite_db_path as the third element (was None before)
-    return result_xml_path, result, sqlite_db_path, None
+    # Return coverage_xml_path as the fourth element when coverage is enabled
+    return result_xml_path, result, sqlite_db_path, coverage_xml_path
 
 
 def run_benchmarking_tests(
@@ -254,10 +264,10 @@ def _get_combined_junit_xml(surefire_dir: Path, candidate_index: int) -> Path:
 
 def _write_empty_junit_xml(path: Path) -> None:
     """Write an empty JUnit XML results file."""
-    xml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+    xml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="NoTests" tests="0" failures="0" errors="0" skipped="0" time="0">
 </testsuite>
-'''
+"""
     path.write_text(xml_content, encoding="utf-8")
 
 
@@ -317,6 +327,7 @@ def _run_maven_tests(
     env: dict[str, str],
     timeout: int = 300,
     mode: str = "behavior",
+    enable_coverage: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run Maven tests with Surefire.
 
@@ -326,6 +337,7 @@ def _run_maven_tests(
         env: Environment variables.
         timeout: Maximum execution time in seconds.
         mode: Testing mode - "behavior" or "performance".
+        enable_coverage: Whether to enable JaCoCo coverage collection.
 
     Returns:
         CompletedProcess with test results.
@@ -345,7 +357,11 @@ def _run_maven_tests(
     test_filter = _build_test_filter(test_paths, mode=mode)
 
     # Build Maven command
-    cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
+    # When coverage is enabled, run both test and jacoco:report goals
+    if enable_coverage:
+        cmd = [mvn, "test", "jacoco:report", "-fae"]  # Fail at end to run all tests
+    else:
+        cmd = [mvn, "test", "-fae"]  # Fail at end to run all tests
 
     if test_filter:
         cmd.append(f"-Dtest={test_filter}")
@@ -419,12 +435,11 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     class_name = _path_to_class_name(test_file.benchmarking_file_path)
                     if class_name:
                         filters.append(class_name)
-            else:
-                # For behavior mode, use instrumented_behavior_file_path
-                if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
-                    class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
-                    if class_name:
-                        filters.append(class_name)
+            # For behavior mode, use instrumented_behavior_file_path
+            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
+                if class_name:
+                    filters.append(class_name)
         return ",".join(filters) if filters else ""
 
     return ""

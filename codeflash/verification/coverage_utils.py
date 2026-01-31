@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Union
 
 import sentry_sdk
@@ -131,6 +132,210 @@ class JestCoverageUtils:
         # Calculate coverage percentage
         total_lines = set(executed_lines) | set(unexecuted_lines)
         coverage_pct = (len(executed_lines) / len(total_lines) * 100) if total_lines else 0.0
+
+        main_func_coverage = FunctionCoverage(
+            name=function_name,
+            coverage=coverage_pct,
+            executed_lines=sorted(executed_lines),
+            unexecuted_lines=sorted(unexecuted_lines),
+            executed_branches=executed_branches,
+            unexecuted_branches=unexecuted_branches,
+        )
+
+        graph = {
+            function_name: {
+                "executed_lines": set(executed_lines),
+                "unexecuted_lines": set(unexecuted_lines),
+                "executed_branches": executed_branches,
+                "unexecuted_branches": unexecuted_branches,
+            }
+        }
+
+        return CoverageData(
+            file_path=source_code_path,
+            coverage=coverage_pct,
+            function_name=function_name,
+            functions_being_tested=[function_name],
+            graph=graph,
+            code_context=code_context,
+            main_func_coverage=main_func_coverage,
+            dependent_func_coverage=None,
+            status=CoverageStatus.PARSED_SUCCESSFULLY,
+        )
+
+
+class JacocoCoverageUtils:
+    """Coverage utils class for parsing JaCoCo XML reports (Java)."""
+
+    @staticmethod
+    def load_from_jacoco_xml(
+        jacoco_xml_path: Path,
+        function_name: str,
+        code_context: CodeOptimizationContext,
+        source_code_path: Path,
+        _class_name: str | None = None,
+    ) -> CoverageData:
+        """Load coverage data from JaCoCo XML report.
+
+        JaCoCo XML structure:
+        <report>
+          <package name="com/example">
+            <class name="com/example/Calculator" sourcefilename="Calculator.java">
+              <method name="add" desc="(II)I" line="10">
+                <counter type="INSTRUCTION" missed="0" covered="5"/>
+                <counter type="BRANCH" missed="0" covered="2"/>
+                <counter type="LINE" missed="0" covered="3"/>
+              </method>
+            </class>
+            <sourcefile name="Calculator.java">
+              <line nr="10" mi="0" ci="2" mb="0" cb="0"/>
+              <line nr="11" mi="0" ci="1" mb="0" cb="2"/>
+            </sourcefile>
+          </package>
+        </report>
+
+        Args:
+            jacoco_xml_path: Path to jacoco.xml report file.
+            function_name: Name of the function/method being tested.
+            code_context: Code optimization context.
+            source_code_path: Path to the source file being tested.
+            class_name: Optional fully qualified class name (e.g., "com.example.Calculator").
+
+        Returns:
+            CoverageData object with parsed coverage information.
+
+        """
+        if not jacoco_xml_path or not jacoco_xml_path.exists():
+            logger.debug(f"JaCoCo XML file not found: {jacoco_xml_path}")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        try:
+            tree = ET.parse(jacoco_xml_path)
+            root = tree.getroot()
+        except ET.ParseError as e:
+            logger.warning(f"Failed to parse JaCoCo XML file: {e}")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        # Determine expected source file name from path
+        source_filename = source_code_path.name
+
+        # Find the matching sourcefile element and collect all method start lines
+        sourcefile_elem = None
+        method_elem = None
+        method_start_line = None
+        all_method_start_lines: list[int] = []
+
+        for package in root.findall(".//package"):
+            # Look for the sourcefile matching our source file
+            for sf in package.findall("sourcefile"):
+                if sf.get("name") == source_filename:
+                    sourcefile_elem = sf
+                    break
+
+            # Look for the class and method, collect all method start lines
+            for cls in package.findall("class"):
+                cls_source = cls.get("sourcefilename")
+                if cls_source == source_filename:
+                    # Collect all method start lines for boundary detection
+                    for method in cls.findall("method"):
+                        method_line = int(method.get("line", 0))
+                        if method_line > 0:
+                            all_method_start_lines.append(method_line)
+
+                        # Check if this is our target method
+                        method_name = method.get("name")
+                        if method_name == function_name:
+                            method_elem = method
+                            method_start_line = method_line
+
+            if sourcefile_elem is not None:
+                break
+
+        if sourcefile_elem is None:
+            logger.debug(f"No coverage data found for {source_filename} in JaCoCo report")
+            return CoverageData.create_empty(source_code_path, function_name, code_context)
+
+        # Sort method start lines to determine boundaries
+        all_method_start_lines = sorted(set(all_method_start_lines))
+
+        # Parse line-level coverage from sourcefile
+        executed_lines: list[int] = []
+        unexecuted_lines: list[int] = []
+        executed_branches: list[list[int]] = []
+        unexecuted_branches: list[list[int]] = []
+
+        # Get all line data
+        line_data: dict[int, dict[str, int]] = {}
+        for line in sourcefile_elem.findall("line"):
+            line_nr = int(line.get("nr", 0))
+            line_data[line_nr] = {
+                "mi": int(line.get("mi", 0)),  # missed instructions
+                "ci": int(line.get("ci", 0)),  # covered instructions
+                "mb": int(line.get("mb", 0)),  # missed branches
+                "cb": int(line.get("cb", 0)),  # covered branches
+            }
+
+        # Determine method boundaries
+        if method_start_line:
+            # Find the next method's start line to determine this method's end
+            method_end_line = None
+            for start_line in all_method_start_lines:
+                if start_line > method_start_line:
+                    # Next method starts here, so our method ends before this
+                    method_end_line = start_line - 1
+                    break
+
+            # If no next method found, use the max line in the file
+            if method_end_line is None:
+                all_lines = sorted(line_data.keys())
+                method_end_line = max(all_lines) if all_lines else method_start_line
+
+            # Filter to lines within the method boundaries
+            for line_nr, data in sorted(line_data.items()):
+                if method_start_line <= line_nr <= method_end_line:
+                    # Line is covered if it has covered instructions
+                    if data["ci"] > 0:
+                        executed_lines.append(line_nr)
+                    elif data["mi"] > 0:
+                        unexecuted_lines.append(line_nr)
+
+                    # Branch coverage
+                    if data["cb"] > 0:
+                        # Covered branches - each branch is [line, branch_id]
+                        for i in range(data["cb"]):
+                            executed_branches.append([line_nr, i])
+                    if data["mb"] > 0:
+                        # Missed branches
+                        for i in range(data["mb"]):
+                            unexecuted_branches.append([line_nr, data["cb"] + i])
+        else:
+            # No method found - use all lines in the file
+            for line_nr, data in sorted(line_data.items()):
+                if data["ci"] > 0:
+                    executed_lines.append(line_nr)
+                elif data["mi"] > 0:
+                    unexecuted_lines.append(line_nr)
+
+                if data["cb"] > 0:
+                    for i in range(data["cb"]):
+                        executed_branches.append([line_nr, i])
+                if data["mb"] > 0:
+                    for i in range(data["mb"]):
+                        unexecuted_branches.append([line_nr, data["cb"] + i])
+
+        # Calculate coverage percentage
+        total_lines = set(executed_lines) | set(unexecuted_lines)
+        coverage_pct = (len(executed_lines) / len(total_lines) * 100) if total_lines else 0.0
+
+        # If we found method-level counters, use them as the authoritative source
+        if method_elem is not None:
+            for counter in method_elem.findall("counter"):
+                if counter.get("type") == "LINE":
+                    missed = int(counter.get("missed", 0))
+                    covered = int(counter.get("covered", 0))
+                    if missed + covered > 0:
+                        coverage_pct = covered / (missed + covered) * 100
+                    break
 
         main_func_coverage = FunctionCoverage(
             name=function_name,
