@@ -379,25 +379,20 @@ def get_functions_to_optimize(
 
                     is_exported, export_name = _is_js_ts_function_exported(file, name_to_check)
                     if not is_exported:
-                        if is_lsp:
-                            return functions, 0, None
                         if found_function.parents:
-                            exit_with_message(
+                            logger.debug(
                                 f"Class '{name_to_check}' containing method '{found_function.function_name}' "
-                                f"is not exported from {file}.\n"
+                                f"is not exported from {file}. "
                                 f"In JavaScript/TypeScript, only exported classes/functions can be optimized "
-                                f"because tests need to import them.\n"
-                                f"To fix: Add 'export' keyword to the class declaration, e.g.:\n"
-                                f"  export class {name_to_check} {{ ... }}"
+                                f"because tests need to import them."
                             )
                         else:
-                            exit_with_message(
-                                f"Function '{found_function.function_name}' is not exported from {file}.\n"
+                            logger.debug(
+                                f"Function '{found_function.function_name}' is not exported from {file}. "
                                 f"In JavaScript/TypeScript, only exported functions can be optimized because "
-                                f"tests need to import them.\n"
-                                f"To fix: Add 'export' keyword to the function declaration, e.g.:\n"
-                                f"  export const {found_function.function_name} = ..."
+                                f"tests need to import them."
                             )
+                        return {}, 0, None
 
                 functions[file] = [found_function]
         else:

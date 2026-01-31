@@ -346,11 +346,11 @@ function capitalize(str) {
         """Test getting a specific function by name."""
         js_file = tmp_path / "math_utils.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function subtract(a, b) {
+export function subtract(a, b) {
     return a - b;
 }
 """)
@@ -378,7 +378,7 @@ function subtract(a, b) {
         """Test getting a specific class method."""
         js_file = tmp_path / "calculator.js"
         js_file.write_text("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -388,7 +388,7 @@ class Calculator {
     }
 }
 
-function standaloneFunc() {
+export function standaloneFunc() {
     return 42;
 }
 """)
