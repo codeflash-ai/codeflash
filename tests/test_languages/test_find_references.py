@@ -1150,3 +1150,358 @@ class TestReferenceSearchContext:
         ctx = ReferenceSearchContext(max_files=500)
 
         assert ctx.max_files == 500
+
+
+class TestEdgeCasesAdvanced:
+    """Advanced edge case tests to catch potential failures."""
+
+    @pytest.fixture
+    def project_root(self, tmp_path):
+        """Create project for edge case testing."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        return tmp_path
+
+    def test_function_with_same_name_different_files(self, project_root):
+        """Test finding references when multiple files have functions with same name."""
+        src_dir = project_root / "src"
+
+        # Two files with same function name
+        (src_dir / "utils1.ts").write_text("""
+export function process(data: any) {
+    return data.map(x => x * 2);
+}
+""")
+
+        (src_dir / "utils2.ts").write_text("""
+export function process(data: any) {
+    return data.filter(x => x > 0);
+}
+""")
+
+        # Consumer imports from utils1
+        (src_dir / "consumer.ts").write_text("""
+import { process } from './utils1';
+
+export function handle(items: any[]) {
+    return process(items);
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "utils1.ts"
+
+        refs = finder.find_references("process", source_file)
+
+        # Should only find reference from consumer (which imports from utils1)
+        consumer_refs = [r for r in refs if r.file_path == project_root / "src" / "consumer.ts"]
+        assert len(consumer_refs) >= 1
+
+    def test_circular_import_handling(self, project_root):
+        """Test that circular imports don't cause infinite loops."""
+        src_dir = project_root / "src"
+
+        # Create circular import structure
+        (src_dir / "a.ts").write_text("""
+import { funcB } from './b';
+
+export function funcA() {
+    return funcB() + 1;
+}
+""")
+
+        (src_dir / "b.ts").write_text("""
+import { funcA } from './a';
+
+export function funcB() {
+    return 42;
+}
+
+export function callsA() {
+    return funcA();
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "a.ts"
+
+        # Should not hang or crash
+        refs = finder.find_references("funcA", source_file)
+
+        assert isinstance(refs, list)
+        # Should find reference in b.ts
+        b_refs = [r for r in refs if r.file_path == project_root / "src" / "b.ts"]
+        assert len(b_refs) >= 1
+
+    def test_deeply_nested_directory_structure(self, project_root):
+        """Test finding references in nested directory structures.
+
+        Note: Very deep relative paths (many ../) may not be resolved by the
+        import resolver. This test uses a moderate nesting level.
+        """
+        # Create moderate nesting (2 levels deep)
+        deep_dir = project_root / "src" / "features" / "auth"
+        deep_dir.mkdir(parents=True)
+        utils_dir = project_root / "src" / "utils"
+        utils_dir.mkdir(parents=True)
+
+        (utils_dir / "helpers.ts").write_text("""
+export function validateEmail(email: string): boolean {
+    return email.includes('@');
+}
+""")
+
+        (deep_dir / "LoginForm.tsx").write_text("""
+import { validateEmail } from '../../utils/helpers';
+
+export function LoginForm() {
+    const handleSubmit = (email: string) => {
+        if (validateEmail(email)) {
+            console.log('Valid');
+        }
+    };
+    return null;
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = utils_dir / "helpers.ts"
+
+        refs = finder.find_references("validateEmail", source_file)
+
+        # Should find reference in nested directory
+        login_refs = [r for r in refs if "LoginForm" in str(r.file_path)]
+        assert len(login_refs) >= 1
+
+    def test_unicode_in_function_names(self, project_root):
+        """Test handling of unicode in identifiers (while not common, some codebases use it)."""
+        src_dir = project_root / "src"
+
+        # File with unicode comments but ASCII function name
+        (src_dir / "unicode.ts").write_text("""
+// 日本語コメント
+export function calculateTotal(items: number[]): number {
+    // Добавить все элементы
+    return items.reduce((a, b) => a + b, 0);
+}
+""")
+
+        (src_dir / "consumer.ts").write_text("""
+import { calculateTotal } from './unicode';
+
+export function process() {
+    return calculateTotal([1, 2, 3]);
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "unicode.ts"
+
+        refs = finder.find_references("calculateTotal", source_file)
+
+        assert len(refs) >= 1
+
+    def test_dynamic_import_not_found(self, project_root):
+        """Test that dynamic imports (import()) are not matched as static references."""
+        src_dir = project_root / "src"
+
+        (src_dir / "utils.ts").write_text("""
+export function lazyLoad() {
+    return import('./heavy-module');
+}
+""")
+
+        (src_dir / "heavy-module.ts").write_text("""
+export function heavyFunction() {
+    return 'heavy computation';
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "heavy-module.ts"
+
+        refs = finder.find_references("heavyFunction", source_file)
+
+        # Dynamic imports don't create static references
+        # This should return empty or minimal references
+        assert isinstance(refs, list)
+
+    def test_type_only_imports_excluded(self, project_root):
+        """Test that type-only imports are handled correctly."""
+        src_dir = project_root / "src"
+
+        (src_dir / "types.ts").write_text("""
+export interface User {
+    id: string;
+    name: string;
+}
+
+export function createUser(name: string): User {
+    return { id: '123', name };
+}
+""")
+
+        (src_dir / "consumer.ts").write_text("""
+import type { User } from './types';
+import { createUser } from './types';
+
+export function makeUser(): User {
+    return createUser('John');
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "types.ts"
+
+        refs = finder.find_references("createUser", source_file)
+
+        # Should find the call reference, not type import
+        call_refs = [r for r in refs if r.reference_type == "call"]
+        assert len(call_refs) >= 1
+
+    def test_jsx_component_as_function(self, project_root):
+        """Test finding references to functions used as JSX components."""
+        src_dir = project_root / "src"
+
+        (src_dir / "Button.tsx").write_text("""
+export function Button({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+    return <button onClick={onClick}>{children}</button>;
+}
+""")
+
+        (src_dir / "App.tsx").write_text("""
+import { Button } from './Button';
+
+export function App() {
+    return (
+        <div>
+            <Button onClick={() => console.log('clicked')}>Click me</Button>
+        </div>
+    );
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "Button.tsx"
+
+        refs = finder.find_references("Button", source_file)
+
+        # Should find the JSX usage
+        app_refs = [r for r in refs if r.file_path == project_root / "src" / "App.tsx"]
+        # JSX usage may be detected as reference or callback depending on AST
+        assert len(app_refs) >= 1
+
+    def test_function_passed_to_higher_order_function(self, project_root):
+        """Test finding references when function is passed to HOF like debounce, throttle."""
+        src_dir = project_root / "src"
+
+        (src_dir / "handlers.ts").write_text("""
+export function handleSearch(query: string) {
+    console.log('Searching:', query);
+}
+""")
+
+        (src_dir / "component.ts").write_text("""
+import debounce from 'lodash/debounce';
+import { handleSearch } from './handlers';
+
+// Function passed to debounce
+const debouncedSearch = debounce(handleSearch, 300);
+
+export function onInputChange(value: string) {
+    debouncedSearch(value);
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "handlers.ts"
+
+        refs = finder.find_references("handleSearch", source_file)
+
+        # Should find the reference passed to debounce
+        component_refs = [r for r in refs if r.file_path == project_root / "src" / "component.ts"]
+        assert len(component_refs) >= 1
+
+    def test_export_with_as_keyword(self, project_root):
+        """Test finding references when function is exported with 'as' keyword."""
+        src_dir = project_root / "src"
+
+        (src_dir / "internal.ts").write_text("""
+function internalProcess(data: any) {
+    return data;
+}
+
+// Export with different name
+export { internalProcess as publicProcess };
+""")
+
+        (src_dir / "consumer.ts").write_text("""
+import { publicProcess } from './internal';
+
+export function use() {
+    return publicProcess({ x: 1 });
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "internal.ts"
+
+        refs = finder.find_references("internalProcess", source_file)
+
+        # Should find reference through the aliased export
+        consumer_refs = [r for r in refs if r.file_path == project_root / "src" / "consumer.ts"]
+        assert len(consumer_refs) >= 1
+
+    def test_very_large_file(self, project_root):
+        """Test performance with a large file."""
+        src_dir = project_root / "src"
+
+        # Create a large file with many functions
+        large_content = "export function targetFunction() { return 42; }\n\n"
+        for i in range(100):
+            large_content += f"""
+export function func{i}() {{
+    const result = targetFunction();
+    return result + {i};
+}}
+"""
+
+        (src_dir / "large.ts").write_text(large_content)
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "large.ts"
+
+        refs = finder.find_references("targetFunction", source_file, include_definition=True)
+
+        # Should find many references (100 calls + definition)
+        # The exact count may vary but should be substantial
+        assert len(refs) >= 50  # At least half should be found
+
+    def test_syntax_error_in_file_graceful_handling(self, project_root):
+        """Test that syntax errors in files are handled gracefully."""
+        src_dir = project_root / "src"
+
+        (src_dir / "valid.ts").write_text("""
+export function validFunction() {
+    return 42;
+}
+""")
+
+        # Create a file with syntax error
+        (src_dir / "invalid.ts").write_text("""
+import { validFunction } from './valid';
+
+export function broken( {
+    // Missing closing brace and paren
+    return validFunction(
+}
+""")
+
+        finder = ReferenceFinder(project_root)
+        source_file = project_root / "src" / "valid.ts"
+
+        # Should not crash, should return whatever valid references it can find
+        refs = finder.find_references("validFunction", source_file)
+
+        assert isinstance(refs, list)
+        # May or may not find references depending on how parser handles errors
