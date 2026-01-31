@@ -75,7 +75,7 @@ def generate_tests(
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
 
-            # First validate and fix import styles
+            # Validate and fix import styles (default vs named exports)
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
