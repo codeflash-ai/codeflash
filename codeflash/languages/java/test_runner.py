@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 from codeflash.languages.java.build_tools import (
     find_maven_executable,
@@ -58,7 +59,8 @@ def run_behavioral_tests(
     """Run behavioral tests for Java code.
 
     This runs tests and captures behavior (inputs/outputs) for verification.
-    For Java, verification is based on JUnit test pass/fail results.
+    For Java, test results are written to a SQLite database via CodeflashHelper,
+    and JUnit test pass/fail results serve as the primary verification mechanism.
 
     Args:
         test_paths: TestFiles object or list of test file paths.
@@ -70,17 +72,21 @@ def run_behavioral_tests(
         candidate_index: Index of the candidate being tested.
 
     Returns:
-        Tuple of (result_xml_path, subprocess_result, coverage_path, config_path).
+        Tuple of (result_xml_path, subprocess_result, sqlite_db_path, None).
 
     """
     project_root = project_root or cwd
 
-    # Set environment variables for timing instrumentation
+    # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
+    sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
+
+    # Set environment variables for timing instrumentation and behavior capture
     run_env = os.environ.copy()
     run_env.update(test_env)
     run_env["CODEFLASH_LOOP_INDEX"] = "1"  # Single loop for behavior tests
     run_env["CODEFLASH_MODE"] = "behavior"
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
+    run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
     # Run Maven tests
     result = _run_maven_tests(
@@ -95,7 +101,8 @@ def run_behavioral_tests(
     surefire_dir = project_root / "target" / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    return result_xml_path, result, None, None
+    # Return sqlite_db_path as the third element (was None before)
+    return result_xml_path, result, sqlite_db_path, None
 
 
 def run_benchmarking_tests(

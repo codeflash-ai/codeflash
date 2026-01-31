@@ -119,7 +119,8 @@ def instrument_existing_test(
 
     For Java, this:
     1. Renames the class to match the new file name (Java requires class name = file name)
-    2. Adds timing instrumentation to test methods (for performance mode)
+    2. For behavior mode: adds timing instrumentation that writes to SQLite
+    3. For performance mode: adds timing instrumentation with stdout markers
 
     Args:
         test_path: Path to the test file.
@@ -157,12 +158,19 @@ def instrument_existing_test(
     replacement = rf'\1class {new_class_name}'
     modified_source = re.sub(pattern, replacement, source)
 
-    # For performance mode, add timing instrumentation to test methods
+    # Add timing instrumentation to test methods
     # Use original class name (without suffix) in timing markers for consistency with Python
     if mode == "performance":
         modified_source = _add_timing_instrumentation(
             modified_source,
             original_class_name,  # Use original name in markers, not the renamed class
+            func_name,
+        )
+    else:
+        # Behavior mode: add timing instrumentation that also writes to SQLite
+        modified_source = _add_behavior_instrumentation(
+            modified_source,
+            original_class_name,
             func_name,
         )
 
@@ -175,6 +183,257 @@ def instrument_existing_test(
     )
 
     return True, modified_source
+
+
+def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) -> str:
+    """Add behavior instrumentation to test methods.
+
+    For behavior mode, this adds:
+    1. Gson import for JSON serialization
+    2. SQLite database connection setup
+    3. Function call wrapping to capture return values
+    4. SQLite insert with serialized return values
+
+    Args:
+        source: The test source code.
+        class_name: Name of the test class.
+        func_name: Name of the function being tested.
+
+    Returns:
+        Instrumented source code.
+
+    """
+    # Add necessary imports at the top of the file
+    import_statements = [
+        "import java.sql.Connection;",
+        "import java.sql.DriverManager;",
+        "import java.sql.PreparedStatement;",
+        "import java.sql.Statement;",
+        "import com.google.gson.Gson;",
+        "import com.google.gson.GsonBuilder;",
+    ]
+
+    # Find position to insert imports (after package, before class)
+    lines = source.split('\n')
+    result = []
+    imports_added = False
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Add imports after the last existing import or before the class declaration
+        if not imports_added:
+            if stripped.startswith('import '):
+                result.append(line)
+                i += 1
+                # Find end of imports
+                while i < len(lines) and lines[i].strip().startswith('import '):
+                    result.append(lines[i])
+                    i += 1
+                # Add our imports
+                for imp in import_statements:
+                    if imp not in source:
+                        result.append(imp)
+                imports_added = True
+                continue
+            elif stripped.startswith('public class') or stripped.startswith('class'):
+                # No imports found, add before class
+                for imp in import_statements:
+                    result.append(imp)
+                result.append("")
+                imports_added = True
+
+        result.append(line)
+        i += 1
+
+    # Now add timing and SQLite instrumentation to test methods
+    source = '\n'.join(result)
+    lines = source.split('\n')
+    result = []
+    i = 0
+    iteration_counter = 0
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Look for @Test annotation
+        if stripped.startswith('@Test'):
+            result.append(line)
+            i += 1
+
+            # Collect any additional annotations
+            while i < len(lines) and lines[i].strip().startswith('@'):
+                result.append(lines[i])
+                i += 1
+
+            # Now find the method signature and opening brace
+            method_lines = []
+            while i < len(lines):
+                method_lines.append(lines[i])
+                if '{' in lines[i]:
+                    break
+                i += 1
+
+            # Add the method signature lines
+            for ml in method_lines:
+                result.append(ml)
+            i += 1
+
+            # We're now inside the method body
+            iteration_counter += 1
+            iter_id = iteration_counter
+
+            # Detect indentation
+            method_sig_line = method_lines[-1] if method_lines else ""
+            base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
+            indent = " " * (base_indent + 4)
+
+            # Collect method body until we find matching closing brace
+            brace_depth = 1
+            body_lines = []
+
+            while i < len(lines) and brace_depth > 0:
+                body_line = lines[i]
+                for ch in body_line:
+                    if ch == '{':
+                        brace_depth += 1
+                    elif ch == '}':
+                        brace_depth -= 1
+
+                if brace_depth > 0:
+                    body_lines.append(body_line)
+                    i += 1
+                else:
+                    # We've hit the closing brace
+                    i += 1
+                    break
+
+            # Wrap function calls to capture return values
+            # Look for patterns like: obj.funcName(args) or new Class().funcName(args)
+            call_counter = 0
+            wrapped_body_lines = []
+
+            # Use regex to find method calls with the target function
+            # Pattern matches: receiver.funcName(args) where receiver can be:
+            # - identifier (counter, calc, etc.)
+            # - new ClassName()
+            # - new ClassName(args)
+            # - this
+            method_call_pattern = re.compile(
+                rf'((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)',
+                re.MULTILINE
+            )
+
+            for body_line in body_lines:
+                # Check if this line contains a call to the target function
+                if func_name in body_line and '(' in body_line:
+                    line_indent = len(body_line) - len(body_line.lstrip())
+                    line_indent_str = " " * line_indent
+
+                    # Find all matches in the line
+                    matches = list(method_call_pattern.finditer(body_line))
+                    if matches:
+                        # Process matches in reverse order to maintain correct positions
+                        new_line = body_line
+                        for match in reversed(matches):
+                            call_counter += 1
+                            var_name = f"_cf_result{iter_id}_{call_counter}"
+                            full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
+
+                            # Replace this occurrence with the variable
+                            new_line = new_line[:match.start()] + var_name + new_line[match.end():]
+
+                            # Insert capture line
+                            capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
+                            wrapped_body_lines.append(capture_line)
+
+                        wrapped_body_lines.append(new_line)
+                    else:
+                        wrapped_body_lines.append(body_line)
+                else:
+                    wrapped_body_lines.append(body_line)
+
+            # Build the serialized return value expression
+            # If we captured any calls, serialize the last one; otherwise serialize null
+            if call_counter > 0:
+                result_var = f"_cf_result{iter_id}_{call_counter}"
+                serialize_expr = f'new GsonBuilder().serializeNulls().create().toJson({result_var})'
+            else:
+                serialize_expr = '"null"'
+
+            # Add behavior instrumentation code
+            behavior_start_code = [
+                f"{indent}// Codeflash behavior instrumentation",
+                f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
+                f"{indent}int _cf_iter{iter_id} = {iter_id};",
+                f'{indent}String _cf_mod{iter_id} = "{class_name}";',
+                f'{indent}String _cf_cls{iter_id} = "{class_name}";',
+                f'{indent}String _cf_fn{iter_id} = "{func_name}";',
+                f'{indent}String _cf_outputFile{iter_id} = System.getenv("CODEFLASH_OUTPUT_FILE");',
+                f'{indent}String _cf_testIteration{iter_id} = System.getenv("CODEFLASH_TEST_ITERATION");',
+                f'{indent}if (_cf_testIteration{iter_id} == null) _cf_testIteration{iter_id} = "0";',
+                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
+                f"{indent}long _cf_start{iter_id} = System.nanoTime();",
+                f"{indent}String _cf_serializedResult{iter_id} = null;",
+                f"{indent}try {{",
+            ]
+            result.extend(behavior_start_code)
+
+            # Add the wrapped body lines with extra indentation
+            for bl in wrapped_body_lines:
+                result.append("    " + bl)
+
+            # Add serialization after the body (before finally)
+            result.append(f"{indent}    _cf_serializedResult{iter_id} = {serialize_expr};")
+
+            # Add finally block with SQLite write
+            method_close_indent = " " * base_indent
+            behavior_end_code = [
+                f"{indent}}} finally {{",
+                f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
+                f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+                f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+                f"{indent}    // Write to SQLite if output file is set",
+                f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
+                f"{indent}        try {{",
+                f"{indent}            Class.forName(\"org.sqlite.JDBC\");",
+                f"{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection(\"jdbc:sqlite:\" + _cf_outputFile{iter_id})) {{",
+                f"{indent}                try (Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
+                f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
+                f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
+                f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
+                f'{indent}                        "runtime INTEGER, return_value TEXT, verification_type TEXT)");',
+                f"{indent}                }}",
+                f'{indent}                String _cf_sql{iter_id} = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";',
+                f"{indent}                try (PreparedStatement _cf_pstmt{iter_id} = _cf_conn{iter_id}.prepareStatement(_cf_sql{iter_id})) {{",
+                f"{indent}                    _cf_pstmt{iter_id}.setString(1, _cf_mod{iter_id});",
+                f"{indent}                    _cf_pstmt{iter_id}.setString(2, _cf_cls{iter_id});",
+                f'{indent}                    _cf_pstmt{iter_id}.setString(3, "{class_name}Test");',
+                f"{indent}                    _cf_pstmt{iter_id}.setString(4, _cf_fn{iter_id});",
+                f"{indent}                    _cf_pstmt{iter_id}.setInt(5, _cf_loop{iter_id});",
+                f'{indent}                    _cf_pstmt{iter_id}.setString(6, _cf_iter{iter_id} + "_" + _cf_testIteration{iter_id});',
+                f"{indent}                    _cf_pstmt{iter_id}.setLong(7, _cf_dur{iter_id});",
+                f"{indent}                    _cf_pstmt{iter_id}.setString(8, _cf_serializedResult{iter_id});",  # Serialized return value
+                f'{indent}                    _cf_pstmt{iter_id}.setString(9, "function_call");',
+                f"{indent}                    _cf_pstmt{iter_id}.executeUpdate();",
+                f"{indent}                }}",
+                f"{indent}            }}",
+                f"{indent}        }} catch (Exception _cf_e{iter_id}) {{",
+                f'{indent}            System.err.println("CodeflashHelper: SQLite error: " + _cf_e{iter_id}.getMessage());',
+                f"{indent}        }}",
+                f"{indent}    }}",
+                f"{indent}}}",
+                f"{method_close_indent}}}",  # Method closing brace
+            ]
+            result.extend(behavior_end_code)
+        else:
+            result.append(line)
+            i += 1
+
+    return '\n'.join(result)
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:

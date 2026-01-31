@@ -441,8 +441,9 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
     finally:
         db.close()
 
-    # Check if this is a JavaScript test (use JSON) or Python test (use pickle)
+    # Check if this is a JavaScript or Java test (use JSON) or Python test (use pickle)
     is_jest = is_javascript()
+    is_java_test = is_java()
 
     for val in data:
         try:
@@ -500,6 +501,34 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 else:
                     # Already a file path
                     test_file_path = test_config.tests_project_rootdir / test_module_path
+            elif is_java_test:
+                # Java: test_module_path is the class name (e.g., "CounterTest")
+                # We need to find the test file by searching for it in the test files
+                test_file_path = None
+                for test_file in test_files.test_files:
+                    # Check instrumented behavior file path
+                    if test_file.instrumented_behavior_file_path:
+                        # Java class name is stored without package prefix in SQLite
+                        # Check if the file name matches the module path
+                        file_stem = test_file.instrumented_behavior_file_path.stem
+                        # The instrumented file has __perfinstrumented suffix
+                        original_class = file_stem.replace("__perfinstrumented", "").replace("__perfonlyinstrumented", "")
+                        if original_class == test_module_path or file_stem == test_module_path:
+                            test_file_path = test_file.instrumented_behavior_file_path
+                            break
+                    # Check original file path
+                    if test_file.original_file_path:
+                        if test_file.original_file_path.stem == test_module_path:
+                            test_file_path = test_file.original_file_path
+                            break
+                if test_file_path is None:
+                    # Fallback: try to find by searching in tests_project_rootdir
+                    java_files = list(test_config.tests_project_rootdir.rglob(f"*{test_module_path}*.java"))
+                    if java_files:
+                        test_file_path = java_files[0]
+                    else:
+                        logger.debug(f"Could not find Java test file for module path: {test_module_path}")
+                        test_file_path = test_config.tests_project_rootdir / f"{test_module_path}.java"
             else:
                 # Python: convert module path to file path
                 test_file_path = file_path_from_module_name(test_module_path, test_config.tests_project_rootdir)
@@ -519,10 +548,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 if test_type is None:
                     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
                     logger.debug(f"[PARSE-DEBUG]   by_instrumented_file_path: {test_type}")
-                # Default to GENERATED_REGRESSION for Jest tests when test type can't be determined
-                if test_type is None and is_jest:
+                # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
+                if test_type is None and (is_jest or is_java_test):
                     test_type = TestType.GENERATED_REGRESSION
-                    logger.debug("[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION (Jest)")
+                    logger.debug(f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})")
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
@@ -530,14 +559,15 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 logger.debug(f"[PARSE-DEBUG]   FINAL test_type={test_type}")
 
             # Deserialize return value
-            # For Jest: Skip deserialization - comparison happens via language-specific comparator
+            # For Jest/Java: Store as serialized JSON - comparison happens via language-specific comparator
             # For Python: Use pickle to deserialize
             ret_val = None
             if loop_index == 1 and val[7]:
                 try:
-                    if is_jest:
-                        # Jest comparison happens via Node.js script (language_support.compare_test_results)
+                    if is_jest or is_java_test:
+                        # Jest/Java comparison happens via language-specific comparator
                         # Store a marker indicating data exists but is not deserialized in Python
+                        # For Java, val[7] is a JSON string from Gson serialization
                         ret_val = ("__serialized__", val[7])
                     else:
                         # Python uses pickle serialization
@@ -1017,16 +1047,28 @@ def parse_test_xml(
                     timed_out = True
 
             sys_stdout = testcase.system_out or ""
-            begin_matches = list(matches_re_start.finditer(sys_stdout))
-            end_matches = {}
-            for match in matches_re_end.finditer(sys_stdout):
-                groups = match.groups()
-                if len(groups[5].split(":")) > 1:
-                    iteration_id = groups[5].split(":")[0]
-                    groups = (*groups[:5], iteration_id)
-                end_matches[groups] = match
 
-            if not begin_matches or not begin_matches:
+            # Use different patterns for Java (5-field start, 6-field end) vs Python (6-field both)
+            # Java format: !$######module:class:func:loop:iter######$! (start)
+            #              !######module:class:func:loop:iter:duration######! (end)
+            if is_java():
+                begin_matches = list(start_pattern.finditer(sys_stdout))
+                end_matches = {}
+                for match in end_pattern.finditer(sys_stdout):
+                    groups = match.groups()
+                    # Key is first 5 groups (module, class, func, loop, iter)
+                    end_matches[groups[:5]] = match
+            else:
+                begin_matches = list(matches_re_start.finditer(sys_stdout))
+                end_matches = {}
+                for match in matches_re_end.finditer(sys_stdout):
+                    groups = match.groups()
+                    if len(groups[5].split(":")) > 1:
+                        iteration_id = groups[5].split(":")[0]
+                        groups = (*groups[:5], iteration_id)
+                    end_matches[groups] = match
+
+            if not begin_matches:
                 # For Java tests, use the JUnit XML time attribute for runtime
                 runtime_from_xml = None
                 if is_java():
@@ -1064,41 +1106,87 @@ def parse_test_xml(
             else:
                 for match_index, match in enumerate(begin_matches):
                     groups = match.groups()
-                    end_match = end_matches.get(groups)
-                    iteration_id, runtime = groups[5], None
-                    if end_match:
-                        stdout = sys_stdout[match.end() : end_match.start()]
-                        split_val = end_match.groups()[5].split(":")
-                        if len(split_val) > 1:
-                            iteration_id = split_val[0]
-                            runtime = int(split_val[1])
-                        else:
-                            iteration_id, runtime = split_val[0], None
-                    elif match_index == len(begin_matches) - 1:
-                        stdout = sys_stdout[match.end() :]
-                    else:
-                        stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
 
-                    test_results.add(
-                        FunctionTestInvocation(
-                            loop_index=int(groups[4]),
-                            id=InvocationId(
-                                test_module_path=groups[0],
-                                test_class_name=None if groups[1] == "" else groups[1][:-1],
-                                test_function_name=groups[2],
-                                function_getting_tested=groups[3],
-                                iteration_id=iteration_id,
-                            ),
-                            file_name=test_file_path,
-                            runtime=runtime,
-                            test_framework=test_config.test_framework,
-                            did_pass=result,
-                            test_type=test_type,
-                            return_value=None,
-                            timed_out=timed_out,
-                            stdout=stdout,
+                    # Java and Python have different marker formats:
+                    # Java:   5 groups - (module, class, func, loop_index, iteration_id)
+                    # Python: 6 groups - (module, class.test, _, func, loop_index, iteration_id)
+                    if is_java():
+                        # Java format: !$######module:class:func:loop:iter######$!
+                        end_key = groups[:5]  # Use all 5 groups as key
+                        end_match = end_matches.get(end_key)
+                        iteration_id = groups[4]  # iter is at index 4
+                        loop_idx = int(groups[3])  # loop is at index 3
+                        test_module = groups[0]  # module
+                        test_class_str = groups[1]  # class
+                        test_func = test_function  # Use the testcase name from XML
+                        func_getting_tested = groups[2]  # func being tested
+                        runtime = None
+
+                        if end_match:
+                            stdout = sys_stdout[match.end() : end_match.start()]
+                            runtime = int(end_match.groups()[5])  # duration is at index 5
+                        elif match_index == len(begin_matches) - 1:
+                            stdout = sys_stdout[match.end() :]
+                        else:
+                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
+                        test_results.add(
+                            FunctionTestInvocation(
+                                loop_index=loop_idx,
+                                id=InvocationId(
+                                    test_module_path=test_module,
+                                    test_class_name=test_class_str if test_class_str else None,
+                                    test_function_name=test_func,
+                                    function_getting_tested=func_getting_tested,
+                                    iteration_id=iteration_id,
+                                ),
+                                file_name=test_file_path,
+                                runtime=runtime,
+                                test_framework=test_config.test_framework,
+                                did_pass=result,
+                                test_type=test_type,
+                                return_value=None,
+                                timed_out=timed_out,
+                                stdout=stdout,
+                            )
                         )
-                    )
+                    else:
+                        # Python format: 6 groups
+                        end_match = end_matches.get(groups)
+                        iteration_id, runtime = groups[5], None
+                        if end_match:
+                            stdout = sys_stdout[match.end() : end_match.start()]
+                            split_val = end_match.groups()[5].split(":")
+                            if len(split_val) > 1:
+                                iteration_id = split_val[0]
+                                runtime = int(split_val[1])
+                            else:
+                                iteration_id, runtime = split_val[0], None
+                        elif match_index == len(begin_matches) - 1:
+                            stdout = sys_stdout[match.end() :]
+                        else:
+                            stdout = sys_stdout[match.end() : begin_matches[match_index + 1].start()]
+
+                        test_results.add(
+                            FunctionTestInvocation(
+                                loop_index=int(groups[4]),
+                                id=InvocationId(
+                                    test_module_path=groups[0],
+                                    test_class_name=None if groups[1] == "" else groups[1][:-1],
+                                    test_function_name=groups[2],
+                                    function_getting_tested=groups[3],
+                                    iteration_id=iteration_id,
+                                ),
+                                file_name=test_file_path,
+                                runtime=runtime,
+                                test_framework=test_config.test_framework,
+                                did_pass=result,
+                                test_type=test_type,
+                                return_value=None,
+                                timed_out=timed_out,
+                                stdout=stdout,
+                            )
+                        )
 
     if not test_results:
         logger.info(
