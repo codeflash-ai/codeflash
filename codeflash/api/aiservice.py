@@ -484,12 +484,17 @@ class AiServiceClient:
         """
         console.rule()
         try:
+            # Filter out test diffs where test_src_code is None since aiservice requires it to be a string
+            valid_test_diffs = [diff for diff in request.test_diffs if diff.test_src_code is not None]
+            if not valid_test_diffs:
+                logger.warning("No test diffs with valid test_src_code found, skipping code repair")
+                return None
             payload = {
                 "optimization_id": request.optimization_id,
                 "original_source_code": request.original_source_code,
                 "modified_source_code": request.modified_source_code,
                 "trace_id": request.trace_id,
-                "test_diffs": request.test_diffs,
+                "test_diffs": valid_test_diffs,
                 "language": request.language,
             }
             response = self.make_ai_service_request("/code_repair", payload=payload, timeout=self.timeout)
