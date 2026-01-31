@@ -75,6 +75,10 @@ def replace_function(
     new_source_lines = new_source.splitlines(keepends=True)
     indented_new_source = _apply_indentation(new_source_lines, indent)
 
+    # Ensure the new source ends with a newline to avoid concatenation issues
+    if indented_new_source and not indented_new_source.endswith("\n"):
+        indented_new_source += "\n"
+
     # Build the result
     before = lines[: start_line - 1]  # Lines before the method
     after = lines[end_line:]  # Lines after the method
@@ -112,11 +116,11 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
     if not lines:
         return ""
 
-    # Detect the existing indentation in the new source
+    # Detect the existing indentation from the first non-empty line
+    # This includes Javadoc/comment lines to handle them correctly
     existing_indent = ""
     for line in lines:
-        stripped = line.lstrip()
-        if stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+        if line.strip():  # First non-empty line
             existing_indent = _get_indentation(line)
             break
 
@@ -129,7 +133,9 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
             stripped_line = line.lstrip()
             # Calculate relative indentation
             line_indent = _get_indentation(line)
-            if existing_indent and line_indent.startswith(existing_indent):
+            # When existing_indent is empty (first line has no indent), the relative
+            # indent is the full line indent. Otherwise, calculate the difference.
+            if line_indent.startswith(existing_indent):
                 relative_indent = line_indent[len(existing_indent) :]
             else:
                 relative_indent = ""
@@ -263,11 +269,16 @@ def insert_method(
     method_lines = method_source.strip().splitlines(keepends=True)
     indented_method = _apply_indentation(method_lines, method_indent)
 
+    # Ensure the indented method ends with a newline
+    if indented_method and not indented_method.endswith("\n"):
+        indented_method += "\n"
+
     # Insert the method
     before = source_bytes[:insert_point]
     after = source_bytes[insert_point:]
 
-    separator = "\n\n" if position == "end" else "\n"
+    # Use single newline as separator; for start position we need newline after opening brace
+    separator = "\n" if position == "end" else "\n"
 
     return (before + separator.encode("utf8") + indented_method.encode("utf8") + after).decode("utf8")
 
