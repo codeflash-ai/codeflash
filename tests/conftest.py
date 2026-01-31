@@ -11,6 +11,7 @@ SHARED_FILE_TEST_MODULES = {
     "test_instrumentation_run_results_aiservice",
     "test_instrument_all_and_run",
     "test_async_run_and_parse_tests",
+    "test_instrument_tests",
 }
 
 
