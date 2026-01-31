@@ -48,9 +48,19 @@ from codeflash.languages.registry import (
     get_supported_languages,
     register_language,
 )
+from codeflash.languages.test_framework import (
+    current_test_framework,
+    get_js_test_framework_or_default,
+    is_jest,
+    is_mocha,
+    is_pytest,
+    is_unittest,
+    is_vitest,
+    reset_test_framework,
+    set_current_test_framework,
+)
 
 __all__ = [
-    # Base types
     "CodeContext",
     "FunctionInfo",
     "HelperFunction",
@@ -59,18 +69,25 @@ __all__ = [
     "ParentInfo",
     "TestInfo",
     "TestResult",
-    # Current language singleton
     "current_language",
     "current_language_support",
-    # Registry functions
+    "current_test_framework",
     "detect_project_language",
+    "get_js_test_framework_or_default",
     "get_language_support",
     "get_supported_extensions",
     "get_supported_languages",
     "is_javascript",
+    "is_jest",
+    "is_mocha",
+    "is_pytest",
     "is_python",
     "is_typescript",
+    "is_unittest",
+    "is_vitest",
     "register_language",
     "reset_current_language",
+    "reset_test_framework",
     "set_current_language",
+    "set_current_test_framework",
 ]
