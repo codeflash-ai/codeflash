@@ -350,8 +350,9 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Global variables are now included in read-writable code, so don't duplicate in read-only
-        read_only_context_code="",
+        # Type definitions are provided as read-only context (not part of code to be replaced)
+        # This prevents AI from duplicating imported types in the optimized output
+        read_only_context_code=code_context.type_definitions_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,

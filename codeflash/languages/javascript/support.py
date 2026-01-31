@@ -384,12 +384,9 @@ class JavaScriptSupport:
             exclude_names=type_definition_names,
         )
 
-        # Combine type definitions with other read-only context
-        if type_definitions_context:
-            if read_only_context:
-                read_only_context = type_definitions_context + "\n\n" + read_only_context
-            else:
-                read_only_context = type_definitions_context
+        # Keep type definitions separate from global variables
+        # Type definitions should be provided as true read-only context (not part of code to be replaced)
+        # Global variables may need to be modified and are included in the read-writable context
 
         # Validate that the extracted code is syntactically valid
         # If not, raise an error to fail the optimization early
@@ -406,6 +403,7 @@ class JavaScriptSupport:
             target_file=function.file_path,
             helper_functions=helpers,
             read_only_context=read_only_context,
+            type_definitions_context=type_definitions_context,
             imports=import_lines,
             language=Language.JAVASCRIPT,
         )

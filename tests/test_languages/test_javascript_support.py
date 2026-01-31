@@ -1607,3 +1607,144 @@ module.exports = { MathUtils };
                 f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert js_support.validate_syntax(result) is True
+
+
+class TestTypeDefinitionsSeparation:
+    """Tests for proper separation of type definitions from read-only context.
+
+    Type definitions (interfaces, types) should be in the type_definitions_context field,
+    NOT in the read_only_context field (which gets prepended to target code and thus
+    becomes part of the code to be replaced).
+
+    This prevents the bug where type definitions are duplicated in the optimization output.
+    See: https://github.com/codeflash-ai/appsmith/pull/20
+    """
+
+    def test_same_file_interface_in_type_definitions_context(self):
+        """Test that same-file interfaces are in type_definitions_context, not read_only_context.
+
+        When a function uses a type defined in the same file, that type definition
+        should be in type_definitions_context (passed as read-only context to AI)
+        and NOT in read_only_context (which gets prepended to target code).
+        """
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        # Create a file with interface and function in the same file
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            f.write("""interface TreeNode {
+    aboves: string[];
+    belows: string[];
+    topRow: number;
+    bottomRow: number;
+}
+
+const MAX_BOX_SIZE = 20000;
+
+export function getNearestAbove(
+    tree: Record<string, TreeNode>,
+    effectedBoxId: string,
+) {
+    const aboves = tree[effectedBoxId].aboves;
+    return aboves.reduce((prev: string[], next: string) => {
+        if (!prev[0]) return [next];
+        let nextBottomRow = tree[next].bottomRow;
+        let prevBottomRow = tree[prev[0]].bottomRow;
+        if (nextBottomRow > prevBottomRow) return [next];
+        else if (nextBottomRow === prevBottomRow) {
+            return [...prev, next];
+        }
+        else return prev;
+    }, []);
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+        try:
+            # Discover functions
+            functions = ts_support.discover_functions(file_path)
+            get_nearest_above = next(f for f in functions if f.name == "getNearestAbove")
+
+            # Extract code context
+            context = ts_support.extract_code_context(get_nearest_above, file_path.parent, file_path.parent)
+
+            # The TreeNode interface should be in type_definitions_context, NOT in read_only_context
+            # This is the key assertion - type definitions should be separate from global variables
+            assert "interface TreeNode" not in context.read_only_context, (
+                f"TreeNode interface should NOT be in read_only_context. "
+                f"read_only_context contains: {context.read_only_context}"
+            )
+
+            # The type definition should be in type_definitions_context
+            assert "interface TreeNode" in context.type_definitions_context, (
+                f"TreeNode interface should be in type_definitions_context. "
+                f"type_definitions_context contains: {context.type_definitions_context}"
+            )
+
+            # The target_code should NOT contain the TreeNode interface definition
+            assert "interface TreeNode" not in context.target_code, (
+                f"TreeNode interface definition should NOT be in target_code. "
+                f"target_code contains: {context.target_code}"
+            )
+
+        finally:
+            file_path.unlink(missing_ok=True)
+
+    def test_type_definitions_context_passed_to_optimizer(self):
+        """Test that type_definitions_context is properly passed through the code context extraction.
+
+        When get_code_optimization_context_for_language is called, the type definitions
+        should end up in read_only_context_code (not prepended to target code).
+        """
+        from codeflash.context.code_context_extractor import get_code_optimization_context_for_language
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.languages.base import Language
+
+        # Create a TypeScript file with imported types
+        with tempfile.NamedTemporaryFile(suffix=".ts", mode="w", delete=False) as f:
+            f.write("""interface Point {
+    x: number;
+    y: number;
+}
+
+export function distance(p1: Point, p2: Point): number {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+""")
+            f.flush()
+            file_path = Path(f.name)
+
+        try:
+            # Create FunctionToOptimize
+            fto = FunctionToOptimize(
+                function_name="distance",
+                file_path=file_path,
+                parents=[],
+                starting_line=6,
+                ending_line=11,
+                language=str(Language.TYPESCRIPT),
+            )
+
+            # Extract optimization context
+            code_context = get_code_optimization_context_for_language(fto, file_path.parent)
+
+            # Type definitions should be in read_only_context_code (not empty)
+            # This is what gets passed to the AI as true read-only context
+            assert "interface Point" in code_context.read_only_context_code, (
+                f"Point interface should be in read_only_context_code. "
+                f"read_only_context_code: {code_context.read_only_context_code}"
+            )
+
+            # The read-writable code should NOT contain the interface definition
+            # (only the function itself)
+            assert "interface Point" not in code_context.read_writable_code.flat, (
+                f"Point interface should NOT be in read_writable_code. "
+                f"read_writable_code.flat: {code_context.read_writable_code.flat}"
+            )
+
+        finally:
+            file_path.unlink(missing_ok=True)

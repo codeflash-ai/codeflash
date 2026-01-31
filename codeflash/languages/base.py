@@ -145,7 +145,8 @@ class CodeContext:
         target_code: Source code of the function to optimize.
         target_file: Path to the file containing the target function.
         helper_functions: List of helper functions called by the target.
-        read_only_context: Additional context code (read-only dependencies).
+        read_only_context: Module-level global variables that may be modified.
+        type_definitions_context: Type/interface definitions for context only (not to be modified).
         imports: List of import statements needed.
         language: The programming language.
 
@@ -155,6 +156,7 @@ class CodeContext:
     target_file: Path
     helper_functions: list[HelperFunction] = field(default_factory=list)
     read_only_context: str = ""
+    type_definitions_context: str = ""
     imports: list[str] = field(default_factory=list)
     language: Language = Language.PYTHON
 
