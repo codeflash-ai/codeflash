@@ -2256,7 +2256,7 @@ class FunctionOptimizer:
             self.args.all
             or env_utils.get_pr_number()
             or self.args.replay_test
-            or (self.args.file and not self.args.function)
+            or self.args.file  # Always revert when using --file mode (with or without --function)
         ):
             self.revert_code_and_helpers(original_helper_code)
             return
