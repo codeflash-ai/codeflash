@@ -257,7 +257,14 @@ def run_jest_behavioral_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        # This is needed because some projects configure Jest with restricted roots
+        # (e.g., roots: ["<rootDir>/src"]) which excludes the test directory
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -467,7 +474,12 @@ def run_jest_benchmarking_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
@@ -596,7 +608,12 @@ def run_jest_line_profile_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
