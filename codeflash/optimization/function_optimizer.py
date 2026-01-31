@@ -369,9 +369,7 @@ class CandidateProcessor:
                 logger.info(success_msg.format(len(candidates), self.candidate_len))
 
             callback()
-        # Call get_next_candidate() OUTSIDE the progress_bar context to avoid
-        # nested progress bars (Rich only allows one active Live display at a time)
-        return self.get_next_candidate()
+            return self.get_next_candidate()
 
     def _filter_refined_candidates(self, candidates: list[OptimizedCandidate]) -> list[OptimizedCandidate]:
         """We generate a weighted ranking based on the runtime and diff lines and select the best of valid optimizations to be tested."""
