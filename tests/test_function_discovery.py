@@ -604,3 +604,349 @@ def test_function_in_tests_dir():
             assert "vanilla_function" not in remaining_functions
         files_and_funcs = get_all_files_and_functions(module_root_path=temp_dir, ignore_paths=[])
         assert len(files_and_funcs) == 6
+
+
+def test_filter_functions_tests_root_overlaps_source():
+    """Test that source files are not filtered when tests_root equals module_root or project_root.
+
+    This is a critical test for monorepo structures where tests live alongside source code
+    (e.g., TypeScript projects with .test.ts files in the same directories as source).
+    """
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        # Create a source file (NOT a test file)
+        source_file = temp_dir / "utils.py"
+        with source_file.open("w") as f:
+            f.write("""
+def process_data(items):
+    return [item * 2 for item in items]
+
+def calculate_sum(numbers):
+    return sum(numbers)
+""")
+
+        # Create a test file with standard naming pattern
+        test_file = temp_dir / "utils.test.py"
+        with test_file.open("w") as f:
+            f.write("""
+def test_process_data():
+    return "test"
+""")
+
+        # Create a test file with _test suffix pattern
+        test_file_underscore = temp_dir / "utils_test.py"
+        with test_file_underscore.open("w") as f:
+            f.write("""
+def test_calculate_sum():
+    return "test"
+""")
+
+        # Create a spec file
+        spec_file = temp_dir / "utils.spec.py"
+        with spec_file.open("w") as f:
+            f.write("""
+def spec_function():
+    return "spec"
+""")
+
+        # Create a file in a tests subdirectory
+        tests_subdir = temp_dir / "tests"
+        tests_subdir.mkdir()
+        tests_subdir_file = tests_subdir / "test_main.py"
+        with tests_subdir_file.open("w") as f:
+            f.write("""
+def test_in_tests_dir():
+    return "test"
+""")
+
+        # Create a file in __tests__ subdirectory (common in JS/TS projects)
+        dunder_tests_subdir = temp_dir / "__tests__"
+        dunder_tests_subdir.mkdir()
+        dunder_tests_file = dunder_tests_subdir / "main.py"
+        with dunder_tests_file.open("w") as f:
+            f.write("""
+def test_in_dunder_tests():
+    return "test"
+""")
+
+        # Discover all functions
+        discovered_source = find_all_functions_in_file(source_file)
+        discovered_test = find_all_functions_in_file(test_file)
+        discovered_test_underscore = find_all_functions_in_file(test_file_underscore)
+        discovered_spec = find_all_functions_in_file(spec_file)
+        discovered_tests_dir = find_all_functions_in_file(tests_subdir_file)
+        discovered_dunder_tests = find_all_functions_in_file(dunder_tests_file)
+
+        # Combine all discovered functions
+        all_functions = {}
+        for discovered in [discovered_source, discovered_test, discovered_test_underscore,
+                          discovered_spec, discovered_tests_dir, discovered_dunder_tests]:
+            all_functions.update(discovered)
+
+        # Test Case 1: tests_root == module_root (overlapping case)
+        # This is the bug scenario where all functions were being filtered
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=temp_dir,  # Same as module_root
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,  # Same as tests_root
+            )
+
+        # Strict check: only source_file should remain in filtered results
+        assert set(filtered.keys()) == {source_file}, (
+            f"Expected only source file in filtered results, got: {set(filtered.keys())}"
+        )
+
+        # Strict check: exactly these two functions should be present
+        source_functions = sorted([fn.function_name for fn in filtered.get(source_file, [])])
+        assert source_functions == ["calculate_sum", "process_data"], (
+            f"Expected ['calculate_sum', 'process_data'], got {source_functions}"
+        )
+
+        # Strict check: exactly 2 functions remaining
+        assert count == 2, f"Expected exactly 2 functions, got {count}"
+
+        # Test Case 2: tests_root == project_root (another overlapping case)
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered2, count2 = filter_functions(
+                {source_file: discovered_source[source_file]},
+                tests_root=temp_dir,  # Same as project_root
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,
+            )
+
+        # Strict check: only source_file should remain
+        assert set(filtered2.keys()) == {source_file}, (
+            f"Expected only source file when tests_root == project_root, got: {set(filtered2.keys())}"
+        )
+        assert count2 == 2, f"Expected exactly 2 functions, got {count2}"
+
+
+def test_filter_functions_strict_string_matching():
+    """Test that test file pattern matching uses strict string matching.
+
+    Ensures patterns like '.test.' only match actual test files and don't
+    accidentally match files with similar names like 'contest.py' or 'latest.py'.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        # Files that should NOT be filtered (contain 'test' as substring but not as pattern)
+        contest_file = temp_dir / "contest.py"
+        with contest_file.open("w") as f:
+            f.write("def run_contest(): return 1")
+
+        latest_file = temp_dir / "latest.py"
+        with latest_file.open("w") as f:
+            f.write("def get_latest(): return 1")
+
+        attestation_file = temp_dir / "attestation.py"
+        with attestation_file.open("w") as f:
+            f.write("def verify_attestation(): return 1")
+
+        # File that SHOULD be filtered (matches .test. pattern)
+        actual_test_file = temp_dir / "utils.test.py"
+        with actual_test_file.open("w") as f:
+            f.write("def test_utils(): return 1")
+
+        # File that SHOULD be filtered (matches _test. pattern)
+        underscore_test_file = temp_dir / "utils_test.py"
+        with underscore_test_file.open("w") as f:
+            f.write("def test_stuff(): return 1")
+
+        # Discover all functions
+        all_functions = {}
+        for file_path in [contest_file, latest_file, attestation_file, actual_test_file, underscore_test_file]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=temp_dir,  # Overlapping case to trigger pattern matching
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,
+            )
+
+        # Strict check: exactly these 3 files should remain (those with 'test' as substring only)
+        expected_files = {contest_file, latest_file, attestation_file}
+        assert set(filtered.keys()) == expected_files, (
+            f"Expected files {expected_files}, got {set(filtered.keys())}"
+        )
+
+        # Strict check: each file should have exactly 1 function with the expected name
+        assert [fn.function_name for fn in filtered[contest_file]] == ["run_contest"], (
+            f"Expected ['run_contest'], got {[fn.function_name for fn in filtered[contest_file]]}"
+        )
+        assert [fn.function_name for fn in filtered[latest_file]] == ["get_latest"], (
+            f"Expected ['get_latest'], got {[fn.function_name for fn in filtered[latest_file]]}"
+        )
+        assert [fn.function_name for fn in filtered[attestation_file]] == ["verify_attestation"], (
+            f"Expected ['verify_attestation'], got {[fn.function_name for fn in filtered[attestation_file]]}"
+        )
+
+        # Strict check: exactly 3 functions remaining
+        assert count == 3, f"Expected exactly 3 functions, got {count}"
+
+
+def test_filter_functions_test_directory_patterns():
+    """Test that test directory patterns work correctly with strict matching.
+
+    Ensures that /test/, /tests/, and /__tests__/ patterns only match actual
+    test directories and not directories that happen to contain 'test' in name.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        # Directory that should NOT be filtered (contains 'test' but not as /test/ pattern)
+        contest_dir = temp_dir / "contest_results"
+        contest_dir.mkdir()
+        contest_file = contest_dir / "scores.py"
+        with contest_file.open("w") as f:
+            f.write("def get_scores(): return [1, 2, 3]")
+
+        latest_dir = temp_dir / "latest_data"
+        latest_dir.mkdir()
+        latest_file = latest_dir / "data.py"
+        with latest_file.open("w") as f:
+            f.write("def load_data(): return {}")
+
+        # Directory that SHOULD be filtered (matches /tests/ pattern)
+        tests_dir = temp_dir / "tests"
+        tests_dir.mkdir()
+        tests_file = tests_dir / "test_main.py"
+        with tests_file.open("w") as f:
+            f.write("def test_main(): return True")
+
+        # Directory that SHOULD be filtered (matches /test/ pattern - singular)
+        test_dir = temp_dir / "test"
+        test_dir.mkdir()
+        test_file = test_dir / "test_utils.py"
+        with test_file.open("w") as f:
+            f.write("def test_utils(): return True")
+
+        # Directory that SHOULD be filtered (matches /__tests__/ pattern)
+        dunder_tests_dir = temp_dir / "__tests__"
+        dunder_tests_dir.mkdir()
+        dunder_file = dunder_tests_dir / "component.py"
+        with dunder_file.open("w") as f:
+            f.write("def test_component(): return True")
+
+        # Nested test directory
+        src_dir = temp_dir / "src"
+        src_dir.mkdir()
+        nested_tests_dir = src_dir / "tests"
+        nested_tests_dir.mkdir()
+        nested_test_file = nested_tests_dir / "test_nested.py"
+        with nested_test_file.open("w") as f:
+            f.write("def test_nested(): return True")
+
+        # Discover all functions
+        all_functions = {}
+        for file_path in [contest_file, latest_file, tests_file, test_file, dunder_file, nested_test_file]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=temp_dir,  # Overlapping case
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=temp_dir,
+            )
+
+        # Strict check: exactly these 2 files should remain (those in non-test directories)
+        expected_files = {contest_file, latest_file}
+        assert set(filtered.keys()) == expected_files, (
+            f"Expected files {expected_files}, got {set(filtered.keys())}"
+        )
+
+        # Strict check: each file should have exactly 1 function with the expected name
+        assert [fn.function_name for fn in filtered[contest_file]] == ["get_scores"], (
+            f"Expected ['get_scores'], got {[fn.function_name for fn in filtered[contest_file]]}"
+        )
+        assert [fn.function_name for fn in filtered[latest_file]] == ["load_data"], (
+            f"Expected ['load_data'], got {[fn.function_name for fn in filtered[latest_file]]}"
+        )
+
+        # Strict check: exactly 2 functions remaining
+        assert count == 2, f"Expected exactly 2 functions, got {count}"
+
+
+def test_filter_functions_non_overlapping_tests_root():
+    """Test that the original directory-based filtering still works when tests_root is separate.
+
+    When tests_root is a distinct directory (e.g., 'tests/'), the original behavior
+    of filtering files that start with tests_root should still work.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+
+        # Create source directory structure
+        src_dir = temp_dir / "src"
+        src_dir.mkdir()
+        source_file = src_dir / "utils.py"
+        with source_file.open("w") as f:
+            f.write("def process(): return 1")
+
+        # Create a file with .test. pattern in source (should NOT be filtered in non-overlapping mode)
+        # because directory-based filtering takes precedence
+        test_in_src = src_dir / "helper.test.py"
+        with test_in_src.open("w") as f:
+            f.write("def helper_test(): return 1")
+
+        # Create separate tests directory
+        tests_dir = temp_dir / "tests"
+        tests_dir.mkdir()
+        test_file = tests_dir / "test_utils.py"
+        with test_file.open("w") as f:
+            f.write("def test_process(): return 1")
+
+        # Discover functions
+        all_functions = {}
+        for file_path in [source_file, test_in_src, test_file]:
+            discovered = find_all_functions_in_file(file_path)
+            all_functions.update(discovered)
+
+        # Non-overlapping case: tests_root is a separate directory
+        with unittest.mock.patch(
+            "codeflash.discovery.functions_to_optimize.get_blocklisted_functions", return_value={}
+        ):
+            filtered, count = filter_functions(
+                all_functions,
+                tests_root=tests_dir,  # Separate from module_root
+                ignore_paths=[],
+                project_root=temp_dir,
+                module_root=src_dir,  # Different from tests_root
+            )
+
+        # Strict check: exactly these 2 files should remain (both in src/, not in tests/)
+        expected_files = {source_file, test_in_src}
+        assert set(filtered.keys()) == expected_files, (
+            f"Expected files {expected_files}, got {set(filtered.keys())}"
+        )
+
+        # Strict check: each file should have exactly 1 function with the expected name
+        assert [fn.function_name for fn in filtered[source_file]] == ["process"], (
+            f"Expected ['process'], got {[fn.function_name for fn in filtered[source_file]]}"
+        )
+        assert [fn.function_name for fn in filtered[test_in_src]] == ["helper_test"], (
+            f"Expected ['helper_test'], got {[fn.function_name for fn in filtered[test_in_src]]}"
+        )
+
+        # Strict check: exactly 2 functions remaining
+        assert count == 2, f"Expected exactly 2 functions, got {count}"

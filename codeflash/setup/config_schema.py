@@ -103,6 +103,9 @@ class CodeflashConfig(BaseModel):
         if self.module_root and self.module_root not in (".", "src"):
             config["moduleRoot"] = self.module_root
 
+        if self.tests_root:
+            config["testsRoot"] = self.tests_root
+
         # Formatter (only if explicitly set)
         if self.formatter_cmds:
             config["formatterCmds"] = self.formatter_cmds

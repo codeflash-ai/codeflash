@@ -47,6 +47,11 @@ class PythonSupport:
         return (".py", ".pyw")
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for Python."""
+        return ".py"
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework for Python."""
         return "pytest"

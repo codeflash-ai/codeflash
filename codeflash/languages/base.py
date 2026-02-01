@@ -310,6 +310,11 @@ class LanguageSupport(Protocol):
         ...
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for this language."""
+        ...
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework name.
 
