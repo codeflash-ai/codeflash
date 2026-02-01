@@ -142,8 +142,8 @@ class TestBasicNamedExports:
 
         refs = finder.find_references("getDynamicBindings", source_file)
 
-        # Convert to ReferenceInfo
-        ref_infos = [
+        # Convert to ReferenceInfo and sort for consistent ordering
+        ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path,
                 line=r.line,
@@ -156,21 +156,25 @@ class TestBasicNamedExports:
                 caller_function=r.caller_function,
             )
             for r in refs
-        ]
+        ], key=lambda r: str(r.file_path))
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
-        # Should contain both files
-        assert "```typescript:src/evaluator.ts" in markdown
-        assert "```typescript:src/validator.ts" in markdown
-
-        # Should contain the function bodies
-        assert "function evaluate(expression: string)" in markdown
-        assert "function validateBindings(input: string)" in markdown
-
-        # Should contain the actual calls
-        assert "getDynamicBindings(expression)" in markdown
-        assert "getDynamicBindings(input)" in markdown
+        expected_markdown = (
+            '```typescript:src/evaluator.ts\n'
+            'function evaluate(expression: string) {\n'
+            '    const bindings = getDynamicBindings(expression);\n'
+            '    return bindings;\n'
+            '}\n'
+            '```\n'
+            '```typescript:src/validator.ts\n'
+            'function validateBindings(input: string) {\n'
+            '    const bindings = getDynamicBindings(input);\n'
+            '    return bindings.length > 0;\n'
+            '}\n'
+            '```\n'
+        )
+        assert markdown == expected_markdown
 
 
 class TestDefaultExports:
@@ -244,7 +248,7 @@ class TestDefaultExports:
         source_file = project_root / "src" / "helper.ts"
 
         refs = finder.find_references("processData", source_file)
-        ref_infos = [
+        ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
                 end_line=r.end_line, end_column=r.end_column, context=r.context,
@@ -252,17 +256,24 @@ class TestDefaultExports:
                 caller_function=r.caller_function,
             )
             for r in refs
-        ]
+        ], key=lambda r: str(r.file_path))
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
-        # Both files should be present
-        assert "```typescript:src/main.ts" in markdown
-        assert "```typescript:src/alternative.ts" in markdown
-
-        # Function definitions should be present
-        assert "function handleData(items: any[])" in markdown
-        assert "function process(items: any[])" in markdown
+        expected_markdown = (
+            '```typescript:src/alternative.ts\n'
+            'function process(items: any[]) {\n'
+            '    return myProcessor(items);\n'
+            '}\n'
+            '```\n'
+            '```typescript:src/main.ts\n'
+            'function handleData(items: any[]) {\n'
+            '    const processed = processData(items);\n'
+            '    return processed.length;\n'
+            '}\n'
+            '```\n'
+        )
+        assert markdown == expected_markdown
 
 
 class TestReExports:
@@ -326,7 +337,7 @@ class TestReExports:
         source_file = project_root / "src" / "utils" / "filterUtils.ts"
 
         refs = finder.find_references("filterBySearchTerm", source_file)
-        ref_infos = [
+        ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
                 end_line=r.end_line, end_column=r.end_column, context=r.context,
@@ -334,14 +345,21 @@ class TestReExports:
                 caller_function=r.caller_function,
             )
             for r in refs
-        ]
+        ], key=lambda r: str(r.file_path))
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
-        # Consumer file should be present with function body
-        assert "```typescript:src/consumer.ts" in markdown
-        assert "function searchItems(items: any[], query: string)" in markdown
-        assert "filterBySearchTerm(items, query)" in markdown
+        expected_markdown = (
+            '```typescript:src/consumer.ts\n'
+            'function searchItems(items: any[], query: string) {\n'
+            '    return filterBySearchTerm(items, query);\n'
+            '}\n'
+            '```\n'
+            '```typescript:src/utils/index.ts\n'
+            "export { filterBySearchTerm } from './filterUtils';\n"
+            '```\n'
+        )
+        assert markdown == expected_markdown
 
 
 class TestCallbackPatterns:
@@ -712,7 +730,7 @@ class TestComplexMultiFileScenarios:
         source_file = project_root / "src" / "utils" / "widgetUtils.ts"
 
         refs = finder.find_references("isLargeWidget", source_file)
-        ref_infos = [
+        ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
                 end_line=r.end_line, end_column=r.end_column, context=r.context,
@@ -720,14 +738,22 @@ class TestComplexMultiFileScenarios:
                 caller_function=r.caller_function,
             )
             for r in refs
-        ]
+        ], key=lambda r: str(r.file_path))
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.TYPESCRIPT)
 
-        # Should contain Widget.tsx with the function
-        assert "```typescript:src/components/Widget.tsx" in markdown
-        assert "function Widget({ type }: { type: string })" in markdown
-        assert "isLargeWidget(type)" in markdown
+        expected_markdown = (
+            '```typescript:src/components/Widget.tsx\n'
+            'function Widget({ type }: { type: string }) {\n'
+            '    const isLarge = isLargeWidget(type);\n'
+            '    return isLarge;\n'
+            '}\n'
+            '```\n'
+            '```typescript:src/utils/index.ts\n'
+            "export { isLargeWidget } from './widgetUtils';\n"
+            '```\n'
+        )
+        assert markdown == expected_markdown
 
 
 class TestEdgeCases:
@@ -838,7 +864,7 @@ class TestCommonJSPatterns:
         source_file = project_root / "src" / "helpers.js"
 
         refs = finder.find_references("processConfig", source_file)
-        ref_infos = [
+        ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
                 end_line=r.end_line, end_column=r.end_column, context=r.context,
@@ -846,13 +872,18 @@ class TestCommonJSPatterns:
                 caller_function=r.caller_function,
             )
             for r in refs
-        ]
+        ], key=lambda r: str(r.file_path))
 
         markdown = _format_references_as_markdown(ref_infos, source_file, project_root, Language.JAVASCRIPT)
 
-        assert "```javascript:src/main.js" in markdown
-        assert "function handleConfig(config)" in markdown
-        assert "processConfig(config)" in markdown
+        expected_markdown = (
+            '```javascript:src/main.js\n'
+            'function handleConfig(config) {\n'
+            '    return processConfig(config);\n'
+            '}\n'
+            '```\n'
+        )
+        assert markdown == expected_markdown
 
 
 class TestConvenienceFunction:
