@@ -663,6 +663,19 @@ def _add_global_declarations_for_language(
         # Get names of existing declarations
         existing_names = {decl.name for decl in original_declarations}
 
+        # Also exclude names that are already imported (to avoid duplicating imported types)
+        original_imports = analyzer.find_imports(original_source)
+        for imp in original_imports:
+            # Add default import name
+            if imp.default_import:
+                existing_names.add(imp.default_import)
+            # Add named imports (use alias if present, otherwise use original name)
+            for name, alias in imp.named_imports:
+                existing_names.add(alias if alias else name)
+            # Add namespace import
+            if imp.namespace_import:
+                existing_names.add(imp.namespace_import)
+
         # Find new declarations (names that don't exist in original)
         new_declarations = []
         seen_sources = set()  # Track to avoid duplicates from destructuring

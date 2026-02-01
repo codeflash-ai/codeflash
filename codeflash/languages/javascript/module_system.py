@@ -184,10 +184,18 @@ def _get_relative_import_path(target_path: Path, source_path: Path) -> str:
 
 
 def add_js_extension(module_path: str) -> str:
-    """Add .js extension to relative module paths for ESM compatibility."""
-    if module_path.startswith(("./", "../")):
-        if not module_path.endswith(".js") and not module_path.endswith(".mjs"):
-            return module_path + ".js"
+    """Process module path for ESM compatibility.
+
+    NOTE: This function intentionally does NOT add extensions because:
+    1. TypeScript projects resolve modules without explicit extensions
+    2. Adding .js to .ts imports causes "Cannot find module" errors
+    3. Modern bundlers (webpack, vite, etc.) handle extension resolution automatically
+
+    The function name is preserved for backward compatibility but the behavior
+    has been changed to NOT add extensions.
+    """
+    # Previously this function added .js extensions, but this caused module resolution
+    # errors in TypeScript projects. We now preserve paths without adding extensions.
     return module_path
 
 

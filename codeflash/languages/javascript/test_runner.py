@@ -257,7 +257,14 @@ def run_jest_behavioral_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        # This is needed because some projects configure Jest with restricted roots
+        # (e.g., roots: ["<rootDir>/src"]) which excludes the test directory
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")  # Jest uses milliseconds
@@ -306,6 +313,14 @@ def run_jest_behavioral_tests(
                 args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
             )
         logger.debug(f"Jest result: returncode={result.returncode}")
+        # Log Jest output at WARNING level if tests fail and no XML output will be created
+        # This helps debug issues like import errors that cause Jest to fail early
+        if result.returncode != 0 and not result_file_path.exists():
+            logger.warning(
+                f"Jest failed with returncode={result.returncode} and no XML output created.\n"
+                f"Jest stdout: {result.stdout[:2000] if result.stdout else '(empty)'}\n"
+                f"Jest stderr: {result.stderr[:500] if result.stderr else '(empty)'}"
+            )
     except subprocess.TimeoutExpired:
         logger.warning(f"Jest tests timed out after {timeout}s")
         result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Test execution timed out")
@@ -468,7 +483,12 @@ def run_jest_benchmarking_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")
@@ -597,7 +617,12 @@ def run_jest_line_profile_tests(
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
-        jest_cmd.extend(str(Path(f).resolve()) for f in test_files)
+        resolved_test_files = [str(Path(f).resolve()) for f in test_files]
+        jest_cmd.extend(resolved_test_files)
+        # Add --roots to include directories containing test files
+        test_dirs = {str(Path(f).resolve().parent) for f in test_files}
+        for test_dir in sorted(test_dirs):
+            jest_cmd.extend(["--roots", test_dir])
 
     if timeout:
         jest_cmd.append(f"--testTimeout={timeout * 1000}")

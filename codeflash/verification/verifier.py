@@ -79,9 +79,7 @@ def generate_tests(
             source_file = Path(function_to_optimize.file_path)
             func_name = function_to_optimize.function_name
             qualified_name = function_to_optimize.qualified_name
-
             log_something("og_test", generated_test_source)
-
 
             og1 = generated_test_source
             # First validate and fix import styles
