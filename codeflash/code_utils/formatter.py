@@ -13,6 +13,7 @@ from typing import Any, Optional, Union
 import isort
 
 from codeflash.cli_cmds.console import console, logger
+from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
@@ -47,8 +48,9 @@ def apply_formatter_cmds(
         raise FileNotFoundError(msg)
 
     file_path = path
+    lang_support = get_language_support(path)
     if test_dir_str:
-        file_path = Path(test_dir_str) / "temp.py"
+        file_path = Path(test_dir_str) / ("temp" + lang_support.default_file_extension)
         shutil.copy2(path, file_path)
 
     file_token = "$file"  # noqa: S105
@@ -87,13 +89,14 @@ def get_diff_lines_count(diff_output: str) -> int:
     return len(diff_lines)
 
 
-def format_generated_code(generated_test_source: str, formatter_cmds: list[str]) -> str:
+def format_generated_code(generated_test_source: str, formatter_cmds: list[str], language: str = "python") -> str:
     formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
     if formatter_name == "disabled":  # nothing to do if no formatter provided
         return re.sub(r"\n{2,}", "\n\n", generated_test_source)
     with tempfile.TemporaryDirectory() as test_dir_str:
         # try running formatter, if nothing changes (could be due to formatting failing or no actual formatting needed) return code with 2 or more newlines substituted with 2 newlines
-        original_temp = Path(test_dir_str) / "original_temp.py"
+        lang_support = get_language_support(language)
+        original_temp = Path(test_dir_str) / ("original_temp" + lang_support.default_file_extension)
         original_temp.write_text(generated_test_source, encoding="utf8")
         _, formatted_code, changed = apply_formatter_cmds(
             formatter_cmds, original_temp, test_dir_str, print_status=False, exit_on_failure=False
@@ -130,7 +133,8 @@ def format_code(
             # we don't count the formatting diff for the optimized function as it should be well-formatted
             original_code_without_opfunc = original_code.replace(optimized_code, "")
 
-            original_temp = Path(test_dir_str) / "original_temp.py"
+            lang_support = get_language_support(path)
+            original_temp = Path(test_dir_str) / ("original_temp" + lang_support.default_file_extension)
             original_temp.write_text(original_code_without_opfunc, encoding="utf8")
 
             formatted_temp, formatted_code, changed = apply_formatter_cmds(
@@ -160,6 +164,7 @@ def format_code(
         _, formatted_code, changed = apply_formatter_cmds(
             formatter_cmds, path, test_dir_str=None, print_status=print_status, exit_on_failure=exit_on_failure
         )
+
         if not changed:
             logger.warning(
                 f"No changes detected in {path} after formatting, are you sure you have valid formatter commands?"

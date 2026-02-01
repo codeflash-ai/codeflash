@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
+import contextlib
+
 from rich.text import Text
 
 _property_id = "property"
@@ -616,9 +618,10 @@ def get_all_replay_test_functions(
         except Exception as e:
             logger.warning(f"Error parsing replay test file {replay_test_file}: {e}")
 
-    if not trace_file_path:
+    if trace_file_path is None:
         logger.error("Could not find trace_file_path in replay test files.")
         exit_with_message("Could not find trace_file_path in replay test files.")
+        raise AssertionError("Unreachable")  # exit_with_message never returns
 
     if not trace_file_path.exists():
         logger.error(f"Trace file not found: {trace_file_path}")
@@ -673,7 +676,7 @@ def get_all_replay_test_functions(
         if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
-    return filtered_valid_functions, trace_file_path
+    return dict(filtered_valid_functions), trace_file_path
 
 
 def is_git_repo(file_path: str) -> bool:
@@ -685,11 +688,13 @@ def is_git_repo(file_path: str) -> bool:
 
 
 @cache
-def ignored_submodule_paths(module_root: str) -> list[str]:
+def ignored_submodule_paths(module_root: str) -> list[Path]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
         try:
-            return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+            working_dir = git_repo.working_tree_dir
+            if working_dir is not None:
+                return [Path(working_dir, submodule.path).resolve() for submodule in git_repo.submodules]
         except Exception as e:
             logger.warning(f"Error getting submodule paths: {e}")
     return []
@@ -703,7 +708,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         self.class_name = class_name
         self.function_name = function_or_method_name
         self.is_top_level = False
-        self.function_has_args = None
+        self.function_has_args: bool | None = None
         self.line_no = line_no
         self.is_staticmethod = False
         self.is_classmethod = False
@@ -817,31 +822,28 @@ def was_function_previously_optimized(
 
     # Check optimization status if repository info is provided
     # already_optimized_count = 0
-    try:
+
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    owner = None
+    repo = None
+    with contextlib.suppress(git.exc.InvalidGitRepositoryError):
         owner, repo = get_repo_owner_and_name()
-    except git.exc.InvalidGitRepositoryError:
-        logger.warning("No git repository found")
-        owner, repo = None, None
+
     pr_number = get_pr_number()
 
     if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
         return False
 
-    code_contexts = []
-
     func_hash = code_context.hashing_code_context_hash
-    # Use a unique path identifier that includes function info
 
-    code_contexts.append(
+    code_contexts = [
         {
-            "file_path": function_to_optimize.file_path,
+            "file_path": str(function_to_optimize.file_path),
             "function_name": function_to_optimize.qualified_name,
             "code_hash": func_hash,
         }
-    )
-
-    if not code_contexts:
-        return False
+    ]
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
@@ -860,7 +862,7 @@ def filter_functions(
     ignore_paths: list[Path],
     project_root: Path,
     module_root: Path,
-    previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
+    previous_checkpoint_functions: dict[str, dict[str, Any]] | None = None,
     *,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
@@ -885,21 +887,49 @@ def filter_functions(
     # Normalize paths for case-insensitive comparison on Windows
     tests_root_str = os.path.normcase(str(tests_root))
     module_root_str = os.path.normcase(str(module_root))
+    project_root_str = os.path.normcase(str(project_root))
+
+    # Check if tests_root overlaps with module_root or project_root
+    # In this case, we need to use file pattern matching instead of directory matching
+    tests_root_overlaps_source = tests_root_str in (module_root_str, project_root_str) or module_root_str.startswith(
+        tests_root_str + os.sep
+    )
+
+    # Test file patterns for when tests_root overlaps with source
+    test_file_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+
+    def is_test_file(file_path_normalized: str) -> bool:
+        """Check if a file is a test file based on patterns."""
+        if tests_root_overlaps_source:
+            # Use file pattern matching when tests_root overlaps with source
+            file_lower = file_path_normalized.lower()
+            # Check filename patterns (e.g., .test.ts, .spec.ts)
+            if any(pattern in file_lower for pattern in test_file_name_patterns):
+                return True
+            # Check directory patterns, but only within the project root
+            # to avoid false positives from parent directories
+            relative_path = file_lower
+            if project_root_str and file_lower.startswith(project_root_str.lower()):
+                relative_path = file_lower[len(project_root_str) :]
+            return any(pattern in relative_path for pattern in test_dir_patterns)
+        # Use directory-based filtering when tests are in a separate directory
+        return file_path_normalized.startswith(tests_root_str + os.sep)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         file_path = str(file_path_path)
         file_path_normalized = os.path.normcase(file_path)
-        if file_path_normalized.startswith(tests_root_str + os.sep):
+        if is_test_file(file_path_normalized):
             test_functions_removed_count += len(_functions)
             continue
-        if file_path in ignore_paths or any(
+        if file_path_path in ignore_paths or any(
             file_path_normalized.startswith(os.path.normcase(str(ignore_path)) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
-        if file_path in submodule_paths or any(
+        if file_path_path in submodule_paths or any(
             file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep)
             for submodule_path in submodule_paths
         ):
@@ -991,7 +1021,7 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
-    stack = [function_node]
+    stack: list[ast.AST] = [function_node]
     while stack:
         node = stack.pop()
         if isinstance(node, ast.Return):

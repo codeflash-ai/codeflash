@@ -236,6 +236,37 @@ class FunctionFilterCriteria:
     max_lines: int | None = None
 
 
+@dataclass
+class ReferenceInfo:
+    """Information about a reference (call site) to a function.
+
+    This class captures information about where a function is called
+    from, including the file, line number, context, and caller function.
+
+    Attributes:
+        file_path: Path to the file containing the reference.
+        line: Line number (1-indexed).
+        column: Column number (0-indexed).
+        end_line: End line number (1-indexed).
+        end_column: End column number (0-indexed).
+        context: The line of code containing the reference.
+        reference_type: Type of reference ("call", "callback", "memoized", "import", "reexport").
+        import_name: Name used to import the function (may differ from original).
+        caller_function: Name of the function containing this reference (or None for module-level).
+
+    """
+
+    file_path: Path
+    line: int
+    column: int
+    end_line: int
+    end_column: int
+    context: str
+    reference_type: str
+    import_name: str | None
+    caller_function: str | None = None
+
+
 @runtime_checkable
 class LanguageSupport(Protocol):
     """Protocol defining what a language implementation must provide.
@@ -276,6 +307,11 @@ class LanguageSupport(Protocol):
             Tuple of extensions with leading dots (e.g., (".py",) for Python).
 
         """
+        ...
+
+    @property
+    def default_file_extension(self) -> str:
+        """Default file extension for this language."""
         ...
 
     @property
@@ -348,6 +384,29 @@ class LanguageSupport(Protocol):
 
         Returns:
             List of HelperFunction objects.
+
+        """
+        ...
+
+    def find_references(
+        self, function: FunctionInfo, project_root: Path, tests_root: Path | None = None, max_files: int = 500
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        This method finds all places where a function is called, including:
+        - Direct calls
+        - Callbacks (passed to other functions)
+        - Memoized versions
+        - Re-exports
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
 
         """
         ...
