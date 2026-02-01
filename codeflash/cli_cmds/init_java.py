@@ -26,6 +26,8 @@ from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
 
+_cached_theme = None
+
 
 class JavaBuildTool(Enum):
     """Java build tools."""
@@ -57,9 +59,11 @@ class JavaSetupInfo:
 
 def _get_theme():
     """Get the CodeflashTheme - imported lazily to avoid circular imports."""
-    from codeflash.cli_cmds.cmd_init import CodeflashTheme
-
-    return CodeflashTheme()
+    global _cached_theme
+    if _cached_theme is None:
+        from codeflash.cli_cmds.cmd_init import CodeflashTheme
+        _cached_theme = CodeflashTheme()
+    return _cached_theme
 
 
 def detect_java_build_tool(project_root: Path) -> JavaBuildTool:
