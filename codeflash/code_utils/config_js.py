@@ -251,6 +251,9 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
         detected_module_root = detect_module_root(project_root, package_data)
         config["module_root"] = str((project_root / Path(detected_module_root)).resolve())
 
+    if codeflash_config.get("testsRoot"):
+        config["tests_root"] = str(project_root / Path(codeflash_config["testsRoot"]).resolve())
+
     # Auto-detect test runner
     config["test_runner"] = detect_test_runner(project_root, package_data)
     # Keep pytest_cmd for backwards compatibility with existing code
