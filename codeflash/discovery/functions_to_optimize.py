@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
+import contextlib
+
 from rich.text import Text
 
 _property_id = "property"
@@ -799,31 +801,28 @@ def was_function_previously_optimized(
 
     # Check optimization status if repository info is provided
     # already_optimized_count = 0
-    try:
+
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    owner = None
+    repo = None
+    with contextlib.suppress(git.exc.InvalidGitRepositoryError):
         owner, repo = get_repo_owner_and_name()
-    except git.exc.InvalidGitRepositoryError:
-        logger.warning("No git repository found")
-        owner, repo = None, None
+
     pr_number = get_pr_number()
 
     if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
         return False
 
-    code_contexts: list[dict[str, str]] = []
-
     func_hash = code_context.hashing_code_context_hash
-    # Use a unique path identifier that includes function info
 
-    code_contexts.append(
+    code_contexts = [
         {
             "file_path": str(function_to_optimize.file_path),
             "function_name": function_to_optimize.qualified_name,
             "code_hash": func_hash,
         }
-    )
-
-    if not code_contexts:
-        return False
+    ]
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
