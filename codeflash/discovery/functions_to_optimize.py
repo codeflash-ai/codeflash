@@ -1001,7 +1001,19 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
-    stack: list[ast.AST] = [function_node]
+    # Handle edge case where a Return node is passed directly
+    if isinstance(function_node, ast.Return):
+        return True
+    
+    body = function_node.body
+    if not body:
+        return False
+    # Fast-path: check top-level body statements first (common case)
+    for node in body:
+        if isinstance(node, ast.Return):
+            return True
+    # Continue DFS from the body nodes (skip the wrapper function node)
+    stack: list[ast.AST] = list(body)
     while stack:
         node = stack.pop()
         if isinstance(node, ast.Return):
