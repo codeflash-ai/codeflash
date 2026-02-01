@@ -189,7 +189,7 @@ class FunctionToOptimize:
 
 
 def get_files_for_language(
-    module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
+    module_root_path: Path, ignore_paths: list[Path] | None = None, language: Language | None = None
 ) -> list[Path]:
     """Get all source files for supported languages.
 
@@ -202,17 +202,38 @@ def get_files_for_language(
         List of file paths matching supported extensions.
 
     """
+    if ignore_paths is None:
+        ignore_paths = []
+
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
     else:
         extensions = tuple(get_supported_extensions())
 
+    # Default directory patterns to always exclude for JS/TS
+    js_ts_default_excludes = {
+        "node_modules",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "coverage",
+        ".cache",
+        ".turbo",
+        ".vercel",
+        "__pycache__",
+    }
+
     files = []
     for ext in extensions:
         pattern = f"*{ext}"
         for file_path in module_root_path.rglob(pattern):
+            # Check explicit ignore paths
             if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
+                continue
+            # Check default JS/TS excludes in path parts
+            if any(part in js_ts_default_excludes for part in file_path.parts):
                 continue
             files.append(file_path)
     return files
