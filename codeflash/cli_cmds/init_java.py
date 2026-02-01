@@ -26,6 +26,12 @@ from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
 
+_JAVA_SETUP_BASE = """- name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'"""
+
 
 class JavaBuildTool(Enum):
     """Java build tools."""
@@ -519,20 +525,7 @@ def configure_java_project(setup_info: JavaSetupInfo) -> bool:
 
 def get_java_runtime_setup_steps(build_tool: JavaBuildTool) -> str:
     """Generate the appropriate Java setup steps for GitHub Actions."""
-    java_setup = """- name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'"""
-
-    if build_tool == JavaBuildTool.MAVEN:
-        java_setup += """
-          cache: 'maven'"""
-    elif build_tool == JavaBuildTool.GRADLE:
-        java_setup += """
-          cache: 'gradle'"""
-
-    return java_setup
+    return _JAVA_SETUP_MAP.get(build_tool, _JAVA_SETUP_BASE)
 
 
 def get_java_dependency_installation_commands(build_tool: JavaBuildTool) -> str:
@@ -551,3 +544,10 @@ def get_java_test_command(build_tool: JavaBuildTool) -> str:
     if build_tool == JavaBuildTool.GRADLE:
         return "./gradlew test"
     return "mvn test"
+
+_JAVA_SETUP_MAP = {
+    JavaBuildTool.MAVEN: _JAVA_SETUP_BASE + """
+          cache: 'maven'""",
+    JavaBuildTool.GRADLE: _JAVA_SETUP_BASE + """
+          cache: 'gradle'""",
+}
