@@ -422,7 +422,13 @@ def _run_tests_direct(
         "org.junit.platform.console.ConsoleLauncher",
         "--disable-banner",
         "--disable-ansi-colors",
-        "--details=verbose",
+        # Use 'none' details to avoid duplicate output
+        # Timing markers are captured in XML via stdout capture config
+        "--details=none",
+        # Enable stdout/stderr capture in XML reports
+        # This ensures timing markers are included in the XML system-out element
+        "--config=junit.platform.output.capture.stdout=true",
+        "--config=junit.platform.output.capture.stderr=true",
     ]
 
     # Add reports directory if specified (for XML output)
