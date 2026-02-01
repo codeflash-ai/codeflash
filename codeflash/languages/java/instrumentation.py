@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.languages.base import FunctionInfo
-from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
+from codeflash.languages.java.parser import JavaAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -154,8 +154,8 @@ def instrument_existing_test(
 
     # Rename the class declaration in the source
     # Pattern: "public class ClassName" or "class ClassName"
-    pattern = rf'\b(public\s+)?class\s+{re.escape(original_class_name)}\b'
-    replacement = rf'\1class {new_class_name}'
+    pattern = rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b"
+    replacement = rf"\1class {new_class_name}"
     modified_source = re.sub(pattern, replacement, source)
 
     # Add timing instrumentation to test methods
@@ -214,7 +214,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     ]
 
     # Find position to insert imports (after package, before class)
-    lines = source.split('\n')
+    lines = source.split("\n")
     result = []
     imports_added = False
     i = 0
@@ -225,11 +225,11 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
         # Add imports after the last existing import or before the class declaration
         if not imports_added:
-            if stripped.startswith('import '):
+            if stripped.startswith("import "):
                 result.append(line)
                 i += 1
                 # Find end of imports
-                while i < len(lines) and lines[i].strip().startswith('import '):
+                while i < len(lines) and lines[i].strip().startswith("import "):
                     result.append(lines[i])
                     i += 1
                 # Add our imports
@@ -238,7 +238,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         result.append(imp)
                 imports_added = True
                 continue
-            elif stripped.startswith('public class') or stripped.startswith('class'):
+            if stripped.startswith("public class") or stripped.startswith("class"):
                 # No imports found, add before class
                 for imp in import_statements:
                     result.append(imp)
@@ -249,8 +249,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         i += 1
 
     # Now add timing and SQLite instrumentation to test methods
-    source = '\n'.join(result)
-    lines = source.split('\n')
+    source = "\n".join(result)
+    lines = source.split("\n")
     result = []
     i = 0
     iteration_counter = 0
@@ -260,12 +260,12 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         stripped = line.strip()
 
         # Look for @Test annotation
-        if stripped.startswith('@Test'):
+        if stripped.startswith("@Test"):
             result.append(line)
             i += 1
 
             # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith('@'):
+            while i < len(lines) and lines[i].strip().startswith("@"):
                 result.append(lines[i])
                 i += 1
 
@@ -273,7 +273,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             method_lines = []
             while i < len(lines):
                 method_lines.append(lines[i])
-                if '{' in lines[i]:
+                if "{" in lines[i]:
                     break
                 i += 1
 
@@ -298,9 +298,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
                 for ch in body_line:
-                    if ch == '{':
+                    if ch == "{":
                         brace_depth += 1
-                    elif ch == '}':
+                    elif ch == "}":
                         brace_depth -= 1
 
                 if brace_depth > 0:
@@ -323,13 +323,13 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # - new ClassName(args)
             # - this
             method_call_pattern = re.compile(
-                rf'((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)',
+                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
                 re.MULTILINE
             )
 
             for body_line in body_lines:
                 # Check if this line contains a call to the target function
-                if func_name in body_line and '(' in body_line:
+                if func_name in body_line and "(" in body_line:
                     line_indent = len(body_line) - len(body_line.lstrip())
                     line_indent_str = " " * line_indent
 
@@ -360,7 +360,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # If we captured any calls, serialize the last one; otherwise serialize null
             if call_counter > 0:
                 result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f'new GsonBuilder().serializeNulls().create().toJson({result_var})'
+                serialize_expr = f"new GsonBuilder().serializeNulls().create().toJson({result_var})"
             else:
                 serialize_expr = '"null"'
 
@@ -399,8 +399,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}    // Write to SQLite if output file is set",
                 f"{indent}    if (_cf_outputFile{iter_id} != null && !_cf_outputFile{iter_id}.isEmpty()) {{",
                 f"{indent}        try {{",
-                f"{indent}            Class.forName(\"org.sqlite.JDBC\");",
-                f"{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection(\"jdbc:sqlite:\" + _cf_outputFile{iter_id})) {{",
+                f'{indent}            Class.forName("org.sqlite.JDBC");',
+                f'{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
                 f"{indent}                try (Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
                 f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
                 f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
@@ -433,19 +433,25 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             result.append(line)
             i += 1
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 def _add_timing_instrumentation(source: str, class_name: str, func_name: str) -> str:
-    """Add timing instrumentation to test methods.
+    """Add timing instrumentation to test methods with inner loop for JIT warmup.
 
     For each @Test method, this adds:
-    1. Start timing marker printed at the beginning
-    2. End timing marker printed at the end (in a finally block)
+    1. Inner loop that runs N iterations (controlled by CODEFLASH_INNER_ITERATIONS env var)
+    2. Start timing marker printed at the beginning of each iteration
+    3. End timing marker printed at the end of each iteration (in a finally block)
+
+    The inner loop allows JIT warmup within a single JVM invocation, avoiding
+    expensive Maven restarts. Post-processing uses min runtime across all iterations.
 
     Timing markers format:
       Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
       End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+
+    Where iterationId is the inner iteration number (0, 1, 2, ..., N-1).
 
     Args:
         source: The test source code.
@@ -460,7 +466,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     # Pattern matches: @Test (with optional parameters) followed by method declaration
     # We process line by line for cleaner handling
 
-    lines = source.split('\n')
+    lines = source.split("\n")
     result = []
     i = 0
     iteration_counter = 0
@@ -470,12 +476,12 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
         stripped = line.strip()
 
         # Look for @Test annotation
-        if stripped.startswith('@Test'):
+        if stripped.startswith("@Test"):
             result.append(line)
             i += 1
 
             # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith('@'):
+            while i < len(lines) and lines[i].strip().startswith("@"):
                 result.append(lines[i])
                 i += 1
 
@@ -483,7 +489,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             method_lines = []
             while i < len(lines):
                 method_lines.append(lines[i])
-                if '{' in lines[i]:
+                if "{" in lines[i]:
                     break
                 i += 1
 
@@ -500,21 +506,24 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             method_sig_line = method_lines[-1] if method_lines else ""
             base_indent = len(method_sig_line) - len(method_sig_line.lstrip())
             indent = " " * (base_indent + 4)  # Add one level of indentation
+            inner_indent = " " * (base_indent + 8)  # Two levels for inside inner loop
+            inner_body_indent = " " * (base_indent + 12)  # Three levels for try block body
 
-            # Add timing start code
+            # Add timing instrumentation with inner loop
             # Note: CODEFLASH_LOOP_INDEX must always be set - no null check, crash if missing
-            # Start marker is printed BEFORE timing starts
-            # System.nanoTime() immediately precedes try block with test code
+            # CODEFLASH_INNER_ITERATIONS controls inner loop count (default: 100)
             timing_start_code = [
-                f"{indent}// Codeflash timing instrumentation",
+                f"{indent}// Codeflash timing instrumentation with inner loop for JIT warmup",
                 f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
-                f"{indent}int _cf_iter{iter_id} = {iter_id};",
+                f'{indent}int _cf_innerIterations{iter_id} = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));',
                 f'{indent}String _cf_mod{iter_id} = "{class_name}";',
                 f'{indent}String _cf_cls{iter_id} = "{class_name}";',
                 f'{indent}String _cf_fn{iter_id} = "{func_name}";',
-                f'{indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + "######$!");',
-                f"{indent}long _cf_start{iter_id} = System.nanoTime();",
-                f"{indent}try {{",
+                "",
+                f"{indent}for (int _cf_i{iter_id} = 0; _cf_i{iter_id} < _cf_innerIterations{iter_id}; _cf_i{iter_id}++) {{",
+                f'{inner_indent}System.out.println("!$######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + "######$!");',
+                f"{inner_indent}long _cf_start{iter_id} = System.nanoTime();",
+                f"{inner_indent}try {{",
             ]
             result.extend(timing_start_code)
 
@@ -526,9 +535,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                 body_line = lines[i]
                 # Count braces (simple approach - doesn't handle strings/comments perfectly)
                 for ch in body_line:
-                    if ch == '{':
+                    if ch == "{":
                         brace_depth += 1
-                    elif ch == '}':
+                    elif ch == "}":
                         brace_depth -= 1
 
                 if brace_depth > 0:
@@ -536,18 +545,19 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                     i += 1
                 else:
                     # This line contains the closing brace, but we've hit depth 0
-                    # Add indented body lines
+                    # Add indented body lines (inside try block, inside for loop)
                     for bl in body_lines:
-                        result.append("    " + bl)
+                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
 
-                    # Add finally block
+                    # Add finally block and close inner loop
                     method_close_indent = " " * base_indent  # Same level as method signature
                     timing_end_code = [
-                        f"{indent}}} finally {{",
-                        f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
-                        f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
-                        f'{indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_iter{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
-                        f"{indent}}}",
+                        f"{inner_indent}}} finally {{",
+                        f"{inner_indent}    long _cf_end{iter_id} = System.nanoTime();",
+                        f"{inner_indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
+                        f'{inner_indent}    System.out.println("!######" + _cf_mod{iter_id} + ":" + _cf_cls{iter_id} + ":" + _cf_fn{iter_id} + ":" + _cf_loop{iter_id} + ":" + _cf_i{iter_id} + ":" + _cf_dur{iter_id} + "######!");',
+                        f"{inner_indent}}}",
+                        f"{indent}}}",  # Close for loop
                         f"{method_close_indent}}}",  # Method closing brace
                     ]
                     result.extend(timing_end_code)
@@ -556,7 +566,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             result.append(line)
             i += 1
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 def create_benchmark_test(
@@ -653,7 +663,7 @@ def instrument_generated_java_test(
     """
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
-    class_match = re.search(r'^(?:public\s+)?class\s+(\w+)', test_code, re.MULTILINE)
+    class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
     if not class_match:
         logger.warning("Could not find class name in generated test")
         return test_code
@@ -668,8 +678,8 @@ def instrument_generated_java_test(
 
     # Rename the class in the source
     modified_code = re.sub(
-        rf'\b(public\s+)?class\s+{re.escape(original_class_name)}\b',
-        rf'\1class {new_class_name}',
+        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b",
+        rf"\1class {new_class_name}",
         test_code,
     )
 

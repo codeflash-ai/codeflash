@@ -1058,6 +1058,23 @@ def parse_test_xml(
                     groups = match.groups()
                     # Key is first 5 groups (module, class, func, loop, iter)
                     end_matches[groups[:5]] = match
+
+                # For Java: fallback to subprocess stdout when XML system-out has no timing markers
+                # This happens when using JUnit Console Launcher directly (bypassing Maven)
+                if not begin_matches and run_result is not None:
+                    try:
+                        fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
+                        begin_matches = list(start_pattern.finditer(fallback_stdout))
+                        if begin_matches:
+                            # Found timing markers in subprocess stdout, use it
+                            sys_stdout = fallback_stdout
+                            end_matches = {}
+                            for match in end_pattern.finditer(sys_stdout):
+                                groups = match.groups()
+                                end_matches[groups[:5]] = match
+                            logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
+                    except (AttributeError, UnicodeDecodeError):
+                        pass
             else:
                 begin_matches = list(matches_re_start.finditer(sys_stdout))
                 end_matches = {}

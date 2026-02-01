@@ -653,6 +653,7 @@ class LanguageSupport(Protocol):
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests for this language.
 
@@ -665,6 +666,7 @@ class LanguageSupport(Protocol):
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            inner_iterations: Number of inner loop iterations per test method (Java only).
 
         Returns:
             Tuple of (result_file_path, subprocess_result).

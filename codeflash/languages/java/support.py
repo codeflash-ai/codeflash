@@ -356,11 +356,12 @@ class JavaSupport(LanguageSupport):
         cwd: Path,
         timeout: int | None = None,
         project_root: Path | None = None,
-        min_loops: int = 5,
-        max_loops: int = 100_000,
+        min_loops: int = 1,
+        max_loops: int = 3,
         target_duration_seconds: float = 10.0,
+        inner_iterations: int = 100,
     ) -> tuple[Path, Any]:
-        """Run benchmarking tests for Java."""
+        """Run benchmarking tests for Java with inner loop for JIT warmup."""
         return run_benchmarking_tests(
             test_paths,
             test_env,
@@ -370,6 +371,7 @@ class JavaSupport(LanguageSupport):
             min_loops,
             max_loops,
             target_duration_seconds,
+            inner_iterations,
         )
 
 
