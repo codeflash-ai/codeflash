@@ -26,6 +26,7 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
+from rich.prompt import Confirm
 
 
 class ProjectLanguage(Enum):
@@ -208,9 +209,7 @@ def init_js_project(language: ProjectLanguage) -> None:
 
 def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
     """Check if package.json has valid codeflash config for JS/TS projects."""
-    from rich.prompt import Confirm
-
-    package_json_path = Path.cwd() / "package.json"
+    package_json_path = Path("package.json")
 
     if not package_json_path.exists():
         click.echo("❌ No package.json found. Please run 'npm init' first.")
