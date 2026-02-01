@@ -150,32 +150,11 @@ def _ensure_runtime_files(project_root: Path) -> None:
         project_root: The project root directory.
 
     """
-    # Check if package is already installed
     node_modules_pkg = project_root / "node_modules" / "codeflash"
     if node_modules_pkg.exists():
         logger.debug("codeflash already installed")
         return
 
-    # Try to install from local package first (for development)
-    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "codeflash"
-    if local_package_path.exists():
-        try:
-            result = subprocess.run(
-                ["npm", "install", "--save-dev", str(local_package_path)],
-                check=False,
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                logger.debug("Installed codeflash from local package")
-                return
-            logger.warning(f"Failed to install local package: {result.stderr}")
-        except Exception as e:
-            logger.warning(f"Error installing local package: {e}")
-
-    # Try to install from npm registry
     try:
         result = subprocess.run(
             ["npm", "install", "--save-dev", "codeflash"],

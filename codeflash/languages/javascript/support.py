@@ -19,7 +19,6 @@ from codeflash.languages.base import (
     HelperFunction,
     Language,
     ParentInfo,
-    ReferenceInfo,
     TestInfo,
     TestResult,
 )
@@ -29,6 +28,7 @@ from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterL
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.treesitter_utils import TypeDefinition
 
 logger = logging.getLogger(__name__)
@@ -966,11 +966,7 @@ class JavaScriptSupport:
             return []
 
     def find_references(
-        self,
-        function: FunctionInfo,
-        project_root: Path,
-        tests_root: Path | None = None,
-        max_files: int = 500,
+        self, function: FunctionInfo, project_root: Path, tests_root: Path | None = None, max_files: int = 500
     ) -> list[ReferenceInfo]:
         """Find all references (call sites) to a function across the codebase.
 
@@ -1835,51 +1831,98 @@ class JavaScriptSupport:
             rel_path = source_file.relative_to(project_root)
             return "../" + rel_path.with_suffix("").as_posix()
 
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+        """Verify that all JavaScript requirements are met.
+
+        Checks for:
+        1. Node.js installation
+        2. npm availability
+        3. Test framework (jest/vitest) installation
+        4. node_modules existence
+
+        Args:
+            project_root: The project root directory.
+            test_framework: The test framework to check for ("jest" or "vitest").
+
+        Returns:
+            Tuple of (success, list of error messages).
+
+        """
+        errors: list[str] = []
+
+        # Check Node.js
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except FileNotFoundError:
+            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except Exception as e:
+            errors.append(f"Failed to check Node.js: {e}")
+
+        # Check npm
+        try:
+            result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except FileNotFoundError:
+            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except Exception as e:
+            errors.append(f"Failed to check npm: {e}")
+
+        # Check node_modules exists
+        node_modules = project_root / "node_modules"
+        if not node_modules.exists():
+            errors.append(
+                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+            )
+        else:
+            # Check test framework is installed
+            framework_path = node_modules / test_framework
+            if not framework_path.exists():
+                errors.append(
+                    f"{test_framework} is not installed. "
+                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                )
+
+        return len(errors) == 0, errors
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
         Attempts to install the npm package for test instrumentation.
-        Falls back to copying files if npm install fails.
 
         Args:
             project_root: The project root directory.
 
         Returns:
-            True if npm package is installed, False if falling back to file copy.
+            True if npm package is installed, False otherwise.
 
         """
-        import subprocess
-
         from codeflash.cli_cmds.console import logger
 
-        # Check if package is already installed
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
             logger.debug("codeflash already installed")
             return True
 
-        # Try to install from local package first (for development)
-        local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "cli"
-        if local_package_path.exists():
-            try:
-                result = subprocess.run(
-                    ["npm", "install", "--save-dev", str(local_package_path)],
-                    check=False,
-                    cwd=project_root,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-                if result.returncode == 0:
-                    logger.debug("Installed codeflash from local package")
-                    return True
-                logger.warning(f"Failed to install local package: {result.stderr}")
-            except Exception as e:
-                logger.warning(f"Error installing local package: {e}")
+        try:
+            result = subprocess.run(
+                ["npm", "install", "--save-dev", "codeflash"],
+                check=False,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed codeflash from npm registry")
+                return True
+            logger.warning(f"Failed to install codeflash: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error installing codeflash: {e}")
 
-        # Could try npm registry here in the future:
-        # subprocess.run(["npm", "install", "--save-dev", "codeflash"], ...)
-
+        logger.error("Could not install codeflash. Please run: npm install --save-dev codeflash")
         return False
 
     def instrument_existing_test(
