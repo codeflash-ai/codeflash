@@ -238,7 +238,16 @@ class ReferenceFinder:
                 if (ref.file_path, ref.line, ref.column) not in existing_locs:
                     references.append(ref)
 
-        return references
+        # Step 6: Deduplicate references (same file, line, column)
+        seen: set[tuple[Path, int, int]] = set()
+        unique_refs: list[Reference] = []
+        for ref in references:
+            key = (ref.file_path, ref.line, ref.column)
+            if key not in seen:
+                seen.add(key)
+                unique_refs.append(ref)
+
+        return unique_refs
 
     def _analyze_exports(
         self, function_name: str, file_path: Path, source_code: str, analyzer: TreeSitterAnalyzer
