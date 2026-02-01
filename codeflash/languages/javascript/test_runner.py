@@ -47,6 +47,73 @@ def _find_node_project_root(file_path: Path) -> Path | None:
     return None
 
 
+def _find_jest_config(project_root: Path) -> Path | None:
+    """Find Jest configuration file in the project.
+
+    Searches for common Jest config file names in the project root and parent
+    directories (for monorepo support). This is important for TypeScript projects
+    that require specific transformation configurations (e.g., next/jest, ts-jest, babel-jest).
+
+    Args:
+        project_root: Root of the project to search.
+
+    Returns:
+        Path to Jest config file, or None if not found.
+
+    """
+    # Common Jest config file names, in order of preference
+    config_names = [
+        "jest.config.ts",
+        "jest.config.js",
+        "jest.config.mjs",
+        "jest.config.cjs",
+        "jest.config.json",
+    ]
+
+    # First check the project root itself
+    for config_name in config_names:
+        config_path = project_root / config_name
+        if config_path.exists():
+            logger.debug(f"Found Jest config: {config_path}")
+            return config_path
+
+    # For monorepos, search parent directories up to the filesystem root
+    # Stop at common monorepo root indicators (git root, package.json with workspaces)
+    current = project_root.parent
+    max_depth = 5  # Don't search too far up
+    depth = 0
+
+    while current != current.parent and depth < max_depth:
+        for config_name in config_names:
+            config_path = current / config_name
+            if config_path.exists():
+                logger.debug(f"Found Jest config in parent directory: {config_path}")
+                return config_path
+
+        # Check if this looks like a monorepo root
+        package_json = current / "package.json"
+        if package_json.exists():
+            try:
+                import json
+
+                with package_json.open("r") as f:
+                    pkg = json.load(f)
+                    if "workspaces" in pkg:
+                        # This is likely the monorepo root, stop here
+                        break
+            except Exception:
+                pass
+
+        # Check for git root as another stopping point
+        if (current / ".git").exists():
+            break
+
+        current = current.parent
+        depth += 1
+
+    return None
+
+
 def _is_esm_project(project_root: Path) -> bool:
     """Check if the project uses ES Modules.
 
@@ -229,6 +296,11 @@ def run_jest_behavioral_tests(
         "--runInBand",  # Run tests serially for consistent timing
         "--forceExit",
     ]
+
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
 
     # Add coverage flags if enabled
     if enable_coverage:
@@ -459,6 +531,11 @@ def run_jest_benchmarking_tests(
         "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
 
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
+
     if test_files:
         jest_cmd.append("--runTestsByPath")
         resolved_test_files = [str(Path(f).resolve()) for f in test_files]
@@ -592,6 +669,11 @@ def run_jest_line_profile_tests(
         "--runInBand",  # Run tests serially for consistent line profiling
         "--forceExit",
     ]
+
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
 
     if test_files:
         jest_cmd.append("--runTestsByPath")
