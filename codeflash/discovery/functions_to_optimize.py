@@ -864,13 +864,53 @@ def filter_functions(
     # Normalize paths for case-insensitive comparison on Windows
     tests_root_str = os.path.normcase(str(tests_root))
     module_root_str = os.path.normcase(str(module_root))
+    project_root_str = os.path.normcase(str(project_root))
+
+    # Check if tests_root overlaps with module_root or project_root
+    # In this case, we need to use file pattern matching instead of directory matching
+    tests_root_overlaps_source = (
+        tests_root_str == module_root_str
+        or tests_root_str == project_root_str
+        or module_root_str.startswith(tests_root_str + os.sep)
+    )
+
+    # Test file patterns for when tests_root overlaps with source
+    test_file_name_patterns = (
+        ".test.",
+        ".spec.",
+        "_test.",
+        "_spec.",
+    )
+    test_dir_patterns = (
+        os.sep + "test" + os.sep,
+        os.sep + "tests" + os.sep,
+        os.sep + "__tests__" + os.sep,
+    )
+
+    def is_test_file(file_path_normalized: str) -> bool:
+        """Check if a file is a test file based on patterns."""
+        if tests_root_overlaps_source:
+            # Use file pattern matching when tests_root overlaps with source
+            file_lower = file_path_normalized.lower()
+            # Check filename patterns (e.g., .test.ts, .spec.ts)
+            if any(pattern in file_lower for pattern in test_file_name_patterns):
+                return True
+            # Check directory patterns, but only within the project root
+            # to avoid false positives from parent directories
+            relative_path = file_lower
+            if project_root_str and file_lower.startswith(project_root_str.lower()):
+                relative_path = file_lower[len(project_root_str):]
+            return any(pattern in relative_path for pattern in test_dir_patterns)
+        else:
+            # Use directory-based filtering when tests are in a separate directory
+            return file_path_normalized.startswith(tests_root_str + os.sep)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         file_path = str(file_path_path)
         file_path_normalized = os.path.normcase(file_path)
-        if file_path_normalized.startswith(tests_root_str + os.sep):
+        if is_test_file(file_path_normalized):
             test_functions_removed_count += len(_functions)
             continue
         if file_path in ignore_paths or any(
