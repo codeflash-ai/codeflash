@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
+import contextlib
+
 from rich.text import Text
 
 _property_id = "property"
@@ -804,11 +806,9 @@ def was_function_previously_optimized(
     # already_optimized_count = 0
     owner = None
     repo = None
-    try:
+    with contextlib.suppress(git.exc.InvalidGitRepositoryError):
         owner, repo = get_repo_owner_and_name()
-    except git.exc.InvalidGitRepositoryError:
-        pass
-    
+
     pr_number = get_pr_number()
 
     if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
@@ -824,14 +824,13 @@ def was_function_previously_optimized(
         }
     ]
 
-
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
         already_optimized_paths: list[tuple[str, str]] = result.get("already_optimized_tuples", [])
         return len(already_optimized_paths) > 0
 
-    except Exception:
-        # Return all functions if API call fails
+    except Exception as e:
+        logger.warning(f"Failed to check optimization status: {e}")
         # Return all functions if API call fails
         return False
 
