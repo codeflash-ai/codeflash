@@ -294,10 +294,9 @@ def get_code_optimization_context_for_language(
         helper_code = "\n\n".join(h.source_code for h in same_file_helpers)
         target_file_code = target_file_code + "\n\n" + helper_code
 
-    # Add global variables (module-level declarations) referenced by the function and helpers
-    # These should be included in read-writable context so AI can modify them if needed
-    if code_context.read_only_context:
-        target_file_code = code_context.read_only_context + "\n\n" + target_file_code
+    # Note: code_context.read_only_context contains type definitions and global variables
+    # These should be passed as read-only context to the AI, not prepended to the target code
+    # If prepended to target code, the AI treats them as code to optimize and includes them in output
 
     # Add imports to target file code
     if imports_code:
@@ -350,8 +349,9 @@ def get_code_optimization_context_for_language(
     return CodeOptimizationContext(
         testgen_context=testgen_context,
         read_writable_code=read_writable_code,
-        # Global variables are now included in read-writable code, so don't duplicate in read-only
-        read_only_context_code="",
+        # Pass type definitions and globals as read-only context for the AI
+        # This way the AI sees them as context but doesn't include them in optimized output
+        read_only_context_code=code_context.read_only_context,
         hashing_code_context=read_writable_code.flat,
         hashing_code_context_hash=code_hash,
         helper_functions=helper_function_sources,
