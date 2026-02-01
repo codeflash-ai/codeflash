@@ -216,8 +216,8 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
         apologize_and_exit()
 
     try:
-        with package_json_path.open(encoding="utf8") as f:
-            package_data = json.load(f)
+        package_data = json.loads(package_json_path.read_bytes())
+
 
         config = package_data.get("codeflash", {})
 
