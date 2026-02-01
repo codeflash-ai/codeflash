@@ -54,6 +54,11 @@ class JavaScriptSupport:
         return (".js", ".jsx", ".mjs", ".cjs")
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for JavaScript."""
+        return ".js"
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework for JavaScript."""
         return "jest"
