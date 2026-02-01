@@ -472,7 +472,8 @@ def validate_relative_directory_path(path: str) -> tuple[bool, str]:
 
     # Check for absolute paths, invalid characters, and validate path format
     error_msg = ""
-    if Path(path).is_absolute():
+    # Use os.path.isabs() which is faster than Path().is_absolute()
+    if os.path.isabs(path):
         error_msg = "Path must be relative, not absolute"
     elif os.name == "nt":  # Windows
         if any(char in _INVALID_CHARS_NT for char in path):
