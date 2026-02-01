@@ -101,6 +101,7 @@ class ReferenceFinder:
         source_file: Path,
         include_definition: bool = False,
         max_files: int = 1000,
+        class_name: str | None = None,
     ) -> list[Reference]:
         """Find all references to a function across the project.
 
@@ -109,6 +110,7 @@ class ReferenceFinder:
             source_file: Path to the file where the function is defined.
             include_definition: Whether to include the function definition itself.
             max_files: Maximum number of files to search (prevents runaway searches).
+            class_name: For class methods, the name of the containing class.
 
         Returns:
             List of Reference objects describing each call site.
@@ -126,7 +128,7 @@ class ReferenceFinder:
             return references
 
         analyzer = get_analyzer_for_file(source_file)
-        exported = self._analyze_exports(function_name, source_file, source_code, analyzer)
+        exported = self._analyze_exports(function_name, source_file, source_code, analyzer, class_name)
 
         if not exported:
             logger.debug("Function %s is not exported from %s", function_name, source_file)
@@ -250,21 +252,29 @@ class ReferenceFinder:
         return unique_refs
 
     def _analyze_exports(
-        self, function_name: str, file_path: Path, source_code: str, analyzer: TreeSitterAnalyzer
+        self,
+        function_name: str,
+        file_path: Path,
+        source_code: str,
+        analyzer: TreeSitterAnalyzer,
+        class_name: str | None = None,
     ) -> ExportedFunction | None:
         """Analyze how a function is exported from its file.
+
+        For class methods, also checks if the containing class is exported.
 
         Args:
             function_name: Name of the function to check.
             file_path: Path to the source file.
             source_code: Source code content.
             analyzer: TreeSitterAnalyzer instance.
+            class_name: For class methods, the name of the containing class.
 
         Returns:
             ExportedFunction if the function is exported, None otherwise.
 
         """
-        is_exported, export_name = analyzer.is_function_exported(source_code, function_name)
+        is_exported, export_name = analyzer.is_function_exported(source_code, function_name, class_name)
 
         if not is_exported:
             return None
@@ -825,6 +835,7 @@ def find_references(
     source_file: Path,
     project_root: Path | None = None,
     max_files: int = 1000,
+    class_name: str | None = None,
 ) -> list[Reference]:
     """Convenience function to find all references to a function.
 
@@ -835,6 +846,7 @@ def find_references(
         source_file: Path to the file where the function is defined.
         project_root: Root directory of the project. If None, uses source_file's parent.
         max_files: Maximum number of files to search.
+        class_name: For class methods, the name of the containing class.
 
     Returns:
         List of Reference objects describing each call site.
@@ -858,4 +870,4 @@ def find_references(
         project_root = source_file.parent
 
     finder = ReferenceFinder(project_root)
-    return finder.find_references(function_name, source_file, max_files=max_files)
+    return finder.find_references(function_name, source_file, max_files=max_files, class_name=class_name)

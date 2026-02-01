@@ -841,20 +841,27 @@ class TreeSitterAnalyzer:
             end_line=node.end_point[0] + 1,
         )
 
-    def is_function_exported(self, source: str, function_name: str) -> tuple[bool, str | None]:
+    def is_function_exported(
+        self, source: str, function_name: str, class_name: str | None = None
+    ) -> tuple[bool, str | None]:
         """Check if a function is exported and get its export name.
+
+        For class methods, also checks if the containing class is exported.
 
         Args:
             source: The source code to analyze.
             function_name: The name of the function to check.
+            class_name: For class methods, the name of the containing class.
 
         Returns:
             Tuple of (is_exported, export_name). export_name may differ from
-            function_name if exported with an alias.
+            function_name if exported with an alias. For class methods,
+            returns the class export name.
 
         """
         exports = self.find_exports(source)
 
+        # First, check if the function itself is directly exported
         for export in exports:
             # Check default export
             if export.default_export == function_name:
@@ -864,6 +871,18 @@ class TreeSitterAnalyzer:
             for name, alias in export.exported_names:
                 if name == function_name:
                     return (True, alias if alias else name)
+
+        # For class methods, check if the containing class is exported
+        if class_name:
+            for export in exports:
+                # Check if class is default export
+                if export.default_export == class_name:
+                    return (True, class_name)
+
+                # Check if class is in named exports
+                for name, alias in export.exported_names:
+                    if name == class_name:
+                        return (True, alias if alias else name)
 
         return (False, None)
 
