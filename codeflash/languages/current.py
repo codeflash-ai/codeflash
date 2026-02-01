@@ -33,6 +33,8 @@ from codeflash.languages.base import Language
 if TYPE_CHECKING:
     from codeflash.languages.base import LanguageSupport
 
+_JAVA = Language.JAVA
+
 # Module-level singleton for the current language
 _current_language: Language | None = None
 
@@ -113,7 +115,7 @@ def is_java() -> bool:
         True if the current language is Java.
 
     """
-    return _current_language == Language.JAVA
+    return _current_language == _JAVA
 
 
 def current_language_support() -> LanguageSupport:
