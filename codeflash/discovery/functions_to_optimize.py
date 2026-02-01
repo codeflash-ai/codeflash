@@ -875,17 +875,8 @@ def filter_functions(
     )
 
     # Test file patterns for when tests_root overlaps with source
-    test_file_name_patterns = (
-        ".test.",
-        ".spec.",
-        "_test.",
-        "_spec.",
-    )
-    test_dir_patterns = (
-        os.sep + "test" + os.sep,
-        os.sep + "tests" + os.sep,
-        os.sep + "__tests__" + os.sep,
-    )
+    test_file_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
 
     def is_test_file(file_path_normalized: str) -> bool:
         """Check if a file is a test file based on patterns."""
@@ -899,11 +890,10 @@ def filter_functions(
             # to avoid false positives from parent directories
             relative_path = file_lower
             if project_root_str and file_lower.startswith(project_root_str.lower()):
-                relative_path = file_lower[len(project_root_str):]
+                relative_path = file_lower[len(project_root_str) :]
             return any(pattern in relative_path for pattern in test_dir_patterns)
-        else:
-            # Use directory-based filtering when tests are in a separate directory
-            return file_path_normalized.startswith(tests_root_str + os.sep)
+        # Use directory-based filtering when tests are in a separate directory
+        return file_path_normalized.startswith(tests_root_str + os.sep)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
