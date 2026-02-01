@@ -706,6 +706,8 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
             return False
 
         # JaCoCo plugin XML to insert (indented for typical pom.xml format)
+        # Note: For multi-module projects where tests are in a separate module,
+        # we configure the report to look in multiple directories for classes
         jacoco_plugin = """
       <plugin>
         <groupId>org.jacoco</groupId>
@@ -724,6 +726,12 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
             <goals>
               <goal>report</goal>
             </goals>
+            <configuration>
+              <!-- For multi-module projects, include dependency classes -->
+              <includes>
+                <include>**/*.class</include>
+              </includes>
+            </configuration>
           </execution>
         </executions>
       </plugin>""".format(version=JACOCO_PLUGIN_VERSION)
