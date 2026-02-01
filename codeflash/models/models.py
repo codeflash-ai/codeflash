@@ -364,6 +364,15 @@ class CodeStringsMarkdown(BaseModel):
             # if any file is invalid, return an empty CodeStringsMarkdown for the entire context
             return CodeStringsMarkdown(language=expected_language)
 
+    @model_validator(mode="after")
+    def _build_file_to_path_cache(self) -> CodeStringsMarkdown:
+        # Precompute and cache the mapping once during model creation to avoid
+        # repeated expensive str(Path) conversions later when file_to_path() is called
+        self._cache["file_to_path"] = {
+            str(code_string.file_path): code_string.code for code_string in self.code_strings
+        }
+        return self
+
 
 class CodeOptimizationContext(BaseModel):
     testgen_context: CodeStringsMarkdown
