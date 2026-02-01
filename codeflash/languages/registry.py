@@ -189,9 +189,12 @@ def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) ->
     # Try as extension first
     ext = None
 
-    if any(cmd in ("black", "isort", "ruff") for cmd in formatter_cmd):
+    py_formatters = ["black", "isort", "ruff", "autopep8", "yapf", "pyfmt"]
+    js_ts_formatters = ["prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"]
+
+    if any(cmd in py_formatters for cmd in formatter_cmd):
         ext = ".py"
-    elif any(cmd in ("prettier", "stylelint", "eslint") for cmd in formatter_cmd):
+    elif any(cmd in js_ts_formatters for cmd in formatter_cmd):
         ext = ".js"
 
     if ext is None:
