@@ -660,6 +660,19 @@ def _add_global_declarations_for_language(
         # Get names of existing declarations
         existing_names = {decl.name for decl in original_declarations}
 
+        # Also exclude names that are already imported (to avoid duplicating imported types)
+        original_imports = analyzer.find_imports(original_source)
+        for imp in original_imports:
+            # Add default import name
+            if imp.default_import:
+                existing_names.add(imp.default_import)
+            # Add named imports (use alias if present, otherwise use original name)
+            for name, alias in imp.named_imports:
+                existing_names.add(alias if alias else name)
+            # Add namespace import
+            if imp.namespace_import:
+                existing_names.add(imp.namespace_import)
+
         # Find new declarations (names that don't exist in original)
         new_declarations = []
         seen_sources = set()  # Track to avoid duplicates from destructuring
@@ -725,7 +738,8 @@ def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitter
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
     file_to_code_context = optimized_code.file_to_path()
-    module_optimized_code = file_to_code_context.get(str(relative_path))
+    relative_path_str = str(relative_path)
+    module_optimized_code = file_to_code_context.get(relative_path_str)
     if module_optimized_code is None:
         # Fallback: if there's only one code block with None file path,
         # use it regardless of the expected path (the AI server doesn't always include file paths)
@@ -738,10 +752,13 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             # the full path like "src/main/java/com/example/Algorithms.java")
             target_filename = relative_path.name
             for file_path_str, code in file_to_code_context.items():
-                if file_path_str and Path(file_path_str).name == target_filename:
-                    module_optimized_code = code
-                    logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
-                    break
+                if file_path_str:
+                    # Extract filename without creating Path object repeatedly
+                    if file_path_str.endswith(target_filename) and (len(file_path_str) == len(target_filename) or file_path_str[-len(target_filename)-1] in ('/', '\\')):
+                        module_optimized_code = code
+                        logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
+                        break
+
 
             if module_optimized_code is None:
                 # Also try matching if there's only one code file
@@ -750,11 +767,13 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
                     module_optimized_code = file_to_code_context[only_key]
                     logger.debug(f"Using only code block {only_key} for {relative_path}")
                 else:
-                    logger.warning(
-                        f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                        "re-check your 'markdown code structure'"
-                        f"existing files are {file_to_code_context.keys()}"
-                    )
+                    # Delay expensive string formatting until actually logging
+                    if logger.isEnabledFor(logger.level):
+                        logger.warning(
+                            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                            "re-check your 'markdown code structure'"
+                            f"existing files are {file_to_code_context.keys()}"
+                        )
                     module_optimized_code = ""
     return module_optimized_code
 
