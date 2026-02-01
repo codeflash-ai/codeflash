@@ -230,6 +230,10 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
         if not Path(module_root).is_dir():
             return True, None
 
+        tests_root = config.get("testsRoot", None)
+        if tests_root and not Path(tests_root).is_dir():
+            return True, None
+
         # Config is valid - ask if user wants to reconfigure
         return Confirm.ask(
             "✅ A valid Codeflash config already exists in package.json. Do you want to re-configure it?",
