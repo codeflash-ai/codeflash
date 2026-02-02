@@ -474,6 +474,13 @@ class TestCommonJSExports:
 
         return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
 
+    @pytest.fixture
+    def ts_analyzer(self):
+        """Create a TypeScript analyzer."""
+        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage
+
+        return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+
     def test_module_exports_function(self, js_analyzer):
         """Test module.exports = function() {}."""
         code = "module.exports = function helper() { return 1; };"
@@ -583,6 +590,51 @@ exports.helper = helper;
 
         assert is_exported is True
         assert export_name == "helper"
+
+    def test_is_class_method_exported_via_class(self, ts_analyzer):
+        """Test is_function_exported returns True for method of exported class."""
+        code = """
+export class BloomFilter {
+    getHashValues(key: string): number[] {
+        return [1, 2, 3];
+    }
+}
+"""
+        # Method itself is not directly exported
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "getHashValues")
+        assert is_exported is False
+        assert export_name is None
+
+        # But when we pass the class name, it should find the class export
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "getHashValues", "BloomFilter")
+        assert is_exported is True
+        assert export_name == "BloomFilter"
+
+    def test_is_class_method_exported_default_class(self, ts_analyzer):
+        """Test is_function_exported returns True for method of default exported class."""
+        code = """
+export default class Calculator {
+    add(a: number, b: number): number {
+        return a + b;
+    }
+}
+"""
+        # When we pass the class name, it should find the default export
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "add", "Calculator")
+        assert is_exported is True
+        assert export_name == "Calculator"
+
+    def test_is_class_method_not_exported_non_exported_class(self, ts_analyzer):
+        """Test is_function_exported returns False for method of non-exported class."""
+        code = """
+class InternalClass {
+    helper(): void {}
+}
+"""
+        # Even with class name, non-exported class method should not be exported
+        is_exported, export_name = ts_analyzer.is_function_exported(code, "helper", "InternalClass")
+        assert is_exported is False
+        assert export_name is None
 
 
 class TestCommonJSImportResolver:
