@@ -149,7 +149,61 @@ def _match_test_to_functions(
                 if func_info.qualified_name not in matched:
                     matched.append(func_info.qualified_name)
 
+    # Strategy 4: Import-based matching
+    # If the test file imports a class containing the target function, consider it a match
+    # This handles cases like TestQueryBlob importing Buffer and calling Buffer methods
+    imported_classes = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+    for func_name, func_info in function_map.items():
+        if func_info.qualified_name in matched:
+            continue
+
+        # Check if the function's class is imported
+        if func_info.class_name and func_info.class_name in imported_classes:
+            matched.append(func_info.qualified_name)
+
     return matched
+
+
+def _extract_imports(
+    node,
+    source_bytes: bytes,
+    analyzer: JavaAnalyzer,
+) -> set[str]:
+    """Extract imported class names from a Java file.
+
+    Args:
+        node: Tree-sitter root node.
+        source_bytes: Source code as bytes.
+        analyzer: JavaAnalyzer instance.
+
+    Returns:
+        Set of imported class names (simple names, not fully qualified).
+
+    """
+    imports: set[str] = set()
+
+    def visit(n):
+        if n.type == "import_declaration":
+            # Get the full import path
+            for child in n.children:
+                if child.type == "scoped_identifier" or child.type == "identifier":
+                    import_path = analyzer.get_node_text(child, source_bytes)
+                    # Extract just the class name (last part)
+                    # e.g., "com.example.Buffer" -> "Buffer"
+                    if "." in import_path:
+                        class_name = import_path.rsplit(".", 1)[-1]
+                    else:
+                        class_name = import_path
+                    # Skip wildcard imports (*)
+                    if class_name != "*":
+                        imports.add(class_name)
+
+        for child in n.children:
+            visit(child)
+
+    visit(node)
+    return imports
 
 
 def _find_method_calls_in_range(
