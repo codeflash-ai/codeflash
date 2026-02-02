@@ -79,7 +79,10 @@ def generate_tests(
             generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
+            # Skip conversion if ts-jest is installed (handles interop natively)
+            generated_test_source = ensure_module_system_compatibility(
+                generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+            )
 
             # Instrument for behavior verification (writes to SQLite)
             instrumented_behavior_test_source = instrument_generated_js_test(
