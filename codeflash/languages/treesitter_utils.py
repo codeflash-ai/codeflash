@@ -7,6 +7,7 @@ across multiple languages using tree-sitter.
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -139,6 +140,11 @@ class TreeSitterAnalyzer:
             language = TreeSitterLanguage(language)
         self.language = language
         self._parser: Parser | None = None
+
+        # LRU-style cache for find_exports: maps source -> list[ExportInfo]
+        # Bounded to avoid unbounded memory growth.
+        self._exports_cache: OrderedDict[str, list[ExportInfo]] = OrderedDict()
+        self._EXPORTS_CACHE_SIZE = 32
 
     @property
     def parser(self) -> Parser:
@@ -647,11 +653,25 @@ class TreeSitterAnalyzer:
             List of ExportInfo objects describing exports.
 
         """
+        # Return cached result if available (shallow copy to preserve original behavior)
+        cached = self._exports_cache.get(source)
+        if cached is not None:
+            return cached.copy()
+
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
         exports: list[ExportInfo] = []
 
         self._walk_tree_for_exports(tree.root_node, source_bytes, exports)
+
+
+        # Cache the result (store the list itself, return copies on access)
+        # Maintain LRU order
+        self._exports_cache[source] = exports
+        self._exports_cache.move_to_end(source)
+        if len(self._exports_cache) > self._EXPORTS_CACHE_SIZE:
+            # pop the oldest item
+            self._exports_cache.popitem(last=False)
 
         return exports
 
