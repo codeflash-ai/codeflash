@@ -322,8 +322,10 @@ def replace_function(
         # Filter fields
         new_fields_to_add = []
         for field_src in parsed.new_fields:
-            # Parse field to get its name
-            field_infos = analyzer.find_fields(field_src)
+            # Parse field to get its name by wrapping in a dummy class
+            # (find_fields requires class context to parse field declarations)
+            dummy_class = f"class __DummyClass__ {{\n{field_src}\n}}"
+            field_infos = analyzer.find_fields(dummy_class)
             for field_info in field_infos:
                 if field_info.name not in existing_fields:
                     new_fields_to_add.append(field_src)

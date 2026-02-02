@@ -535,15 +535,21 @@ def replace_function_definitions_for_language(
             is_async=function_to_optimize.is_async,
             language=language,
         )
-        # Extract just the target function from the optimized code
-        optimized_func = _extract_function_from_code(
-            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
-        )
-        if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
-        else:
-            # Fallback: use the entire optimized code (for simple single-function files)
+        # For Java, we need to pass the full optimized code so replace_function can
+        # extract and add any new class members (static fields, helper methods).
+        # For other languages, we extract just the target function.
+        if language == Language.JAVA:
             new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
+        else:
+            # Extract just the target function from the optimized code
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+            )
+            if optimized_func:
+                new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
+            else:
+                # Fallback: use the entire optimized code (for simple single-function files)
+                new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
     else:
         # For helper files or when we don't have precise line info:
         # Find each function by name in both original and optimized code
@@ -568,11 +574,17 @@ def replace_function_definitions_for_language(
             if func is None:
                 continue
 
-            # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
-            if optimized_func:
-                new_code = lang_support.replace_function(new_code, func, optimized_func)
+            # For Java, pass the full optimized code to handle class member insertion.
+            # For other languages, extract just the target function.
+            if language == Language.JAVA:
+                new_code = lang_support.replace_function(new_code, func, code_to_apply)
                 modified = True
+            else:
+                # Extract just this function from the optimized code
+                optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
+                if optimized_func:
+                    new_code = lang_support.replace_function(new_code, func, optimized_func)
+                    modified = True
 
         if not modified:
             logger.warning(f"Could not find function {function_names} in {module_abspath}")
@@ -737,8 +749,9 @@ def _add_global_declarations_for_language(
     For JavaScript/TypeScript: Finds module-level declarations (const, let, var, class, type, interface, enum)
     in the optimized code that don't exist in the original source and adds them.
 
-    For Java: Finds new static fields and helper methods in the optimized code that don't exist
-    in the original source and adds them to the appropriate class.
+    For Java: Class members are NOT added here because replace_function() in
+    replacement.py handles them. Adding them here would shift line numbers and
+    break method matching for overloaded methods.
 
     Args:
         optimized_code: The optimized code that may contain new declarations.
@@ -753,9 +766,10 @@ def _add_global_declarations_for_language(
     """
     from codeflash.languages.base import Language
 
-    # Handle Java class-level members
+    # Java class members are handled by replace_function() in replacement.py
+    # Adding them here would shift line numbers and break overload matching
     if language == Language.JAVA:
-        return _add_java_class_members(optimized_code, original_source, target_function_names)
+        return original_source
 
     # Only process JavaScript/TypeScript for module-level declarations
     if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):

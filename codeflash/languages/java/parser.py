@@ -329,20 +329,21 @@ class JavaAnalyzer:
     def _walk_tree_for_classes(
         self, node: Node, source_bytes: bytes, classes: list[JavaClassNode], is_inner: bool
     ) -> None:
-        """Recursively walk the tree to find class definitions."""
-        if node.type == "class_declaration":
+        """Recursively walk the tree to find class, interface, and enum definitions."""
+        # Handle class_declaration, interface_declaration, and enum_declaration
+        if node.type in ("class_declaration", "interface_declaration", "enum_declaration"):
             class_info = self._extract_class_info(node, source_bytes, is_inner)
             if class_info:
                 classes.append(class_info)
 
-            # Look for inner classes
+            # Look for inner classes/interfaces
             body_node = node.child_by_field_name("body")
             if body_node:
                 for child in body_node.children:
                     self._walk_tree_for_classes(child, source_bytes, classes, is_inner=True)
             return
 
-        # Continue walking for top-level classes
+        # Continue walking for top-level classes/interfaces
         for child in node.children:
             self._walk_tree_for_classes(child, source_bytes, classes, is_inner)
 
