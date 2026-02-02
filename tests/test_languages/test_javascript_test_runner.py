@@ -412,3 +412,126 @@ class TestVitestTimeoutConfiguration:
 
                 # Default should be at least 120 seconds (or 600 from the default)
                 assert subprocess_timeout >= 120, f"Expected subprocess timeout >= 120s, got {subprocess_timeout}s"
+
+
+class TestVitestInternalLoopingConfiguration:
+    """Tests for Vitest internal looping (no external loop-runner)."""
+
+    def test_vitest_benchmarking_does_not_set_current_batch_env(self):
+        """Test that Vitest runner does NOT set CODEFLASH_PERF_CURRENT_BATCH.
+
+        This is critical: when CODEFLASH_PERF_CURRENT_BATCH is not set,
+        capturePerf() in the npm package will do all loops internally
+        (PERF_LOOP_COUNT iterations) instead of just PERF_BATCH_SIZE.
+        """
+        from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+
+            (tmpdir_path / "package.json").write_text('{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}')
+
+            test_file = test_dir / "test_func.test.ts"
+            test_file.write_text("// perf test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 0
+                mock_run.return_value = mock_result
+
+                run_vitest_benchmarking_tests(
+                    test_paths=mock_test_files,
+                    test_env={},
+                    cwd=tmpdir_path,
+                    project_root=tmpdir_path,
+                    max_loops=100,
+                    min_loops=5,
+                )
+
+                assert mock_run.called
+                call_kwargs = mock_run.call_args[1]
+                env = call_kwargs.get("env", {})
+
+                # CODEFLASH_PERF_CURRENT_BATCH should NOT be set
+                # This allows capturePerf() to do all loops internally
+                assert "CODEFLASH_PERF_CURRENT_BATCH" not in env, (
+                    "CODEFLASH_PERF_CURRENT_BATCH should not be set for Vitest - "
+                    "internal looping relies on this being undefined"
+                )
+
+                # But CODEFLASH_PERF_LOOP_COUNT should be set
+                assert "CODEFLASH_PERF_LOOP_COUNT" in env, "CODEFLASH_PERF_LOOP_COUNT should be set"
+                assert env["CODEFLASH_PERF_LOOP_COUNT"] == "100"
+
+    def test_vitest_benchmarking_sets_loop_configuration_env_vars(self):
+        """Test that Vitest benchmarking sets correct loop configuration environment variables."""
+        from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+
+            (tmpdir_path / "package.json").write_text('{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}')
+
+            test_file = test_dir / "test_func.test.ts"
+            test_file.write_text("// perf test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 0
+                mock_run.return_value = mock_result
+
+                run_vitest_benchmarking_tests(
+                    test_paths=mock_test_files,
+                    test_env={},
+                    cwd=tmpdir_path,
+                    project_root=tmpdir_path,
+                    max_loops=50,
+                    min_loops=10,
+                    target_duration_ms=5000,
+                    stability_check=True,
+                )
+
+                assert mock_run.called
+                call_kwargs = mock_run.call_args[1]
+                env = call_kwargs.get("env", {})
+
+                # Verify all loop configuration env vars are set correctly
+                assert env.get("CODEFLASH_PERF_LOOP_COUNT") == "50"
+                assert env.get("CODEFLASH_PERF_MIN_LOOPS") == "10"
+                assert env.get("CODEFLASH_PERF_TARGET_DURATION_MS") == "5000"
+                assert env.get("CODEFLASH_PERF_STABILITY_CHECK") == "true"
+                assert env.get("CODEFLASH_MODE") == "performance"
