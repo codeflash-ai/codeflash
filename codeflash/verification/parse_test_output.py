@@ -968,6 +968,26 @@ def parse_test_xml(
         return test_results
     # Always use tests_project_rootdir since pytest is now the test runner for all frameworks
     base_dir = test_config.tests_project_rootdir
+
+    # For Java: pre-parse fallback stdout once (not per testcase) to avoid O(n²) complexity
+    java_fallback_stdout = None
+    java_fallback_begin_matches = None
+    java_fallback_end_matches = None
+    if is_java() and run_result is not None:
+        try:
+            fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
+            begin_matches = list(start_pattern.finditer(fallback_stdout))
+            if begin_matches:
+                java_fallback_stdout = fallback_stdout
+                java_fallback_begin_matches = begin_matches
+                java_fallback_end_matches = {}
+                for match in end_pattern.finditer(fallback_stdout):
+                    groups = match.groups()
+                    java_fallback_end_matches[groups[:5]] = match
+                logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
+        except (AttributeError, UnicodeDecodeError):
+            pass
+
     for suite in xml:
         for testcase in suite:
             class_name = testcase.classname
@@ -1061,22 +1081,12 @@ def parse_test_xml(
                     # Key is first 5 groups (module, class, func, loop, iter)
                     end_matches[groups[:5]] = match
 
-                # For Java: fallback to subprocess stdout when XML system-out has no timing markers
+                # For Java: fallback to pre-parsed subprocess stdout when XML system-out has no timing markers
                 # This happens when using JUnit Console Launcher directly (bypassing Maven)
-                if not begin_matches and run_result is not None:
-                    try:
-                        fallback_stdout = run_result.stdout if isinstance(run_result.stdout, str) else run_result.stdout.decode()
-                        begin_matches = list(start_pattern.finditer(fallback_stdout))
-                        if begin_matches:
-                            # Found timing markers in subprocess stdout, use it
-                            sys_stdout = fallback_stdout
-                            end_matches = {}
-                            for match in end_pattern.finditer(sys_stdout):
-                                groups = match.groups()
-                                end_matches[groups[:5]] = match
-                            logger.debug(f"Java: Found {len(begin_matches)} timing markers in subprocess stdout (fallback)")
-                    except (AttributeError, UnicodeDecodeError):
-                        pass
+                if not begin_matches and java_fallback_begin_matches is not None:
+                    sys_stdout = java_fallback_stdout
+                    begin_matches = java_fallback_begin_matches
+                    end_matches = java_fallback_end_matches
             else:
                 begin_matches = list(matches_re_start.finditer(sys_stdout))
                 end_matches = {}
@@ -1095,7 +1105,7 @@ def parse_test_xml(
                         # JUnit XML time is in seconds, convert to nanoseconds
                         # Use a minimum of 1000ns (1 microsecond) for any successful test
                         # to avoid 0 runtime being treated as "no runtime"
-                        test_time = float(testcase.time) if hasattr(testcase, 'time') and testcase.time else 0.0
+                        test_time = float(testcase.time) if hasattr(testcase, "time") and testcase.time else 0.0
                         runtime_from_xml = max(int(test_time * 1_000_000_000), 1000)
                     except (ValueError, TypeError):
                         # If we can't get time from XML, use 1 microsecond as minimum
