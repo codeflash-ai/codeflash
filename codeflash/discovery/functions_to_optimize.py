@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from libcst import CSTNode
     from libcst.metadata import CodeRange
 
+    from codeflash.languages.base import FunctionInfo
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 import contextlib
@@ -165,6 +166,14 @@ class FunctionToOptimize:
     def top_level_parent_name(self) -> str:
         return self.function_name if not self.parents else self.parents[0].name
 
+    @property
+    def class_name(self) -> str | None:
+        """Get the immediate parent class name, if any."""
+        for parent in reversed(self.parents):
+            if parent.type == "ClassDef":
+                return parent.name
+        return None
+
     def __str__(self) -> str:
         return (
             f"{self.file_path}:{'.'.join([p.name for p in self.parents])}"
@@ -181,6 +190,26 @@ class FunctionToOptimize:
 
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
+
+    @classmethod
+    def from_function_info(cls, func_info: FunctionInfo) -> FunctionToOptimize:
+        """Create a FunctionToOptimize from a FunctionInfo instance.
+
+        This enables interoperability between the language-agnostic FunctionInfo
+        and the FunctionToOptimize dataclass used throughout the codebase.
+        """
+        parents = [FunctionParent(name=p.name, type=p.type) for p in func_info.parents]
+        return cls(
+            function_name=func_info.name,
+            file_path=func_info.file_path,
+            parents=parents,
+            starting_line=func_info.start_line,
+            ending_line=func_info.end_line,
+            starting_col=func_info.start_col,
+            ending_col=func_info.end_col,
+            is_async=func_info.is_async,
+            language=func_info.language.value,
+        )
 
 
 # =============================================================================

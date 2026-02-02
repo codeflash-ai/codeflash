@@ -11,6 +11,7 @@ Each test verifies:
 import pytest
 from pathlib import Path
 
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.javascript.find_references import (
     Reference,
     ReferenceFinder,
@@ -20,6 +21,18 @@ from codeflash.languages.javascript.find_references import (
 )
 from codeflash.languages.base import Language, FunctionInfo, ReferenceInfo
 from codeflash.code_utils.code_extractor import _format_references_as_markdown
+from codeflash.models.models import FunctionParent
+
+
+def make_func(name: str, file_path: Path, class_name: str | None = None) -> FunctionToOptimize:
+    """Helper to create FunctionToOptimize for testing."""
+    parents = [FunctionParent(name=class_name, type="ClassDef")] if class_name else []
+    return FunctionToOptimize(
+        function_name=name,
+        file_path=file_path,
+        parents=parents,
+        language="javascript",
+    )
 
 
 class TestReferenceFinder:
@@ -111,7 +124,7 @@ class TestBasicNamedExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "DynamicBindingUtils.ts"
 
-        refs = finder.find_references("getDynamicBindings", source_file)
+        refs = finder.find_references(make_func("getDynamicBindings", source_file))
 
         # Sort refs by file path for consistent ordering
         refs_sorted = sorted(refs, key=lambda r: (str(r.file_path), r.line))
@@ -140,7 +153,7 @@ class TestBasicNamedExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "DynamicBindingUtils.ts"
 
-        refs = finder.find_references("getDynamicBindings", source_file)
+        refs = finder.find_references(make_func("getDynamicBindings", source_file))
 
         # Convert to ReferenceInfo and sort for consistent ordering
         ref_infos = sorted([
@@ -221,7 +234,7 @@ class TestDefaultExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "helper.ts"
 
-        refs = finder.find_references("processData", source_file)
+        refs = finder.find_references(make_func("processData", source_file))
 
         # Should find references in both files
         ref_files = {str(ref.file_path) for ref in refs}
@@ -247,7 +260,7 @@ class TestDefaultExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "helper.ts"
 
-        refs = finder.find_references("processData", source_file)
+        refs = finder.find_references(make_func("processData", source_file))
         ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -315,7 +328,7 @@ class TestReExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "filterUtils.ts"
 
-        refs = finder.find_references("filterBySearchTerm", source_file)
+        refs = finder.find_references(make_func("filterBySearchTerm", source_file))
 
         # Should find re-export in index.ts
         reexport_refs = [r for r in refs if r.reference_type == "reexport"]
@@ -336,7 +349,7 @@ class TestReExports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "filterUtils.ts"
 
-        refs = finder.find_references("filterBySearchTerm", source_file)
+        refs = finder.find_references(make_func("filterBySearchTerm", source_file))
         ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -395,7 +408,7 @@ class TestCallbackPatterns:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "transforms.ts"
 
-        refs = finder.find_references("normalizeItem", source_file)
+        refs = finder.find_references(make_func("normalizeItem", source_file))
 
         # Should find the callback reference
         callback_refs = [r for r in refs if r.reference_type == "callback"]
@@ -412,7 +425,7 @@ class TestCallbackPatterns:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "transforms.ts"
 
-        refs = finder.find_references("normalizeItem", source_file)
+        refs = finder.find_references(make_func("normalizeItem", source_file))
         ref_infos = [
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -469,7 +482,7 @@ class TestAliasImports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils.ts"
 
-        refs = finder.find_references("computeValue", source_file)
+        refs = finder.find_references(make_func("computeValue", source_file))
 
         # Should find the reference even though it's called as "calculate"
         assert len(refs) == 1
@@ -486,7 +499,7 @@ class TestAliasImports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils.ts"
 
-        refs = finder.find_references("computeValue", source_file)
+        refs = finder.find_references(make_func("computeValue", source_file))
         ref_infos = [
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -542,7 +555,7 @@ class TestNamespaceImports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "mathUtils.ts"
 
-        refs = finder.find_references("add", source_file)
+        refs = finder.find_references(make_func("add", source_file))
 
         assert len(refs) == 1
         ref = refs[0]
@@ -558,7 +571,7 @@ class TestNamespaceImports:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "mathUtils.ts"
 
-        refs = finder.find_references("add", source_file)
+        refs = finder.find_references(make_func("add", source_file))
         ref_infos = [
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -616,7 +629,7 @@ class TestMemoizedFunctions:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "expensive.ts"
 
-        refs = finder.find_references("computeExpensive", source_file)
+        refs = finder.find_references(make_func("computeExpensive", source_file))
 
         # Should find memoize call and direct call
         assert len(refs) >= 2
@@ -657,7 +670,7 @@ class TestSameFileReferences:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "recursive.ts"
 
-        refs = finder.find_references("factorial", source_file, include_definition=True)
+        refs = finder.find_references(make_func("factorial", source_file), include_definition=True)
 
         # Should find the recursive call
         call_refs = [r for r in refs if r.reference_type == "call"]
@@ -709,7 +722,7 @@ class TestComplexMultiFileScenarios:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "widgetUtils.ts"
 
-        refs = finder.find_references("isLargeWidget", source_file)
+        refs = finder.find_references(make_func("isLargeWidget", source_file))
 
         # Should find re-export in index.ts
         reexport_refs = [r for r in refs if r.reference_type == "reexport"]
@@ -729,7 +742,7 @@ class TestComplexMultiFileScenarios:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "utils" / "widgetUtils.ts"
 
-        refs = finder.find_references("isLargeWidget", source_file)
+        refs = finder.find_references(make_func("isLargeWidget", source_file))
         ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -771,7 +784,7 @@ class TestEdgeCases:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "nonexistent.ts"
 
-        refs = finder.find_references("someFunction", source_file)
+        refs = finder.find_references(make_func("someFunction", source_file))
 
         assert refs == []
 
@@ -791,7 +804,7 @@ class TestEdgeCases:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "private.ts"
 
-        refs = finder.find_references("internalHelper", source_file)
+        refs = finder.find_references(make_func("internalHelper", source_file))
 
         # Should only find internal reference
         assert all(r.file_path == source_file for r in refs)
@@ -803,7 +816,7 @@ class TestEdgeCases:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "empty.ts"
 
-        refs = finder.find_references("anything", source_file)
+        refs = finder.find_references(make_func("anything", source_file))
 
         assert refs == []
 
@@ -849,7 +862,7 @@ class TestCommonJSPatterns:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "helpers.js"
 
-        refs = finder.find_references("processConfig", source_file)
+        refs = finder.find_references(make_func("processConfig", source_file))
 
         assert len(refs) >= 1
         main_ref = next((r for r in refs if "main.js" in str(r.file_path)), None)
@@ -863,7 +876,7 @@ class TestCommonJSPatterns:
         finder = ReferenceFinder(project_root)
         source_file = project_root / "src" / "helpers.js"
 
-        refs = finder.find_references("processConfig", source_file)
+        refs = finder.find_references(make_func("processConfig", source_file))
         ref_infos = sorted([
             ReferenceInfo(
                 file_path=r.file_path, line=r.line, column=r.column,
@@ -915,7 +928,7 @@ class TestConvenienceFunction:
         """Test the find_references convenience function with exact values."""
         source_file = project_root / "src" / "utils.ts"
 
-        refs = find_references("helper", source_file, project_root=project_root)
+        refs = find_references(make_func("helper", source_file), project_root=project_root)
 
         assert len(refs) == 1
         ref = refs[0]
@@ -1054,7 +1067,7 @@ class TestEdgeCasesAdvanced:
         source_file = project_root / "src" / "a.ts"
 
         # Should not hang or crash
-        refs = finder.find_references("funcA", source_file)
+        refs = finder.find_references(make_func("funcA", source_file))
 
         # Should find reference in b.ts
         b_refs = [r for r in refs if "b.ts" in str(r.file_path)]
@@ -1084,5 +1097,5 @@ class TestEdgeCasesAdvanced:
         source_file = project_root / "src" / "valid.ts"
 
         # Should not crash
-        refs = finder.find_references("validFunction", source_file)
+        refs = finder.find_references(make_func("validFunction", source_file))
         assert isinstance(refs, list)

@@ -15,7 +15,8 @@ from codeflash.cli_cmds.console import logger
 
 if TYPE_CHECKING:
     from codeflash.code_utils.code_position import CodePosition
-    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 
 class TestingMode:
@@ -72,15 +73,16 @@ class StandaloneCallTransformer:
 
     """
 
-    def __init__(self, func_name: str, qualified_name: str, capture_func: str) -> None:
-        self.func_name = func_name
-        self.qualified_name = qualified_name
+    def __init__(self, function_to_optimize: FunctionToOptimize, capture_func: str) -> None:
+        self.function_to_optimize = function_to_optimize
+        self.func_name = function_to_optimize.function_name
+        self.qualified_name = function_to_optimize.qualified_name
         self.capture_func = capture_func
         self.invocation_counter = 0
         # Pattern to match func_name( with optional leading await and optional object prefix
         # Captures: (whitespace)(await )?(object.)*func_name(
         # We'll filter out expect() and codeflash. cases in the transform loop
-        self._call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(func_name)}\s*\(")
+        self._call_pattern = re.compile(rf"(\s*)(await\s+)?((?:\w+\.)*){re.escape(self.func_name)}\s*\(")
 
     def transform(self, code: str) -> str:
         """Transform all standalone calls in the code."""
@@ -310,7 +312,7 @@ class StandaloneCallTransformer:
 
 
 def transform_standalone_calls(
-    code: str, func_name: str, qualified_name: str, capture_func: str, start_counter: int = 0
+    code: str, function_to_optimize: FunctionToOptimize, capture_func: str, start_counter: int = 0
 ) -> tuple[str, int]:
     """Transform standalone func(...) calls in JavaScript test code.
 
@@ -318,8 +320,7 @@ def transform_standalone_calls(
 
     Args:
         code: The test code to transform.
-        func_name: Name of the function being tested.
-        qualified_name: Fully qualified function name.
+        function_to_optimize: The function being tested.
         capture_func: The capture function to use ('capture' or 'capturePerf').
         start_counter: Starting value for the invocation counter.
 
@@ -327,9 +328,7 @@ def transform_standalone_calls(
         Tuple of (transformed code, final counter value).
 
     """
-    transformer = StandaloneCallTransformer(
-        func_name=func_name, qualified_name=qualified_name, capture_func=capture_func
-    )
+    transformer = StandaloneCallTransformer(function_to_optimize=function_to_optimize, capture_func=capture_func)
     transformer.invocation_counter = start_counter
     result = transformer.transform(code)
     return result, transformer.invocation_counter
@@ -348,15 +347,18 @@ class ExpectCallTransformer:
     - Multi-arg assertions: expect(func(args)).toBeCloseTo(0.5, 2)
     """
 
-    def __init__(self, func_name: str, qualified_name: str, capture_func: str, remove_assertions: bool = False) -> None:
-        self.func_name = func_name
-        self.qualified_name = qualified_name
+    def __init__(
+        self, function_to_optimize: FunctionToOptimize, capture_func: str, remove_assertions: bool = False
+    ) -> None:
+        self.function_to_optimize = function_to_optimize
+        self.func_name = function_to_optimize.function_name
+        self.qualified_name = function_to_optimize.qualified_name
         self.capture_func = capture_func
         self.remove_assertions = remove_assertions
         self.invocation_counter = 0
         # Pattern to match start of expect((object.)*func_name(
         # Captures: (whitespace), (object prefix like calc. or this.)
-        self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(func_name)}\s*\(")
+        self._expect_pattern = re.compile(rf"(\s*)expect\s*\(\s*((?:\w+\.)*){re.escape(self.func_name)}\s*\(")
 
     def transform(self, code: str) -> str:
         """Transform all expect calls in the code."""
@@ -601,7 +603,7 @@ class ExpectCallTransformer:
 
 
 def transform_expect_calls(
-    code: str, func_name: str, qualified_name: str, capture_func: str, remove_assertions: bool = False
+    code: str, function_to_optimize: FunctionToOptimize, capture_func: str, remove_assertions: bool = False
 ) -> tuple[str, int]:
     """Transform expect(func(...)).assertion() calls in JavaScript test code.
 
@@ -609,8 +611,7 @@ def transform_expect_calls(
 
     Args:
         code: The test code to transform.
-        func_name: Name of the function being tested.
-        qualified_name: Fully qualified function name.
+        function_to_optimize: The function being tested.
         capture_func: The capture function to use ('capture' or 'capturePerf').
         remove_assertions: If True, remove assertions entirely (for generated tests).
 
@@ -619,10 +620,7 @@ def transform_expect_calls(
 
     """
     transformer = ExpectCallTransformer(
-        func_name=func_name,
-        qualified_name=qualified_name,
-        capture_func=capture_func,
-        remove_assertions=remove_assertions,
+        function_to_optimize=function_to_optimize, capture_func=capture_func, remove_assertions=remove_assertions
     )
     result = transformer.transform(code)
     return result, transformer.invocation_counter
@@ -658,8 +656,6 @@ def inject_profiling_into_existing_js_test(
         logger.error(f"Failed to read test file {test_path}: {e}")
         return False, None
 
-    func_name = function_to_optimize.function_name
-
     # Get the relative path for test identification
     try:
         rel_path = test_path.relative_to(tests_project_root)
@@ -667,14 +663,12 @@ def inject_profiling_into_existing_js_test(
         rel_path = test_path
 
     # Check if the function is imported/required in this test file
-    if not _is_function_used_in_test(test_code, func_name):
-        logger.debug(f"Function '{func_name}' not found in test file {test_path}")
+    if not _is_function_used_in_test(test_code, function_to_optimize.function_name):
+        logger.debug(f"Function '{function_to_optimize.function_name}' not found in test file {test_path}")
         return False, None
 
     # Instrument the test code
-    instrumented_code = _instrument_js_test_code(
-        test_code, func_name, str(rel_path), mode, function_to_optimize.qualified_name
-    )
+    instrumented_code = _instrument_js_test_code(test_code, function_to_optimize, str(rel_path), mode)
 
     if instrumented_code == test_code:
         logger.debug(f"No changes made to test file {test_path}")
@@ -716,16 +710,15 @@ def _is_function_used_in_test(code: str, func_name: str) -> bool:
 
 
 def _instrument_js_test_code(
-    code: str, func_name: str, test_file_path: str, mode: str, qualified_name: str, remove_assertions: bool = False
+    code: str, function_to_optimize: FunctionToOptimize, test_file_path: str, mode: str, remove_assertions: bool = False
 ) -> str:
     """Instrument JavaScript test code with profiling capture calls.
 
     Args:
         code: Original test code.
-        func_name: Name of the function to instrument.
+        function_to_optimize: The function to instrument.
         test_file_path: Relative path to test file.
         mode: Testing mode (behavior or performance).
-        qualified_name: Fully qualified function name.
         remove_assertions: If True, remove expect assertions entirely (for generated/regression tests).
                           If False, keep the expect wrapper (for existing user-written tests).
 
@@ -771,8 +764,7 @@ def _instrument_js_test_code(
     # Transform expect calls using the refactored transformer
     code, expect_counter = transform_expect_calls(
         code=code,
-        func_name=func_name,
-        qualified_name=qualified_name,
+        function_to_optimize=function_to_optimize,
         capture_func=capture_func,
         remove_assertions=remove_assertions,
     )
@@ -780,11 +772,7 @@ def _instrument_js_test_code(
     # Transform standalone calls (not inside expect wrappers)
     # Continue counter from expect transformer to ensure unique IDs
     code, _final_counter = transform_standalone_calls(
-        code=code,
-        func_name=func_name,
-        qualified_name=qualified_name,
-        capture_func=capture_func,
-        start_counter=expect_counter,
+        code=code, function_to_optimize=function_to_optimize, capture_func=capture_func, start_counter=expect_counter
     )
 
     return code
@@ -941,7 +929,7 @@ def get_instrumented_test_path(original_path: Path, mode: str) -> Path:
 
 
 def instrument_generated_js_test(
-    test_code: str, function_name: str, qualified_name: str, mode: str = TestingMode.BEHAVIOR
+    test_code: str, function_to_optimize: FunctionToOptimize, mode: str = TestingMode.BEHAVIOR
 ) -> str:
     """Instrument generated JavaScript/TypeScript test code.
 
@@ -956,8 +944,7 @@ def instrument_generated_js_test(
 
     Args:
         test_code: The generated test code to instrument.
-        function_name: Name of the function being tested.
-        qualified_name: Fully qualified function name (e.g., 'module.funcName').
+        function_to_optimize: The function being tested.
         mode: Testing mode - "behavior" or "performance".
 
     Returns:
@@ -971,9 +958,8 @@ def instrument_generated_js_test(
     # Generated tests are treated as regression tests, so we remove LLM-generated assertions
     return _instrument_js_test_code(
         code=test_code,
-        func_name=function_name,
+        function_to_optimize=function_to_optimize,
         test_file_path="generated_test",
         mode=mode,
-        qualified_name=qualified_name,
         remove_assertions=True,
     )

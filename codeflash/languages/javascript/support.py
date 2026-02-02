@@ -983,14 +983,14 @@ class JavaScriptSupport:
             List of ReferenceInfo objects describing each reference location.
 
         """
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
         from codeflash.languages.base import ReferenceInfo
         from codeflash.languages.javascript.find_references import ReferenceFinder
 
         try:
             finder = ReferenceFinder(project_root)
-            refs = finder.find_references(
-                function.name, function.file_path, max_files=max_files, class_name=function.class_name
-            )
+            func_to_optimize = FunctionToOptimize.from_function_info(function)
+            refs = finder.find_references(func_to_optimize, max_files=max_files)
 
             # Convert to ReferenceInfo and filter out tests
             result: list[ReferenceInfo] = []
