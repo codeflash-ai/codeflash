@@ -136,6 +136,43 @@ def determine_js_package_manager(project_root: Path) -> JsPackageManager:
     return JsPackageManager.UNKNOWN
 
 
+def get_package_install_command(project_root: Path, package: str, dev: bool = True) -> list[str]:
+    """Get the correct install command for the project's package manager.
+
+    Args:
+        project_root: The project root directory.
+        package: The package name to install.
+        dev: Whether to install as a dev dependency (default: True).
+
+    Returns:
+        List of command arguments for subprocess execution.
+
+    """
+    pkg_manager = determine_js_package_manager(project_root)
+
+    if pkg_manager == JsPackageManager.PNPM:
+        cmd = ["pnpm", "add", package]
+        if dev:
+            cmd.append("--save-dev")
+        return cmd
+    elif pkg_manager == JsPackageManager.YARN:
+        cmd = ["yarn", "add", package]
+        if dev:
+            cmd.append("--dev")
+        return cmd
+    elif pkg_manager == JsPackageManager.BUN:
+        cmd = ["bun", "add", package]
+        if dev:
+            cmd.append("--dev")
+        return cmd
+    else:
+        # Default to npm
+        cmd = ["npm", "install", package]
+        if dev:
+            cmd.append("--save-dev")
+        return cmd
+
+
 def init_js_project(language: ProjectLanguage) -> None:
     """Initialize Codeflash for a JavaScript/TypeScript project."""
     from codeflash.cli_cmds.cmd_init import install_github_actions, install_github_app, prompt_api_key

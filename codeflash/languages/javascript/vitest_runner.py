@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 
@@ -72,6 +73,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     Installs codeflash package if not already present.
     The package provides all runtime files needed for test instrumentation.
+    Uses the project's detected package manager (npm, pnpm, yarn, or bun).
 
     Args:
         project_root: The project root directory.
@@ -82,9 +84,10 @@ def _ensure_runtime_files(project_root: Path) -> None:
         logger.debug("codeflash already installed")
         return
 
+    install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
         result = subprocess.run(
-            ["npm", "install", "--save-dev", "codeflash"],
+            install_cmd,
             check=False,
             cwd=project_root,
             capture_output=True,
@@ -92,13 +95,13 @@ def _ensure_runtime_files(project_root: Path) -> None:
             timeout=120,
         )
         if result.returncode == 0:
-            logger.debug("Installed codeflash from npm registry")
+            logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
-        logger.warning(f"Failed to install from npm: {result.stderr}")
+        logger.warning(f"Failed to install codeflash: {result.stderr}")
     except Exception as e:
-        logger.warning(f"Error installing from npm: {e}")
+        logger.warning(f"Error installing codeflash: {e}")
 
-    logger.error("Could not install codeflash. Please install it manually: npm install --save-dev codeflash")
+    logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
 
 def _build_vitest_behavioral_command(
