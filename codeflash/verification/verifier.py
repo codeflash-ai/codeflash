@@ -83,16 +83,12 @@ def generate_tests(
 
             # Instrument for behavior verification (writes to SQLite)
             instrumented_behavior_test_source = instrument_generated_js_test(
-                test_code=generated_test_source,
-                function_to_optimize=function_to_optimize,
-                mode=TestingMode.BEHAVIOR,
+                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
             )
 
             # Instrument for performance measurement (prints to stdout)
             instrumented_perf_test_source = instrument_generated_js_test(
-                test_code=generated_test_source,
-                function_to_optimize=function_to_optimize,
-                mode=TestingMode.PERFORMANCE,
+                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
             )
 
             logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import libcst as cst
+from pydantic import Field
 from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
@@ -26,9 +27,8 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.languages import get_language_support, get_supported_extensions
-from codeflash.languages.base import Language
-from codeflash.languages.registry import is_language_supported
+from codeflash.languages.language_enum import Language
+from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -134,17 +134,23 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 class FunctionToOptimize:
     """Represent a function that is a candidate for optimization.
 
+    This is the canonical dataclass for representing functions across all languages
+    (Python, JavaScript, TypeScript). It captures all information needed to identify,
+    locate, and work with a function.
+
     Attributes
     ----------
         function_name: The name of the function.
         file_path: The absolute file path where the function is located.
         parents: A list of parent scopes, which could be classes or functions.
-        starting_line: The starting line number of the function in the file.
-        ending_line: The ending line number of the function in the file.
-        starting_col: The starting column offset (for precise location in multi-line contexts).
-        ending_col: The ending column offset (for precise location in multi-line contexts).
+        starting_line: The starting line number of the function in the file (1-indexed).
+        ending_line: The ending line number of the function in the file (1-indexed).
+        starting_col: The starting column offset (0-indexed, for precise location).
+        ending_col: The ending column offset (0-indexed, for precise location).
         is_async: Whether this function is defined as async.
+        is_method: Whether this is a method (belongs to a class).
         language: The programming language of this function (default: "python").
+        doc_start_line: Line where docstring/JSDoc starts (or None if no doc comment).
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -154,13 +160,15 @@ class FunctionToOptimize:
 
     function_name: str
     file_path: Path
-    parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
+    parents: list[FunctionParent] = Field(default_factory=list)  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
     starting_col: Optional[int] = None  # Column offset for precise location
     ending_col: Optional[int] = None  # Column offset for precise location
     is_async: bool = False
+    is_method: bool = False  # Whether this is a method (belongs to a class)
     language: str = "python"  # Language identifier for multi-language support
+    doc_start_line: Optional[int] = None  # Line where docstring/JSDoc starts
 
     @property
     def top_level_parent_name(self) -> str:
@@ -175,10 +183,9 @@ class FunctionToOptimize:
         return None
 
     def __str__(self) -> str:
-        return (
-            f"{self.file_path}:{'.'.join([p.name for p in self.parents])}"
-            f"{'.' if self.parents else ''}{self.function_name}"
-        )
+        qualified = f"{'.'.join([p.name for p in self.parents])}{'.' if self.parents else ''}{self.function_name}"
+        line_info = f":{self.starting_line}-{self.ending_line}" if self.starting_line and self.ending_line else ""
+        return f"{self.file_path}:{qualified}{line_info}"
 
     @property
     def qualified_name(self) -> str:
@@ -195,8 +202,8 @@ class FunctionToOptimize:
     def from_function_info(cls, func_info: FunctionInfo) -> FunctionToOptimize:
         """Create a FunctionToOptimize from a FunctionInfo instance.
 
-        This enables interoperability between the language-agnostic FunctionInfo
-        and the FunctionToOptimize dataclass used throughout the codebase.
+        This is a temporary method for backward compatibility during migration.
+        Once FunctionInfo is fully removed, this method can be deleted.
         """
         parents = [FunctionParent(name=p.name, type=p.type) for p in func_info.parents]
         return cls(
@@ -208,7 +215,9 @@ class FunctionToOptimize:
             starting_col=func_info.start_col,
             ending_col=func_info.end_col,
             is_async=func_info.is_async,
+            is_method=func_info.is_method,
             language=func_info.language.value,
+            doc_start_line=func_info.doc_start_line,
         )
 
 

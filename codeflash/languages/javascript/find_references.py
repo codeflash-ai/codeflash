@@ -73,10 +73,7 @@ class ReferenceFinder:
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
         func = FunctionToOptimize(
-            function_name="myHelper",
-            file_path=Path("/my/project/src/utils.ts"),
-            parents=[],
-            language="javascript"
+            function_name="myHelper", file_path=Path("/my/project/src/utils.ts"), parents=[], language="javascript"
         )
         finder = ReferenceFinder(project_root=Path("/my/project"))
         references = finder.find_references(func)

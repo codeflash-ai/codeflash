@@ -464,6 +464,7 @@ class TreeSitterAnalyzer:
             source_bytes: Source code bytes.
             imports: List to append found imports to.
             in_function: Whether we're currently inside a function/method body.
+
         """
         # Track when we enter function/method bodies
         # These node types contain function/method bodies where require() should not be treated as imports

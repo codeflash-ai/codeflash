@@ -19,7 +19,6 @@ Usage:
 
 from codeflash.languages.base import (
     CodeContext,
-    FunctionInfo,
     HelperFunction,
     Language,
     LanguageSupport,
@@ -27,6 +26,17 @@ from codeflash.languages.base import (
     TestInfo,
     TestResult,
 )
+
+
+# Lazy import for FunctionInfo to avoid circular imports
+def __getattr__(name: str):
+    if name == "FunctionInfo":
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        return FunctionToOptimize
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 from codeflash.languages.current import (
     current_language,
     current_language_support,

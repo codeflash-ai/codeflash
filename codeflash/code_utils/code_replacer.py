@@ -496,7 +496,7 @@ def replace_function_definitions_for_language(
 
     """
     from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+    from codeflash.languages.base import Language
 
     original_source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
@@ -523,25 +523,15 @@ def replace_function_definitions_for_language(
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
-        parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
-        func_info = FunctionInfo(
-            name=function_to_optimize.function_name,
-            file_path=module_abspath,
-            start_line=function_to_optimize.starting_line,
-            end_line=function_to_optimize.ending_line,
-            parents=parents,
-            is_async=function_to_optimize.is_async,
-            language=language,
-        )
         # Extract just the target function from the optimized code
         optimized_func = _extract_function_from_code(
             lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
         )
         if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
+            new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
         else:
             # Fallback: use the entire optimized code (for simple single-function files)
-            new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
+            new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
     else:
         # For helper files or when we don't have precise line info:
         # Find each function by name in both original and optimized code

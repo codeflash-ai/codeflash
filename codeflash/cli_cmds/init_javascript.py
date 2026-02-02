@@ -16,6 +16,7 @@ import inquirer
 from git import InvalidGitRepositoryError, Repo
 from rich.console import Group
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
 
@@ -26,7 +27,6 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
-from rich.prompt import Confirm
 
 
 class ProjectLanguage(Enum):

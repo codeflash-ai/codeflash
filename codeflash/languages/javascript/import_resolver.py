@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash.languages.base import FunctionInfo, HelperFunction
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import HelperFunction
     from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -302,7 +303,7 @@ class MultiFileHelperFinder:
 
     def find_helpers(
         self,
-        function: FunctionInfo,
+        function: FunctionToOptimize,
         source: str,
         analyzer: TreeSitterAnalyzer,
         imports: list[ImportInfo],
@@ -505,7 +506,7 @@ class MultiFileHelperFinder:
             Dictionary mapping file paths to lists of helper functions.
 
         """
-        from codeflash.languages.base import FunctionInfo
+        from codeflash.languages.base import FunctionToOptimize
         from codeflash.languages.treesitter_utils import get_analyzer_for_file
 
         if context.current_depth >= context.max_depth:
@@ -525,9 +526,13 @@ class MultiFileHelperFinder:
         analyzer = get_analyzer_for_file(file_path)
         imports = analyzer.find_imports(source)
 
-        # Create FunctionInfo for the helper
-        func_info = FunctionInfo(
-            name=helper.name, file_path=file_path, start_line=helper.start_line, end_line=helper.end_line, parents=()
+        # Create FunctionToOptimize for the helper
+        func_info = FunctionToOptimize(
+            function_name=helper.name,
+            file_path=file_path,
+            parents=[],
+            starting_line=helper.start_line,
+            ending_line=helper.end_line,
         )
 
         # Recursively find helpers

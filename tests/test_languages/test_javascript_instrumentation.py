@@ -62,7 +62,7 @@ function add(a, b) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="add", file_path=file_path, start_line=2, end_line=5, language=Language.JAVASCRIPT
+            function_name="add", file_path=file_path, starting_line=2, ending_line=5, language="javascript"
         )
 
         output_file = Path("/tmp/test_profile.json")
@@ -123,7 +123,7 @@ function multiply(x, y) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="multiply", file_path=file_path, start_line=2, end_line=4, language=Language.JAVASCRIPT
+            function_name="multiply", file_path=file_path, starting_line=2, ending_line=4, language="javascript"
         )
 
         output_db = Path("/tmp/test_traces.db")
@@ -167,7 +167,7 @@ function greet(name) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="greet", file_path=file_path, start_line=2, end_line=4, language=Language.JAVASCRIPT
+            function_name="greet", file_path=file_path, starting_line=2, ending_line=4, language="javascript"
         )
 
         output_file = file_path.parent / ".codeflash" / "traces.db"
@@ -198,7 +198,7 @@ function square(n) {
             file_path = Path(f.name)
 
         func_info = FunctionInfo(
-            name="square", file_path=file_path, start_line=2, end_line=5, language=Language.JAVASCRIPT
+            function_name="square", file_path=file_path, starting_line=2, ending_line=5, language="javascript"
         )
 
         output_file = file_path.parent / ".codeflash" / "line_profile.json"

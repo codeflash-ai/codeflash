@@ -136,7 +136,7 @@ function add(a, b) {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
         assert functions[0].is_arrow is False
         assert functions[0].is_async is False
         assert functions[0].is_method is False
@@ -151,7 +151,7 @@ const add = (a, b) => {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
         assert functions[0].is_arrow is True
 
     def test_find_arrow_function_concise(self, js_analyzer):
@@ -160,7 +160,7 @@ const add = (a, b) => {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "double"
+        assert functions[0].function_name == "double"
         assert functions[0].is_arrow is True
 
     def test_find_async_function(self, js_analyzer):
@@ -173,7 +173,7 @@ async function fetchData(url) {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "fetchData"
+        assert functions[0].function_name == "fetchData"
         assert functions[0].is_async is True
 
     def test_find_class_methods(self, js_analyzer):
@@ -188,7 +188,7 @@ class Calculator {
         functions = js_analyzer.find_functions(code, include_methods=True)
 
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
         assert functions[0].is_method is True
         assert functions[0].class_name == "Calculator"
 
@@ -208,7 +208,7 @@ function standalone() {
         functions = js_analyzer.find_functions(code, include_methods=False)
 
         assert len(functions) == 1
-        assert functions[0].name == "standalone"
+        assert functions[0].function_name == "standalone"
 
     def test_exclude_arrow_functions(self, js_analyzer):
         """Test excluding arrow functions."""
@@ -222,7 +222,7 @@ const arrow = () => 2;
         functions = js_analyzer.find_functions(code, include_arrow_functions=False)
 
         assert len(functions) == 1
-        assert functions[0].name == "regular"
+        assert functions[0].function_name == "regular"
 
     def test_find_generator_function(self, js_analyzer):
         """Test finding generator functions."""
@@ -235,7 +235,7 @@ function* numberGenerator() {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "numberGenerator"
+        assert functions[0].function_name == "numberGenerator"
         assert functions[0].is_generator is True
 
     def test_function_line_numbers(self, js_analyzer):
@@ -291,7 +291,7 @@ function named() {
         functions = js_analyzer.find_functions(code, require_name=True)
 
         assert len(functions) == 1
-        assert functions[0].name == "named"
+        assert functions[0].function_name == "named"
 
     def test_function_expression_in_variable(self, js_analyzer):
         """Test function expression assigned to variable."""
@@ -303,7 +303,7 @@ const add = function(a, b) {
         functions = js_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
 
 
 class TestFindImports:
@@ -515,7 +515,7 @@ function add(a: number, b: number): number {
         functions = ts_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "add"
+        assert functions[0].function_name == "add"
 
     def test_find_interface_method(self, ts_analyzer):
         """Test that interface methods are not found (they're declarations)."""
@@ -544,4 +544,4 @@ function identity<T>(value: T): T {
         functions = ts_analyzer.find_functions(code)
 
         assert len(functions) == 1
-        assert functions[0].name == "identity"
+        assert functions[0].function_name == "identity"

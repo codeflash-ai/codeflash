@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import Language
+from codeflash.languages.language_enum import Language
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

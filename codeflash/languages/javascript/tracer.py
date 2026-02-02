@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.languages.base import FunctionInfo
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class JavaScriptTracer:
         self.output_db = output_db
         self.tracer_var = "__codeflash_tracer__"
 
-    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo]) -> str:
+    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionToOptimize]) -> str:
         """Instrument JavaScript source code with function tracing.
 
         Wraps specified functions to capture their inputs and outputs.
@@ -269,7 +269,7 @@ process.on('exit', () => {{
 }});
 """
 
-    def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path) -> list[str]:
+    def _instrument_function(self, func: FunctionToOptimize, lines: list[str], file_path: Path) -> list[str]:
         """Instrument a single function with tracing.
 
         Args:

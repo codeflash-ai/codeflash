@@ -603,6 +603,9 @@ class FunctionParent:
     name: str
     type: str
 
+    def __str__(self) -> str:
+        return f"{self.type}:{self.name}"
+
 
 class OriginalCodeBaseline(BaseModel):
     behavior_test_results: TestResults

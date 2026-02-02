@@ -16,7 +16,7 @@ from codeflash.languages.treesitter_utils import get_analyzer_for_file
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from codeflash.languages.base import FunctionInfo
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class JavaScriptLineProfiler:
         self.output_file = output_file
         self.profiler_var = "__codeflash_line_profiler__"
 
-    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionInfo]) -> str:
+    def instrument_source(self, source: str, file_path: Path, functions: list[FunctionToOptimize]) -> str:
         """Instrument JavaScript source code with line profiling.
 
         Adds profiling instrumentation to track line-level execution for the
@@ -171,7 +171,7 @@ const __codeflash_save_interval__ = setInterval(() => {self.profiler_var}.save()
 if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // Don't keep process alive
 """
 
-    def _instrument_function(self, func: FunctionInfo, lines: list[str], file_path: Path) -> list[str]:
+    def _instrument_function(self, func: FunctionToOptimize, lines: list[str], file_path: Path) -> list[str]:
         """Instrument a single function with line profiling.
 
         Args:
