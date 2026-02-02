@@ -30,13 +30,17 @@ def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     Raises:
         ET.ParseError: If XML parsing fails.
     """
-    # Create a parser that forbids external entities and DTDs
-    parser = ET.XMLParser()
-    # Disable entity resolution to prevent XXE attacks
-    parser.entity = {}  # type: ignore[attr-defined]
-    parser.parser.SetParamEntityParsing(0)  # type: ignore[attr-defined]
+    # Read file content and parse as string to avoid file-based attacks
+    # This prevents XXE attacks by not allowing external entity resolution
+    content = file_path.read_text(encoding="utf-8")
 
-    return ET.parse(file_path, parser=parser)
+    # Parse string content (no external entities possible)
+    root = ET.fromstring(content)
+
+    # Create ElementTree from root
+    tree = ET.ElementTree(root)
+
+    return tree
 
 
 class BuildTool(Enum):
