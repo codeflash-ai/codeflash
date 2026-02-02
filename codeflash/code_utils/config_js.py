@@ -260,11 +260,11 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
     # Check for explicit test framework override, otherwise auto-detect
     # Uses "test-framework" to match Python's pyproject.toml convention
     if codeflash_config.get("test-framework"):
-        config["test_runner"] = codeflash_config["test-framework"]
+        config["test_framework"] = codeflash_config["test-framework"]
     else:
-        config["test_runner"] = detect_test_runner(project_root, package_data)
+        config["test_framework"] = detect_test_runner(project_root, package_data)
     # Keep pytest_cmd for backwards compatibility with existing code
-    config["pytest_cmd"] = config["test_runner"]
+    config["pytest_cmd"] = config["test_framework"]
 
     # Auto-detect formatter (with optional override from config)
     if "formatterCmds" in codeflash_config:

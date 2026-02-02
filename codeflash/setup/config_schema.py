@@ -29,7 +29,7 @@ class CodeflashConfig(BaseModel):
     tests_root: str | None = Field(default=None, description="Root directory containing tests")
 
     # Tooling settings (auto-detected, can be overridden)
-    test_runner: str | None = Field(default=None, description="Test runner: pytest, jest, vitest, mocha")
+    test_framework: str | None = Field(default=None, description="Test framework: pytest, jest, vitest, mocha")
     formatter_cmds: list[str] = Field(default_factory=list, description="Formatter commands")
 
     # Optional settings
@@ -145,7 +145,7 @@ class CodeflashConfig(BaseModel):
             if detected.module_root != detected.project_root
             else ".",
             tests_root=str(detected.tests_root.relative_to(detected.project_root)) if detected.tests_root else None,
-            test_runner=detected.test_runner,
+            test_framework=detected.test_runner,
             formatter_cmds=detected.formatter_cmds,
             ignore_paths=[
                 str(p.relative_to(detected.project_root)) for p in detected.ignore_paths if p != detected.project_root
