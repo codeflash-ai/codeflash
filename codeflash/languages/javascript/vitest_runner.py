@@ -243,10 +243,16 @@ def run_vitest_behavioral_tests(
 
     logger.debug(f"Running Vitest tests with command: {' '.join(vitest_cmd)}")
 
+    # Subprocess timeout should be much larger than per-test timeout to account for:
+    # - Vitest startup time (loading modules, compiling TypeScript)
+    # - Multiple tests running sequentially
+    # Use at least 120 seconds, or 10x the per-test timeout, whichever is larger
+    subprocess_timeout = max(120, (timeout or 60) * 10)
+
     start_time_ns = time.perf_counter_ns()
     try:
         run_args = get_cross_platform_subprocess_run_args(
-            cwd=effective_cwd, env=vitest_env, timeout=timeout or 600, check=False, text=True, capture_output=True
+            cwd=effective_cwd, env=vitest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
         )
         result = subprocess.run(vitest_cmd, **run_args)  # noqa: PLW1510
         # Combine stderr into stdout for timing markers
@@ -260,7 +266,7 @@ def run_vitest_behavioral_tests(
             )
         logger.debug(f"Vitest result: returncode={result.returncode}")
     except subprocess.TimeoutExpired:
-        logger.warning(f"Vitest tests timed out after {timeout}s")
+        logger.warning(f"Vitest tests timed out after {subprocess_timeout}s")
         result = subprocess.CompletedProcess(
             args=vitest_cmd, returncode=-1, stdout="", stderr="Test execution timed out"
         )
@@ -457,7 +463,8 @@ def run_vitest_line_profile_tests(
     if line_profile_output_file:
         vitest_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
 
-    subprocess_timeout = timeout or 600
+    # Subprocess timeout should be larger than per-test timeout to account for startup
+    subprocess_timeout = max(120, (timeout or 60) * 10)
 
     logger.debug(f"Running Vitest line profile tests: {' '.join(vitest_cmd)}")
 

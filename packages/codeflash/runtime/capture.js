@@ -646,9 +646,16 @@ function capturePerf(funcName, lineId, fn, ...args) {
     let lastReturnValue;
     let lastError = null;
 
-    // Batched looping: run BATCH_SIZE loops per capturePerf call
-    // This ensures fair distribution across all test invocations
-    const batchSize = shouldLoop ? PERF_BATCH_SIZE : 1;
+    // Determine if we're running with external loop-runner (Jest) or internal looping (Vitest)
+    // loop-runner sets CODEFLASH_PERF_CURRENT_BATCH before each batch
+    // If not set, we're in Vitest mode and need to do all loops internally
+    const hasExternalLoopRunner = process.env.CODEFLASH_PERF_CURRENT_BATCH !== undefined;
+
+    // Batched looping: run BATCH_SIZE loops per capturePerf call when using loop-runner
+    // For Vitest (no loop-runner), do all loops internally in a single call
+    const batchSize = shouldLoop
+        ? (hasExternalLoopRunner ? PERF_BATCH_SIZE : PERF_LOOP_COUNT)
+        : 1;
 
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
