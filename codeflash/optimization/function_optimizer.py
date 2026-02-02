@@ -1596,12 +1596,15 @@ class FunctionOptimizer:
             if helper_function.jedi_definition is None or helper_function.jedi_definition.type != "class":
                 read_writable_functions_by_file_path[helper_function.file_path].add(helper_function.qualified_name)
         for module_abspath, qualified_names in read_writable_functions_by_file_path.items():
+            # Pass function_to_optimize for the main file to enable precise overload matching
+            func_to_opt = self.function_to_optimize if module_abspath == self.function_to_optimize.file_path else None
             did_update |= replace_function_definitions_in_module(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
                 preexisting_objects=code_context.preexisting_objects,
                 project_root_path=self.project_root,
+                function_to_optimize=func_to_opt,
             )
         unused_helpers = detect_unused_helper_functions(self.function_to_optimize, code_context, optimized_code)
 
