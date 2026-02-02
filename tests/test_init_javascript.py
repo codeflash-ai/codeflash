@@ -99,6 +99,97 @@ class TestDetermineJsPackageManager:
 
         assert result == JsPackageManager.BUN
 
+    # Monorepo tests - lock file in parent directory
+    def test_detects_pnpm_from_parent_lockfile(self, tmp_project: Path) -> None:
+        """Should detect pnpm from pnpm-lock.yaml in parent directory (monorepo)."""
+        # Create monorepo structure: root/packages/my-package
+        workspace_root = tmp_project
+        package_dir = workspace_root / "packages" / "my-package"
+        package_dir.mkdir(parents=True)
+
+        # Lock file at workspace root
+        (workspace_root / "pnpm-lock.yaml").write_text("")
+        (workspace_root / "package.json").write_text("{}")
+        # Package has its own package.json but no lock file
+        (package_dir / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(package_dir)
+
+        assert result == JsPackageManager.PNPM
+
+    def test_detects_yarn_from_parent_lockfile(self, tmp_project: Path) -> None:
+        """Should detect yarn from yarn.lock in parent directory (monorepo)."""
+        workspace_root = tmp_project
+        package_dir = workspace_root / "packages" / "my-package"
+        package_dir.mkdir(parents=True)
+
+        (workspace_root / "yarn.lock").write_text("")
+        (workspace_root / "package.json").write_text("{}")
+        (package_dir / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(package_dir)
+
+        assert result == JsPackageManager.YARN
+
+    def test_detects_npm_from_parent_lockfile(self, tmp_project: Path) -> None:
+        """Should detect npm from package-lock.json in parent directory (monorepo)."""
+        workspace_root = tmp_project
+        package_dir = workspace_root / "packages" / "my-package"
+        package_dir.mkdir(parents=True)
+
+        (workspace_root / "package-lock.json").write_text("{}")
+        (workspace_root / "package.json").write_text("{}")
+        (package_dir / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(package_dir)
+
+        assert result == JsPackageManager.NPM
+
+    def test_detects_bun_from_parent_lockfile(self, tmp_project: Path) -> None:
+        """Should detect bun from bun.lockb in parent directory (monorepo)."""
+        workspace_root = tmp_project
+        package_dir = workspace_root / "packages" / "my-package"
+        package_dir.mkdir(parents=True)
+
+        (workspace_root / "bun.lockb").write_text("")
+        (workspace_root / "package.json").write_text("{}")
+        (package_dir / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(package_dir)
+
+        assert result == JsPackageManager.BUN
+
+    def test_local_lockfile_takes_precedence_over_parent(self, tmp_project: Path) -> None:
+        """Should prefer local lock file over parent directory lock file."""
+        workspace_root = tmp_project
+        package_dir = workspace_root / "packages" / "my-package"
+        package_dir.mkdir(parents=True)
+
+        # Parent has pnpm, but local package has yarn
+        (workspace_root / "pnpm-lock.yaml").write_text("")
+        (workspace_root / "package.json").write_text("{}")
+        (package_dir / "yarn.lock").write_text("")
+        (package_dir / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(package_dir)
+
+        # Should detect yarn from local directory first
+        assert result == JsPackageManager.YARN
+
+    def test_deeply_nested_package_finds_root_lockfile(self, tmp_project: Path) -> None:
+        """Should find lock file in deeply nested monorepo structure."""
+        workspace_root = tmp_project
+        # Simulate: root/apps/web/src/features/auth
+        deep_dir = workspace_root / "apps" / "web" / "src" / "features" / "auth"
+        deep_dir.mkdir(parents=True)
+
+        (workspace_root / "pnpm-lock.yaml").write_text("")
+        (workspace_root / "package.json").write_text("{}")
+
+        result = determine_js_package_manager(deep_dir)
+
+        assert result == JsPackageManager.PNPM
+
 
 class TestGetPackageInstallCommand:
     """Tests for get_package_install_command function."""
