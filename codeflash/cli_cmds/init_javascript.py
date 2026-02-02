@@ -121,16 +121,26 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
 
 
 def determine_js_package_manager(project_root: Path) -> JsPackageManager:
-    """Determine which JavaScript package manager is being used based on lock files."""
-    if (project_root / "bun.lockb").exists() or (project_root / "bun.lock").exists():
-        return JsPackageManager.BUN
-    if (project_root / "pnpm-lock.yaml").exists():
-        return JsPackageManager.PNPM
-    if (project_root / "yarn.lock").exists():
-        return JsPackageManager.YARN
-    if (project_root / "package-lock.json").exists():
-        return JsPackageManager.NPM
-    # Default to npm if package.json exists but no lock file
+    """Determine which JavaScript package manager is being used based on lock files.
+
+    Searches the project_root directory and parent directories (for monorepo support)
+    to find lock files that indicate which package manager is being used.
+    """
+    # Search from project_root up to filesystem root for lock files
+    # This supports monorepo setups where lock file is at workspace root
+    current_dir = project_root.resolve()
+    while current_dir != current_dir.parent:
+        if (current_dir / "bun.lockb").exists() or (current_dir / "bun.lock").exists():
+            return JsPackageManager.BUN
+        if (current_dir / "pnpm-lock.yaml").exists():
+            return JsPackageManager.PNPM
+        if (current_dir / "yarn.lock").exists():
+            return JsPackageManager.YARN
+        if (current_dir / "package-lock.json").exists():
+            return JsPackageManager.NPM
+        current_dir = current_dir.parent
+
+    # Default to npm if package.json exists but no lock file found anywhere
     if (project_root / "package.json").exists():
         return JsPackageManager.NPM
     return JsPackageManager.UNKNOWN

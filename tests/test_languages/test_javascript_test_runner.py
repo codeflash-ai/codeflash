@@ -535,3 +535,196 @@ class TestVitestInternalLoopingConfiguration:
                 assert env.get("CODEFLASH_PERF_TARGET_DURATION_MS") == "5000"
                 assert env.get("CODEFLASH_PERF_STABILITY_CHECK") == "true"
                 assert env.get("CODEFLASH_MODE") == "performance"
+
+
+class TestBundlerModuleResolutionFix:
+    """Tests for bundler moduleResolution compatibility fix."""
+
+    def test_detect_bundler_module_resolution_true(self):
+        """Test detection of bundler moduleResolution in tsconfig."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _detect_bundler_module_resolution
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create tsconfig with bundler moduleResolution
+            tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "bundler",
+                    "module": "preserve",
+                    "target": "ES2022",
+                }
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(tsconfig))
+
+            assert _detect_bundler_module_resolution(tmpdir_path) is True
+
+    def test_detect_bundler_module_resolution_false(self):
+        """Test detection returns false for Node moduleResolution."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _detect_bundler_module_resolution
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create tsconfig with Node moduleResolution
+            tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "Node",
+                    "module": "ESNext",
+                }
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(tsconfig))
+
+            assert _detect_bundler_module_resolution(tmpdir_path) is False
+
+    def test_detect_bundler_module_resolution_no_tsconfig(self):
+        """Test detection returns false when no tsconfig exists."""
+        from codeflash.languages.javascript.test_runner import _detect_bundler_module_resolution
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            assert _detect_bundler_module_resolution(tmpdir_path) is False
+
+    def test_detect_bundler_module_resolution_extended_config(self):
+        """Test detection works with extended tsconfig files."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _detect_bundler_module_resolution
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create a base config with bundler in a subdirectory (simulating node_modules)
+            node_modules = tmpdir_path / "node_modules" / "@myorg" / "tsconfig"
+            node_modules.mkdir(parents=True)
+            base_tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "bundler",
+                    "module": "preserve",
+                }
+            }
+            (node_modules / "tsconfig.json").write_text(json.dumps(base_tsconfig))
+
+            # Create a project tsconfig that extends the base
+            project_tsconfig = {
+                "extends": "@myorg/tsconfig/tsconfig.json",
+                "compilerOptions": {
+                    "target": "ES2022",
+                }
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(project_tsconfig))
+
+            # Should detect bundler from extended config
+            assert _detect_bundler_module_resolution(tmpdir_path) is True
+
+    def test_create_codeflash_tsconfig(self):
+        """Test creation of codeflash-compatible tsconfig."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _create_codeflash_tsconfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create original tsconfig
+            original_tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "bundler",
+                    "module": "preserve",
+                    "target": "ES2022",
+                },
+                "include": ["src/**/*.ts"],
+                "exclude": ["node_modules"],
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(original_tsconfig))
+
+            # Create codeflash tsconfig
+            result_path = _create_codeflash_tsconfig(tmpdir_path)
+
+            assert result_path.exists()
+            assert result_path.name == "tsconfig.codeflash.json"
+
+            # Verify contents
+            codeflash_tsconfig = json.loads(result_path.read_text())
+            assert codeflash_tsconfig["extends"] == "./tsconfig.json"
+            assert codeflash_tsconfig["compilerOptions"]["moduleResolution"] == "Node"
+            assert "include" in codeflash_tsconfig
+
+    def test_create_codeflash_jest_config(self):
+        """Test creation of codeflash Jest config."""
+        from codeflash.languages.javascript.test_runner import _create_codeflash_jest_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create codeflash Jest config without original
+            result_path = _create_codeflash_jest_config(tmpdir_path, None)
+
+            assert result_path is not None
+            assert result_path.exists()
+            assert result_path.name == "jest.codeflash.config.js"
+
+            # Verify it contains the tsconfig reference
+            content = result_path.read_text()
+            assert "tsconfig.codeflash.json" in content
+            assert "ts-jest" in content
+
+    def test_get_jest_config_for_project_with_bundler(self):
+        """Test that bundler projects get codeflash Jest config."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _get_jest_config_for_project
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create tsconfig with bundler
+            tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "bundler",
+                    "module": "preserve",
+                }
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(tsconfig))
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+
+            result = _get_jest_config_for_project(tmpdir_path)
+
+            assert result is not None
+            assert result.name == "jest.codeflash.config.js"
+            # Also verify tsconfig.codeflash.json was created
+            assert (tmpdir_path / "tsconfig.codeflash.json").exists()
+
+    def test_get_jest_config_for_project_without_bundler(self):
+        """Test that non-bundler projects use original Jest config."""
+        import json
+
+        from codeflash.languages.javascript.test_runner import _get_jest_config_for_project
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create tsconfig with Node moduleResolution
+            tsconfig = {
+                "compilerOptions": {
+                    "moduleResolution": "Node",
+                    "module": "ESNext",
+                }
+            }
+            (tmpdir_path / "tsconfig.json").write_text(json.dumps(tsconfig))
+            (tmpdir_path / "package.json").write_text('{"name": "test"}')
+
+            # Create original Jest config
+            (tmpdir_path / "jest.config.js").write_text("module.exports = {};")
+
+            result = _get_jest_config_for_project(tmpdir_path)
+
+            assert result is not None
+            assert result.name == "jest.config.js"
+            # Verify codeflash configs were NOT created
+            assert not (tmpdir_path / "jest.codeflash.config.js").exists()
+            assert not (tmpdir_path / "tsconfig.codeflash.json").exists()
