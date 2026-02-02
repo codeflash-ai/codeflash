@@ -1466,3 +1466,88 @@ public final class Buffer {{
         assert "return 42;" in new_code
         # Verify old implementation is replaced
         assert 'String.format("%02x", buf[i])' not in new_code
+
+
+class TestOverloadedMethods:
+    """Tests for handling overloaded methods (same name, different signatures)."""
+
+    def test_replace_specific_overload_by_line_number(self, tmp_path: Path):
+        """Test replacing a specific overload when multiple exist."""
+        java_file = tmp_path / "Buffer.java"
+        original_code = """public final class Buffer {
+    public static String bytesToHexString(byte[] buf) {
+        if (buf == null || buf.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(buf.length * 2);
+        for (int i = 0; i < buf.length; i++) {
+            sb.append(String.format("%02x", buf[i]));
+        }
+        return sb.toString();
+    }
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        StringBuilder sb = new StringBuilder(length * 2);
+        for (int i = offset; i < length; i++) {
+            sb.append(String.format("%02x", buf[i]));
+        }
+        return sb.toString();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization only for the 3-argument version
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public final class Buffer {{
+    private static final char[] HEX_CHARS = {{'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'}};
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {{
+        char[] out = new char[(length - offset) * 2];
+        for (int i = offset, j = 0; i < length; i++) {{
+            int v = buf[i] & 0xFF;
+            out[j++] = HEX_CHARS[v >>> 4];
+            out[j++] = HEX_CHARS[v & 0x0F];
+        }}
+        return new String(out);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        # Create FunctionToOptimize with line info for the 3-arg version (lines 13-18)
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionParent
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="bytesToHexString",
+            file_path=java_file,
+            starting_line=13,  # Line where 3-arg version starts (1-indexed)
+            ending_line=18,
+            parents=(FunctionParent(name="Buffer", type="class"),),
+            qualified_name="Buffer.bytesToHexString",
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["bytesToHexString"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            function_to_optimize=function_to_optimize,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+
+        # Verify the static field was added
+        assert "private static final char[] HEX_CHARS" in new_code
+        # Verify the 1-arg version is PRESERVED (not modified)
+        assert "bytesToHexString(byte[] buf)" in new_code
+        assert 'String.format("%02x", buf[i])' in new_code  # 1-arg version still uses format
+        # Verify the 3-arg version is OPTIMIZED
+        assert "HEX_CHARS[v >>> 4]" in new_code
+        # Should NOT have duplicate method definitions
+        assert new_code.count("bytesToHexString(byte[] buf, int offset, int length)") == 1
+        # Should still have both overloads
+        assert new_code.count("bytesToHexString") == 2

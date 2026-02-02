@@ -249,12 +249,55 @@ def replace_function(
     # Find the method in the original source
     methods = analyzer.find_methods(source)
     target_method = None
+    target_overload_index = 0  # Track which overload we're targeting
 
-    for method in methods:
-        if method.name == function.name:
-            if function.class_name is None or method.class_name == function.class_name:
-                target_method = method
-                break
+    # Find all methods matching the name (there may be overloads)
+    matching_methods = [
+        m for m in methods
+        if m.name == function.name
+        and (function.class_name is None or m.class_name == function.class_name)
+    ]
+
+    if len(matching_methods) == 1:
+        # Only one method with this name - use it
+        target_method = matching_methods[0]
+        target_overload_index = 0
+    elif len(matching_methods) > 1:
+        # Multiple overloads - use line numbers to find the exact one
+        logger.debug(
+            "Found %d overloads of %s. Function start_line=%s, end_line=%s",
+            len(matching_methods),
+            function.name,
+            function.start_line,
+            function.end_line,
+        )
+        for i, m in enumerate(matching_methods):
+            logger.debug("  Overload %d: lines %d-%d", i, m.start_line, m.end_line)
+        if function.start_line and function.end_line:
+            for i, method in enumerate(matching_methods):
+                # Check if the line numbers are close (account for minor differences
+                # that can occur due to different parsing or file transformations)
+                # Use a tolerance of 5 lines to handle edge cases
+                if abs(method.start_line - function.start_line) <= 5:
+                    target_method = method
+                    target_overload_index = i
+                    logger.debug(
+                        "Matched overload %d at lines %d-%d (target: %d-%d)",
+                        i,
+                        method.start_line,
+                        method.end_line,
+                        function.start_line,
+                        function.end_line,
+                    )
+                    break
+        if not target_method:
+            # Fallback: use the first match
+            logger.warning(
+                "Multiple overloads of %s found but no line match, using first match",
+                function.name,
+            )
+            target_method = matching_methods[0]
+            target_overload_index = 0
 
     if not target_method:
         logger.error("Could not find method %s in source", function.name)
@@ -298,16 +341,30 @@ def replace_function(
             )
 
             # Re-find the target method after modifications
+            # Line numbers have shifted, but the relative order of overloads is preserved
+            # Use the target_overload_index we saved earlier
             methods = analyzer.find_methods(source)
-            target_method = None
-            for method in methods:
-                if method.name == function.name:
-                    if function.class_name is None or method.class_name == function.class_name:
-                        target_method = method
-                        break
+            matching_methods = [
+                m for m in methods
+                if m.name == function.name
+                and (function.class_name is None or m.class_name == function.class_name)
+            ]
 
-            if not target_method:
-                logger.error("Lost target method %s after adding members", function.name)
+            if matching_methods and target_overload_index < len(matching_methods):
+                target_method = matching_methods[target_overload_index]
+                logger.debug(
+                    "Re-found target method at overload index %d (lines %d-%d after shift)",
+                    target_overload_index,
+                    target_method.start_line,
+                    target_method.end_line,
+                )
+            else:
+                logger.error(
+                    "Lost target method %s after adding members (had index %d, found %d overloads)",
+                    function.name,
+                    target_overload_index,
+                    len(matching_methods),
+                )
                 return source
 
     # Determine replacement range

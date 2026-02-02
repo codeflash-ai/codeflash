@@ -287,7 +287,7 @@ def _compile_tests(
             stderr="Maven not found",
         )
 
-    cmd = [mvn, "test-compile", "-q"]  # Quiet mode for faster output
+    cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
 
     if test_module:
         cmd.extend(["-pl", test_module, "-am"])
@@ -742,7 +742,12 @@ def run_benchmarking_tests(
     compile_time = time.time() - compile_start
 
     if compile_result.returncode != 0:
-        logger.error("Test compilation failed: %s", compile_result.stderr)
+        logger.error(
+            "Test compilation failed (rc=%d):\nstdout: %s\nstderr: %s",
+            compile_result.returncode,
+            compile_result.stdout,
+            compile_result.stderr,
+        )
         # Fall back to Maven-based execution
         logger.warning("Falling back to Maven-based test execution")
         return _run_benchmarking_tests_maven(
