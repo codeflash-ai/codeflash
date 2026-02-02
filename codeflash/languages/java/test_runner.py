@@ -46,11 +46,14 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
         - test_module_name: The name of the test module if different from project_root, else None
 
     """
-    # Get test file paths
+    # Get test file paths - try both benchmarking and behavior paths
     test_file_paths: list[Path] = []
     if hasattr(test_paths, "test_files"):
         for test_file in test_paths.test_files:
-            if hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+            # Prefer benchmarking_file_path for performance mode
+            if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
+                test_file_paths.append(test_file.benchmarking_file_path)
+            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
                 test_file_paths.append(test_file.instrumented_behavior_file_path)
     elif isinstance(test_paths, (list, tuple)):
         test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
@@ -71,6 +74,34 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
             break
 
     if not test_outside_project:
+        # Check if project_root itself is a multi-module project
+        # and the test file is in a submodule (e.g., test/src/...)
+        pom_path = project_root / "pom.xml"
+        if pom_path.exists():
+            try:
+                content = pom_path.read_text(encoding="utf-8")
+                if "<modules>" in content:
+                    # This is a multi-module project root
+                    # Extract modules from pom.xml
+                    import re
+                    modules = re.findall(r"<module>([^<]+)</module>", content)
+                    # Check if test file is in one of the modules
+                    for test_path in test_file_paths:
+                        try:
+                            rel_path = test_path.relative_to(project_root)
+                            # Get the first component of the relative path
+                            first_component = rel_path.parts[0] if rel_path.parts else None
+                            if first_component and first_component in modules:
+                                logger.debug(
+                                    "Detected multi-module Maven project. Root: %s, Test module: %s",
+                                    project_root,
+                                    first_component,
+                                )
+                                return project_root, first_component
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
         return project_root, None
 
     # Find common parent that contains both project_root and test files
@@ -775,6 +806,27 @@ def run_benchmarking_tests(
             all_stderr.append(result.stderr)
 
         logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
+
+        # Check if JUnit Console Launcher is not available (JUnit 4 projects)
+        # Fall back to Maven-based execution in this case
+        if (
+            loop_idx == 1
+            and result.returncode != 0
+            and result.stderr
+            and "ConsoleLauncher" in result.stderr
+        ):
+            logger.debug("JUnit Console Launcher not available, falling back to Maven-based execution")
+            return _run_benchmarking_tests_maven(
+                test_paths,
+                test_env,
+                cwd,
+                timeout,
+                project_root,
+                min_loops,
+                max_loops,
+                target_duration_seconds,
+                inner_iterations,
+            )
 
         # Check if we've hit the target duration
         elapsed = time.time() - total_start_time
