@@ -359,7 +359,7 @@ class JavaSupport(LanguageSupport):
         min_loops: int = 1,
         max_loops: int = 3,
         target_duration_seconds: float = 10.0,
-        inner_iterations: int = 100,
+        inner_iterations: int = 10,
     ) -> tuple[Path, Any]:
         """Run benchmarking tests for Java with inner loop for JIT warmup."""
         return run_benchmarking_tests(
