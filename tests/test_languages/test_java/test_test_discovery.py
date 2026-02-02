@@ -318,3 +318,240 @@ class TestWithFixture:
 
         tests = discover_all_tests(test_root)
         assert len(tests) > 0
+
+
+class TestImportExtraction:
+    """Tests for the _extract_imports helper function."""
+
+    def test_basic_import(self):
+        """Test extraction of basic import statement."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import com.example.Calculator;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == {"Calculator"}
+
+    def test_multiple_imports(self):
+        """Test extraction of multiple imports."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import com.example.util.Helper;
+import com.example.Calculator;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == {"Helper", "Calculator"}
+
+    def test_wildcard_import_returns_empty(self):
+        """Test that wildcard imports don't add specific classes."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import com.example.*;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == set()
+
+    def test_static_import_extracts_class(self):
+        """Test that static imports extract the class name, not the method."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import static com.example.Utils.format;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == {"Utils"}
+
+    def test_static_wildcard_import_extracts_class(self):
+        """Test that static wildcard imports extract the class name."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import static com.example.Utils.*;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == {"Utils"}
+
+    def test_deeply_nested_package(self):
+        """Test extraction from deeply nested package."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import com.aerospike.client.command.Buffer;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        assert imports == {"Buffer"}
+
+    def test_mixed_imports(self):
+        """Test extraction with mix of regular, static, and wildcard imports."""
+        from codeflash.languages.java.test_discovery import _extract_imports
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+import com.example.Calculator;
+import com.example.util.*;
+import static org.junit.Assert.assertEquals;
+import static com.example.Utils.*;
+public class Test {}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        imports = _extract_imports(tree.root_node, source_bytes, analyzer)
+
+        # Should have Calculator, Assert, Utils but NOT wildcards
+        assert "Calculator" in imports
+        assert "Assert" in imports
+        assert "Utils" in imports
+
+
+class TestMethodCallDetection:
+    """Tests for method call detection in test code."""
+
+    def test_find_method_calls(self):
+        """Test detection of method calls within a code range."""
+        from codeflash.languages.java.test_discovery import _find_method_calls_in_range
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+        source = """
+public class TestExample {
+    @Test
+    public void testSomething() {
+        Calculator calc = new Calculator();
+        int result = calc.add(2, 3);
+        String hex = Buffer.bytesToHexString(data);
+        helper.process(x);
+    }
+}
+"""
+        source_bytes = source.encode("utf8")
+        tree = analyzer.parse(source_bytes)
+        calls = _find_method_calls_in_range(tree.root_node, source_bytes, 1, 10, analyzer)
+
+        assert "add" in calls
+        assert "bytesToHexString" in calls
+        assert "process" in calls
+
+
+class TestClassNamingConventions:
+    """Tests for class naming convention matching."""
+
+    def test_suffix_test_pattern(self, tmp_path: Path):
+        """Test that ClassNameTest matches ClassName."""
+        src_file = tmp_path / "Calculator.java"
+        src_file.write_text("""
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+}
+""")
+
+        test_dir = tmp_path / "test"
+        test_dir.mkdir()
+        test_file = test_dir / "CalculatorTest.java"
+        test_file.write_text("""
+import org.junit.jupiter.api.Test;
+public class CalculatorTest {
+    @Test
+    public void testAdd() { }
+}
+""")
+
+        source_functions = discover_functions_from_source(src_file.read_text(), src_file)
+        result = discover_tests(test_dir, source_functions)
+
+        # CalculatorTest should match Calculator class
+        assert len(result) > 0
+        assert "Calculator.add" in result
+
+    def test_prefix_test_pattern(self, tmp_path: Path):
+        """Test that TestClassName matches ClassName."""
+        src_file = tmp_path / "Calculator.java"
+        src_file.write_text("""
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+}
+""")
+
+        test_dir = tmp_path / "test"
+        test_dir.mkdir()
+        test_file = test_dir / "TestCalculator.java"
+        test_file.write_text("""
+import org.junit.jupiter.api.Test;
+public class TestCalculator {
+    @Test
+    public void testAdd() { }
+}
+""")
+
+        source_functions = discover_functions_from_source(src_file.read_text(), src_file)
+        result = discover_tests(test_dir, source_functions)
+
+        # TestCalculator should match Calculator class
+        assert len(result) > 0
+        assert "Calculator.add" in result
+
+    def test_tests_suffix_pattern(self, tmp_path: Path):
+        """Test that ClassNameTests matches ClassName."""
+        src_file = tmp_path / "Calculator.java"
+        src_file.write_text("""
+public class Calculator {
+    public int add(int a, int b) { return a + b; }
+}
+""")
+
+        test_dir = tmp_path / "test"
+        test_dir.mkdir()
+        test_file = test_dir / "CalculatorTests.java"
+        test_file.write_text("""
+import org.junit.jupiter.api.Test;
+public class CalculatorTests {
+    @Test
+    public void testAdd() { }
+}
+""")
+
+        source_functions = discover_functions_from_source(src_file.read_text(), src_file)
+        result = discover_tests(test_dir, source_functions)
+
+        # CalculatorTests should match Calculator class
+        assert len(result) > 0
+        assert "Calculator.add" in result

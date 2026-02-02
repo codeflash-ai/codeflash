@@ -53,8 +53,12 @@ def discover_tests(
         function_map[func.name] = func
         function_map[func.qualified_name] = func
 
-    # Find all test files
-    test_files = list(test_root.rglob("*Test.java")) + list(test_root.rglob("Test*.java"))
+    # Find all test files (various naming conventions)
+    test_files = (
+        list(test_root.rglob("*Test.java"))
+        + list(test_root.rglob("*Tests.java"))
+        + list(test_root.rglob("Test*.java"))
+    )
 
     # Result map
     result: dict[str, list[TestInfo]] = defaultdict(list)
@@ -134,11 +138,13 @@ def _match_test_to_functions(
                 matched.append(qualified)
 
     # Strategy 3: Test class naming convention
-    # e.g., CalculatorTest tests Calculator
+    # e.g., CalculatorTest tests Calculator, TestCalculator tests Calculator
     if test_method.class_name:
-        # Remove "Test" suffix or prefix
+        # Remove "Test/Tests" suffix or "Test" prefix
         source_class_name = test_method.class_name
-        if source_class_name.endswith("Test"):
+        if source_class_name.endswith("Tests"):
+            source_class_name = source_class_name[:-5]
+        elif source_class_name.endswith("Test"):
             source_class_name = source_class_name[:-4]
         elif source_class_name.startswith("Test"):
             source_class_name = source_class_name[4:]
@@ -185,7 +191,37 @@ def _extract_imports(
 
     def visit(n):
         if n.type == "import_declaration":
-            # Get the full import path
+            import_text = analyzer.get_node_text(n, source_bytes)
+
+            # Check if it's a wildcard import - skip these as we can't know specific classes
+            if import_text.rstrip(";").endswith(".*"):
+                # For static wildcard imports like "import static com.example.Utils.*"
+                # we CAN extract the class name (Utils)
+                if "import static" in import_text:
+                    # Extract class from "import static com.example.Utils.*"
+                    # Remove "import static " prefix and ".*;" suffix
+                    path = import_text.replace("import static ", "").rstrip(";").rstrip(".*")
+                    if "." in path:
+                        class_name = path.rsplit(".", 1)[-1]
+                        if class_name and class_name[0].isupper():  # Ensure it's a class name
+                            imports.add(class_name)
+                # For regular wildcards like "import com.example.*", skip entirely
+                return
+
+            # Check if it's a static import of a specific method/field
+            if "import static" in import_text:
+                # "import static com.example.Utils.format;"
+                # We want to extract "Utils" (the class), not "format" (the method)
+                path = import_text.replace("import static ", "").rstrip(";")
+                parts = path.rsplit(".", 2)  # Split into [package..., Class, member]
+                if len(parts) >= 2:
+                    # The second-to-last part is the class name
+                    class_name = parts[-2]
+                    if class_name and class_name[0].isupper():  # Ensure it's a class name
+                        imports.add(class_name)
+                return
+
+            # Regular import: extract class name from scoped_identifier
             for child in n.children:
                 if child.type == "scoped_identifier" or child.type == "identifier":
                     import_path = analyzer.get_node_text(child, source_bytes)
@@ -195,8 +231,8 @@ def _extract_imports(
                         class_name = import_path.rsplit(".", 1)[-1]
                     else:
                         class_name = import_path
-                    # Skip wildcard imports (*)
-                    if class_name != "*":
+                    # Skip if it looks like a package name (lowercase)
+                    if class_name and class_name[0].isupper():
                         imports.add(class_name)
 
         for child in n.children:
@@ -314,8 +350,12 @@ def discover_all_tests(
     analyzer = analyzer or get_java_analyzer()
     all_tests: list[FunctionInfo] = []
 
-    # Find all test files
-    test_files = list(test_root.rglob("*Test.java")) + list(test_root.rglob("Test*.java"))
+    # Find all test files (various naming conventions)
+    test_files = (
+        list(test_root.rglob("*Test.java"))
+        + list(test_root.rglob("*Tests.java"))
+        + list(test_root.rglob("Test*.java"))
+    )
 
     for test_file in test_files:
         try:
