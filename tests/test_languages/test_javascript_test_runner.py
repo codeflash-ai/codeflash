@@ -258,3 +258,157 @@ class TestJestRootsConfiguration:
 
                     # Should have two --roots flags (one for each directory)
                     assert len(roots_flags) == 2, f"Expected 2 --roots flags, got {len(roots_flags)}"
+
+
+class TestVitestTimeoutConfiguration:
+    """Tests for Vitest subprocess timeout handling."""
+
+    def test_vitest_behavioral_subprocess_timeout_larger_than_test_timeout(self):
+        """Test that subprocess timeout is larger than per-test timeout for Vitest behavioral tests."""
+        from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+
+            (tmpdir_path / "package.json").write_text('{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}')
+
+            test_file = test_dir / "test_func.test.ts"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 0
+                mock_run.return_value = mock_result
+
+                # Run with a 15 second per-test timeout
+                run_vitest_behavioral_tests(
+                    test_paths=mock_test_files,
+                    test_env={},
+                    cwd=tmpdir_path,
+                    timeout=15,  # 15 second per-test timeout
+                    project_root=tmpdir_path,
+                )
+
+                # Verify subprocess was called with a larger timeout
+                assert mock_run.called
+                call_kwargs = mock_run.call_args[1]
+                subprocess_timeout = call_kwargs.get("timeout")
+
+                # Subprocess timeout should be at least 120 seconds (minimum)
+                # or 10x the per-test timeout (150 seconds)
+                assert subprocess_timeout >= 120, f"Expected subprocess timeout >= 120s, got {subprocess_timeout}s"
+                assert subprocess_timeout >= 15 * 10, f"Expected subprocess timeout >= 150s (10x per-test), got {subprocess_timeout}s"
+
+    def test_vitest_line_profile_subprocess_timeout_larger_than_test_timeout(self):
+        """Test that subprocess timeout is larger than per-test timeout for Vitest line profile tests."""
+        from codeflash.languages.javascript.vitest_runner import run_vitest_line_profile_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+
+            (tmpdir_path / "package.json").write_text('{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}')
+
+            test_file = test_dir / "test_func.test.ts"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 0
+                mock_run.return_value = mock_result
+
+                run_vitest_line_profile_tests(
+                    test_paths=mock_test_files,
+                    test_env={},
+                    cwd=tmpdir_path,
+                    timeout=15,
+                    project_root=tmpdir_path,
+                )
+
+                assert mock_run.called
+                call_kwargs = mock_run.call_args[1]
+                subprocess_timeout = call_kwargs.get("timeout")
+
+                assert subprocess_timeout >= 120, f"Expected subprocess timeout >= 120s, got {subprocess_timeout}s"
+
+    def test_vitest_default_subprocess_timeout_is_reasonable(self):
+        """Test that default subprocess timeout is at least 120 seconds when no timeout specified."""
+        from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
+        from codeflash.models.models import TestFile, TestFiles
+        from codeflash.models.test_type import TestType
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            test_dir = tmpdir_path / "test"
+            test_dir.mkdir()
+
+            (tmpdir_path / "package.json").write_text('{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}')
+
+            test_file = test_dir / "test_func.test.ts"
+            test_file.write_text("// test")
+
+            mock_test_files = TestFiles(
+                test_files=[
+                    TestFile(
+                        original_file_path=test_file,
+                        instrumented_behavior_file_path=test_file,
+                        benchmarking_file_path=test_file,
+                        test_type=TestType.GENERATED_REGRESSION,
+                    ),
+                ]
+            )
+
+            with patch("subprocess.run") as mock_run:
+                mock_result = MagicMock()
+                mock_result.stdout = ""
+                mock_result.stderr = ""
+                mock_result.returncode = 0
+                mock_run.return_value = mock_result
+
+                # Run without specifying a timeout
+                run_vitest_behavioral_tests(
+                    test_paths=mock_test_files,
+                    test_env={},
+                    cwd=tmpdir_path,
+                    project_root=tmpdir_path,
+                )
+
+                assert mock_run.called
+                call_kwargs = mock_run.call_args[1]
+                subprocess_timeout = call_kwargs.get("timeout")
+
+                # Default should be at least 120 seconds (or 600 from the default)
+                assert subprocess_timeout >= 120, f"Expected subprocess timeout >= 120s, got {subprocess_timeout}s"
