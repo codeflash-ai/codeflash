@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from contextlib import contextmanager
 from itertools import cycle
 from typing import TYPE_CHECKING, Optional
@@ -31,6 +32,15 @@ if TYPE_CHECKING:
     from codeflash.lsp.lsp_message import LspMessage
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
+
+# Fix UTF-8 encoding on Windows before creating the console
+# This prevents UnicodeEncodeError when Rich tries to render Unicode characters
+# especially in environments like Git Bash that default to cp1252 encoding
+if sys.platform == "win32" and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    import codecs
+
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
 
 console = Console()
 
