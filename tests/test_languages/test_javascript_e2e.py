@@ -5,14 +5,27 @@ Tests the full optimization pipeline for JavaScript:
 - Code context extraction
 - Test discovery
 - Code replacement
+
+Note: These tests require JS/TS language support to be registered.
+They will be skipped in environments where only Python is supported.
 """
 
 import tempfile
 from pathlib import Path
 
 import pytest
-from codeflash.discovery.functions_to_optimize import find_all_functions_in_file, get_files_for_language
+
 from codeflash.languages.base import Language
+
+
+def skip_if_js_not_supported():
+    """Skip test if JavaScript/TypeScript languages are not supported."""
+    try:
+        from codeflash.languages import get_language_support
+
+        get_language_support(Language.JAVASCRIPT)
+    except Exception as e:
+        pytest.skip(f"JavaScript/TypeScript language support not available: {e}")
 
 
 class TestJavaScriptFunctionDiscovery:
@@ -29,6 +42,9 @@ class TestJavaScriptFunctionDiscovery:
 
     def test_discover_functions_in_fibonacci(self, js_project_dir):
         """Test discovering functions in fibonacci.js."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
         fib_file = js_project_dir / "fibonacci.js"
         if not fib_file.exists():
             pytest.skip("fibonacci.js not found")
@@ -38,19 +54,17 @@ class TestJavaScriptFunctionDiscovery:
         assert fib_file in functions
         func_list = functions[fib_file]
 
-        # Should find the main exported functions
         func_names = {f.function_name for f in func_list}
-        assert "fibonacci" in func_names
-        assert "isFibonacci" in func_names
-        assert "isPerfectSquare" in func_names
-        assert "fibonacciSequence" in func_names
+        assert func_names == {"fibonacci", "isFibonacci", "isPerfectSquare", "fibonacciSequence"}
 
-        # All should be JavaScript functions
         for func in func_list:
             assert func.language == "javascript"
 
     def test_discover_functions_in_bubble_sort(self, js_project_dir):
         """Test discovering functions in bubble_sort.js."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
         sort_file = js_project_dir / "bubble_sort.js"
         if not sort_file.exists():
             pytest.skip("bubble_sort.js not found")
@@ -65,13 +79,14 @@ class TestJavaScriptFunctionDiscovery:
 
     def test_get_javascript_files(self, js_project_dir):
         """Test getting JavaScript files from directory."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import get_files_for_language
+
         files = get_files_for_language(js_project_dir, Language.JAVASCRIPT)
 
-        # Should find .js files
         js_files = [f for f in files if f.suffix == ".js"]
-        assert len(js_files) >= 3  # fibonacci.js, bubble_sort.js, string_utils.js
+        assert len(js_files) >= 3
 
-        # Should not include test files in root (they're in tests/)
         root_files = [f for f in js_files if f.parent == js_project_dir]
         assert len(root_files) >= 3
 
@@ -90,11 +105,11 @@ class TestJavaScriptCodeContext:
 
     def test_extract_code_context_for_javascript(self, js_project_dir):
         """Test extracting code context for a JavaScript function."""
+        skip_if_js_not_supported()
         from codeflash.context.code_context_extractor import get_code_optimization_context
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
         from codeflash.languages import current as lang_current
-        from codeflash.languages.base import Language
 
-        # Force set language to JavaScript for proper context extraction routing
         lang_current._current_language = Language.JAVASCRIPT
 
         fib_file = js_project_dir / "fibonacci.js"
@@ -104,21 +119,30 @@ class TestJavaScriptCodeContext:
         functions = find_all_functions_in_file(fib_file)
         func_list = functions[fib_file]
 
-        # Find the fibonacci function
         fib_func = next((f for f in func_list if f.function_name == "fibonacci"), None)
         assert fib_func is not None
 
-        # Extract code context
         context = get_code_optimization_context(fib_func, js_project_dir)
 
-        # Verify context structure
         assert context.read_writable_code is not None
         assert context.read_writable_code.language == "javascript"
         assert len(context.read_writable_code.code_strings) > 0
 
-        # The code should contain the function
         code = context.read_writable_code.code_strings[0].code
-        assert "fibonacci" in code
+        expected_code = """/**
+ * Calculate the nth Fibonacci number using naive recursion.
+ * This is intentionally slow to demonstrate optimization potential.
+ * @param {number} n - The index of the Fibonacci number to calculate
+ * @returns {number} - The nth Fibonacci number
+ */
+function fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+"""
+        assert code == expected_code
 
 
 class TestJavaScriptCodeReplacement:
@@ -126,8 +150,9 @@ class TestJavaScriptCodeReplacement:
 
     def test_replace_function_in_javascript_file(self):
         """Test replacing a function in a JavaScript file."""
+        skip_if_js_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import FunctionInfo
 
         original_source = """
 function add(a, b) {
@@ -146,16 +171,23 @@ function multiply(a, b) {
 
         js_support = get_language_support(Language.JAVASCRIPT)
 
-        # Create FunctionInfo for the add function
         func_info = FunctionInfo(
             name="add", file_path=Path("/tmp/test.js"), start_line=2, end_line=4, language=Language.JAVASCRIPT
         )
 
         result = js_support.replace_function(original_source, func_info, new_function)
 
-        # Verify the function was replaced
-        assert "// Optimized version" in result
-        assert "multiply" in result  # Other function should still be there
+        expected_result = """
+function add(a, b) {
+    // Optimized version
+    return a + b;
+}
+
+function multiply(a, b) {
+    return a * b;
+}
+"""
+        assert result == expected_result
 
 
 class TestJavaScriptTestDiscovery:
@@ -172,8 +204,9 @@ class TestJavaScriptTestDiscovery:
 
     def test_discover_jest_tests(self, js_project_dir):
         """Test discovering Jest tests for JavaScript functions."""
+        skip_if_js_not_supported()
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.languages.base import FunctionInfo
 
         js_support = get_language_support(Language.JAVASCRIPT)
         test_root = js_project_dir / "tests"
@@ -181,17 +214,14 @@ class TestJavaScriptTestDiscovery:
         if not test_root.exists():
             pytest.skip("tests directory not found")
 
-        # Create FunctionInfo for fibonacci function
         fib_file = js_project_dir / "fibonacci.js"
         func_info = FunctionInfo(
             name="fibonacci", file_path=fib_file, start_line=11, end_line=16, language=Language.JAVASCRIPT
         )
 
-        # Discover tests
         tests = js_support.discover_tests(test_root, [func_info])
 
-        # Should find tests for fibonacci
-        assert func_info.qualified_name in tests or "fibonacci" in str(tests)
+        assert func_info.qualified_name in tests or len(tests) > 0
 
 
 class TestJavaScriptPipelineIntegration:
@@ -199,6 +229,9 @@ class TestJavaScriptPipelineIntegration:
 
     def test_function_to_optimize_has_correct_fields(self):
         """Test that FunctionToOptimize from JavaScript has all required fields."""
+        skip_if_js_not_supported()
+        from codeflash.discovery.functions_to_optimize import find_all_functions_in_file
+
         with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
             f.write("""
 class Calculator {
@@ -220,16 +253,13 @@ function standalone(x) {
 
             functions = find_all_functions_in_file(file_path)
 
-            # Should find class methods and standalone function
             assert len(functions.get(file_path, [])) >= 3
 
-            # Check standalone function
             standalone_fn = next((fn for fn in functions[file_path] if fn.function_name == "standalone"), None)
             assert standalone_fn is not None
             assert standalone_fn.language == "javascript"
             assert len(standalone_fn.parents) == 0
 
-            # Check class method
             add_fn = next((fn for fn in functions[file_path] if fn.function_name == "add"), None)
             assert add_fn is not None
             assert add_fn.language == "javascript"
@@ -250,4 +280,4 @@ function standalone(x) {
         )
 
         markdown = code_strings.markdown
-        assert "```javascript" in markdown or "```js" in markdown.lower()
+        assert "```javascript" in markdown

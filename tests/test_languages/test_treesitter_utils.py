@@ -351,6 +351,32 @@ class TestFindImports:
         assert imports[0].module_path == "fs"
         assert imports[0].default_import == "fs"
 
+    def test_require_inside_function_not_import(self, js_analyzer):
+        """Test that require() inside functions is not treated as an import.
+
+        This is important because dynamic require() calls inside functions are
+        not module-level imports and should not be extracted as such.
+        """
+        code = """
+const fs = require('fs');
+
+function loadModule() {
+    const dynamic = require('dynamic-module');
+    return dynamic;
+}
+
+class MyClass {
+    method() {
+        const inMethod = require('method-module');
+    }
+}
+"""
+        imports = js_analyzer.find_imports(code)
+
+        # Only the module-level require should be found
+        assert len(imports) == 1
+        assert imports[0].module_path == "fs"
+
     def test_find_multiple_imports(self, js_analyzer):
         """Test finding multiple imports."""
         code = """
