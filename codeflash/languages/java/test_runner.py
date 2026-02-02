@@ -640,9 +640,20 @@ def _run_benchmarking_tests_maven(
             )
             break
 
+        # Check if we have timing markers even if some tests failed
+        # We should continue looping if we're getting valid timing data
         if result.returncode != 0:
-            logger.warning("Tests failed in Maven loop %d, stopping", loop_idx)
-            break
+            import re
+            timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
+            has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
+            if not has_timing_markers:
+                logger.warning("Tests failed in Maven loop %d with no timing markers, stopping", loop_idx)
+                break
+            else:
+                logger.debug(
+                    "Some tests failed in Maven loop %d but timing markers present, continuing",
+                    loop_idx,
+                )
 
     combined_stdout = "\n".join(all_stdout)
     combined_stderr = "\n".join(all_stderr)
@@ -840,10 +851,19 @@ def run_benchmarking_tests(
             )
             break
 
-        # Check if tests failed - don't continue looping
+        # Check if tests failed - continue looping if we have timing markers
         if result.returncode != 0:
-            logger.warning("Tests failed in loop %d, stopping benchmark", loop_idx)
-            break
+            import re
+            timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
+            has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
+            if not has_timing_markers:
+                logger.warning("Tests failed in loop %d with no timing markers, stopping benchmark", loop_idx)
+                break
+            else:
+                logger.debug(
+                    "Some tests failed in loop %d but timing markers present, continuing",
+                    loop_idx,
+                )
 
     # Create a combined result with all stdout
     combined_stdout = "\n".join(all_stdout)
