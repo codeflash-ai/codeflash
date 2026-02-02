@@ -228,22 +228,322 @@ def run_behavioral_tests(
     return result_xml_path, result, sqlite_db_path, coverage_xml_path
 
 
-def run_benchmarking_tests(
+def _compile_tests(
+    project_root: Path,
+    env: dict[str, str],
+    test_module: str | None = None,
+    timeout: int = 120,
+) -> subprocess.CompletedProcess:
+    """Compile test code using Maven (without running tests).
+
+    Args:
+        project_root: Root directory of the Maven project.
+        env: Environment variables.
+        test_module: For multi-module projects, the module containing tests.
+        timeout: Maximum execution time in seconds.
+
+    Returns:
+        CompletedProcess with compilation results.
+
+    """
+    mvn = find_maven_executable()
+    if not mvn:
+        logger.error("Maven not found")
+        return subprocess.CompletedProcess(
+            args=["mvn"],
+            returncode=-1,
+            stdout="",
+            stderr="Maven not found",
+        )
+
+    cmd = [mvn, "test-compile", "-q"]  # Quiet mode for faster output
+
+    if test_module:
+        cmd.extend(["-pl", test_module, "-am"])
+
+    logger.debug("Compiling tests: %s in %s", " ".join(cmd), project_root)
+
+    try:
+        return subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("Maven compilation timed out after %d seconds", timeout)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-2,
+            stdout="",
+            stderr=f"Compilation timed out after {timeout} seconds",
+        )
+    except Exception as e:
+        logger.exception("Maven compilation failed: %s", e)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-1,
+            stdout="",
+            stderr=str(e),
+        )
+
+
+def _get_test_classpath(
+    project_root: Path,
+    env: dict[str, str],
+    test_module: str | None = None,
+    timeout: int = 60,
+) -> str | None:
+    """Get the test classpath from Maven.
+
+    Args:
+        project_root: Root directory of the Maven project.
+        env: Environment variables.
+        test_module: For multi-module projects, the module containing tests.
+        timeout: Maximum execution time in seconds.
+
+    Returns:
+        Classpath string, or None if failed.
+
+    """
+    mvn = find_maven_executable()
+    if not mvn:
+        return None
+
+    # Create temp file for classpath output
+    cp_file = project_root / ".codeflash_classpath.txt"
+
+    cmd = [
+        mvn,
+        "dependency:build-classpath",
+        "-DincludeScope=test",
+        f"-Dmdep.outputFile={cp_file}",
+        "-q",
+    ]
+
+    if test_module:
+        cmd.extend(["-pl", test_module])
+
+    logger.debug("Getting classpath: %s", " ".join(cmd))
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        if result.returncode != 0:
+            logger.error("Failed to get classpath: %s", result.stderr)
+            return None
+
+        if not cp_file.exists():
+            logger.error("Classpath file not created")
+            return None
+
+        classpath = cp_file.read_text(encoding="utf-8").strip()
+
+        # Add compiled classes directories to classpath
+        # For multi-module, we need to find the correct target directories
+        if test_module:
+            module_path = project_root / test_module
+        else:
+            module_path = project_root
+
+        test_classes = module_path / "target" / "test-classes"
+        main_classes = module_path / "target" / "classes"
+
+        cp_parts = [classpath]
+        if test_classes.exists():
+            cp_parts.append(str(test_classes))
+        if main_classes.exists():
+            cp_parts.append(str(main_classes))
+
+        return os.pathsep.join(cp_parts)
+
+    except subprocess.TimeoutExpired:
+        logger.error("Getting classpath timed out")
+        return None
+    except Exception as e:
+        logger.exception("Failed to get classpath: %s", e)
+        return None
+    finally:
+        # Clean up temp file
+        if cp_file.exists():
+            cp_file.unlink()
+
+
+def _run_tests_direct(
+    classpath: str,
+    test_classes: list[str],
+    env: dict[str, str],
+    working_dir: Path,
+    timeout: int = 60,
+    reports_dir: Path | None = None,
+) -> subprocess.CompletedProcess:
+    """Run JUnit tests directly using java command (bypassing Maven).
+
+    This is much faster than Maven invocation (~500ms vs ~5-10s overhead).
+
+    Args:
+        classpath: Full classpath including test dependencies.
+        test_classes: List of fully qualified test class names to run.
+        env: Environment variables.
+        working_dir: Working directory for execution.
+        timeout: Maximum execution time in seconds.
+        reports_dir: Optional directory for JUnit XML reports.
+
+    Returns:
+        CompletedProcess with test results.
+
+    """
+    # Find java executable
+    java_home = os.environ.get("JAVA_HOME")
+    if java_home:
+        java = Path(java_home) / "bin" / "java"
+        if not java.exists():
+            java = "java"
+    else:
+        java = "java"
+
+    # Build command using JUnit Platform Console Launcher
+    # The launcher is included in junit-platform-console-standalone or junit-jupiter
+    cmd = [
+        str(java),
+        "-cp",
+        classpath,
+        "org.junit.platform.console.ConsoleLauncher",
+        "--disable-banner",
+        "--disable-ansi-colors",
+        # Use 'none' details to avoid duplicate output
+        # Timing markers are captured in XML via stdout capture config
+        "--details=none",
+        # Enable stdout/stderr capture in XML reports
+        # This ensures timing markers are included in the XML system-out element
+        "--config=junit.platform.output.capture.stdout=true",
+        "--config=junit.platform.output.capture.stderr=true",
+    ]
+
+    # Add reports directory if specified (for XML output)
+    if reports_dir:
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        cmd.extend(["--reports-dir", str(reports_dir)])
+
+    # Add test classes to select
+    for test_class in test_classes:
+        cmd.extend(["--select-class", test_class])
+
+    logger.debug("Running tests directly: java -cp ... ConsoleLauncher --select-class %s", test_classes)
+
+    try:
+        return subprocess.run(
+            cmd,
+            check=False,
+            cwd=working_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("Direct test execution timed out after %d seconds", timeout)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-2,
+            stdout="",
+            stderr=f"Test execution timed out after {timeout} seconds",
+        )
+    except Exception as e:
+        logger.exception("Direct test execution failed: %s", e)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-1,
+            stdout="",
+            stderr=str(e),
+        )
+
+
+def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[str]:
+    """Extract fully qualified test class names from test paths.
+
+    Args:
+        test_paths: TestFiles object or list of test file paths.
+        mode: Testing mode - "behavior" or "performance".
+
+    Returns:
+        List of fully qualified class names.
+
+    """
+    class_names = []
+
+    if hasattr(test_paths, "test_files"):
+        for test_file in test_paths.test_files:
+            if mode == "performance":
+                if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
+                    class_name = _path_to_class_name(test_file.benchmarking_file_path)
+                    if class_name:
+                        class_names.append(class_name)
+            elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
+                class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
+                if class_name:
+                    class_names.append(class_name)
+    elif isinstance(test_paths, (list, tuple)):
+        for path in test_paths:
+            if isinstance(path, Path):
+                class_name = _path_to_class_name(path)
+                if class_name:
+                    class_names.append(class_name)
+            elif isinstance(path, str):
+                class_names.append(path)
+
+    return class_names
+
+
+def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, Any]:
+    """Return an empty result for when no tests can be run.
+
+    Args:
+        maven_root: Maven project root.
+        test_module: Optional test module name.
+
+    Returns:
+        Tuple of (empty_xml_path, empty_result).
+
+    """
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
+
+    empty_result = subprocess.CompletedProcess(
+        args=["java", "-cp", "...", "ConsoleLauncher"],
+        returncode=-1,
+        stdout="",
+        stderr="No test classes found",
+    )
+    return result_xml_path, empty_result
+
+
+def _run_benchmarking_tests_maven(
     test_paths: Any,
     test_env: dict[str, str],
     cwd: Path,
-    timeout: int | None = None,
-    project_root: Path | None = None,
-    min_loops: int = 5,
-    max_loops: int = 100,
-    target_duration_seconds: float = 10.0,
+    timeout: int | None,
+    project_root: Path | None,
+    min_loops: int,
+    max_loops: int,
+    target_duration_seconds: float,
+    inner_iterations: int,
 ) -> tuple[Path, Any]:
-    """Run benchmarking tests for Java code.
+    """Fallback: Run benchmarking tests using Maven (slower but more reliable).
 
-    This runs tests multiple times with performance measurement.
-    The instrumented tests print timing markers that are parsed from stdout:
-      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
-      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+    This is used when direct JVM execution fails (e.g., classpath issues).
 
     Args:
         test_paths: TestFiles object or list of test file paths.
@@ -251,9 +551,127 @@ def run_benchmarking_tests(
         cwd: Working directory for running tests.
         timeout: Optional timeout in seconds.
         project_root: Project root directory.
-        min_loops: Minimum number of loops for benchmarking.
-        max_loops: Maximum number of loops for benchmarking.
+        min_loops: Minimum number of outer loops.
+        max_loops: Maximum number of outer loops.
+        target_duration_seconds: Target duration for benchmarking.
+        inner_iterations: Number of inner loop iterations.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result with aggregated stdout).
+
+    """
+    import time
+
+    project_root = project_root or cwd
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    all_stdout = []
+    all_stderr = []
+    total_start_time = time.time()
+    loop_count = 0
+    last_result = None
+
+    per_loop_timeout = timeout or max(120, 60 + inner_iterations)
+
+    logger.debug("Using Maven-based benchmarking (fallback mode)")
+
+    for loop_idx in range(1, max_loops + 1):
+        run_env = os.environ.copy()
+        run_env.update(test_env)
+        run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
+        run_env["CODEFLASH_MODE"] = "performance"
+        run_env["CODEFLASH_TEST_ITERATION"] = "0"
+        run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
+
+        result = _run_maven_tests(
+            maven_root,
+            test_paths,
+            run_env,
+            timeout=per_loop_timeout,
+            mode="performance",
+            test_module=test_module,
+        )
+
+        last_result = result
+        loop_count = loop_idx
+
+        if result.stdout:
+            all_stdout.append(result.stdout)
+        if result.stderr:
+            all_stderr.append(result.stderr)
+
+        elapsed = time.time() - total_start_time
+        if loop_idx >= min_loops and elapsed >= target_duration_seconds:
+            logger.debug(
+                "Stopping Maven benchmark after %d loops (%.2fs elapsed)",
+                loop_idx,
+                elapsed,
+            )
+            break
+
+        if result.returncode != 0:
+            logger.warning("Tests failed in Maven loop %d, stopping", loop_idx)
+            break
+
+    combined_stdout = "\n".join(all_stdout)
+    combined_stderr = "\n".join(all_stderr)
+
+    total_iterations = loop_count * inner_iterations
+    logger.debug(
+        "Maven fallback: %d loops x %d iterations = %d total in %.2fs",
+        loop_count,
+        inner_iterations,
+        total_iterations,
+        time.time() - total_start_time,
+    )
+
+    combined_result = subprocess.CompletedProcess(
+        args=last_result.args if last_result else ["mvn", "test"],
+        returncode=last_result.returncode if last_result else -1,
+        stdout=combined_stdout,
+        stderr=combined_stderr,
+    )
+
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
+
+    return result_xml_path, combined_result
+
+
+def run_benchmarking_tests(
+    test_paths: Any,
+    test_env: dict[str, str],
+    cwd: Path,
+    timeout: int | None = None,
+    project_root: Path | None = None,
+    min_loops: int = 1,
+    max_loops: int = 3,
+    target_duration_seconds: float = 10.0,
+    inner_iterations: int = 100,
+) -> tuple[Path, Any]:
+    """Run benchmarking tests for Java code with compile-once-run-many optimization.
+
+    This compiles tests once, then runs them multiple times directly via JVM,
+    bypassing Maven overhead (~500ms vs ~5-10s per invocation).
+
+    The instrumented tests run CODEFLASH_INNER_ITERATIONS iterations per JVM invocation,
+    printing timing markers that are parsed from stdout:
+      Start: !$######testModule:testClass:funcName:loopIndex:iterationId######$!
+      End:   !######testModule:testClass:funcName:loopIndex:iterationId:durationNs######!
+
+    Where iterationId is the inner iteration number (0, 1, 2, ..., inner_iterations-1).
+
+    Args:
+        test_paths: TestFiles object or list of test file paths.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds.
+        project_root: Project root directory.
+        min_loops: Minimum number of outer loops (JVM invocations). Default: 1.
+        max_loops: Maximum number of outer loops (JVM invocations). Default: 3.
         target_duration_seconds: Target duration for benchmarking in seconds.
+        inner_iterations: Number of inner loop iterations per JVM invocation. Default: 100.
 
     Returns:
         Tuple of (result_file_path, subprocess_result with aggregated stdout).
@@ -266,14 +684,66 @@ def run_benchmarking_tests(
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
 
-    # Collect stdout from all loops
+    # Get test class names
+    test_classes = _get_test_class_names(test_paths, mode="performance")
+    if not test_classes:
+        logger.error("No test classes found")
+        return _get_empty_result(maven_root, test_module)
+
+    # Step 1: Compile tests once using Maven
+    compile_env = os.environ.copy()
+    compile_env.update(test_env)
+
+    logger.debug("Step 1: Compiling tests (one-time Maven overhead)")
+    compile_start = time.time()
+    compile_result = _compile_tests(maven_root, compile_env, test_module, timeout=120)
+    compile_time = time.time() - compile_start
+
+    if compile_result.returncode != 0:
+        logger.error("Test compilation failed: %s", compile_result.stderr)
+        # Fall back to Maven-based execution
+        logger.warning("Falling back to Maven-based test execution")
+        return _run_benchmarking_tests_maven(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations
+        )
+
+    logger.debug("Compilation completed in %.2fs", compile_time)
+
+    # Step 2: Get classpath from Maven
+    logger.debug("Step 2: Getting classpath")
+    classpath = _get_test_classpath(maven_root, compile_env, test_module, timeout=60)
+
+    if not classpath:
+        logger.warning("Failed to get classpath, falling back to Maven-based execution")
+        return _run_benchmarking_tests_maven(
+            test_paths, test_env, cwd, timeout, project_root,
+            min_loops, max_loops, target_duration_seconds, inner_iterations
+        )
+
+    # Step 3: Run tests multiple times directly via JVM
+    logger.debug("Step 3: Running tests directly (bypassing Maven)")
+
     all_stdout = []
     all_stderr = []
     total_start_time = time.time()
     loop_count = 0
     last_result = None
 
-    # Run multiple loops until we hit target duration or max loops
+    # Calculate timeout per loop
+    per_loop_timeout = timeout or max(60, 30 + inner_iterations // 10)
+
+    # Determine working directory for test execution
+    if test_module:
+        working_dir = maven_root / test_module
+    else:
+        working_dir = maven_root
+
+    # Create reports directory for JUnit XML output (in Surefire-compatible location)
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    reports_dir = target_dir / "surefire-reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
     for loop_idx in range(1, max_loops + 1):
         # Set environment variables for this loop
         run_env = os.environ.copy()
@@ -281,16 +751,19 @@ def run_benchmarking_tests(
         run_env["CODEFLASH_LOOP_INDEX"] = str(loop_idx)
         run_env["CODEFLASH_MODE"] = "performance"
         run_env["CODEFLASH_TEST_ITERATION"] = "0"
+        run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
-        # Run Maven tests for this loop
-        result = _run_maven_tests(
-            maven_root,
-            test_paths,
+        # Run tests directly with XML report generation
+        loop_start = time.time()
+        result = _run_tests_direct(
+            classpath,
+            test_classes,
             run_env,
-            timeout=timeout or 120,  # Per-loop timeout
-            mode="performance",
-            test_module=test_module,
+            working_dir,
+            timeout=per_loop_timeout,
+            reports_dir=reports_dir,
         )
+        loop_time = time.time() - loop_start
 
         last_result = result
         loop_count = loop_idx
@@ -301,14 +774,17 @@ def run_benchmarking_tests(
         if result.stderr:
             all_stderr.append(result.stderr)
 
+        logger.debug("Loop %d completed in %.2fs (returncode=%d)", loop_idx, loop_time, result.returncode)
+
         # Check if we've hit the target duration
         elapsed = time.time() - total_start_time
         if loop_idx >= min_loops and elapsed >= target_duration_seconds:
             logger.debug(
-                "Stopping benchmark after %d loops (%.2fs elapsed, target: %.2fs)",
+                "Stopping benchmark after %d loops (%.2fs elapsed, target: %.2fs, %d inner iterations each)",
                 loop_idx,
                 elapsed,
                 target_duration_seconds,
+                inner_iterations,
             )
             break
 
@@ -321,10 +797,15 @@ def run_benchmarking_tests(
     combined_stdout = "\n".join(all_stdout)
     combined_stderr = "\n".join(all_stderr)
 
+    total_time = time.time() - total_start_time
+    total_iterations = loop_count * inner_iterations
     logger.debug(
-        "Completed %d benchmark loops in %.2fs",
+        "Completed %d loops x %d inner iterations = %d total iterations in %.2fs (compile: %.2fs)",
         loop_count,
-        time.time() - total_start_time,
+        inner_iterations,
+        total_iterations,
+        total_time,
+        compile_time,
     )
 
     # Create a combined subprocess result

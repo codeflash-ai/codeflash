@@ -143,7 +143,7 @@ public class CalculatorTest {
         assert "System.nanoTime()" in result
 
     def test_instrument_performance_mode_simple(self, tmp_path: Path):
-        """Test instrumenting a simple test in performance mode."""
+        """Test instrumenting a simple test in performance mode with inner loop."""
         test_file = tmp_path / "CalculatorTest.java"
         source = """import org.junit.jupiter.api.Test;
 
@@ -180,21 +180,24 @@ public class CalculatorTest {
 public class CalculatorTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "CalculatorTest";
         String _cf_cls1 = "CalculatorTest";
         String _cf_fn1 = "add";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            Calculator calc = new Calculator();
-            assertEquals(4, calc.add(2, 2));
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                Calculator calc = new Calculator();
+                assertEquals(4, calc.add(2, 2));
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -203,7 +206,7 @@ public class CalculatorTest__perfonlyinstrumented {
         assert result == expected
 
     def test_instrument_performance_mode_multiple_tests(self, tmp_path: Path):
-        """Test instrumenting multiple test methods in performance mode."""
+        """Test instrumenting multiple test methods in performance mode with inner loop."""
         test_file = tmp_path / "MathTest.java"
         source = """import org.junit.jupiter.api.Test;
 
@@ -244,39 +247,45 @@ public class MathTest {
 public class MathTest__perfonlyinstrumented {
     @Test
     public void testAdd() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "MathTest";
         String _cf_cls1 = "MathTest";
         String _cf_fn1 = "calculate";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            assertEquals(4, add(2, 2));
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                assertEquals(4, add(2, 2));
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 
     @Test
     public void testSubtract() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter2 = 2;
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod2 = "MathTest";
         String _cf_cls2 = "MathTest";
         String _cf_fn2 = "calculate";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
-        try {
-            assertEquals(0, subtract(2, 2));
-        } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            long _cf_start2 = System.nanoTime();
+            try {
+                assertEquals(0, subtract(2, 2));
+            } finally {
+                long _cf_end2 = System.nanoTime();
+                long _cf_dur2 = _cf_end2 - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+            }
         }
     }
 }
@@ -285,7 +294,7 @@ public class MathTest__perfonlyinstrumented {
         assert result == expected
 
     def test_instrument_preserves_annotations(self, tmp_path: Path):
-        """Test that annotations other than @Test are preserved."""
+        """Test that annotations other than @Test are preserved with inner loop."""
         test_file = tmp_path / "ServiceTest.java"
         source = """import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -333,40 +342,46 @@ public class ServiceTest__perfonlyinstrumented {
     @Test
     @DisplayName("Test service call")
     public void testService() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "ServiceTest";
         String _cf_cls1 = "ServiceTest";
         String _cf_fn1 = "call";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            service.call();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                service.call();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 
     @Disabled
     @Test
     public void testDisabled() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter2 = 2;
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod2 = "ServiceTest";
         String _cf_cls2 = "ServiceTest";
         String _cf_fn2 = "call";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
-        try {
-            service.other();
-        } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            long _cf_start2 = System.nanoTime();
+            try {
+                service.other();
+            } finally {
+                long _cf_end2 = System.nanoTime();
+                long _cf_dur2 = _cf_end2 - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+            }
         }
     }
 }
@@ -400,10 +415,10 @@ public class ServiceTest__perfonlyinstrumented {
 
 
 class TestAddTimingInstrumentation:
-    """Tests for _add_timing_instrumentation helper function."""
+    """Tests for _add_timing_instrumentation helper function with inner loop."""
 
     def test_single_test_method(self):
-        """Test timing instrumentation for a single test method."""
+        """Test timing instrumentation for a single test method with inner loop."""
         source = """public class SimpleTest {
     @Test
     public void testSomething() {
@@ -416,20 +431,23 @@ class TestAddTimingInstrumentation:
         expected = """public class SimpleTest {
     @Test
     public void testSomething() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "SimpleTest";
         String _cf_cls1 = "SimpleTest";
         String _cf_fn1 = "targetFunc";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            doSomething();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                doSomething();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -437,7 +455,7 @@ class TestAddTimingInstrumentation:
         assert result == expected
 
     def test_multiple_test_methods(self):
-        """Test timing instrumentation for multiple test methods."""
+        """Test timing instrumentation for multiple test methods with inner loop."""
         source = """public class MultiTest {
     @Test
     public void testFirst() {
@@ -455,39 +473,45 @@ class TestAddTimingInstrumentation:
         expected = """public class MultiTest {
     @Test
     public void testFirst() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "MultiTest";
         String _cf_cls1 = "MultiTest";
         String _cf_fn1 = "func";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            first();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                first();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 
     @Test
     public void testSecond() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter2 = 2;
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod2 = "MultiTest";
         String _cf_cls2 = "MultiTest";
         String _cf_fn2 = "func";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
-        try {
-            second();
-        } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            long _cf_start2 = System.nanoTime();
+            try {
+                second();
+            } finally {
+                long _cf_end2 = System.nanoTime();
+                long _cf_dur2 = _cf_end2 - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+            }
         }
     }
 }
@@ -495,7 +519,7 @@ class TestAddTimingInstrumentation:
         assert result == expected
 
     def test_timing_markers_format(self):
-        """Test that timing markers have the correct format."""
+        """Test that timing markers have the correct format with inner loop."""
         source = """public class MarkerTest {
     @Test
     public void testMarkers() {
@@ -508,20 +532,23 @@ class TestAddTimingInstrumentation:
         expected = """public class MarkerTest {
     @Test
     public void testMarkers() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "TestClass";
         String _cf_cls1 = "TestClass";
         String _cf_fn1 = "targetMethod";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            action();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                action();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -703,7 +730,7 @@ public class CalculatorTest__perfinstrumented {
         assert result == expected
 
     def test_instrument_generated_test_performance_mode(self):
-        """Test instrumenting generated test in performance mode."""
+        """Test instrumenting generated test in performance mode with inner loop."""
         test_code = """import org.junit.jupiter.api.Test;
 
 public class GeneratedTest {
@@ -725,20 +752,23 @@ public class GeneratedTest {
 public class GeneratedTest__perfonlyinstrumented {
     @Test
     public void testMethod() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "GeneratedTest";
         String _cf_cls1 = "GeneratedTest";
         String _cf_fn1 = "method";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            target.method();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                target.method();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -804,12 +834,55 @@ test 3
         durations = [int(m[5]) for m in end_matches]
         assert durations == [100000, 200000, 150000]
 
+    def test_inner_loop_timing_markers(self):
+        """Test parsing timing markers from inner loop iterations.
+
+        With the inner loop, each test method produces N timing markers (one per iteration).
+        The iterationId (5th field) now represents the inner iteration number (0, 1, 2, ..., N-1).
+        """
+        # Simulate stdout from 3 inner iterations (inner_iterations=3)
+        stdout = """
+!$######Module:Class:func:1:0######$!
+iteration 0
+!######Module:Class:func:1:0:150000######!
+!$######Module:Class:func:1:1######$!
+iteration 1
+!######Module:Class:func:1:1:50000######!
+!$######Module:Class:func:1:2######$!
+iteration 2
+!######Module:Class:func:1:2:45000######!
+"""
+        start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+        end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+
+        start_matches = start_pattern.findall(stdout)
+        end_matches = end_pattern.findall(stdout)
+
+        # Should have 3 start and 3 end markers (one per inner iteration)
+        assert len(start_matches) == 3
+        assert len(end_matches) == 3
+
+        # All markers should have the same loopIndex (1) but different iterationIds (0, 1, 2)
+        for i, (start, end) in enumerate(zip(start_matches, end_matches)):
+            assert start[3] == "1"  # loopIndex
+            assert start[4] == str(i)  # iterationId (0, 1, 2)
+            assert end[3] == "1"  # loopIndex
+            assert end[4] == str(i)  # iterationId (0, 1, 2)
+
+        # Verify durations - iteration 0 is slower (JIT warmup), iterations 1 and 2 are faster
+        durations = [int(m[5]) for m in end_matches]
+        assert durations == [150000, 50000, 45000]
+
+        # Min runtime logic would select 45000ns (the fastest iteration after JIT warmup)
+        min_runtime = min(durations)
+        assert min_runtime == 45000
+
 
 class TestInstrumentedCodeValidity:
-    """Tests to verify that instrumented code is syntactically valid Java."""
+    """Tests to verify that instrumented code is syntactically valid Java with inner loop."""
 
     def test_instrumented_code_has_balanced_braces(self, tmp_path: Path):
-        """Test that instrumented code has balanced braces."""
+        """Test that instrumented code has balanced braces with inner loop."""
         test_file = tmp_path / "BraceTest.java"
         source = """import org.junit.jupiter.api.Test;
 
@@ -854,43 +927,49 @@ public class BraceTest {
 public class BraceTest__perfonlyinstrumented {
     @Test
     public void testOne() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "BraceTest";
         String _cf_cls1 = "BraceTest";
         String _cf_fn1 = "process";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            if (true) {
-                doSomething();
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                if (true) {
+                    doSomething();
+                }
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
         }
     }
 
     @Test
     public void testTwo() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter2 = 2;
+        int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod2 = "BraceTest";
         String _cf_cls2 = "BraceTest";
         String _cf_fn2 = "process";
-        System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-        long _cf_start2 = System.nanoTime();
-        try {
-            for (int i = 0; i < 10; i++) {
-                process(i);
+
+        for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+            long _cf_start2 = System.nanoTime();
+            try {
+                for (int i = 0; i < 10; i++) {
+                    process(i);
+                }
+            } finally {
+                long _cf_end2 = System.nanoTime();
+                long _cf_dur2 = _cf_end2 - _cf_start2;
+                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
             }
-        } finally {
-            long _cf_end2 = System.nanoTime();
-            long _cf_dur2 = _cf_end2 - _cf_start2;
-            System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
         }
     }
 }
@@ -899,7 +978,7 @@ public class BraceTest__perfonlyinstrumented {
         assert result == expected
 
     def test_instrumented_code_preserves_imports(self, tmp_path: Path):
-        """Test that imports are preserved in instrumented code."""
+        """Test that imports are preserved in instrumented code with inner loop."""
         test_file = tmp_path / "ImportTest.java"
         source = """package com.example;
 
@@ -946,21 +1025,24 @@ import java.util.ArrayList;
 public class ImportTest__perfonlyinstrumented {
     @Test
     public void testCollections() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "ImportTest";
         String _cf_cls1 = "ImportTest";
         String _cf_fn1 = "size";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            List<String> list = new ArrayList<>();
-            assertEquals(0, list.size());
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                List<String> list = new ArrayList<>();
+                assertEquals(0, list.size());
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -970,10 +1052,10 @@ public class ImportTest__perfonlyinstrumented {
 
 
 class TestEdgeCases:
-    """Edge cases for Java instrumentation."""
+    """Edge cases for Java instrumentation with inner loop."""
 
     def test_empty_test_method(self, tmp_path: Path):
-        """Test instrumenting an empty test method."""
+        """Test instrumenting an empty test method with inner loop."""
         test_file = tmp_path / "EmptyTest.java"
         source = """import org.junit.jupiter.api.Test;
 
@@ -1008,19 +1090,22 @@ public class EmptyTest {
 public class EmptyTest__perfonlyinstrumented {
     @Test
     public void testEmpty() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "EmptyTest";
         String _cf_cls1 = "EmptyTest";
         String _cf_fn1 = "empty";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 }
@@ -1029,7 +1114,7 @@ public class EmptyTest__perfonlyinstrumented {
         assert result == expected
 
     def test_test_with_nested_braces(self, tmp_path: Path):
-        """Test instrumenting code with nested braces."""
+        """Test instrumenting code with nested braces with inner loop."""
         test_file = tmp_path / "NestedTest.java"
         source = """import org.junit.jupiter.api.Test;
 
@@ -1071,26 +1156,29 @@ public class NestedTest {
 public class NestedTest__perfonlyinstrumented {
     @Test
     public void testNested() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "NestedTest";
         String _cf_cls1 = "NestedTest";
         String _cf_fn1 = "process";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            if (condition) {
-                for (int i = 0; i < 10; i++) {
-                    if (i > 5) {
-                        process(i);
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                if (condition) {
+                    for (int i = 0; i < 10; i++) {
+                        if (i > 5) {
+                            process(i);
+                        }
                     }
                 }
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
             }
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
         }
     }
 }
@@ -1099,7 +1187,7 @@ public class NestedTest__perfonlyinstrumented {
         assert result == expected
 
     def test_class_with_inner_class(self, tmp_path: Path):
-        """Test instrumenting test class with inner class."""
+        """Test instrumenting test class with inner class with inner loop."""
         test_file = tmp_path / "InnerClassTest.java"
         source = """import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Nested;
@@ -1145,20 +1233,23 @@ import org.junit.jupiter.api.Nested;
 public class InnerClassTest__perfonlyinstrumented {
     @Test
     public void testOuter() {
-        // Codeflash timing instrumentation
+        // Codeflash timing instrumentation with inner loop for JIT warmup
         int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-        int _cf_iter1 = 1;
+        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
         String _cf_mod1 = "InnerClassTest";
         String _cf_cls1 = "InnerClassTest";
         String _cf_fn1 = "testMethod";
-        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + "######$!");
-        long _cf_start1 = System.nanoTime();
-        try {
-            outerMethod();
-        } finally {
-            long _cf_end1 = System.nanoTime();
-            long _cf_dur1 = _cf_end1 - _cf_start1;
-            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_iter1 + ":" + _cf_dur1 + "######!");
+
+        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {
+            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + "######$!");
+            long _cf_start1 = System.nanoTime();
+            try {
+                outerMethod();
+            } finally {
+                long _cf_end1 = System.nanoTime();
+                long _cf_dur1 = _cf_end1 - _cf_start1;
+                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + _cf_i1 + ":" + _cf_dur1 + "######!");
+            }
         }
     }
 
@@ -1166,20 +1257,23 @@ public class InnerClassTest__perfonlyinstrumented {
     class InnerTests {
         @Test
         public void testInner() {
-            // Codeflash timing instrumentation
+            // Codeflash timing instrumentation with inner loop for JIT warmup
             int _cf_loop2 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));
-            int _cf_iter2 = 2;
+            int _cf_innerIterations2 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "100"));
             String _cf_mod2 = "InnerClassTest";
             String _cf_cls2 = "InnerClassTest";
             String _cf_fn2 = "testMethod";
-            System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + "######$!");
-            long _cf_start2 = System.nanoTime();
-            try {
-                innerMethod();
-            } finally {
-                long _cf_end2 = System.nanoTime();
-                long _cf_dur2 = _cf_end2 - _cf_start2;
-                System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_iter2 + ":" + _cf_dur2 + "######!");
+
+            for (int _cf_i2 = 0; _cf_i2 < _cf_innerIterations2; _cf_i2++) {
+                System.out.println("!$######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + "######$!");
+                long _cf_start2 = System.nanoTime();
+                try {
+                    innerMethod();
+                } finally {
+                    long _cf_end2 = System.nanoTime();
+                    long _cf_dur2 = _cf_end2 - _cf_start2;
+                    System.out.println("!######" + _cf_mod2 + ":" + _cf_cls2 + ":" + _cf_fn2 + ":" + _cf_loop2 + ":" + _cf_i2 + ":" + _cf_dur2 + "######!");
+                }
             }
         }
     }
@@ -1220,6 +1314,12 @@ class TestRunAndParseTests:
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>5.9.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-console-standalone</artifactId>
+            <version>1.9.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -1380,7 +1480,14 @@ public class CalculatorTest {
         assert result.runtime > 0
 
     def test_run_and_parse_performance_mode(self, java_project):
-        """Test run_and_parse_tests in PERFORMANCE mode with timing markers."""
+        """Test run_and_parse_tests in PERFORMANCE mode with inner loop timing.
+
+        This test verifies the complete performance benchmarking flow:
+        1. Instruments test with inner loop for JIT warmup
+        2. Runs with inner_iterations=2 (fast test)
+        3. Validates multiple timing markers are produced (one per inner iteration)
+        4. Validates parsed results contain timing data
+        """
         from argparse import Namespace
 
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
@@ -1431,6 +1538,10 @@ public class MathUtilsTest {
         )
         assert success
 
+        # Verify instrumented code contains inner loop for JIT warmup
+        assert "CODEFLASH_INNER_ITERATIONS" in instrumented, "Performance mode should use inner loop"
+        assert "for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++)" in instrumented
+
         instrumented_file = test_dir / "MathUtilsTest__perfonlyinstrumented.java"
         instrumented_file.write_text(instrumented, encoding="utf-8")
 
@@ -1463,9 +1574,10 @@ public class MathUtilsTest {
             )
         ])
 
-        # Run performance tests
+        # Run performance tests with inner_iterations=2 for fast test
         test_env = os.environ.copy()
         test_env["CODEFLASH_TEST_ITERATION"] = "0"
+        test_env["CODEFLASH_INNER_ITERATIONS"] = "2"  # Only 2 inner iterations for fast test
 
         test_results, _ = func_optimizer.run_and_parse_tests(
             testing_type=TestingMode.PERFORMANCE,
@@ -1473,16 +1585,30 @@ public class MathUtilsTest {
             test_files=func_optimizer.test_files,
             optimization_iteration=0,
             pytest_min_loops=1,
-            pytest_max_loops=3,
+            pytest_max_loops=1,  # Only 1 outer loop (Maven invocation)
             testing_time=1.0,
         )
 
-        # Verify results
-        assert len(test_results.test_results) >= 1
+        # Should have 2 results (one per inner iteration)
+        assert len(test_results.test_results) >= 2, (
+            f"Expected at least 2 results from inner loop (inner_iterations=2), got {len(test_results.test_results)}"
+        )
+
+        # All results should pass with valid timing
+        runtimes = []
         for result in test_results.test_results:
             assert result.did_pass is True
             assert result.runtime is not None
             assert result.runtime > 0
+            runtimes.append(result.runtime)
+
+        # Verify we have multiple timing measurements
+        assert len(runtimes) >= 2, f"Expected at least 2 runtimes, got {len(runtimes)}"
+
+        # Log runtime info (min would be selected for benchmarking comparison)
+        min_runtime = min(runtimes)
+        max_runtime = max(runtimes)
+        print(f"Inner loop runtimes: min={min_runtime}ns, max={max_runtime}ns, count={len(runtimes)}")
 
     def test_run_and_parse_multiple_test_methods(self, java_project):
         """Test run_and_parse_tests with multiple test methods."""
@@ -1863,3 +1989,227 @@ public class CounterTest {
             assert return_value == "1", f"Expected serialized integer '1', got: {return_value}"
 
         conn.close()
+
+    def test_performance_mode_inner_loop_timing_markers(self, java_project):
+        """Test that performance mode produces multiple timing markers from inner loop.
+
+        This test verifies that:
+        1. Instrumented code runs inner_iterations=2 times
+        2. Two timing markers are produced (one per inner iteration)
+        3. Each marker has a unique iteration ID (0, 1)
+        4. Both markers have valid durations
+        """
+        from codeflash.languages.java.test_runner import run_benchmarking_tests
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create a simple function to optimize
+        (src_dir / "Fibonacci.java").write_text("""package com.example;
+
+public class Fibonacci {
+    public int fib(int n) {
+        if (n <= 1) return n;
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+""", encoding="utf-8")
+
+        # Create test file
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class FibonacciTest {
+    @Test
+    public void testFib() {
+        Fibonacci fib = new Fibonacci();
+        assertEquals(5, fib.fib(5));
+    }
+}
+"""
+        test_file = test_dir / "FibonacciTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        # Instrument for performance mode (adds inner loop)
+        func_info = FunctionInfo(
+            name="fib",
+            file_path=src_dir / "Fibonacci.java",
+            start_line=4,
+            end_line=7,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="performance"
+        )
+        assert success
+
+        # Verify instrumented code contains inner loop
+        assert "CODEFLASH_INNER_ITERATIONS" in instrumented
+        assert "for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++)" in instrumented
+
+        instrumented_file = test_dir / "FibonacciTest__perfonlyinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        # Run benchmarking with inner_iterations=2 (fast)
+        test_env = os.environ.copy()
+
+        # Use TestFiles-like object
+        class MockTestFiles:
+            def __init__(self, files):
+                self.test_files = files
+
+        class MockTestFile:
+            def __init__(self, path):
+                self.benchmarking_file_path = path
+                self.instrumented_behavior_file_path = path
+
+        test_files = MockTestFiles([MockTestFile(instrumented_file)])
+
+        result_xml_path, result = run_benchmarking_tests(
+            test_paths=test_files,
+            test_env=test_env,
+            cwd=project_root,
+            timeout=120,
+            project_root=project_root,
+            min_loops=1,
+            max_loops=1,  # Only 1 outer loop
+            target_duration_seconds=1.0,
+            inner_iterations=2,  # Only 2 inner iterations for fast test
+        )
+
+        # Verify the test ran successfully
+        assert result.returncode == 0, f"Maven test failed: {result.stderr}"
+
+        # Parse timing markers from stdout
+        stdout = result.stdout
+        start_pattern = re.compile(r"!\$######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+)######\$!")
+        end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+
+        start_matches = start_pattern.findall(stdout)
+        end_matches = end_pattern.findall(stdout)
+
+        # Should have 2 timing markers (inner_iterations=2)
+        assert len(start_matches) == 2, f"Expected 2 start markers, got {len(start_matches)}: {start_matches}"
+        assert len(end_matches) == 2, f"Expected 2 end markers, got {len(end_matches)}: {end_matches}"
+
+        # Verify iteration IDs are 0 and 1
+        iteration_ids = [m[4] for m in start_matches]
+        assert "0" in iteration_ids, f"Expected iteration ID 0, got: {iteration_ids}"
+        assert "1" in iteration_ids, f"Expected iteration ID 1, got: {iteration_ids}"
+
+        # Verify all markers have the same loop index (1)
+        loop_indices = [m[3] for m in start_matches]
+        assert all(idx == "1" for idx in loop_indices), f"Expected all loop indices to be 1, got: {loop_indices}"
+
+        # Verify durations are positive
+        durations = [int(m[5]) for m in end_matches]
+        assert all(d > 0 for d in durations), f"Expected positive durations, got: {durations}"
+
+    def test_performance_mode_multiple_methods_inner_loop(self, java_project):
+        """Test inner loop with multiple test methods.
+
+        Each test method should run inner_iterations times independently.
+        This produces 2 test methods x 2 inner iterations = 4 total timing markers.
+        """
+        from codeflash.languages.java.test_runner import run_benchmarking_tests
+
+        project_root, src_dir, test_dir = java_project
+
+        # Create a simple math class
+        (src_dir / "MathOps.java").write_text("""package com.example;
+
+public class MathOps {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+""", encoding="utf-8")
+
+        # Create test with multiple test methods
+        test_source = """package com.example;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class MathOpsTest {
+    @Test
+    public void testAddPositive() {
+        MathOps math = new MathOps();
+        assertEquals(5, math.add(2, 3));
+    }
+
+    @Test
+    public void testAddNegative() {
+        MathOps math = new MathOps();
+        assertEquals(-1, math.add(2, -3));
+    }
+}
+"""
+        test_file = test_dir / "MathOpsTest.java"
+        test_file.write_text(test_source, encoding="utf-8")
+
+        # Instrument for performance mode
+        func_info = FunctionInfo(
+            name="add",
+            file_path=src_dir / "MathOps.java",
+            start_line=4,
+            end_line=6,
+            parents=(),
+            is_method=True,
+            language=Language.JAVA,
+        )
+
+        success, instrumented = instrument_existing_test(
+            test_file, [], func_info, test_dir, mode="performance"
+        )
+        assert success
+
+        instrumented_file = test_dir / "MathOpsTest__perfonlyinstrumented.java"
+        instrumented_file.write_text(instrumented, encoding="utf-8")
+
+        # Run benchmarking with inner_iterations=2
+        test_env = os.environ.copy()
+
+        class MockTestFiles:
+            def __init__(self, files):
+                self.test_files = files
+
+        class MockTestFile:
+            def __init__(self, path):
+                self.benchmarking_file_path = path
+                self.instrumented_behavior_file_path = path
+
+        test_files = MockTestFiles([MockTestFile(instrumented_file)])
+
+        result_xml_path, result = run_benchmarking_tests(
+            test_paths=test_files,
+            test_env=test_env,
+            cwd=project_root,
+            timeout=120,
+            project_root=project_root,
+            min_loops=1,
+            max_loops=1,
+            target_duration_seconds=1.0,
+            inner_iterations=2,
+        )
+
+        assert result.returncode == 0, f"Maven test failed: {result.stderr}"
+
+        # Parse timing markers
+        stdout = result.stdout
+        end_pattern = re.compile(r"!######([^:]*):([^:]*):([^:]*):([^:]*):([^:]+):([^:]+)######!")
+        end_matches = end_pattern.findall(stdout)
+
+        # Should have 4 timing markers (2 test methods x 2 inner iterations)
+        assert len(end_matches) == 4, f"Expected 4 end markers, got {len(end_matches)}: {end_matches}"
+
+        # Count markers per iteration ID
+        iter_0_count = sum(1 for m in end_matches if m[4] == "0")
+        iter_1_count = sum(1 for m in end_matches if m[4] == "1")
+
+        assert iter_0_count == 2, f"Expected 2 markers for iteration 0, got {iter_0_count}"
+        assert iter_1_count == 2, f"Expected 2 markers for iteration 1, got {iter_1_count}"
