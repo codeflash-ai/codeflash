@@ -23,7 +23,7 @@
  *
  * NOTE: This runner requires jest-runner to be installed in your project.
  *       It is a Jest-specific feature and does not work with Vitest.
- *       For Vitest projects, external looping is handled by the Python runner.
+ *       For Vitest projects, capturePerf() does all loops internally in a single call.
  */
 
 'use strict';
