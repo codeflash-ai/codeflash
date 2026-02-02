@@ -1042,9 +1042,11 @@ def parse_test_xml(
             if len(testcase.result) > 1:
                 logger.debug(f"!!!!!Multiple results for {testcase.name or '<None>'} in {test_xml_file_path}!!!")
             if len(testcase.result) == 1:
-                message = testcase.result[0].message.lower()
-                if "failed: timeout >" in message or "timed out" in message:
-                    timed_out = True
+                message = testcase.result[0].message
+                if message is not None:
+                    message = message.lower()
+                    if "failed: timeout >" in message or "timed out" in message:
+                        timed_out = True
 
             sys_stdout = testcase.system_out or ""
 
