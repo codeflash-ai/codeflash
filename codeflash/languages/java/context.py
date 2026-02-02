@@ -412,15 +412,19 @@ def _extract_type_body_context(
     constructor_parts: list[str] = []
     enum_constant_parts: list[str] = []
 
+
+    skip_types = ("{", "}", ";", ",")
+    ls = lines  # local alias
+
     for child in body_node.children:
         # Skip braces, semicolons, and commas
-        if child.type in ("{", "}", ";", ","):
+        if child.type in skip_types:
             continue
 
         # Handle enum constants (only for enums)
         # Extract just the constant name/text, not the whole line
         if child.type == "enum_constant" and type_kind == "enum":
-            constant_text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
+            constant_text = _slice_text_by_points(child.start_point, child.end_point, ls)
             enum_constant_parts.append(constant_text)
 
         # Handle field declarations
@@ -432,18 +436,18 @@ def _extract_type_body_context(
             javadoc_start = start_line
             prev_sibling = child.prev_named_sibling
             if prev_sibling and prev_sibling.type == "block_comment":
-                comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+                comment_text = _slice_text_by_points(prev_sibling.start_point, prev_sibling.end_point, ls)
                 if comment_text.strip().startswith("/**"):
                     javadoc_start = prev_sibling.start_point[0]
 
-            field_lines = lines[javadoc_start : end_line + 1]
+            field_lines = ls[javadoc_start : end_line + 1]
             field_parts.append("".join(field_lines))
 
         # Handle constant declarations (for interfaces)
         elif child.type == "constant_declaration" and type_kind == "interface":
             start_line = child.start_point[0]
             end_line = child.end_point[0]
-            constant_lines = lines[start_line : end_line + 1]
+            constant_lines = ls[start_line : end_line + 1]
             field_parts.append("".join(constant_lines))
 
         # Handle constructor declarations
@@ -455,11 +459,11 @@ def _extract_type_body_context(
             javadoc_start = start_line
             prev_sibling = child.prev_named_sibling
             if prev_sibling and prev_sibling.type == "block_comment":
-                comment_text = source_bytes[prev_sibling.start_byte : prev_sibling.end_byte].decode("utf8")
+                comment_text = _slice_text_by_points(prev_sibling.start_point, prev_sibling.end_point, ls)
                 if comment_text.strip().startswith("/**"):
                     javadoc_start = prev_sibling.start_point[0]
 
-            constructor_lines = lines[javadoc_start : end_line + 1]
+            constructor_lines = ls[javadoc_start : end_line + 1]
             constructor_parts.append("".join(constructor_lines))
 
     fields_code = "".join(field_parts)
@@ -814,3 +818,44 @@ def extract_class_context(
     except Exception as e:
         logger.error("Failed to extract class context: %s", e)
         return ""
+
+
+
+def _slice_text_by_points(
+    start_point: tuple[int, int],
+    end_point: tuple[int, int],
+    lines: list[str],
+) -> str:
+    # Extract text from lines using start/end (row, column) points.
+    # This mirrors the original byte-slice + decode behavior but uses the
+    # provided decoded lines to avoid repeated UTF-8 decodes.
+    start_line, start_col = start_point
+    end_line, end_col = end_point
+    if start_line == end_line:
+        return lines[start_line][start_col:end_col]
+    parts: list[str] = []
+    parts.append(lines[start_line][start_col:])
+    if end_line - start_line > 1:
+        parts.extend(lines[start_line + 1 : end_line])
+    parts.append(lines[end_line][:end_col])
+    return "".join(parts)
+
+
+def _slice_text_by_points(
+    start_point: tuple[int, int],
+    end_point: tuple[int, int],
+    lines: list[str],
+) -> str:
+    # Extract text from lines using start/end (row, column) points.
+    # This mirrors the original byte-slice + decode behavior but uses the
+    # provided decoded lines to avoid repeated UTF-8 decodes.
+    start_line, start_col = start_point
+    end_line, end_col = end_point
+    if start_line == end_line:
+        return lines[start_line][start_col:end_col]
+    parts: list[str] = []
+    parts.append(lines[start_line][start_col:])
+    if end_line - start_line > 1:
+        parts.extend(lines[start_line + 1 : end_line])
+    parts.append(lines[end_line][:end_col])
+    return "".join(parts)
