@@ -159,7 +159,7 @@ class PythonSupport:
                 try:
                     source = test_file.read_text()
                     # Check if function name appears in test file
-                    if func.name in source:
+                    if func.function_name in source:
                         result[func.qualified_name].append(
                             TestInfo(test_name=test_file.stem, test_file=test_file, test_class=None)
                         )
@@ -289,7 +289,7 @@ class PythonSupport:
                         )
 
         except Exception as e:
-            logger.warning("Failed to find helpers for %s: %s", function.name, e)
+            logger.warning("Failed to find helpers for %s: %s", function.function_name, e)
 
         return helpers
 
@@ -389,10 +389,10 @@ class PythonSupport:
                         line=ref.line,
                         column=ref.column,
                         end_line=ref.line,
-                        end_column=ref.column + len(function.name),
+                        end_column=ref.column + len(function.function_name),
                         context=context.strip(),
                         reference_type="call",
-                        import_name=function.name,
+                        import_name=function.function_name,
                         caller_function=caller_function,
                     )
                 )
@@ -400,7 +400,7 @@ class PythonSupport:
             return result
 
         except Exception as e:
-            logger.warning("Failed to find references for %s: %s", function.name, e)
+            logger.warning("Failed to find references for %s: %s", function.function_name, e)
             return []
 
     # === Code Transformation ===
@@ -433,7 +433,7 @@ class PythonSupport:
                 preexisting_objects=set(),
             )
         except Exception as e:
-            logger.warning("Failed to replace function %s: %s", function.name, e)
+            logger.warning("Failed to replace function %s: %s", function.function_name, e)
             return source
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:

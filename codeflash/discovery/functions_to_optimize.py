@@ -335,25 +335,8 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
     try:
         lang_support = get_language_support(file_path)
         criteria = FunctionFilterCriteria(require_return=True)
-        function_infos = lang_support.discover_functions(file_path, criteria)
-
-        ftos = []
-        for func_info in function_infos:
-            parents = [FunctionParent(p.name, p.type) for p in func_info.parents]
-            ftos.append(
-                FunctionToOptimize(
-                    function_name=func_info.name,
-                    file_path=func_info.file_path,
-                    parents=parents,
-                    starting_line=func_info.start_line,
-                    ending_line=func_info.end_line,
-                    starting_col=func_info.start_col,
-                    ending_col=func_info.end_col,
-                    is_async=func_info.is_async,
-                    language=func_info.language.value,
-                )
-            )
-        functions[file_path] = ftos
+        # discover_functions already returns FunctionToOptimize objects
+        functions[file_path] = lang_support.discover_functions(file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
 

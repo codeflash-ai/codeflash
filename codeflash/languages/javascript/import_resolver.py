@@ -44,7 +44,8 @@ class ImportResolver:
             project_root: Root directory of the project.
 
         """
-        self.project_root = project_root
+        # Resolve to real path to handle macOS symlinks like /var -> /private/var
+        self.project_root = project_root.resolve()
         self._resolution_cache: dict[tuple[Path, str], Path | None] = {}
 
     def resolve_import(self, import_info: ImportInfo, source_file: Path) -> ResolvedImport | None:
@@ -329,7 +330,7 @@ class MultiFileHelperFinder:
         all_functions = analyzer.find_functions(source, include_methods=True)
         target_func = None
         for func in all_functions:
-            if func.name == function.name and func.start_line == function.start_line:
+            if func.name == function.function_name and func.start_line == function.starting_line:
                 target_func = func
                 break
 
@@ -506,7 +507,7 @@ class MultiFileHelperFinder:
             Dictionary mapping file paths to lists of helper functions.
 
         """
-        from codeflash.languages.base import FunctionToOptimize
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
         from codeflash.languages.treesitter_utils import get_analyzer_for_file
 
         if context.current_depth >= context.max_depth:

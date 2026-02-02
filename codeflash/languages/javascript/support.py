@@ -241,7 +241,7 @@ class JavaScriptSupport:
 
                 # Match source functions to tests
                 for func in source_functions:
-                    if func.name in imported_names or func.name in source:
+                    if func.function_name in imported_names or func.function_name in source:
                         if func.qualified_name not in result:
                             result[func.qualified_name] = []
                         for test_name in test_functions:

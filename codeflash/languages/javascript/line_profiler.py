@@ -65,10 +65,10 @@ class JavaScriptLineProfiler:
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
-        for func in sorted(functions, key=lambda f: f.start_line, reverse=True):
+        for func in sorted(functions, key=lambda f: f.starting_line, reverse=True):
             func_lines = self._instrument_function(func, lines, file_path)
-            start_idx = func.start_line - 1
-            end_idx = func.end_line
+            start_idx = func.starting_line - 1
+            end_idx = func.ending_line
             lines = lines[:start_idx] + func_lines + lines[end_idx:]
 
         instrumented_source = "".join(lines)
@@ -183,7 +183,7 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             Instrumented function lines.
 
         """
-        func_lines = lines[func.start_line - 1 : func.end_line]
+        func_lines = lines[func.starting_line - 1 : func.ending_line]
         instrumented_lines = []
 
         # Parse the function to find executable lines
@@ -194,7 +194,7 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
             tree = analyzer.parse(source.encode("utf8"))
             executable_lines = self._find_executable_lines(tree.root_node, source.encode("utf8"))
         except Exception as e:
-            logger.warning("Failed to parse function %s: %s", func.name, e)
+            logger.warning("Failed to parse function %s: %s", func.function_name, e)
             return func_lines
 
         # Add profiling to each executable line
@@ -203,7 +203,7 @@ if (__codeflash_save_interval__.unref) __codeflash_save_interval__.unref(); // D
 
         for local_idx, line in enumerate(func_lines):
             local_line_num = local_idx + 1  # 1-indexed within function
-            global_line_num = func.start_line + local_idx  # Global line number in original file
+            global_line_num = func.starting_line + local_idx  # Global line number in original file
             stripped = line.strip()
 
             # Add enterFunction() call after the opening brace of the function

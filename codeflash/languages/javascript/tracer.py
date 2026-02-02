@@ -64,10 +64,10 @@ class JavaScriptTracer:
         lines = source.splitlines(keepends=True)
 
         # Process functions in reverse order to preserve line numbers
-        for func in sorted(functions, key=lambda f: f.start_line, reverse=True):
+        for func in sorted(functions, key=lambda f: f.starting_line, reverse=True):
             instrumented = self._instrument_function(func, lines, file_path)
-            start_idx = func.start_line - 1
-            end_idx = func.end_line
+            start_idx = func.starting_line - 1
+            end_idx = func.ending_line
             lines = lines[:start_idx] + instrumented + lines[end_idx:]
 
         instrumented_source = "".join(lines)
@@ -281,11 +281,11 @@ process.on('exit', () => {{
             Instrumented function lines.
 
         """
-        func_lines = lines[func.start_line - 1 : func.end_line]
+        func_lines = lines[func.starting_line - 1 : func.ending_line]
         func_text = "".join(func_lines)
 
         # Detect function pattern
-        func_name = func.name
+        func_name = func.function_name
         is_arrow = "=>" in func_text.split("\n")[0]
         is_method = func.is_method
         is_async = func.is_async

@@ -26,17 +26,6 @@ from codeflash.languages.base import (
     TestInfo,
     TestResult,
 )
-
-
-# Lazy import for FunctionInfo to avoid circular imports
-def __getattr__(name: str):
-    if name == "FunctionInfo":
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-
-        return FunctionToOptimize
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 from codeflash.languages.current import (
     current_language,
     current_language_support,
@@ -46,11 +35,9 @@ from codeflash.languages.current import (
     reset_current_language,
     set_current_language,
 )
-from codeflash.languages.javascript import JavaScriptSupport, TypeScriptSupport  # noqa: F401
 
-# Import language support modules to trigger auto-registration
-# This ensures all supported languages are available when this package is imported
-from codeflash.languages.python import PythonSupport  # noqa: F401
+# Language support modules are imported lazily to avoid circular imports
+# They get registered when first accessed via get_language_support()
 from codeflash.languages.registry import (
     detect_project_language,
     get_language_support,
@@ -69,6 +56,29 @@ from codeflash.languages.test_framework import (
     reset_test_framework,
     set_current_test_framework,
 )
+
+
+# Lazy imports to avoid circular imports
+def __getattr__(name: str):
+    if name == "FunctionInfo":
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+
+        return FunctionToOptimize
+    if name == "JavaScriptSupport":
+        from codeflash.languages.javascript.support import JavaScriptSupport
+
+        return JavaScriptSupport
+    if name == "TypeScriptSupport":
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        return TypeScriptSupport
+    if name == "PythonSupport":
+        from codeflash.languages.python.support import PythonSupport
+
+        return PythonSupport
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
+
 
 __all__ = [
     "CodeContext",

@@ -30,6 +30,33 @@ _LANGUAGE_REGISTRY: dict[Language, type[LanguageSupport]] = {}
 # Cache of instantiated language support objects
 _SUPPORT_CACHE: dict[Language, LanguageSupport] = {}
 
+# Flag to track if language modules have been imported
+_languages_registered = False
+
+
+def _ensure_languages_registered() -> None:
+    """Ensure all language support modules are imported and registered.
+
+    This lazily imports the language support modules to avoid circular imports
+    at module load time. The imports trigger the @register_language decorators
+    which populate the registries.
+    """
+    global _languages_registered
+    if _languages_registered:
+        return
+
+    # Import support modules to trigger registration
+    # These imports are deferred to avoid circular imports
+    import contextlib
+
+    with contextlib.suppress(ImportError):
+        from codeflash.languages.python import support as _
+
+    with contextlib.suppress(ImportError):
+        from codeflash.languages.javascript import support as _  # noqa: F401
+
+    _languages_registered = True
+
 
 class UnsupportedLanguageError(Exception):
     """Raised when attempting to use an unsupported language."""
@@ -123,6 +150,10 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
     Raises:
         UnsupportedLanguageError: If the language is not supported.
 
+    Note:
+        This function lazily imports language support modules on first call
+        to avoid circular import issues at module load time.
+
     Example:
         # By file path
         lang = get_language_support(Path("example.py"))
@@ -137,6 +168,7 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
         lang = get_language_support("python")
 
     """
+    _ensure_languages_registered()
     language: Language | None = None
 
     if isinstance(identifier, Language):
@@ -179,6 +211,7 @@ _FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
 
 
 def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) -> LanguageSupport | None:
+    _ensure_languages_registered()
     language: Language | None = None
     if isinstance(formatter_cmd, str):
         formatter_cmd = [formatter_cmd]
@@ -263,6 +296,7 @@ def detect_project_language(project_root: Path, module_root: Path) -> Language:
         UnsupportedLanguageError: If no supported language is detected.
 
     """
+    _ensure_languages_registered()
     extension_counts: dict[str, int] = {}
 
     # Count files by extension
@@ -290,6 +324,7 @@ def get_supported_languages() -> list[str]:
         List of language name strings.
 
     """
+    _ensure_languages_registered()
     return [lang.value for lang in _LANGUAGE_REGISTRY]
 
 
@@ -300,6 +335,7 @@ def get_supported_extensions() -> list[str]:
         List of extension strings (with leading dots).
 
     """
+    _ensure_languages_registered()
     return list(_EXTENSION_REGISTRY.keys())
 
 
@@ -325,10 +361,12 @@ def clear_registry() -> None:
 
     Primarily useful for testing.
     """
+    global _languages_registered
     _EXTENSION_REGISTRY.clear()
     _LANGUAGE_REGISTRY.clear()
     _SUPPORT_CACHE.clear()
     _FRAMEWORK_CACHE.clear()
+    _languages_registered = False
 
 
 def clear_cache() -> None:

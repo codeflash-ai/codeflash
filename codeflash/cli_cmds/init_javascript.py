@@ -155,22 +155,21 @@ def get_package_install_command(project_root: Path, package: str, dev: bool = Tr
         if dev:
             cmd.append("--save-dev")
         return cmd
-    elif pkg_manager == JsPackageManager.YARN:
+    if pkg_manager == JsPackageManager.YARN:
         cmd = ["yarn", "add", package]
         if dev:
             cmd.append("--dev")
         return cmd
-    elif pkg_manager == JsPackageManager.BUN:
+    if pkg_manager == JsPackageManager.BUN:
         cmd = ["bun", "add", package]
         if dev:
             cmd.append("--dev")
         return cmd
-    else:
-        # Default to npm
-        cmd = ["npm", "install", package]
-        if dev:
-            cmd.append("--save-dev")
-        return cmd
+    # Default to npm
+    cmd = ["npm", "install", package]
+    if dev:
+        cmd.append("--save-dev")
+    return cmd
 
 
 def init_js_project(language: ProjectLanguage) -> None:

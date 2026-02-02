@@ -549,7 +549,7 @@ def replace_function_definitions_for_language(
             # Find the function in current code
             func = None
             for f in current_functions:
-                if func_name in (f.qualified_name, f.name):
+                if func_name in (f.qualified_name, f.function_name):
                     func = f
                     break
 
@@ -557,7 +557,9 @@ def replace_function_definitions_for_language(
                 continue
 
             # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, func.function_name, module_abspath
+            )
             if optimized_func:
                 new_code = lang_support.replace_function(new_code, func, optimized_func)
                 modified = True
@@ -596,13 +598,13 @@ def _extract_function_from_code(
         # file_path is needed for JS/TS to determine correct analyzer (TypeScript vs JavaScript)
         functions = lang_support.discover_functions_from_source(source_code, file_path)
         for func in functions:
-            if func.name == function_name:
+            if func.function_name == function_name:
                 # Extract the function's source using line numbers
                 # Use doc_start_line if available to include JSDoc/docstring
                 lines = source_code.splitlines(keepends=True)
-                effective_start = func.doc_start_line or func.start_line
-                if effective_start and func.end_line and effective_start <= len(lines):
-                    func_lines = lines[effective_start - 1 : func.end_line]
+                effective_start = func.doc_start_line or func.starting_line
+                if effective_start and func.ending_line and effective_start <= len(lines):
+                    func_lines = lines[effective_start - 1 : func.ending_line]
                     return "".join(func_lines)
     except Exception as e:
         logger.debug(f"Error extracting function {function_name}: {e}")

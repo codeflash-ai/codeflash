@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 from codeflash.languages.language_enum import Language
-from codeflash.models.models import FunctionParent
+from codeflash.models.function_types import FunctionParent
 
 # Backward compatibility aliases - ParentInfo is now FunctionParent
 ParentInfo = FunctionParent
@@ -30,7 +30,8 @@ def __getattr__(name: str) -> Any:
         from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
         return FunctionToOptimize
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
 
 
 @dataclass

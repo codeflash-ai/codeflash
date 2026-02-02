@@ -15,15 +15,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
-
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
 logger = logging.getLogger(__name__)
 
@@ -781,10 +781,7 @@ class ReferenceFinder:
 
         """
         path_str = str(file_path)
-        for pattern in self.exclude_patterns:
-            if pattern in path_str:
-                return True
-        return False
+        return any(pattern in path_str for pattern in self.exclude_patterns)
 
     def _read_file(self, file_path: Path) -> str | None:
         """Read a file's contents with caching.
