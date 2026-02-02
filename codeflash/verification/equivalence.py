@@ -47,11 +47,10 @@ def compare_test_results(
 
         if cdd_test_result is not None and original_test_result is None:
             continue
-        # If helper function instance_state verification is not present, that's ok. continue
+        # Skip comparator for init state verifications (both FTO and HELPER)
         if (
             original_test_result.verification_type
-            and original_test_result.verification_type == VerificationType.INIT_STATE_HELPER
-            and cdd_test_result is None
+            and original_test_result.verification_type in {VerificationType.INIT_STATE_FTO, VerificationType.INIT_STATE_HELPER}
         ):
             continue
         if original_test_result is None or cdd_test_result is None:
@@ -60,11 +59,6 @@ def compare_test_results(
         if original_test_result.timed_out:
             continue
         superset_obj = False
-        if original_test_result.verification_type and (
-            original_test_result.verification_type
-            in {VerificationType.INIT_STATE_HELPER, VerificationType.INIT_STATE_FTO}
-        ):
-            superset_obj = True
 
         candidate_test_failures = candidate_results.test_failures
         original_test_failures = original_results.test_failures

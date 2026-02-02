@@ -661,30 +661,30 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            if (
-                self.is_numerical_code and not self.args.no_jit_opts
-            ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
-                jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
-                    code_context.read_writable_code.markdown, self.function_trace_id
-                )
-                if jit_compiled_opt_candidate:  # jit rewrite was successful
-                    # write files
-                    # Try to replace function with optimized code
-                    self.replace_function_and_helpers_with_optimized_code(
-                        code_context=code_context,
-                        optimized_code=jit_compiled_opt_candidate[0].source_code,
-                        original_helper_code=original_helper_code,
-                    )
-                    # get code context
-                    try:
-                        new_code_context = self.get_code_optimization_context().unwrap()
-                    except Exception as e:
-                        sentry_sdk.capture_exception(e)
-                        logger.debug("!lsp|Getting new code context failed, revert to original one")
-                    # unwrite files
-                    self.write_code_and_helpers(
-                        self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
-                    )
+            # if (
+            #     self.is_numerical_code and not self.args.no_jit_opts
+            # ):  # if the code is numerical in nature (uses numpy/tensorflow/math/pytorch/jax)
+            #     jit_compiled_opt_candidate = self.aiservice_client.get_jit_rewritten_code(
+            #         code_context.read_writable_code.markdown, self.function_trace_id
+            #     )
+            #     if jit_compiled_opt_candidate:  # jit rewrite was successful
+            #         # write files
+            #         # Try to replace function with optimized code
+            #         self.replace_function_and_helpers_with_optimized_code(
+            #             code_context=code_context,
+            #             optimized_code=jit_compiled_opt_candidate[0].source_code,
+            #             original_helper_code=original_helper_code,
+            #         )
+            #         # get code context
+            #         try:
+            #             new_code_context = self.get_code_optimization_context().unwrap()
+            #         except Exception as e:
+            #             sentry_sdk.capture_exception(e)
+            #             logger.debug("!lsp|Getting new code context failed, revert to original one")
+            #         # unwrite files
+            #         self.write_code_and_helpers(
+            #             self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            #         )
             # Generate tests and optimizations in parallel
             future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
             future_optimizations = self.executor.submit(

@@ -156,7 +156,7 @@ class Optimizer:
         """Discover functions to optimize."""
         from codeflash.discovery.functions_to_optimize import get_functions_to_optimize
 
-        return get_functions_to_optimize(
+        file_to_funcs, num_funcs, trace_path = get_functions_to_optimize(
             optimize_all=self.args.all,
             replay_test=self.args.replay_test,
             file=self.args.file,
@@ -167,6 +167,17 @@ class Optimizer:
             module_root=self.args.module_root,
             previous_checkpoint_functions=self.args.previous_checkpoint_functions,
         )
+
+        # Filter to only include functions named "forward"
+        filtered_file_to_funcs = {}
+        total_filtered_count = 0
+        for file_path, funcs in file_to_funcs.items():
+            forward_funcs = [func for func in funcs if func.function_name == "forward"]
+            if forward_funcs:
+                filtered_file_to_funcs[file_path] = forward_funcs
+                total_filtered_count += len(forward_funcs)
+
+        return filtered_file_to_funcs, total_filtered_count, trace_path
 
     def create_function_optimizer(
         self,
