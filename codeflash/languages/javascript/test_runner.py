@@ -22,6 +22,254 @@ if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
 
 
+def _detect_bundler_module_resolution(project_root: Path) -> bool:
+    """Detect if the project uses moduleResolution: 'bundler' in tsconfig.
+
+    TypeScript 5+ supports 'bundler' moduleResolution which requires
+    module: 'preserve' or ES2015+. This can cause issues with ts-jest
+    in some configurations.
+
+    This function also resolves extended tsconfigs to find bundler setting
+    in parent configs.
+
+    Args:
+        project_root: Root of the project to check.
+
+    Returns:
+        True if the project uses bundler moduleResolution.
+
+    """
+    tsconfig_path = project_root / "tsconfig.json"
+    if not tsconfig_path.exists():
+        return False
+
+    visited_configs: set[Path] = set()
+
+    def check_tsconfig(config_path: Path) -> bool:
+        """Recursively check tsconfig and its extends for bundler moduleResolution."""
+        if config_path in visited_configs:
+            return False
+        visited_configs.add(config_path)
+
+        if not config_path.exists():
+            return False
+
+        try:
+            content = config_path.read_text()
+            tsconfig = json.loads(content)
+
+            # Check direct moduleResolution setting
+            compiler_options = tsconfig.get("compilerOptions", {})
+            module_resolution = compiler_options.get("moduleResolution", "").lower()
+            if module_resolution == "bundler":
+                return True
+
+            # Check extended config if present
+            extends = tsconfig.get("extends")
+            if extends:
+                # Resolve the extended config path
+                if extends.startswith("."):
+                    # Relative path
+                    extended_path = (config_path.parent / extends).resolve()
+                    if not extended_path.suffix:
+                        extended_path = extended_path.with_suffix(".json")
+                else:
+                    # Package reference (e.g., "@n8n/typescript-config/modern/tsconfig.json")
+                    # Try to find it in node_modules
+                    node_modules_path = project_root / "node_modules" / extends
+                    if not node_modules_path.suffix:
+                        node_modules_path = node_modules_path.with_suffix(".json")
+                    if node_modules_path.exists():
+                        extended_path = node_modules_path
+                    else:
+                        # Try parent directories for monorepo support
+                        current = project_root.parent
+                        extended_path = None
+                        while current != current.parent:
+                            candidate = current / "node_modules" / extends
+                            if not candidate.suffix:
+                                candidate = candidate.with_suffix(".json")
+                            if candidate.exists():
+                                extended_path = candidate
+                                break
+                            # Also check packages directory for workspace packages
+                            packages_candidate = current / "packages" / extends
+                            if not packages_candidate.suffix:
+                                packages_candidate = packages_candidate.with_suffix(".json")
+                            if packages_candidate.exists():
+                                extended_path = packages_candidate
+                                break
+                            current = current.parent
+
+                if extended_path and extended_path.exists():
+                    return check_tsconfig(extended_path)
+
+            return False
+        except Exception as e:
+            logger.debug(f"Failed to read {config_path}: {e}")
+            return False
+
+    return check_tsconfig(tsconfig_path)
+
+
+def _create_codeflash_tsconfig(project_root: Path) -> Path:
+    """Create a codeflash-compatible tsconfig for projects using bundler moduleResolution.
+
+    This creates a tsconfig that inherits from the project's tsconfig but overrides
+    moduleResolution to 'Node' for compatibility with ts-jest.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Path to the created tsconfig.codeflash.json file.
+
+    """
+    codeflash_tsconfig_path = project_root / "tsconfig.codeflash.json"
+
+    # If it already exists, use it
+    if codeflash_tsconfig_path.exists():
+        logger.debug(f"Using existing {codeflash_tsconfig_path}")
+        return codeflash_tsconfig_path
+
+    # Read the original tsconfig to preserve most settings
+    original_tsconfig_path = project_root / "tsconfig.json"
+    try:
+        original_content = original_tsconfig_path.read_text()
+        original_tsconfig = json.loads(original_content)
+    except Exception:
+        original_tsconfig = {}
+
+    # Create a new tsconfig that extends the original but fixes moduleResolution
+    codeflash_tsconfig = {
+        "extends": "./tsconfig.json",
+        "compilerOptions": {
+            # Override bundler to Node for ts-jest compatibility
+            "moduleResolution": "Node",
+            # Ensure module is set to a compatible value
+            "module": "ESNext",
+            # These are generally safe defaults for testing
+            "esModuleInterop": True,
+            "skipLibCheck": True,
+            "isolatedModules": True,
+        },
+    }
+
+    # Preserve include/exclude from original if not in extends
+    if "include" in original_tsconfig:
+        codeflash_tsconfig["include"] = original_tsconfig["include"]
+    if "exclude" in original_tsconfig:
+        codeflash_tsconfig["exclude"] = original_tsconfig["exclude"]
+
+    try:
+        codeflash_tsconfig_path.write_text(json.dumps(codeflash_tsconfig, indent=2))
+        logger.debug(f"Created {codeflash_tsconfig_path} with Node moduleResolution")
+    except Exception as e:
+        logger.warning(f"Failed to create codeflash tsconfig: {e}")
+
+    return codeflash_tsconfig_path
+
+
+def _create_codeflash_jest_config(project_root: Path, original_jest_config: Path | None) -> Path | None:
+    """Create a Jest config that uses the codeflash tsconfig for ts-jest.
+
+    Args:
+        project_root: Root of the project.
+        original_jest_config: Path to the original Jest config, or None.
+
+    Returns:
+        Path to the codeflash Jest config, or None if creation failed.
+
+    """
+    codeflash_jest_config_path = project_root / "jest.codeflash.config.js"
+
+    # If it already exists, use it
+    if codeflash_jest_config_path.exists():
+        logger.debug(f"Using existing {codeflash_jest_config_path}")
+        return codeflash_jest_config_path
+
+    # Create a wrapper Jest config that uses tsconfig.codeflash.json
+    if original_jest_config:
+        # Extend the original config
+        jest_config_content = f"""// Auto-generated by codeflash for bundler moduleResolution compatibility
+const originalConfig = require('./{original_jest_config.name}');
+
+const tsJestOptions = {{
+  isolatedModules: true,
+  tsconfig: 'tsconfig.codeflash.json',
+}};
+
+module.exports = {{
+  ...originalConfig,
+  transform: {{
+    ...originalConfig.transform,
+    '^.+\\\\.tsx?$': ['ts-jest', tsJestOptions],
+  }},
+  globals: {{
+    ...originalConfig.globals,
+    'ts-jest': tsJestOptions,
+  }},
+}};
+"""
+    else:
+        # Create a minimal Jest config for TypeScript
+        jest_config_content = """// Auto-generated by codeflash for bundler moduleResolution compatibility
+const tsJestOptions = {
+  isolatedModules: true,
+  tsconfig: 'tsconfig.codeflash.json',
+};
+
+module.exports = {
+  verbose: true,
+  testEnvironment: 'node',
+  testRegex: '\\\\.(test|spec)\\\\.(js|ts|tsx)$',
+  testPathIgnorePatterns: ['/dist/', '/node_modules/'],
+  transform: {
+    '^.+\\\\.tsx?$': ['ts-jest', tsJestOptions],
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+};
+"""
+
+    try:
+        codeflash_jest_config_path.write_text(jest_config_content)
+        logger.debug(f"Created {codeflash_jest_config_path} with codeflash tsconfig")
+        return codeflash_jest_config_path
+    except Exception as e:
+        logger.warning(f"Failed to create codeflash Jest config: {e}")
+        return None
+
+
+def _get_jest_config_for_project(project_root: Path) -> Path | None:
+    """Get the appropriate Jest config for the project.
+
+    If the project uses bundler moduleResolution, creates and returns a
+    codeflash-compatible Jest config. Otherwise, returns the project's
+    existing Jest config.
+
+    Args:
+        project_root: Root of the project.
+
+    Returns:
+        Path to the Jest config to use, or None if not found.
+
+    """
+    # First check for existing Jest config
+    original_jest_config = _find_jest_config(project_root)
+
+    # Check if project uses bundler moduleResolution
+    if _detect_bundler_module_resolution(project_root):
+        logger.info("Detected bundler moduleResolution - creating compatible config")
+        # Create codeflash-compatible tsconfig
+        _create_codeflash_tsconfig(project_root)
+        # Create codeflash Jest config that uses it
+        codeflash_jest_config = _create_codeflash_jest_config(project_root, original_jest_config)
+        if codeflash_jest_config:
+            return codeflash_jest_config
+
+    return original_jest_config
+
+
 def _find_node_project_root(file_path: Path) -> Path | None:
     """Find the Node.js project root by looking for package.json.
 
@@ -301,7 +549,8 @@ def run_jest_behavioral_tests(
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
-    jest_config = _find_jest_config(effective_cwd)
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
 
@@ -535,7 +784,8 @@ def run_jest_benchmarking_tests(
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
-    jest_config = _find_jest_config(effective_cwd)
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
 
@@ -674,7 +924,8 @@ def run_jest_line_profile_tests(
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
-    jest_config = _find_jest_config(effective_cwd)
+    # Uses codeflash-compatible config if project has bundler moduleResolution
+    jest_config = _get_jest_config_for_project(effective_cwd)
     if jest_config:
         jest_cmd.append(f"--config={jest_config}")
 
