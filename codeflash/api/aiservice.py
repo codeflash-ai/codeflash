@@ -832,9 +832,6 @@ class AiServiceClient:
         replay_tests: str,
         calling_fn_details: str,
         language: str = "python",
-        concolic_tests: str = "",
-        original_line_profiler: str = "",
-        optimized_line_profiler: str = "",
     ) -> OptimizationReviewResult:
         """Compute the optimization review of current Pull Request.
 
