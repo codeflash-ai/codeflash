@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import STABILITY_CENTER_TOLERANCE, STABILITY_SPREAD_TOLERANCE
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
@@ -44,6 +45,73 @@ def _find_node_project_root(file_path: Path) -> Path | None:
         ):
             return current
         current = current.parent
+    return None
+
+
+def _find_jest_config(project_root: Path) -> Path | None:
+    """Find Jest configuration file in the project.
+
+    Searches for common Jest config file names in the project root and parent
+    directories (for monorepo support). This is important for TypeScript projects
+    that require specific transformation configurations (e.g., next/jest, ts-jest, babel-jest).
+
+    Args:
+        project_root: Root of the project to search.
+
+    Returns:
+        Path to Jest config file, or None if not found.
+
+    """
+    # Common Jest config file names, in order of preference
+    config_names = [
+        "jest.config.ts",
+        "jest.config.js",
+        "jest.config.mjs",
+        "jest.config.cjs",
+        "jest.config.json",
+    ]
+
+    # First check the project root itself
+    for config_name in config_names:
+        config_path = project_root / config_name
+        if config_path.exists():
+            logger.debug(f"Found Jest config: {config_path}")
+            return config_path
+
+    # For monorepos, search parent directories up to the filesystem root
+    # Stop at common monorepo root indicators (git root, package.json with workspaces)
+    current = project_root.parent
+    max_depth = 5  # Don't search too far up
+    depth = 0
+
+    while current != current.parent and depth < max_depth:
+        for config_name in config_names:
+            config_path = current / config_name
+            if config_path.exists():
+                logger.debug(f"Found Jest config in parent directory: {config_path}")
+                return config_path
+
+        # Check if this looks like a monorepo root
+        package_json = current / "package.json"
+        if package_json.exists():
+            try:
+                import json
+
+                with package_json.open("r") as f:
+                    pkg = json.load(f)
+                    if "workspaces" in pkg:
+                        # This is likely the monorepo root, stop here
+                        break
+            except Exception:
+                pass
+
+        # Check for git root as another stopping point
+        if (current / ".git").exists():
+            break
+
+        current = current.parent
+        depth += 1
+
     return None
 
 
@@ -145,40 +213,21 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     Installs codeflash package if not already present.
     The package provides all runtime files needed for test instrumentation.
+    Uses the project's detected package manager (npm, pnpm, yarn, or bun).
 
     Args:
         project_root: The project root directory.
 
     """
-    # Check if package is already installed
     node_modules_pkg = project_root / "node_modules" / "codeflash"
     if node_modules_pkg.exists():
         logger.debug("codeflash already installed")
         return
 
-    # Try to install from local package first (for development)
-    local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "codeflash"
-    if local_package_path.exists():
-        try:
-            result = subprocess.run(
-                ["npm", "install", "--save-dev", str(local_package_path)],
-                check=False,
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                logger.debug("Installed codeflash from local package")
-                return
-            logger.warning(f"Failed to install local package: {result.stderr}")
-        except Exception as e:
-            logger.warning(f"Error installing local package: {e}")
-
-    # Try to install from npm registry
+    install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
         result = subprocess.run(
-            ["npm", "install", "--save-dev", "codeflash"],
+            install_cmd,
             check=False,
             cwd=project_root,
             capture_output=True,
@@ -186,13 +235,13 @@ def _ensure_runtime_files(project_root: Path) -> None:
             timeout=120,
         )
         if result.returncode == 0:
-            logger.debug("Installed codeflash from npm registry")
+            logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
-        logger.warning(f"Failed to install from npm: {result.stderr}")
+        logger.warning(f"Failed to install codeflash: {result.stderr}")
     except Exception as e:
-        logger.warning(f"Error installing from npm: {e}")
+        logger.warning(f"Error installing codeflash: {e}")
 
-    logger.error("Could not install codeflash. Please install it manually: npm install --save-dev codeflash")
+    logger.error(f"Could not install codeflash. Please install it manually: {' '.join(install_cmd)}")
 
 
 def run_jest_behavioral_tests(
@@ -250,6 +299,11 @@ def run_jest_behavioral_tests(
         "--runInBand",  # Run tests serially for consistent timing
         "--forceExit",
     ]
+
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
 
     # Add coverage flags if enabled
     if enable_coverage:
@@ -480,6 +534,11 @@ def run_jest_benchmarking_tests(
         "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
 
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
+
     if test_files:
         jest_cmd.append("--runTestsByPath")
         resolved_test_files = [str(Path(f).resolve()) for f in test_files]
@@ -613,6 +672,11 @@ def run_jest_line_profile_tests(
         "--runInBand",  # Run tests serially for consistent line profiling
         "--forceExit",
     ]
+
+    # Add Jest config if found - needed for TypeScript transformation
+    jest_config = _find_jest_config(effective_cwd)
+    if jest_config:
+        jest_cmd.append(f"--config={jest_config}")
 
     if test_files:
         jest_cmd.append("--runTestsByPath")

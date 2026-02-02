@@ -178,6 +178,41 @@ def get_language_support(identifier: Path | Language | str) -> LanguageSupport:
 _FRAMEWORK_CACHE: dict[str, LanguageSupport] = {}
 
 
+def get_language_support_by_common_formatters(formatter_cmd: str | list[str]) -> LanguageSupport | None:
+    language: Language | None = None
+    if isinstance(formatter_cmd, str):
+        formatter_cmd = [formatter_cmd]
+
+    if len(formatter_cmd) == 1:
+        formatter_cmd = formatter_cmd[0].split(" ")
+
+    # Try as extension first
+    ext = None
+
+    py_formatters = ["black", "isort", "ruff", "autopep8", "yapf", "pyfmt"]
+    js_ts_formatters = ["prettier", "eslint", "biome", "rome", "deno", "standard", "tslint"]
+
+    if any(cmd in py_formatters for cmd in formatter_cmd):
+        ext = ".py"
+    elif any(cmd in js_ts_formatters for cmd in formatter_cmd):
+        ext = ".js"
+
+    if ext is None:
+        # can't determine language
+        return None
+
+    cls = _EXTENSION_REGISTRY[ext]
+    language = cls().language
+
+    # Return cached instance or create new one
+    if language not in _SUPPORT_CACHE:
+        if language not in _LANGUAGE_REGISTRY:
+            raise UnsupportedLanguageError(str(language), get_supported_languages())
+        _SUPPORT_CACHE[language] = _LANGUAGE_REGISTRY[language]()
+
+    return _SUPPORT_CACHE[language]
+
+
 def get_language_support_by_framework(test_framework: str) -> LanguageSupport | None:
     """Get language support for a test framework.
 

@@ -26,6 +26,7 @@ from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
 from codeflash.telemetry.posthog_cf import ph
+from rich.prompt import Confirm
 
 
 class ProjectLanguage(Enum):
@@ -90,13 +91,30 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
     has_package_json = (root / "package.json").exists()
     has_tsconfig = (root / "tsconfig.json").exists()
 
-    # TypeScript project
+    # TypeScript project (tsconfig.json is definitive)
     if has_tsconfig:
         return ProjectLanguage.TYPESCRIPT
 
-    # Pure JS project (has package.json but no Python files)
-    if has_package_json and not has_pyproject and not has_setup_py:
-        return ProjectLanguage.JAVASCRIPT
+    # JavaScript project - package.json without Python-specific files takes priority
+    # Note: If both package.json and pyproject.toml exist, check for typical JS project indicators
+    if has_package_json:
+        # If no Python config files, it's definitely JavaScript
+        if not has_pyproject and not has_setup_py:
+            return ProjectLanguage.JAVASCRIPT
+
+        # If package.json exists with Python files, check for JS-specific indicators
+        # Common React/Node patterns indicate a JS project
+        js_indicators = [
+            (root / "node_modules").exists(),
+            (root / ".npmrc").exists(),
+            (root / "yarn.lock").exists(),
+            (root / "package-lock.json").exists(),
+            (root / "pnpm-lock.yaml").exists(),
+            (root / "bun.lockb").exists(),
+            (root / "bun.lock").exists(),
+        ]
+        if any(js_indicators):
+            return ProjectLanguage.JAVASCRIPT
 
     # Python project (default)
     return ProjectLanguage.PYTHON
@@ -116,6 +134,43 @@ def determine_js_package_manager(project_root: Path) -> JsPackageManager:
     if (project_root / "package.json").exists():
         return JsPackageManager.NPM
     return JsPackageManager.UNKNOWN
+
+
+def get_package_install_command(project_root: Path, package: str, dev: bool = True) -> list[str]:
+    """Get the correct install command for the project's package manager.
+
+    Args:
+        project_root: The project root directory.
+        package: The package name to install.
+        dev: Whether to install as a dev dependency (default: True).
+
+    Returns:
+        List of command arguments for subprocess execution.
+
+    """
+    pkg_manager = determine_js_package_manager(project_root)
+
+    if pkg_manager == JsPackageManager.PNPM:
+        cmd = ["pnpm", "add", package]
+        if dev:
+            cmd.append("--save-dev")
+        return cmd
+    elif pkg_manager == JsPackageManager.YARN:
+        cmd = ["yarn", "add", package]
+        if dev:
+            cmd.append("--dev")
+        return cmd
+    elif pkg_manager == JsPackageManager.BUN:
+        cmd = ["bun", "add", package]
+        if dev:
+            cmd.append("--dev")
+        return cmd
+    else:
+        # Default to npm
+        cmd = ["npm", "install", package]
+        if dev:
+            cmd.append("--save-dev")
+        return cmd
 
 
 def init_js_project(language: ProjectLanguage) -> None:
@@ -191,9 +246,7 @@ def init_js_project(language: ProjectLanguage) -> None:
 
 def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
     """Check if package.json has valid codeflash config for JS/TS projects."""
-    from rich.prompt import Confirm
-
-    package_json_path = Path.cwd() / "package.json"
+    package_json_path = Path("package.json")
 
     if not package_json_path.exists():
         click.echo("❌ No package.json found. Please run 'npm init' first.")
@@ -211,6 +264,10 @@ def should_modify_package_json_config() -> tuple[bool, dict[str, Any] | None]:
         # Check if module_root is valid (defaults to "." if not specified)
         module_root = config.get("moduleRoot", ".")
         if not Path(module_root).is_dir():
+            return True, None
+
+        tests_root = config.get("testsRoot", None)
+        if tests_root and not Path(tests_root).is_dir():
             return True, None
 
         # Config is valid - ask if user wants to reconfigure

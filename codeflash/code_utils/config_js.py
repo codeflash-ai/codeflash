@@ -212,15 +212,18 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
 
     Most configuration is auto-detected from package.json and project structure.
     Only minimal config is stored in the "codeflash" key:
+    - moduleRoot: Override auto-detected module root (optional)
+    - testsRoot: Override auto-detected tests root (optional)
+    - test-framework: Override auto-detected test framework - "jest", "vitest", or "mocha" (optional)
     - benchmarksRoot: Where to store benchmark files (optional, defaults to __benchmarks__)
     - ignorePaths: Paths to exclude from optimization (optional)
     - disableTelemetry: Privacy preference (optional, defaults to false)
     - formatterCmds: Override auto-detected formatter (optional)
 
-    Auto-detected values (not stored in config):
+    Auto-detected values (used when not explicitly configured):
     - language: Detected from tsconfig.json presence
     - moduleRoot: Detected from package.json exports/module/main or src/ convention
-    - testRunner: Detected from devDependencies (vitest/jest/mocha)
+    - test-framework: Detected from devDependencies (vitest/jest/mocha)
     - formatter: Detected from devDependencies (prettier/eslint)
 
     Args:
@@ -251,10 +254,17 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
         detected_module_root = detect_module_root(project_root, package_data)
         config["module_root"] = str((project_root / Path(detected_module_root)).resolve())
 
-    # Auto-detect test runner
-    config["test_runner"] = detect_test_runner(project_root, package_data)
+    if codeflash_config.get("testsRoot"):
+        config["tests_root"] = str(project_root / Path(codeflash_config["testsRoot"]).resolve())
+
+    # Check for explicit test framework override, otherwise auto-detect
+    # Uses "test-framework" to match Python's pyproject.toml convention
+    if codeflash_config.get("test-framework"):
+        config["test_framework"] = codeflash_config["test-framework"]
+    else:
+        config["test_framework"] = detect_test_runner(project_root, package_data)
     # Keep pytest_cmd for backwards compatibility with existing code
-    config["pytest_cmd"] = config["test_runner"]
+    config["pytest_cmd"] = config["test_framework"]
 
     # Auto-detect formatter (with optional override from config)
     if "formatterCmds" in codeflash_config:

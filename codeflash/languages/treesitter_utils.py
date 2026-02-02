@@ -454,23 +454,46 @@ class TreeSitterAnalyzer:
 
         return imports
 
-    def _walk_tree_for_imports(self, node: Node, source_bytes: bytes, imports: list[ImportInfo]) -> None:
-        """Recursively walk the tree to find import statements."""
+    def _walk_tree_for_imports(
+        self, node: Node, source_bytes: bytes, imports: list[ImportInfo], in_function: bool = False
+    ) -> None:
+        """Recursively walk the tree to find import statements.
+
+        Args:
+            node: Current node to check.
+            source_bytes: Source code bytes.
+            imports: List to append found imports to.
+            in_function: Whether we're currently inside a function/method body.
+        """
+        # Track when we enter function/method bodies
+        # These node types contain function/method bodies where require() should not be treated as imports
+        function_body_types = {
+            "function_declaration",
+            "method_definition",
+            "arrow_function",
+            "function_expression",
+            "function",  # Generic function in some grammars
+        }
+
         if node.type == "import_statement":
             import_info = self._extract_import_info(node, source_bytes)
             if import_info:
                 imports.append(import_info)
 
-        # Also handle require() calls for CommonJS
-        if node.type == "call_expression":
+        # Also handle require() calls for CommonJS, but only at module level
+        # require() inside functions is a dynamic import, not a module import
+        if node.type == "call_expression" and not in_function:
             func_node = node.child_by_field_name("function")
             if func_node and self.get_node_text(func_node, source_bytes) == "require":
                 import_info = self._extract_require_info(node, source_bytes)
                 if import_info:
                     imports.append(import_info)
 
+        # Update in_function flag for children
+        child_in_function = in_function or node.type in function_body_types
+
         for child in node.children:
-            self._walk_tree_for_imports(child, source_bytes, imports)
+            self._walk_tree_for_imports(child, source_bytes, imports, child_in_function)
 
     def _extract_import_info(self, node: Node, source_bytes: bytes) -> ImportInfo | None:
         """Extract import information from an import statement node."""
@@ -841,20 +864,27 @@ class TreeSitterAnalyzer:
             end_line=node.end_point[0] + 1,
         )
 
-    def is_function_exported(self, source: str, function_name: str) -> tuple[bool, str | None]:
+    def is_function_exported(
+        self, source: str, function_name: str, class_name: str | None = None
+    ) -> tuple[bool, str | None]:
         """Check if a function is exported and get its export name.
+
+        For class methods, also checks if the containing class is exported.
 
         Args:
             source: The source code to analyze.
             function_name: The name of the function to check.
+            class_name: For class methods, the name of the containing class.
 
         Returns:
             Tuple of (is_exported, export_name). export_name may differ from
-            function_name if exported with an alias.
+            function_name if exported with an alias. For class methods,
+            returns the class export name.
 
         """
         exports = self.find_exports(source)
 
+        # First, check if the function itself is directly exported
         for export in exports:
             # Check default export
             if export.default_export == function_name:
@@ -864,6 +894,18 @@ class TreeSitterAnalyzer:
             for name, alias in export.exported_names:
                 if name == function_name:
                     return (True, alias if alias else name)
+
+        # For class methods, check if the containing class is exported
+        if class_name:
+            for export in exports:
+                # Check if class is default export
+                if export.default_export == class_name:
+                    return (True, class_name)
+
+                # Check if class is in named exports
+                for name, alias in export.exported_names:
+                    if name == class_name:
+                        return (True, alias if alias else name)
 
         return (False, None)
 

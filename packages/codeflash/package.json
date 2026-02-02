@@ -1,6 +1,6 @@
 {
   "name": "codeflash",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Codeflash - AI-powered code optimization for JavaScript and TypeScript",
   "main": "runtime/index.js",
   "types": "runtime/index.d.ts",
@@ -9,7 +9,7 @@
     "codeflash-setup": "./bin/codeflash-setup.js"
   },
   "publishConfig": {
-  "access": "public"
+    "access": "public"
   },
   "exports": {
     ".": {
@@ -52,7 +52,8 @@
     "typescript",
     "ai",
     "cli",
-    "jest"
+    "jest",
+    "vitest"
   ],
   "author": "Codeflash AI",
   "license": "MIT",
@@ -70,7 +71,8 @@
   },
   "peerDependencies": {
     "jest": ">=27.0.0",
-    "jest-runner": ">=27.0.0"
+    "jest-runner": ">=27.0.0",
+    "vitest": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "jest": {
@@ -78,12 +80,13 @@
     },
     "jest-runner": {
       "optional": true
+    },
+    "vitest": {
+      "optional": true
     }
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",
-    "@msgpack/msgpack": "^3.0.0",
-    "jest-runner": "^29.7.0",
-    "jest-junit": "^16.0.0"
+    "@msgpack/msgpack": "^3.0.0"
   }
 }
