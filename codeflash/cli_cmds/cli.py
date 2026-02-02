@@ -232,8 +232,8 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
 
     # Set the test framework singleton for JS/TS projects
-    if is_js_ts_project and pyproject_config.get("test_runner"):
-        set_current_test_framework(pyproject_config["test_runner"])
+    if is_js_ts_project and pyproject_config.get("test_framework"):
+        set_current_test_framework(pyproject_config["test_framework"])
 
     if args.tests_root is None:
         if is_js_ts_project:
