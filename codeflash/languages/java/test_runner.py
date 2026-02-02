@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +28,55 @@ from codeflash.languages.java.build_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Regex pattern for valid Java class names (package.ClassName format)
+# Allows: letters, digits, underscores, dots, and dollar signs (inner classes)
+_VALID_JAVA_CLASS_NAME = re.compile(r'^[a-zA-Z_$][a-zA-Z0-9_$.]*$')
+
+
+def _validate_java_class_name(class_name: str) -> bool:
+    """Validate that a string is a valid Java class name.
+
+    This prevents command injection when passing test class names to Maven.
+
+    Args:
+        class_name: The class name to validate (e.g., "com.example.MyTest").
+
+    Returns:
+        True if valid, False otherwise.
+    """
+    return bool(_VALID_JAVA_CLASS_NAME.match(class_name))
+
+
+def _validate_test_filter(test_filter: str) -> str:
+    """Validate and sanitize a test filter string for Maven.
+
+    Test filters can contain commas (multiple classes) and wildcards (*).
+    This function validates the format to prevent command injection.
+
+    Args:
+        test_filter: The test filter string (e.g., "MyTest", "MyTest,OtherTest", "My*Test").
+
+    Returns:
+        The sanitized test filter.
+
+    Raises:
+        ValueError: If the test filter contains invalid characters.
+    """
+    # Split by comma for multiple test patterns
+    patterns = [p.strip() for p in test_filter.split(',')]
+
+    for pattern in patterns:
+        # Remove wildcards for validation (they're allowed in test filters)
+        name_to_validate = pattern.replace('*', 'A')  # Replace * with a valid char
+
+        if not _validate_java_class_name(name_to_validate):
+            raise ValueError(
+                f"Invalid test class name or pattern: '{pattern}'. "
+                f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
+            )
+
+    return test_filter
 
 
 def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
@@ -1053,7 +1103,9 @@ def _run_maven_tests(
         cmd.extend(["-pl", test_module, "-am", "-DfailIfNoTests=false", "-DskipTests=false"])
 
     if test_filter:
-        cmd.append(f"-Dtest={test_filter}")
+        # Validate test filter to prevent command injection
+        validated_filter = _validate_test_filter(test_filter)
+        cmd.append(f"-Dtest={validated_filter}")
 
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
@@ -1333,6 +1385,16 @@ def get_test_run_command(
     cmd = [mvn, "test"]
 
     if test_classes:
-        cmd.append(f"-Dtest={','.join(test_classes)}")
+        # Validate each test class name to prevent command injection
+        validated_classes = []
+        for test_class in test_classes:
+            if not _validate_java_class_name(test_class):
+                raise ValueError(
+                    f"Invalid test class name: '{test_class}'. "
+                    f"Test names must follow Java identifier rules."
+                )
+            validated_classes.append(test_class)
+
+        cmd.append(f"-Dtest={','.join(validated_classes)}")
 
     return cmd
