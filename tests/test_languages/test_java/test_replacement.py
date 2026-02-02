@@ -1054,3 +1054,415 @@ public class Unicode {{
 }
 """
         assert new_code == expected
+
+
+class TestOptimizationWithStaticFields:
+    """Tests for optimizations that add new static fields to the class."""
+
+    def test_add_static_lookup_table(self, tmp_path: Path):
+        """Test optimization that adds a static lookup table."""
+        java_file = tmp_path / "Buffer.java"
+        original_code = """public class Buffer {
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        StringBuilder sb = new StringBuilder(length * 2);
+        for (int i = offset; i < length; i++) {
+            sb.append(String.format("%02x", buf[i]));
+        }
+        return sb.toString();
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization adds a static lookup table
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Buffer {{
+    private static final char[] HEX_DIGITS = "0123456789abcdef".toCharArray();
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {{
+        StringBuilder sb = new StringBuilder(length * 2);
+        for (int i = offset; i < length; i++) {{
+            int v = buf[i] & 0xFF;
+            sb.append(HEX_DIGITS[v >>> 4]);
+            sb.append(HEX_DIGITS[v & 0x0F]);
+        }}
+        return sb.toString();
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["bytesToHexString"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify the static field was added and method was replaced
+        assert "private static final char[] HEX_DIGITS" in new_code
+        assert "HEX_DIGITS[v >>> 4]" in new_code
+        assert "HEX_DIGITS[v & 0x0F]" in new_code
+        # Verify old implementation is gone
+        assert 'String.format("%02x"' not in new_code
+
+    def test_add_precomputed_array(self, tmp_path: Path):
+        """Test optimization that adds a precomputed static array."""
+        java_file = tmp_path / "Encoder.java"
+        original_code = """public class Encoder {
+    public static String byteToHex(byte b) {
+        return String.format("%02x", b);
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization with precomputed byte-to-hex lookup
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Encoder {{
+    private static final String[] BYTE_TO_HEX = createByteToHex();
+
+    private static String[] createByteToHex() {{
+        String[] map = new String[256];
+        for (int i = 0; i < 256; i++) {{
+            map[i] = String.format("%02x", i);
+        }}
+        return map;
+    }}
+
+    public static String byteToHex(byte b) {{
+        return BYTE_TO_HEX[b & 0xFF];
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["byteToHex"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify static field was added
+        assert "private static final String[] BYTE_TO_HEX" in new_code
+        # Verify helper method was added
+        assert "private static String[] createByteToHex()" in new_code
+        # Verify method uses the lookup
+        assert "BYTE_TO_HEX[b & 0xFF]" in new_code
+
+    def test_preserve_existing_fields(self, tmp_path: Path):
+        """Test that existing fields are preserved when adding new ones."""
+        java_file = tmp_path / "Calculator.java"
+        original_code = """public class Calculator {
+    private static final int MAX_VALUE = 1000;
+
+    public int calculate(int n) {
+        int result = 0;
+        for (int i = 0; i < n; i++) {
+            result += i;
+        }
+        return result;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization adds a new static field
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    private static final int MAX_VALUE = 1000;
+    private static final int[] PRECOMPUTED = precompute();
+
+    private static int[] precompute() {{
+        int[] arr = new int[1001];
+        for (int i = 1; i <= 1000; i++) {{
+            arr[i] = arr[i-1] + i - 1;
+        }}
+        return arr;
+    }}
+
+    public int calculate(int n) {{
+        if (n <= 1000) {{
+            return PRECOMPUTED[n];
+        }}
+        int result = PRECOMPUTED[1000];
+        for (int i = 1000; i < n; i++) {{
+            result += i;
+        }}
+        return result;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["calculate"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify existing field is preserved
+        assert "private static final int MAX_VALUE = 1000" in new_code
+        # Verify new field was added
+        assert "private static final int[] PRECOMPUTED" in new_code
+        # Verify helper method was added
+        assert "private static int[] precompute()" in new_code
+        # Verify optimized method body
+        assert "PRECOMPUTED[n]" in new_code
+
+
+class TestOptimizationWithHelperMethods:
+    """Tests for optimizations that add new helper methods."""
+
+    def test_add_private_helper_method(self, tmp_path: Path):
+        """Test optimization that adds a private helper method."""
+        java_file = tmp_path / "StringUtils.java"
+        original_code = """public class StringUtils {
+    public static String reverse(String s) {
+        char[] chars = s.toCharArray();
+        int left = 0;
+        int right = chars.length - 1;
+        while (left < right) {
+            char temp = chars[left];
+            chars[left] = chars[right];
+            chars[right] = temp;
+            left++;
+            right--;
+        }
+        return new String(chars);
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization extracts swap logic to helper
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class StringUtils {{
+    private static void swap(char[] arr, int i, int j) {{
+        char temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }}
+
+    public static String reverse(String s) {{
+        char[] chars = s.toCharArray();
+        for (int i = 0, j = chars.length - 1; i < j; i++, j--) {{
+            swap(chars, i, j);
+        }}
+        return new String(chars);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["reverse"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify helper method was added
+        assert "private static void swap(char[] arr, int i, int j)" in new_code
+        # Verify main method uses helper
+        assert "swap(chars, i, j)" in new_code
+
+    def test_add_multiple_helpers(self, tmp_path: Path):
+        """Test optimization that adds multiple helper methods."""
+        java_file = tmp_path / "MathUtils.java"
+        original_code = """public class MathUtils {
+    public static int gcd(int a, int b) {
+        while (b != 0) {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+        return a;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization adds multiple helper methods
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class MathUtils {{
+    private static int abs(int x) {{
+        return x < 0 ? -x : x;
+    }}
+
+    private static int gcdInternal(int a, int b) {{
+        return b == 0 ? a : gcdInternal(b, a % b);
+    }}
+
+    public static int gcd(int a, int b) {{
+        return gcdInternal(abs(a), abs(b));
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["gcd"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify both helper methods were added
+        assert "private static int abs(int x)" in new_code
+        assert "private static int gcdInternal(int a, int b)" in new_code
+        # Verify main method uses helpers
+        assert "gcdInternal(abs(a), abs(b))" in new_code
+
+
+class TestOptimizationWithFieldsAndHelpers:
+    """Tests for optimizations that add both static fields and helper methods."""
+
+    def test_add_field_and_helper_together(self, tmp_path: Path):
+        """Test optimization that adds both a static field and helper method."""
+        java_file = tmp_path / "Fibonacci.java"
+        original_code = """public class Fibonacci {
+    public static long fib(int n) {
+        if (n <= 1) return n;
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # Optimization with memoization using static field and helper
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Fibonacci {{
+    private static final long[] CACHE = new long[100];
+    private static final boolean[] COMPUTED = new boolean[100];
+
+    private static long fibMemo(int n) {{
+        if (n <= 1) return n;
+        if (n < 100 && COMPUTED[n]) return CACHE[n];
+        long result = fibMemo(n - 1) + fibMemo(n - 2);
+        if (n < 100) {{
+            CACHE[n] = result;
+            COMPUTED[n] = true;
+        }}
+        return result;
+    }}
+
+    public static long fib(int n) {{
+        return fibMemo(n);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["fib"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        # Verify static fields were added
+        assert "private static final long[] CACHE" in new_code
+        assert "private static final boolean[] COMPUTED" in new_code
+        # Verify helper method was added
+        assert "private static long fibMemo(int n)" in new_code
+        # Verify main method uses helper
+        assert "return fibMemo(n)" in new_code
+
+    def test_real_world_bytes_to_hex_optimization(self, tmp_path: Path):
+        """Test the actual bytesToHexString optimization pattern from aerospike."""
+        java_file = tmp_path / "Buffer.java"
+        original_code = """package com.example;
+
+public final class Buffer {
+    public static String bytesToHexString(byte[] buf, int offset, int length) {
+        StringBuilder sb = new StringBuilder(length * 2);
+
+        for (int i = offset; i < length; i++) {
+            sb.append(String.format("%02x", buf[i]));
+        }
+        return sb.toString();
+    }
+
+    public static int otherMethod() {
+        return 42;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # The actual optimization pattern generated by the AI
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+package com.example;
+
+public final class Buffer {{
+    private static final String[] BYTE_TO_HEX = createByteToHex();
+
+    private static String[] createByteToHex() {{
+        String[] map = new String[256];
+        for (int b = -128; b <= 127; b++) {{
+            map[b + 128] = String.format("%02x", (byte) b);
+        }}
+        return map;
+    }}
+
+    public static String bytesToHexString(byte[] buf, int offset, int length) {{
+        StringBuilder sb = new StringBuilder(length * 2);
+
+        for (int i = offset; i < length; i++) {{
+            sb.append(BYTE_TO_HEX[buf[i] + 128]);
+        }}
+        return sb.toString();
+    }}
+
+    public static int otherMethod() {{
+        return 42;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["bytesToHexString"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+        )
+
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+
+        # Verify package is preserved
+        assert "package com.example;" in new_code
+        # Verify static field was added
+        assert "private static final String[] BYTE_TO_HEX = createByteToHex();" in new_code
+        # Verify helper method was added
+        assert "private static String[] createByteToHex()" in new_code
+        # Verify optimized method uses lookup
+        assert "BYTE_TO_HEX[buf[i] + 128]" in new_code
+        # Verify other method is preserved
+        assert "public static int otherMethod()" in new_code
+        assert "return 42;" in new_code
+        # Verify old implementation is replaced
+        assert 'String.format("%02x", buf[i])' not in new_code

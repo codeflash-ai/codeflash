@@ -515,6 +515,7 @@ def replace_function_definitions_for_language(
         original_source=original_source_code,
         module_abspath=module_abspath,
         language=language,
+        target_function_names=function_names,
     )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
@@ -621,27 +622,142 @@ def _extract_function_from_code(
     return None
 
 
+def _add_java_class_members(
+    optimized_code: str, original_source: str, target_function_names: list[str] | None = None
+) -> str:
+    """Add new Java class members (static fields and helper methods) from optimized code.
+
+    Parses both the optimized and original code to find:
+    - New static fields in the optimized code that don't exist in the original
+    - New helper methods in the optimized code that don't exist in the original
+
+    These are added to the original class at appropriate positions.
+    Target functions (being replaced) are NOT added as new helpers.
+
+    Args:
+        optimized_code: The optimized code that may contain new class members.
+        original_source: The original source code.
+        target_function_names: List of function names being optimized (to exclude from helpers).
+
+    Returns:
+        Original source with new class members added.
+
+    """
+    target_names = set(target_function_names or [])
+    try:
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+
+        # Find classes in both sources
+        original_classes = analyzer.find_classes(original_source)
+        optimized_classes = analyzer.find_classes(optimized_code)
+
+        if not original_classes or not optimized_classes:
+            return original_source
+
+        # Match by class name (handle single class per file - most common case)
+        # Use the first class as the target
+        original_class = original_classes[0]
+        optimized_class = None
+        for cls in optimized_classes:
+            if cls.name == original_class.name:
+                optimized_class = cls
+                break
+
+        if not optimized_class:
+            # Try to use first class from optimized if names don't match
+            optimized_class = optimized_classes[0]
+
+        class_name = original_class.name
+
+        # Find existing fields and methods in original
+        existing_fields = analyzer.find_fields(original_source, class_name)
+        existing_methods = analyzer.find_methods(original_source)
+        existing_field_names = {f.name for f in existing_fields}
+        existing_method_names = {m.name for m in existing_methods if m.class_name == class_name}
+
+        # Find fields and methods in optimized code
+        optimized_fields = analyzer.find_fields(optimized_code, class_name)
+        optimized_methods = analyzer.find_methods(optimized_code)
+
+        # Find new fields (fields in optimized that don't exist in original)
+        new_fields = []
+        for field in optimized_fields:
+            if field.name not in existing_field_names:
+                if field.source_text:
+                    new_fields.append(field.source_text)
+
+        # Find new helper methods (methods in optimized that don't exist in original)
+        new_methods = []
+        for method in optimized_methods:
+            # Exclude target functions (they'll be replaced, not added as new helpers)
+            if (
+                method.class_name == class_name
+                and method.name not in existing_method_names
+                and method.name not in target_names
+            ):
+                # Extract method source including Javadoc
+                lines = optimized_code.splitlines(keepends=True)
+                start = (method.javadoc_start_line or method.start_line) - 1
+                end = method.end_line
+                method_source = "".join(lines[start:end])
+                new_methods.append(method_source)
+
+        if not new_fields and not new_methods:
+            return original_source
+
+        logger.debug(
+            f"Adding {len(new_fields)} new fields and {len(new_methods)} helper methods to class {class_name}"
+        )
+
+        # Import the insertion function from replacement module
+        from codeflash.languages.java.replacement import _insert_class_members
+
+        result = _insert_class_members(
+            original_source, class_name, new_fields, new_methods, analyzer
+        )
+
+        return result
+
+    except Exception as e:
+        logger.debug(f"Error adding Java class members: {e}")
+        return original_source
+
+
 def _add_global_declarations_for_language(
-    optimized_code: str, original_source: str, module_abspath: Path, language: Language
+    optimized_code: str,
+    original_source: str,
+    module_abspath: Path,
+    language: Language,
+    target_function_names: list[str] | None = None,
 ) -> str:
     """Add new global declarations from optimized code to original source.
 
-    Finds module-level declarations (const, let, var, class, type, interface, enum)
+    For JavaScript/TypeScript: Finds module-level declarations (const, let, var, class, type, interface, enum)
     in the optimized code that don't exist in the original source and adds them.
+
+    For Java: Finds new static fields and helper methods in the optimized code that don't exist
+    in the original source and adds them to the appropriate class.
 
     Args:
         optimized_code: The optimized code that may contain new declarations.
         original_source: The original source code.
         module_abspath: Path to the module file (for parser selection).
         language: The language of the code.
+        target_function_names: List of function names being optimized (to exclude from Java helpers).
 
     Returns:
-        Original source with new declarations added after imports.
+        Original source with new declarations added.
 
     """
     from codeflash.languages.base import Language
 
-    # Only process JavaScript/TypeScript
+    # Handle Java class-level members
+    if language == Language.JAVA:
+        return _add_java_class_members(optimized_code, original_source, target_function_names)
+
+    # Only process JavaScript/TypeScript for module-level declarations
     if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
         return original_source
 
