@@ -35,7 +35,7 @@ class TestCodeflashConfig:
             language="javascript",
             module_root="src",
             tests_root="tests",
-            test_runner="jest",
+            test_framework="jest",
             formatter_cmds=["npx prettier --write $file"],
             ignore_paths=["dist", "node_modules"],
             benchmarks_root="benchmarks",
@@ -46,7 +46,7 @@ class TestCodeflashConfig:
         assert config.language == "javascript"
         assert config.module_root == "src"
         assert config.tests_root == "tests"
-        assert config.test_runner == "jest"
+        assert config.test_framework == "jest"
         assert config.formatter_cmds == ["npx prettier --write $file"]
         assert config.ignore_paths == ["dist", "node_modules"]
         assert config.git_remote == "upstream"
@@ -128,7 +128,7 @@ class TestCodeflashConfig:
         config = CodeflashConfig.from_detected_project(detected)
 
         assert config.language == detected.language
-        assert config.test_runner == detected.test_runner
+        assert config.test_framework == detected.test_runner
 
     def test_from_pyproject_dict(self):
         """Should create config from pyproject.toml dict."""

@@ -488,7 +488,7 @@ class TestParsePackageJsonConfig:
         assert result is not None
         config, path = result
         assert config["language"] == "javascript"
-        assert config["test_runner"] == "jest"
+        assert config["test_framework"] == "jest"
         assert config["pytest_cmd"] == "jest"
         assert path == package_json
 
@@ -728,7 +728,7 @@ class TestRealWorldPackageJsonExamples:
         config, _ = result
         assert config["language"] == "typescript"
         assert config["module_root"] == str((tmp_path / "src").resolve())
-        assert config["test_runner"] == "jest"
+        assert config["test_framework"] == "jest"
         assert config["formatter_cmds"] == ["npx prettier --write $file"]
 
     def test_vite_react_project(self, tmp_path: Path) -> None:
@@ -752,7 +752,7 @@ class TestRealWorldPackageJsonExamples:
         assert result is not None
         config, _ = result
         assert config["language"] == "typescript"
-        assert config["test_runner"] == "vitest"
+        assert config["test_framework"] == "vitest"
         assert config["formatter_cmds"] == ["npx eslint --fix $file"]
 
     def test_library_with_exports(self, tmp_path: Path) -> None:
@@ -812,7 +812,7 @@ class TestRealWorldPackageJsonExamples:
         assert result is not None
         config, _ = result
         assert config["module_root"] == str((tmp_path / "lib").resolve())
-        assert config["test_runner"] == "mocha"
+        assert config["test_framework"] == "mocha"
 
     def test_minimal_project(self, tmp_path: Path) -> None:
         """Should handle minimal package.json."""
@@ -825,7 +825,7 @@ class TestRealWorldPackageJsonExamples:
         config, _ = result
         assert config["language"] == "javascript"
         assert config["module_root"] == str(tmp_path.resolve())
-        assert config["test_runner"] == "jest"
+        assert config["test_framework"] == "jest"
         assert config["formatter_cmds"] == []
 
     def test_existing_codeflash_config_with_overrides(self, tmp_path: Path) -> None:
@@ -855,3 +855,143 @@ class TestRealWorldPackageJsonExamples:
         assert config["formatter_cmds"] == ["npx prettier --write --single-quote $file"]
         assert len(config["ignore_paths"]) == 2
         assert config["disable_telemetry"] is True
+
+
+class TestTestFrameworkConfigOverride:
+    """Tests for explicit test-framework config override (matches Python's pyproject.toml)."""
+
+    def test_test_framework_overrides_auto_detection(self, tmp_path: Path) -> None:
+        """Should use test-framework from codeflash config instead of auto-detecting from devDependencies."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"vitest": "^1.0.0"},
+                    "codeflash": {"test-framework": "jest"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "jest"
+        assert config["pytest_cmd"] == "jest"
+
+    def test_explicit_vitest_config_with_jest_in_deps(self, tmp_path: Path) -> None:
+        """Should use explicit vitest config even when jest is in devDependencies."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"jest": "^29.0.0", "vitest": "^1.0.0"},
+                    "codeflash": {"test-framework": "vitest"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "vitest"
+
+    def test_explicit_mocha_overrides_vitest_and_jest(self, tmp_path: Path) -> None:
+        """Should use explicit mocha config even when vitest and jest are in devDependencies."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"vitest": "^1.0.0", "jest": "^29.0.0"},
+                    "codeflash": {"test-framework": "mocha"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "mocha"
+
+    def test_auto_detection_when_no_explicit_config(self, tmp_path: Path) -> None:
+        """Should auto-detect test framework when no explicit config is provided."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"vitest": "^1.0.0"},
+                    "codeflash": {"moduleRoot": "src"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "vitest"
+
+    def test_empty_test_framework_falls_back_to_auto_detection(self, tmp_path: Path) -> None:
+        """Should auto-detect when test-framework is empty string."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"jest": "^29.0.0"},
+                    "codeflash": {"test-framework": ""},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "jest"
+
+    def test_custom_test_framework_value(self, tmp_path: Path) -> None:
+        """Should accept custom test framework values not in the standard list."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"vitest": "^1.0.0"},
+                    "codeflash": {"test-framework": "ava"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "ava"
+
+    def test_pytest_cmd_matches_test_framework_with_override(self, tmp_path: Path) -> None:
+        """Should set pytest_cmd to match test_framework when using explicit config."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text(
+            json.dumps(
+                {
+                    "name": "test-project",
+                    "devDependencies": {"vitest": "^1.0.0"},
+                    "codeflash": {"test-framework": "jest"},
+                }
+            )
+        )
+
+        result = parse_package_json_config(package_json)
+
+        assert result is not None
+        config, _ = result
+        assert config["test_framework"] == "jest"
+        assert config["pytest_cmd"] == "jest"
+        assert config["test_framework"] == config["pytest_cmd"]
