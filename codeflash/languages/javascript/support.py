@@ -62,7 +62,9 @@ class JavaScriptSupport:
     @property
     def test_framework(self) -> str:
         """Primary test framework for JavaScript."""
-        return "jest"
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        return get_js_test_framework_or_default()
 
     @property
     def comment_prefix(self) -> str:
