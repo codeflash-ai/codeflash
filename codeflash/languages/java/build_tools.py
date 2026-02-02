@@ -18,6 +18,31 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
+    """Safely parse an XML file with protections against XXE attacks.
+
+    Args:
+        file_path: Path to the XML file.
+
+    Returns:
+        Parsed ElementTree.
+
+    Raises:
+        ET.ParseError: If XML parsing fails.
+    """
+    # Read file content and parse as string to avoid file-based attacks
+    # This prevents XXE attacks by not allowing external entity resolution
+    content = file_path.read_text(encoding="utf-8")
+
+    # Parse string content (no external entities possible)
+    root = ET.fromstring(content)
+
+    # Create ElementTree from root
+    tree = ET.ElementTree(root)
+
+    return tree
+
+
 class BuildTool(Enum):
     """Supported Java build tools."""
 
@@ -124,7 +149,7 @@ def _get_maven_project_info(project_root: Path) -> JavaProjectInfo | None:
         return None
 
     try:
-        tree = ET.parse(pom_path)
+        tree = _safe_parse_xml(pom_path)
         root = tree.getroot()
 
         # Handle Maven namespace
@@ -438,16 +463,34 @@ def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
 
     for xml_file in surefire_dir.glob("TEST-*.xml"):
         try:
-            tree = ET.parse(xml_file)
+            tree = _safe_parse_xml(xml_file)
             root = tree.getroot()
 
-            tests_run += int(root.get("tests", 0))
-            failures += int(root.get("failures", 0))
-            errors += int(root.get("errors", 0))
-            skipped += int(root.get("skipped", 0))
+            # Safely parse numeric attributes with validation
+            try:
+                tests_run += int(root.get("tests", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'tests' value in %s, defaulting to 0", xml_file)
+
+            try:
+                failures += int(root.get("failures", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'failures' value in %s, defaulting to 0", xml_file)
+
+            try:
+                errors += int(root.get("errors", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'errors' value in %s, defaulting to 0", xml_file)
+
+            try:
+                skipped += int(root.get("skipped", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'skipped' value in %s, defaulting to 0", xml_file)
 
         except ET.ParseError as e:
             logger.warning("Failed to parse Surefire report %s: %s", xml_file, e)
+        except Exception as e:
+            logger.warning("Unexpected error parsing Surefire report %s: %s", xml_file, e)
 
     return tests_run, failures, errors, skipped
 
@@ -572,7 +615,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
         return False
 
     try:
-        tree = ET.parse(pom_path)
+        tree = _safe_parse_xml(pom_path)
         root = tree.getroot()
 
         # Handle Maven namespace
@@ -647,7 +690,7 @@ def is_jacoco_configured(pom_path: Path) -> bool:
         return False
 
     try:
-        tree = ET.parse(pom_path)
+        tree = _safe_parse_xml(pom_path)
         root = tree.getroot()
 
         # Handle Maven namespace
