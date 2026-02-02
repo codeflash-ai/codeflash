@@ -988,7 +988,9 @@ class JavaScriptSupport:
 
         try:
             finder = ReferenceFinder(project_root)
-            refs = finder.find_references(function.name, function.file_path, max_files=max_files)
+            refs = finder.find_references(
+                function.name, function.file_path, max_files=max_files, class_name=function.class_name
+            )
 
             # Convert to ReferenceInfo and filter out tests
             result: list[ReferenceInfo] = []
