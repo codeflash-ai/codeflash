@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.languages.base import FunctionInfo
-from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
+from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
-    pass
+    from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
 
 logger = logging.getLogger(__name__)
 
@@ -683,6 +683,99 @@ def remove_test_functions(
     return result
 
 
+def _format_runtime_comment_java(original_time: int, optimized_time: int) -> str:
+    """Format a runtime comparison comment for Java.
+
+    Args:
+        original_time: Original runtime in nanoseconds.
+        optimized_time: Optimized runtime in nanoseconds.
+
+    Returns:
+        Formatted comment string with // prefix.
+
+    """
+    from codeflash.code_utils.time_utils import format_perf, format_time
+    from codeflash.result.critic import performance_gain
+
+    perf_gain = format_perf(
+        abs(performance_gain(original_runtime_ns=original_time, optimized_runtime_ns=optimized_time) * 100)
+    )
+    status = "slower" if optimized_time > original_time else "faster"
+    return f"// {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
+
+
+def _build_timing_lookup_java(
+    original_runtimes: dict[str, int],
+    optimized_runtimes: dict[str, int],
+) -> dict[str, tuple[int, int]]:
+    """Build a lookup table mapping test names to timing data.
+
+    Args:
+        original_runtimes: Map of invocation keys to original runtimes (ns).
+        optimized_runtimes: Map of invocation keys to optimized runtimes (ns).
+
+    Returns:
+        Dict mapping test names to (original_time, optimized_time) tuples.
+
+    """
+    timing_by_test: dict[str, tuple[int, int]] = {}
+
+    for key in original_runtimes:
+        if key not in optimized_runtimes:
+            continue
+
+        # Keys look like: "test_name#/path/to/test#iteration_id"
+        # or for Java: "ClassName.testMethodName#/path/to/TestClass#iteration_id"
+        parts = key.split("#")
+        if len(parts) >= 1:
+            test_name = parts[0]
+
+            orig_time = original_runtimes[key]
+            opt_time = optimized_runtimes[key]
+
+            # Store by full test name
+            if test_name not in timing_by_test:
+                timing_by_test[test_name] = (orig_time, opt_time)
+            else:
+                # Sum up timings for same test (multiple invocations)
+                old_orig, old_opt = timing_by_test[test_name]
+                timing_by_test[test_name] = (old_orig + orig_time, old_opt + opt_time)
+
+    logger.debug("[java-annotations] Built timing_by_test with %d entries", len(timing_by_test))
+    return timing_by_test
+
+
+def _find_matching_test_java(method_name: str, class_name: str | None, timing_by_test: dict[str, tuple[int, int]]) -> str | None:
+    """Find a timing key that matches the given test method.
+
+    Args:
+        method_name: The test method name.
+        class_name: Optional class name.
+        timing_by_test: Dict of test names to timing data.
+
+    Returns:
+        The matched test name key, or None if no match found.
+
+    """
+    # Try qualified name first
+    if class_name:
+        qualified_name = f"{class_name}.{method_name}"
+        if qualified_name in timing_by_test:
+            return qualified_name
+
+    # Try just method name
+    if method_name in timing_by_test:
+        return method_name
+
+    # Try suffix match
+    for full_name in timing_by_test:
+        if full_name.endswith(f".{method_name}") or full_name == method_name:
+            logger.debug("[java-annotations] Suffix match: '%s' matches '%s'", method_name, full_name)
+            return full_name
+
+    return None
+
+
 def add_runtime_comments(
     test_source: str,
     original_runtimes: dict[str, int],
@@ -707,36 +800,123 @@ def add_runtime_comments(
     if not original_runtimes or not optimized_runtimes:
         return test_source
 
-    # For now, add a summary comment at the top
-    summary_lines = ["// Performance comparison:"]
+    logger.debug("[java-annotations] original_runtimes has %d entries", len(original_runtimes))
+    logger.debug("[java-annotations] optimized_runtimes has %d entries", len(optimized_runtimes))
 
-    for inv_id in original_runtimes:
-        original_ns = original_runtimes[inv_id]
-        optimized_ns = optimized_runtimes.get(inv_id, original_ns)
+    # Build timing lookup
+    timing_by_test = _build_timing_lookup_java(original_runtimes, optimized_runtimes)
 
-        original_ms = original_ns / 1_000_000
-        optimized_ms = optimized_ns / 1_000_000
+    if not timing_by_test:
+        logger.debug("[java-annotations] No matching timing data found")
+        return test_source
 
-        if original_ns > 0:
-            speedup = ((original_ns - optimized_ns) / original_ns) * 100
-            summary_lines.append(
-                f"// {inv_id}: {original_ms:.3f}ms -> {optimized_ms:.3f}ms ({speedup:.1f}% faster)"
-            )
+    analyzer = analyzer or get_java_analyzer()
 
-    # Insert after imports
+    # Find all test methods in the source
+    methods = analyzer.find_methods(test_source)
+    test_methods = [m for m in methods if _is_test_method(m)]
+
+    if not test_methods:
+        logger.debug("[java-annotations] No test methods found")
+        return test_source
+
+    # Split source into lines
     lines = test_source.splitlines(keepends=True)
-    insert_idx = 0
 
+    # Track which lines to add comments to (line_number -> comment)
+    line_comments: dict[int, str] = {}
+
+    for method in test_methods:
+        # Find matching timing data
+        matched_key = _find_matching_test_java(method.name, method.class_name, timing_by_test)
+        if not matched_key:
+            logger.debug("[java-annotations] No timing match for test method: %s", method.name)
+            continue
+
+        orig_time, opt_time = timing_by_test[matched_key]
+        comment = _format_runtime_comment_java(orig_time, opt_time)
+
+        # Find the first statement line inside the test method
+        # This is typically where assertions or function calls are
+        method_body_start = method.start_line
+        method_body_end = method.end_line
+
+        # Look for a line with an assertion or function call inside the method
+        for line_idx in range(method_body_start - 1, min(method_body_end, len(lines))):
+            line = lines[line_idx]
+            line_stripped = line.strip()
+
+            # Skip empty lines, comments, and method signature
+            if not line_stripped or line_stripped.startswith(("//", "/*")):
+                continue
+            if line_stripped.startswith(("@", "public ", "void ")):
+                continue
+            if line_stripped in ("{", "}"):
+                continue
+
+            # Check for assertions or function calls
+            if (
+                "assert" in line_stripped.lower()
+                or "assertEquals" in line_stripped
+                or "assertTrue" in line_stripped
+                or "assertFalse" in line_stripped
+                or "assertThat" in line_stripped
+                or ("(" in line_stripped and "=" in line_stripped)
+                or (line_stripped[0].islower() and "(" in line_stripped)
+            ):
+                # Add comment to this line
+                if "//" not in line:
+                    line_comments[line_idx] = comment
+                    logger.debug("[java-annotations] Adding comment at line %d: %s", line_idx + 1, comment)
+                    # Only annotate first call in each test
+                    del timing_by_test[matched_key]
+                    break
+
+    # Apply comments to lines
+    if not line_comments:
+        logger.debug("[java-annotations] No lines to annotate")
+        return test_source
+
+    result_lines = []
     for i, line in enumerate(lines):
-        if line.strip().startswith("import "):
-            insert_idx = i + 1
-        elif line.strip() and not line.strip().startswith("//") and not line.strip().startswith("package"):
-            if insert_idx == 0:
-                insert_idx = i
-            break
+        if i in line_comments:
+            # Add comment at end of line (before newline if present)
+            comment = line_comments[i]
+            if line.endswith("\n"):
+                line = f"{line.rstrip()}  {comment}\n"
+            else:
+                line = f"{line.rstrip()}  {comment}"
+        result_lines.append(line)
 
-    # Insert summary
-    summary = "\n".join(summary_lines) + "\n\n"
-    lines.insert(insert_idx, summary)
+    return "".join(result_lines)
 
-    return "".join(lines)
+
+def _is_test_method(method: JavaMethodNode) -> bool:
+    """Check if a method is a JUnit test method.
+
+    Args:
+        method: The method to check.
+
+    Returns:
+        True if it's a test method.
+
+    """
+    # Check for common test method patterns
+
+    # 1. Method name starts with "test"
+    if method.name.startswith("test"):
+        return True
+
+    # 2. Check for @Test annotation in source_text
+    source_text = method.source_text
+    if source_text:
+        # Look for JUnit 4/5 @Test annotation
+        if "@Test" in source_text:
+            return True
+        # Look for JUnit 5 parameterized test annotations
+        if "@ParameterizedTest" in source_text:
+            return True
+        if "@RepeatedTest" in source_text:
+            return True
+
+    return False

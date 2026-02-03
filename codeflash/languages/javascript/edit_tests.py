@@ -7,8 +7,12 @@ including adding runtime comments and removing test functions.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.console import logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
 from codeflash.code_utils.time_utils import format_perf, format_time
 from codeflash.result.critic import performance_gain
 
@@ -29,6 +33,102 @@ def format_runtime_comment(original_time: int, optimized_time: int) -> str:
     )
     status = "slower" if optimized_time > original_time else "faster"
     return f"// {format_time(original_time)} -> {format_time(optimized_time)} ({perf_gain}% {status})"
+
+
+def _build_timing_lookup(
+    original_runtimes: dict[str, int],
+    optimized_runtimes: dict[str, int],
+    test_file_path: Path | None = None,
+) -> dict[str, tuple[int, int]]:
+    """Build a lookup table mapping test names to timing data.
+
+    Supports matching by:
+    1. Full test name (including describe blocks)
+    2. Iteration ID based matching (like Python implementation)
+
+    Args:
+        original_runtimes: Map of invocation keys to original runtimes (ns).
+        optimized_runtimes: Map of invocation keys to optimized runtimes (ns).
+        test_file_path: Optional path to the test file for path-based matching.
+
+    Returns:
+        Dict mapping test names to (original_time, optimized_time) tuples.
+
+    """
+    timing_by_test: dict[str, tuple[int, int]] = {}
+    timing_by_iteration: dict[str, tuple[int, int]] = {}
+
+    for key in original_runtimes:
+        if key not in optimized_runtimes:
+            continue
+
+        # Keys look like: "test_name#/path/to/test#iteration_id"
+        parts = key.split("#")
+        if len(parts) >= 1:
+            test_name = parts[0]
+            iteration_id = parts[-1] if len(parts) >= 3 else None
+
+            orig_time = original_runtimes[key]
+            opt_time = optimized_runtimes[key]
+
+            # Store by full test name
+            if test_name not in timing_by_test:
+                timing_by_test[test_name] = (orig_time, opt_time)
+            else:
+                # Sum up timings for same test (multiple invocations)
+                old_orig, old_opt = timing_by_test[test_name]
+                timing_by_test[test_name] = (old_orig + orig_time, old_opt + opt_time)
+
+            # Store by iteration ID for line-based matching
+            if iteration_id:
+                iteration_key = f"{test_name}#{iteration_id}"
+                if iteration_key not in timing_by_iteration:
+                    timing_by_iteration[iteration_key] = (orig_time, opt_time)
+                else:
+                    old_orig, old_opt = timing_by_iteration[iteration_key]
+                    timing_by_iteration[iteration_key] = (old_orig + orig_time, old_opt + opt_time)
+
+    logger.debug(f"[js-annotations] Built timing_by_test with {len(timing_by_test)} entries")
+    logger.debug(f"[js-annotations] Built timing_by_iteration with {len(timing_by_iteration)} entries")
+
+    return timing_by_test
+
+
+def _find_matching_test(test_description: str, timing_by_test: dict[str, tuple[int, int]]) -> str | None:
+    """Find a timing key that matches the given test description.
+
+    Supports multiple matching strategies:
+    1. Exact match
+    2. Suffix match (for Jest tests with describe block prefixes)
+
+    Args:
+        test_description: The test name from the source code.
+        timing_by_test: Dict of test names to timing data.
+
+    Returns:
+        The matched test name key, or None if no match found.
+
+    """
+    # Try exact match first
+    if test_description in timing_by_test:
+        return test_description
+
+    # Try suffix match (timing keys may include describe block names)
+    # e.g., timing key: "fibonacci Edge cases should return 0"
+    # test description: "should return 0"
+    for full_name in timing_by_test:
+        if full_name.lower().endswith(test_description.lower()):
+            logger.debug(f"[js-annotations] Suffix match: '{test_description}' matches '{full_name}'")
+            return full_name
+
+    # Try substring match as last resort
+    test_desc_lower = test_description.lower()
+    for full_name in timing_by_test:
+        if test_desc_lower in full_name.lower():
+            logger.debug(f"[js-annotations] Substring match: '{test_description}' in '{full_name}'")
+            return full_name
+
+    return None
 
 
 def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimized_runtimes: dict[str, int]) -> str:
@@ -53,77 +153,66 @@ def add_runtime_comments(source: str, original_runtimes: dict[str, int], optimiz
         logger.debug("[js-annotations] No runtimes available, returning unchanged source")
         return source
 
+    # Build timing lookup
+    timing_by_test = _build_timing_lookup(original_runtimes, optimized_runtimes)
+
+    if not timing_by_test:
+        logger.debug("[js-annotations] No matching timing data found")
+        return source
+
     lines = source.split("\n")
     modified_lines = []
 
-    # Build a lookup by FULL test name (including describe blocks) for suffix matching
-    # The keys in original_runtimes look like: "full_test_name#/path/to/test#invocation_id"
-    # where full_test_name includes describe blocks: "fibonacci Edge cases should return 0"
-    timing_by_full_name: dict[str, tuple[int, int]] = {}
-    for key in original_runtimes:
-        if key in optimized_runtimes:
-            # Extract test function name from the key (first part before #)
-            parts = key.split("#")
-            if parts:
-                full_test_name = parts[0]
-                logger.debug(f"[js-annotations] Found timing for full test name: '{full_test_name}'")
-                if full_test_name not in timing_by_full_name:
-                    timing_by_full_name[full_test_name] = (original_runtimes[key], optimized_runtimes[key])
-                else:
-                    # Sum up timings for same test
-                    old_orig, old_opt = timing_by_full_name[full_test_name]
-                    timing_by_full_name[full_test_name] = (
-                        old_orig + original_runtimes[key],
-                        old_opt + optimized_runtimes[key],
-                    )
-
-    logger.debug(f"[js-annotations] Built timing_by_full_name with {len(timing_by_full_name)} entries")
-
-    def find_matching_test(test_description: str) -> str | None:
-        """Find a timing key that ends with the given test description (suffix match).
-
-        Timing keys are like: "fibonacci Edge cases should return 0"
-        Source test names are like: "should return 0"
-        We need to match by suffix because timing includes all describe block names.
-        """
-        # Try to match by finding a key that ends with the test description
-        for full_name in timing_by_full_name:
-            # Check if the full name ends with the test description (case-insensitive)
-            if full_name.lower().endswith(test_description.lower()):
-                logger.debug(f"[js-annotations] Suffix match: '{test_description}' matches '{full_name}'")
-                return full_name
-        return None
-
     # Track current test context
-    current_test_name = None
-    current_matched_full_name = None
+    current_test_name: str | None = None
+    current_matched_full_name: str | None = None
+
+    # Patterns for test identification
     test_pattern = re.compile(r"(?:test|it)\s*\(\s*['\"]([^'\"]+)['\"]")
-    # Match function calls that look like: funcName(args) or expect(funcName(args))
+
+    # Pattern for function calls - matches:
+    # - expect(someFunc(...))
+    # - const result = someFunc(...)
+    # - someFunc(...)
+    # But excludes common non-function patterns like describe(), it(), etc.
     func_call_pattern = re.compile(r"(?:expect\s*\(\s*)?(\w+)\s*\([^)]*\)")
 
-    for line in lines:
+    # Track lines with function calls inside tests
+    for i, line in enumerate(lines):
         # Check if this line starts a new test
         test_match = test_pattern.search(line)
         if test_match:
             current_test_name = test_match.group(1)
-            logger.debug(f"[js-annotations] Found test: '{current_test_name}'")
-            # Find the matching full name from timing data using suffix match
-            current_matched_full_name = find_matching_test(current_test_name)
+            logger.debug(f"[js-annotations] Found test at line {i + 1}: '{current_test_name}'")
+            # Find the matching full name from timing data
+            current_matched_full_name = _find_matching_test(current_test_name, timing_by_test)
             if current_matched_full_name:
                 logger.debug(f"[js-annotations] Test '{current_test_name}' matched to '{current_matched_full_name}'")
 
         # Check if this line has a function call and we have timing for current test
-        if current_matched_full_name and current_matched_full_name in timing_by_full_name:
-            # Only add comment if line has a function call and doesn't already have a comment
-            if func_call_pattern.search(line) and "//" not in line and "expect(" in line:
-                orig_time, opt_time = timing_by_full_name[current_matched_full_name]
-                comment = format_runtime_comment(orig_time, opt_time)
-                logger.debug(f"[js-annotations] Adding comment to test '{current_test_name}': {comment}")
-                # Add comment at end of line
-                line = f"{line.rstrip()}  {comment}"
-                # Clear timing so we only annotate first call in each test
-                del timing_by_full_name[current_matched_full_name]
-                current_matched_full_name = None
+        if current_matched_full_name and current_matched_full_name in timing_by_test:
+            # Check if line has a function call and doesn't already have a comment
+            if func_call_pattern.search(line) and "//" not in line:
+                # Verify it's not just a test framework call
+                line_stripped = line.strip()
+                if (
+                    "expect(" in line
+                    or ("=" in line and "(" in line)
+                    or (
+                        line_stripped.startswith(tuple("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"))
+                        and "(" in line
+                    )
+                ) and not any(
+                    kw in line_stripped for kw in ["describe(", "it(", "test(", "beforeEach(", "afterEach(", "import "]
+                ):
+                    orig_time, opt_time = timing_by_test[current_matched_full_name]
+                    comment = format_runtime_comment(orig_time, opt_time)
+                    logger.debug(f"[js-annotations] Adding comment at line {i + 1}: {comment}")
+                    # Add comment at end of line
+                    line = f"{line.rstrip()}  {comment}"
+                    # Clear timing so we only annotate first call in each test
+                    del timing_by_test[current_matched_full_name]
+                    current_matched_full_name = None
 
         modified_lines.append(line)
 
