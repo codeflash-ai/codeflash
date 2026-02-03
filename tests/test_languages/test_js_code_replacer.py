@@ -1911,13 +1911,7 @@ class TestNewVariableFromOptimizedCode:
 
         original_source = '''\
 const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
-  "github|1271289",
-  "github|10488227",
-  "github|64513301",
-  "github|106575910",
-  "github|206515457",
-  "github|4725571",
-  "github|235426847",
+  "1234",
 ]);
 
 export function isCodeflashEmployee(userId: string): boolean {
@@ -1961,13 +1955,7 @@ export function isCodeflashEmployee(userId: string): boolean {
         # Expected result for strict equality check
         expected_result = '''\
 const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
-  "github|1271289",
-  "github|10488227",
-  "github|64513301",
-  "github|106575910",
-  "github|206515457",
-  "github|4725571",
-  "github|235426847",
+  "1234",
 ]);
 
 const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
