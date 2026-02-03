@@ -185,6 +185,11 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+        
+        # Pre-compile regex patterns for reuse
+        self._hamcrest_pattern = re.compile(r"(\s*)((?:MatcherAssert\.)?assertThat)\s*\(", re.MULTILINE)
+        self._target_call_pattern = re.compile(rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -417,9 +422,7 @@ class JavaAssertTransformer:
             return assertions
 
         # Pattern for Hamcrest: assertThat(actual, is(...)) or assertThat(reason, actual, matcher)
-        pattern = re.compile(r"(\s*)((?:MatcherAssert\.)?assertThat)\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(source):
+        for match in self._hamcrest_pattern.finditer(source):
             leading_ws = match.group(1)
             start_pos = match.start()
             paren_start = match.end() - 1
@@ -504,9 +507,7 @@ class JavaAssertTransformer:
 
         # Pattern to match method calls: (receiver.)?func_name(args)
         # Handles: obj.method(args), ClassName.staticMethod(args), method(args)
-        pattern = re.compile(rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(content):
+        for match in self._target_call_pattern.finditer(content):
             receiver_prefix = match.group(1) or ""
             receiver = receiver_prefix.rstrip(".") if receiver_prefix else None
             method_name = match.group(2)
@@ -581,7 +582,8 @@ class JavaAssertTransformer:
             Tuple of (content inside parens, position after closing paren) or (None, -1).
 
         """
-        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+        code_len = len(code)
+        if open_paren_pos >= code_len or code[open_paren_pos] != "(":
             return None, -1
 
         depth = 1
@@ -590,15 +592,14 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
+        while pos < code_len and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
-
+            
             # Handle character literals
-            if char == "'" and not in_string and prev_char != "\\":
+            if char == "'" and not in_string and code[pos - 1] != "\\":
                 in_char = not in_char
             # Handle string literals (double quotes)
-            elif char == '"' and not in_char and prev_char != "\\":
+            elif char == '"' and not in_char and code[pos - 1] != "\\":
                 if not in_string:
                     in_string = True
                     string_char = char
