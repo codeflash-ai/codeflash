@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -243,6 +244,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     i = 0
     iteration_counter = 0
 
+
+    # Pre-compile the regex pattern once
+    method_call_pattern = _get_method_call_pattern(func_name)
+
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
@@ -285,11 +290,11 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
+                # Count braces more efficiently using string methods
+                open_count = body_line.count('{')
+                close_count = body_line.count('}')
+                brace_depth += open_count - close_count
+
 
                 if brace_depth > 0:
                     body_lines.append(body_line)
@@ -718,3 +723,22 @@ def _add_import(source: str, import_statement: str) -> str:
 
     lines.insert(insert_idx, import_statement + "\n")
     return "".join(lines)
+
+
+
+@lru_cache(maxsize=128)
+def _get_method_call_pattern(func_name: str):
+    """Cache compiled regex patterns for method call matching."""
+    return re.compile(
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
+        re.MULTILINE
+    )
+
+
+@lru_cache(maxsize=128)
+def _get_method_call_pattern(func_name: str):
+    """Cache compiled regex patterns for method call matching."""
+    return re.compile(
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
+        re.MULTILINE
+    )
