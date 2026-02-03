@@ -1781,8 +1781,7 @@ class FunctionOptimizer:
         if self.args.no_gen_tests:
             func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
             has_existing_tests = bool(self.function_to_tests.get(func_qualname))
-            has_concolic_tests = bool(function_to_concolic_tests.get(func_qualname))
-            if not has_existing_tests and not has_concolic_tests:
+            if not has_existing_tests:
                 logger.warning(
                     f"No existing tests found for {self.function_to_optimize.function_name} and --no-gen-tests is set"
                 )
