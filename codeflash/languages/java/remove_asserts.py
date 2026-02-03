@@ -185,6 +185,11 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+        # Compile the pattern once for this instance to avoid repeated compilation
+        self._call_pattern = re.compile(
+            rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE
+        )
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -504,7 +509,8 @@ class JavaAssertTransformer:
 
         # Pattern to match method calls: (receiver.)?func_name(args)
         # Handles: obj.method(args), ClassName.staticMethod(args), method(args)
-        pattern = re.compile(rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+        pattern = self._call_pattern
+
 
         for match in pattern.finditer(content):
             receiver_prefix = match.group(1) or ""
@@ -517,7 +523,9 @@ class JavaAssertTransformer:
             if args_content is None:
                 continue
 
-            full_call = content[match.start() : end_pos]
+            start_idx = match.start()
+            full_call = content[start_idx:end_pos]
+
 
             target_calls.append(
                 TargetCall(
@@ -525,7 +533,7 @@ class JavaAssertTransformer:
                     method_name=method_name,
                     arguments=args_content,
                     full_call=full_call,
-                    start_pos=base_offset + match.start(),
+                    start_pos=base_offset + start_idx,
                     end_pos=base_offset + end_pos,
                 )
             )
@@ -581,7 +589,9 @@ class JavaAssertTransformer:
             Tuple of (content inside parens, position after closing paren) or (None, -1).
 
         """
-        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+        code_local = code
+        n = len(code_local)
+        if open_paren_pos >= n or code_local[open_paren_pos] != "(":
             return None, -1
 
         depth = 1
@@ -589,10 +599,12 @@ class JavaAssertTransformer:
         in_string = False
         string_char = None
         in_char = False
+        prev_char = code_local[open_paren_pos] if open_paren_pos >= 0 else ""
 
-        while pos < len(code) and depth > 0:
-            char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
+        while pos < n and depth > 0:
+            char = code_local[pos]
+
+            # Handle character literals
 
             # Handle character literals
             if char == "'" and not in_string and prev_char != "\\":
@@ -611,12 +623,14 @@ class JavaAssertTransformer:
                 elif char == ")":
                     depth -= 1
 
+
+            prev_char = char
             pos += 1
 
         if depth != 0:
             return None, -1
 
-        return code[open_paren_pos + 1 : pos - 1], pos
+        return code_local[open_paren_pos + 1 : pos - 1], pos
 
     def _find_balanced_braces(self, code: str, open_brace_pos: int) -> tuple[str | None, int]:
         """Find content within balanced braces."""
