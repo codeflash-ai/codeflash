@@ -363,7 +363,7 @@ def ensure_vitest_imports(code: str, test_framework: str) -> str:
 
     # Check if the code uses test functions that need to be imported
     test_globals = ["describe", "test", "it", "expect", "vi", "beforeEach", "afterEach", "beforeAll", "afterAll"]
-    
+
     # Combine detection and collection into a single pass
     used_globals = [g for g in test_globals if f"{g}(" in code or f"{g} (" in code]
     if not used_globals:
