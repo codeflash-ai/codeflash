@@ -4,10 +4,12 @@ If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
+from __future__ import annotations
+
 import os
 import sys
-from argparse import Namespace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
@@ -18,6 +20,9 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
 from codeflash.telemetry import posthog_cf
 from codeflash.telemetry.sentry import init_sentry
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 
 def main() -> None:
@@ -76,8 +81,7 @@ def _handle_config_loading(args: Namespace) -> Namespace | None:
 
     # Check if we're in CI environment
     is_ci = any(
-        var in ("true", "1", "True")
-        for var in [os.environ.get("CI", ""), os.environ.get("GITHUB_ACTIONS", "")]
+        var in ("true", "1", "True") for var in [os.environ.get("CI", ""), os.environ.get("GITHUB_ACTIONS", "")]
     )
 
     # Check if first run (no config exists)
