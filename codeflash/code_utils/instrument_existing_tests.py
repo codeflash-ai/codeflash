@@ -636,6 +636,7 @@ def inject_async_profiling_into_existing_test(
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
+    gpu: bool = False,
 ) -> tuple[bool, str | None]:
     """Inject profiling for async function calls by setting environment variables before each call."""
     with test_path.open(encoding="utf8") as f:
@@ -708,6 +709,7 @@ def inject_profiling_into_existing_test(
     function_to_optimize: FunctionToOptimize,
     tests_project_root: Path,
     mode: TestingMode = TestingMode.BEHAVIOR,
+    gpu: bool = False,
 ) -> tuple[bool, str | None]:
     if function_to_optimize.is_async:
         return inject_async_profiling_into_existing_test(
@@ -752,7 +754,7 @@ def inject_profiling_into_existing_test(
         else:
             # If there's an alias, use it (e.g., "import torch as th")
             new_imports.append(ast.Import(names=[ast.alias(name=framework_name, asname=framework_alias)]))
-    additional_functions = [create_wrapper_function(mode, used_frameworks)]
+    additional_functions = [create_wrapper_function(mode, used_frameworks, gpu)]
 
     tree.body = [*new_imports, *additional_functions, *tree.body]
     return True, sort_imports(ast.unparse(tree), float_to_top=True)
@@ -908,6 +910,60 @@ def _create_device_sync_precompute_statements(used_frameworks: dict[str, str] | 
     return precompute_statements
 
 
+def _create_gpu_event_timing_precompute_statements(used_frameworks: dict[str, str] | None) -> list[ast.stmt]:
+    """Create AST statements to pre-compute GPU event timing conditions.
+
+    This generates:
+        _codeflash_use_gpu_timer = torch.cuda.is_available() and torch.cuda.is_initialized()
+
+    Args:
+        used_frameworks: Dict mapping framework names to their import aliases
+
+    Returns:
+        List of AST statements that pre-compute GPU timer availability
+
+    """
+    if not used_frameworks or "torch" not in used_frameworks:
+        return []
+
+    torch_alias = used_frameworks["torch"]
+
+    # _codeflash_use_gpu_timer = torch.cuda.is_available() and torch.cuda.is_initialized()
+    return [
+        ast.Assign(
+            targets=[ast.Name(id="_codeflash_use_gpu_timer", ctx=ast.Store())],
+            value=ast.BoolOp(
+                op=ast.And(),
+                values=[
+                    ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                            ),
+                            attr="is_available",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    ),
+                    ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
+                            ),
+                            attr="is_initialized",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    ),
+                ],
+            ),
+            lineno=1,
+        )
+    ]
+
+
 def _create_device_sync_statements(
     used_frameworks: dict[str, str] | None, for_return_value: bool = False
 ) -> list[ast.stmt]:
@@ -1030,8 +1086,338 @@ def _create_device_sync_statements(
     return sync_statements
 
 
+def _create_gpu_timing_try_body(torch_alias: str) -> list[ast.stmt]:
+    """Create AST statements for the GPU event timing try body.
+
+    Generates:
+        _codeflash_start_event = torch.cuda.Event(enable_timing=True)
+        _codeflash_end_event = torch.cuda.Event(enable_timing=True)
+        _codeflash_start_event.record()
+        return_value = codeflash_wrapped(*args, **kwargs)
+        _codeflash_end_event.record()
+        torch.cuda.synchronize()
+        codeflash_duration = int(_codeflash_start_event.elapsed_time(_codeflash_end_event) * 1_000_000)
+
+    Args:
+        torch_alias: The import alias for torch (e.g., "torch" or "th")
+
+    Returns:
+        List of AST statements for GPU event timing
+
+    """
+    return [
+        # _codeflash_start_event = torch.cuda.Event(enable_timing=True)
+        ast.Assign(
+            targets=[ast.Name(id="_codeflash_start_event", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Attribute(value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()),
+                    attr="Event",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[ast.keyword(arg="enable_timing", value=ast.Constant(value=True))],
+            ),
+            lineno=1,
+        ),
+        # _codeflash_end_event = torch.cuda.Event(enable_timing=True)
+        ast.Assign(
+            targets=[ast.Name(id="_codeflash_end_event", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Attribute(value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()),
+                    attr="Event",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[ast.keyword(arg="enable_timing", value=ast.Constant(value=True))],
+            ),
+            lineno=1,
+        ),
+        # _codeflash_start_event.record()
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="_codeflash_start_event", ctx=ast.Load()), attr="record", ctx=ast.Load()
+                ),
+                args=[],
+                keywords=[],
+            )
+        ),
+        # return_value = codeflash_wrapped(*args, **kwargs)
+        ast.Assign(
+            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
+                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+            ),
+            lineno=1,
+        ),
+        # _codeflash_end_event.record()
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="_codeflash_end_event", ctx=ast.Load()), attr="record", ctx=ast.Load()
+                ),
+                args=[],
+                keywords=[],
+            )
+        ),
+        # torch.cuda.synchronize()
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Attribute(value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()),
+                    attr="synchronize",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+        ),
+        # codeflash_duration = int(_codeflash_start_event.elapsed_time(_codeflash_end_event) * 1_000_000)
+        ast.Assign(
+            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Name(id="int", ctx=ast.Load()),
+                args=[
+                    ast.BinOp(
+                        left=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id="_codeflash_start_event", ctx=ast.Load()),
+                                attr="elapsed_time",
+                                ctx=ast.Load(),
+                            ),
+                            args=[ast.Name(id="_codeflash_end_event", ctx=ast.Load())],
+                            keywords=[],
+                        ),
+                        op=ast.Mult(),
+                        right=ast.Constant(value=1_000_000),
+                    )
+                ],
+                keywords=[],
+            ),
+            lineno=1,
+        ),
+    ]
+
+
+def _create_gpu_timing_except_body(torch_alias: str) -> list[ast.stmt]:
+    """Create AST statements for the GPU event timing exception handler.
+
+    Generates:
+        torch.cuda.synchronize()
+        codeflash_duration = 0
+        exception = e
+
+    Args:
+        torch_alias: The import alias for torch (e.g., "torch" or "th")
+
+    Returns:
+        List of AST statements for GPU timing exception handling
+
+    """
+    return [
+        # torch.cuda.synchronize()
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Attribute(value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()),
+                    attr="synchronize",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+        ),
+        # codeflash_duration = 0
+        ast.Assign(targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())], value=ast.Constant(value=0), lineno=1),
+        # exception = e
+        ast.Assign(
+            targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Name(id="e", ctx=ast.Load()), lineno=1
+        ),
+    ]
+
+
+def _create_cpu_timing_try_body(used_frameworks: dict[str, str] | None) -> list[ast.stmt]:
+    """Create AST statements for the CPU timing try body.
+
+    Generates standard time.perf_counter_ns() timing with device sync.
+
+    Args:
+        used_frameworks: Dict mapping framework names to their import aliases
+
+    Returns:
+        List of AST statements for CPU timing
+
+    """
+    return [
+        # Pre-sync: synchronize device before starting timer
+        *_create_device_sync_statements(used_frameworks, for_return_value=False),
+        # counter = time.perf_counter_ns()
+        ast.Assign(
+            targets=[ast.Name(id="counter", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Attribute(value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            ),
+            lineno=1,
+        ),
+        # return_value = codeflash_wrapped(*args, **kwargs)
+        ast.Assign(
+            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+            value=ast.Call(
+                func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
+                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
+                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+            ),
+            lineno=1,
+        ),
+        # Post-sync: synchronize device after function call
+        *_create_device_sync_statements(used_frameworks, for_return_value=True),
+        # codeflash_duration = time.perf_counter_ns() - counter
+        ast.Assign(
+            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+            value=ast.BinOp(
+                left=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                op=ast.Sub(),
+                right=ast.Name(id="counter", ctx=ast.Load()),
+            ),
+            lineno=1,
+        ),
+    ]
+
+
+def _create_cpu_timing_except_body() -> list[ast.stmt]:
+    """Create AST statements for the CPU timing exception handler.
+
+    Generates:
+        codeflash_duration = time.perf_counter_ns() - counter
+        exception = e
+
+    Returns:
+        List of AST statements for CPU timing exception handling
+
+    """
+    return [
+        # codeflash_duration = time.perf_counter_ns() - counter
+        ast.Assign(
+            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+            value=ast.BinOp(
+                left=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[],
+                ),
+                op=ast.Sub(),
+                right=ast.Name(id="counter", ctx=ast.Load()),
+            ),
+            lineno=1,
+        ),
+        # exception = e
+        ast.Assign(
+            targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Name(id="e", ctx=ast.Load()), lineno=1
+        ),
+    ]
+
+
+def _create_timing_try_block(used_frameworks: dict[str, str] | None, gpu: bool, lineno: int) -> list[ast.stmt]:
+    """Create the timing try block, handling both GPU and CPU timing modes.
+
+    When gpu=True and torch is available, generates an if/else structure:
+        if _codeflash_use_gpu_timer:
+            # GPU event timing path
+        else:
+            # CPU timing fallback path
+
+    Otherwise, generates standard CPU timing.
+
+    Args:
+        used_frameworks: Dict mapping framework names to their import aliases
+        gpu: Whether to use GPU event timing when possible
+        lineno: Current line number for AST nodes
+
+    Returns:
+        List containing the try statement(s) for timing
+
+    """
+    use_gpu_timing = gpu and used_frameworks and "torch" in used_frameworks
+
+    if use_gpu_timing:
+        torch_alias = used_frameworks["torch"]
+
+        # Create GPU timing try block
+        gpu_try = ast.Try(
+            body=_create_gpu_timing_try_body(torch_alias),
+            handlers=[
+                ast.ExceptHandler(
+                    type=ast.Name(id="Exception", ctx=ast.Load()),
+                    name="e",
+                    body=_create_gpu_timing_except_body(torch_alias),
+                    lineno=lineno + 14,
+                )
+            ],
+            orelse=[],
+            finalbody=[],
+            lineno=lineno + 11,
+        )
+
+        # Create CPU timing try block (fallback)
+        cpu_try = ast.Try(
+            body=_create_cpu_timing_try_body(used_frameworks),
+            handlers=[
+                ast.ExceptHandler(
+                    type=ast.Name(id="Exception", ctx=ast.Load()),
+                    name="e",
+                    body=_create_cpu_timing_except_body(),
+                    lineno=lineno + 14,
+                )
+            ],
+            orelse=[],
+            finalbody=[],
+            lineno=lineno + 11,
+        )
+
+        # Wrap in if/else based on _codeflash_use_gpu_timer
+        return [
+            ast.If(
+                test=ast.Name(id="_codeflash_use_gpu_timer", ctx=ast.Load()),
+                body=[gpu_try],
+                orelse=[cpu_try],
+                lineno=lineno + 11,
+            )
+        ]
+    # Standard CPU timing
+    return [
+        ast.Try(
+            body=_create_cpu_timing_try_body(used_frameworks),
+            handlers=[
+                ast.ExceptHandler(
+                    type=ast.Name(id="Exception", ctx=ast.Load()),
+                    name="e",
+                    body=_create_cpu_timing_except_body(),
+                    lineno=lineno + 14,
+                )
+            ],
+            orelse=[],
+            finalbody=[],
+            lineno=lineno + 11,
+        )
+    ]
+
+
 def create_wrapper_function(
-    mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: dict[str, str] | None = None
+    mode: TestingMode = TestingMode.BEHAVIOR, used_frameworks: dict[str, str] | None = None, gpu: bool = False
 ) -> ast.FunctionDef:
     lineno = 1
     wrapper_body: list[ast.stmt] = [
@@ -1193,8 +1579,14 @@ def create_wrapper_function(
         ast.Assign(
             targets=[ast.Name(id="exception", ctx=ast.Store())], value=ast.Constant(value=None), lineno=lineno + 10
         ),
-        # Pre-compute device sync conditions before profiling to avoid overhead during timing
-        *_create_device_sync_precompute_statements(used_frameworks),
+        # Pre-compute conditions before profiling to avoid overhead during timing
+        *(
+            # When gpu=True with torch, we need both the GPU timer check AND device sync conditions for the fallback
+            _create_gpu_event_timing_precompute_statements(used_frameworks)
+            + _create_device_sync_precompute_statements(used_frameworks)
+            if gpu and used_frameworks and "torch" in used_frameworks
+            else _create_device_sync_precompute_statements(used_frameworks)
+        ),
         ast.Expr(
             value=ast.Call(
                 func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="disable", ctx=ast.Load()),
@@ -1203,83 +1595,7 @@ def create_wrapper_function(
             ),
             lineno=lineno + 9,
         ),
-        ast.Try(
-            body=[
-                # Pre-sync: synchronize device before starting timer
-                *_create_device_sync_statements(used_frameworks, for_return_value=False),
-                ast.Assign(
-                    targets=[ast.Name(id="counter", ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                        ),
-                        args=[],
-                        keywords=[],
-                    ),
-                    lineno=lineno + 11,
-                ),
-                ast.Assign(
-                    targets=[ast.Name(id="return_value", ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
-                        args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                        keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
-                    ),
-                    lineno=lineno + 12,
-                ),
-                # Post-sync: synchronize device after function call to ensure all device work is complete
-                *_create_device_sync_statements(used_frameworks, for_return_value=True),
-                ast.Assign(
-                    targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
-                    value=ast.BinOp(
-                        left=ast.Call(
-                            func=ast.Attribute(
-                                value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
-                            ),
-                            args=[],
-                            keywords=[],
-                        ),
-                        op=ast.Sub(),
-                        right=ast.Name(id="counter", ctx=ast.Load()),
-                    ),
-                    lineno=lineno + 13,
-                ),
-            ],
-            handlers=[
-                ast.ExceptHandler(
-                    type=ast.Name(id="Exception", ctx=ast.Load()),
-                    name="e",
-                    body=[
-                        ast.Assign(
-                            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
-                            value=ast.BinOp(
-                                left=ast.Call(
-                                    func=ast.Attribute(
-                                        value=ast.Name(id="time", ctx=ast.Load()),
-                                        attr="perf_counter_ns",
-                                        ctx=ast.Load(),
-                                    ),
-                                    args=[],
-                                    keywords=[],
-                                ),
-                                op=ast.Sub(),
-                                right=ast.Name(id="counter", ctx=ast.Load()),
-                            ),
-                            lineno=lineno + 15,
-                        ),
-                        ast.Assign(
-                            targets=[ast.Name(id="exception", ctx=ast.Store())],
-                            value=ast.Name(id="e", ctx=ast.Load()),
-                            lineno=lineno + 13,
-                        ),
-                    ],
-                    lineno=lineno + 14,
-                )
-            ],
-            orelse=[],
-            finalbody=[],
-            lineno=lineno + 11,
-        ),
+        *_create_timing_try_block(used_frameworks, gpu, lineno),
         ast.Expr(
             value=ast.Call(
                 func=ast.Attribute(value=ast.Name(id="gc", ctx=ast.Load()), attr="enable", ctx=ast.Load()),
