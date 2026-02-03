@@ -35,9 +35,25 @@ const path = require('path');
 const fs = require('fs');
 
 /**
+ * Validates that a jest-runner path is valid by checking for package.json.
+ * @param {string} jestRunnerPath - Path to check
+ * @returns {boolean} True if valid jest-runner package
+ */
+function isValidJestRunnerPath(jestRunnerPath) {
+    if (!fs.existsSync(jestRunnerPath)) {
+        return false;
+    }
+    const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+    return fs.existsSync(packageJsonPath);
+}
+
+/**
  * Resolve jest-runner with monorepo support.
  * Uses CODEFLASH_MONOREPO_ROOT environment variable if available,
  * otherwise walks up the directory tree looking for node_modules/jest-runner.
+ *
+ * @returns {string} Path to jest-runner package
+ * @throws {Error} If jest-runner cannot be found
  */
 function resolveJestRunner() {
     // Try standard resolution first (works in simple projects)
@@ -51,11 +67,8 @@ function resolveJestRunner() {
     const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
     if (monorepoRoot) {
         const jestRunnerPath = path.join(monorepoRoot, 'node_modules', 'jest-runner');
-        if (fs.existsSync(jestRunnerPath)) {
-            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
-            if (fs.existsSync(packageJsonPath)) {
-                return jestRunnerPath;
-            }
+        if (isValidJestRunnerPath(jestRunnerPath)) {
+            return jestRunnerPath;
         }
     }
 
@@ -71,11 +84,8 @@ function resolveJestRunner() {
 
         // Try node_modules/jest-runner at this level
         const jestRunnerPath = path.join(currentDir, 'node_modules', 'jest-runner');
-        if (fs.existsSync(jestRunnerPath)) {
-            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
-            if (fs.existsSync(packageJsonPath)) {
-                return jestRunnerPath;
-            }
+        if (isValidJestRunnerPath(jestRunnerPath)) {
+            return jestRunnerPath;
         }
 
         // Check if this is a workspace root (has monorepo markers)
@@ -91,11 +101,18 @@ function resolveJestRunner() {
         currentDir = path.dirname(currentDir);
     }
 
-    throw new Error('jest-runner not found');
+    throw new Error(
+        'jest-runner not found. Please install jest-runner in your project: npm install --save-dev jest-runner'
+    );
 }
 
-// Try to load jest-runner from the PROJECT's node_modules, not from codeflash package
-// This ensures we use the same version of jest-runner that the project uses
+/**
+ * Jest runner components - loaded dynamically from project's node_modules.
+ * This ensures we use the same version that the project uses.
+ *
+ * Jest 30+ uses TestRunner class with event-based architecture.
+ * Jest 29 uses runTest function for direct test execution.
+ */
 let TestRunner;
 let runTest;
 let jestRunnerAvailable = false;
@@ -110,7 +127,7 @@ try {
     TestRunner = jestRunner.default || jestRunner.TestRunner;
 
     if (TestRunner && TestRunner.prototype && typeof TestRunner.prototype.runTests === 'function') {
-        // Jest 30+ - use TestRunner class
+        // Jest 30+ - use TestRunner class with event emitter pattern
         jestVersion = 30;
         jestRunnerAvailable = true;
     } else {
@@ -118,11 +135,16 @@ try {
         try {
             runTest = internalRequire('./runTest').default;
             if (typeof runTest === 'function') {
+                // Jest 29 - use direct runTest function
                 jestVersion = 29;
                 jestRunnerAvailable = true;
             }
         } catch (e29) {
             // Neither Jest 29 nor 30 style import worked
+            const errorMsg = `Found jest-runner at ${jestRunnerPath} but could not load it. ` +
+                `This may indicate an unsupported Jest version. ` +
+                `Supported versions: Jest 29.x and Jest 30.x`;
+            console.error(errorMsg);
             jestRunnerAvailable = false;
         }
     }
@@ -203,15 +225,22 @@ class CodeflashLoopRunner {
                 'codeflash/loop-runner requires jest-runner to be installed.\n' +
                 'Please install it: npm install --save-dev jest-runner\n\n' +
                 'If you are using Vitest, the loop-runner is not needed - ' +
-                'Vitest projects use external looping handled by the Python runner.'
+                'Vitest projects use internal looping handled by capturePerf().'
             );
         }
+
         this._globalConfig = globalConfig;
         this._context = context || {};
         this._eventEmitter = new SimpleEventEmitter();
 
         // For Jest 30+, create an instance of the base TestRunner for delegation
-        if (jestVersion >= 30 && TestRunner) {
+        if (jestVersion >= 30) {
+            if (!TestRunner) {
+                throw new Error(
+                    `Jest ${jestVersion} detected but TestRunner class not available. ` +
+                    `This indicates an internal error in loop-runner initialization.`
+                );
+            }
             this._baseRunner = new TestRunner(globalConfig, context);
         }
     }
@@ -229,7 +258,17 @@ class CodeflashLoopRunner {
     }
 
     /**
-     * Run tests with batched looping for fair distribution.
+     * Run tests with batched looping for fair distribution across all test invocations.
+     *
+     * This implements the batched looping strategy:
+     *   Batch 1: Test1(N loops) → Test2(N loops) → Test3(N loops)
+     *   Batch 2: Test1(N loops) → Test2(N loops) → Test3(N loops)
+     *   ...until time budget exhausted or max batches reached
+     *
+     * @param {Array} tests - Jest test objects to run
+     * @param {Object} watcher - Jest watcher for interrupt handling
+     * @param {Object} options - Jest runner options
+     * @returns {Promise<void>}
      */
     async runTests(tests, watcher, options) {
         const startTime = Date.now();
@@ -238,7 +277,7 @@ class CodeflashLoopRunner {
         let allConsoleOutput = '';
 
         // Time limit check - must use local time tracking because Jest runs tests
-        // in worker processes, so shared state from capture.js isn't accessible here
+        // in isolated worker processes where shared state from capture.js isn't accessible
         const checkTimeLimit = () => {
             const elapsed = Date.now() - startTime;
             return elapsed >= TARGET_DURATION_MS && batchCount >= MIN_BATCHES;

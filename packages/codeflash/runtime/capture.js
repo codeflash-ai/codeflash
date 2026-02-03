@@ -267,26 +267,40 @@ const results = [];
 let db = null;
 
 /**
- * Check if performance has stabilized (for internal looping).
- * Matches Python's pytest_plugin.should_stop() logic.
+ * Check if performance has stabilized, allowing early stopping of benchmarks.
+ * Matches Python's pytest_plugin.should_stop() logic for consistency.
+ *
+ * Performance is considered stable when BOTH conditions are met:
+ * 1. CENTER: All recent measurements are within ±10% of the median
+ * 2. SPREAD: The range (max-min) is within 10% of the minimum
+ *
+ * @param {Array<number>} runtimes - Array of runtime measurements in microseconds
+ * @param {number} window - Number of recent measurements to check
+ * @param {number} minWindowSize - Minimum samples required before checking
+ * @returns {boolean} True if performance has stabilized
  */
 function shouldStopStability(runtimes, window, minWindowSize) {
     if (runtimes.length < window || runtimes.length < minWindowSize) {
         return false;
     }
+
     const recent = runtimes.slice(-window);
     const recentSorted = [...recent].sort((a, b) => a - b);
     const mid = Math.floor(window / 2);
     const median = window % 2 ? recentSorted[mid] : (recentSorted[mid - 1] + recentSorted[mid]) / 2;
 
+    // Check CENTER: all recent points must be close to median
     for (const r of recent) {
         if (Math.abs(r - median) / median > STABILITY_CENTER_TOLERANCE) {
             return false;
         }
     }
+
+    // Check SPREAD: range must be small relative to minimum
     const rMin = recentSorted[0];
     const rMax = recentSorted[recentSorted.length - 1];
     if (rMin === 0) return false;
+
     return (rMax - rMin) / rMin <= STABILITY_SPREAD_TOLERANCE;
 }
 
@@ -776,10 +790,39 @@ function capturePerf(funcName, lineId, fn, ...args) {
 }
 
 /**
+ * Helper to record async timing and update state.
+ * @private
+ */
+function _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes) {
+    console.log(`!######${testStdoutTag}:${durationNs}######!`);
+    sharedPerfState.totalLoopsCompleted++;
+    if (durationNs > 0) {
+        runtimes.push(durationNs / 1000);
+    }
+}
+
+/**
  * Async helper for capturePerf to handle async function looping.
  * This function awaits promises and continues the benchmark loop properly.
  *
  * @private
+ * @param {string} funcName - Name of the function being benchmarked
+ * @param {string} lineId - Line identifier for this capture point
+ * @param {Function} fn - The async function to benchmark
+ * @param {Array} args - Arguments to pass to fn
+ * @param {Promise} firstPromise - The first promise that was already started
+ * @param {number} firstStartTime - Start time of the first execution
+ * @param {string} firstTestStdoutTag - Timing marker tag for the first execution
+ * @param {string} safeModulePath - Sanitized module path
+ * @param {string|null} testClassName - Test class name (if any)
+ * @param {string} safeTestFunctionName - Sanitized test function name
+ * @param {string} invocationKey - Unique key for this invocation
+ * @param {Array<number>} runtimes - Array to collect runtimes for stability checking
+ * @param {number} batchSize - Number of iterations per batch
+ * @param {number} startBatchIndex - Index where async looping started
+ * @param {boolean} shouldLoop - Whether to continue looping
+ * @param {Function} getStabilityWindow - Function to get stability window size
+ * @returns {Promise} The last return value from fn
  */
 async function _capturePerfAsync(
     funcName, lineId, fn, args,
@@ -796,61 +839,52 @@ async function _capturePerfAsync(
         lastReturnValue = await firstPromise;
         const asyncEndTime = getTimeNs();
         const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
-        console.log(`!######${firstTestStdoutTag}:${asyncDurationNs}######!`);
-        sharedPerfState.totalLoopsCompleted++;
-        if (asyncDurationNs > 0) {
-            runtimes.push(asyncDurationNs / 1000);
-        }
+        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
     } catch (err) {
         const asyncEndTime = getTimeNs();
         const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
-        console.log(`!######${firstTestStdoutTag}:${asyncDurationNs}######!`);
-        sharedPerfState.totalLoopsCompleted++;
-        throw err;
+        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
+        lastError = err;
+        // Don't throw yet - we want to record the timing first
+    }
+
+    // If first iteration failed, stop and throw
+    if (lastError) {
+        throw lastError;
     }
 
     // Continue looping for remaining iterations
     for (let batchIndex = startBatchIndex + 1; batchIndex < batchSize; batchIndex++) {
-        // Check shared time limit
+        // Check exit conditions before starting next iteration
         if (shouldLoop && checkSharedTimeLimit()) {
             break;
         }
 
-        // Check if this invocation has already reached stability
         if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
-        // Get the global loop index for this invocation
         const loopIndex = getInvocationLoopIndex(invocationKey);
-
-        // Check if we've exceeded max loops
         if (loopIndex > getPerfLoopCount()) {
             break;
         }
 
-        // Get invocation index for the timing marker
+        // Generate timing marker identifiers
         const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
         const invocationIndex = getInvocationIndex(testId);
         const invocationId = `${lineId}_${invocationIndex}`;
-
-        // Format stdout tag
         const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
 
+        // Execute and time the function
         try {
             const startTime = getTimeNs();
             lastReturnValue = await fn(...args);
             const endTime = getTimeNs();
             const durationNs = getDurationNs(startTime, endTime);
 
-            console.log(`!######${testStdoutTag}:${durationNs}######!`);
-            sharedPerfState.totalLoopsCompleted++;
+            _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes);
 
-            if (durationNs > 0) {
-                runtimes.push(durationNs / 1000);
-            }
-
-            // Check stability
+            // Check if we've reached performance stability
             if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
                 const window = getStabilityWindow();
                 if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
