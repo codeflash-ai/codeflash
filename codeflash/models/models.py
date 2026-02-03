@@ -599,10 +599,8 @@ class CodePosition:
     col_no: int
 
 
-@dataclass(frozen=True)
-class FunctionParent:
-    name: str
-    type: str
+# Re-export FunctionParent for backward compatibility
+from codeflash.models.function_types import FunctionParent  # noqa: E402
 
 
 class OriginalCodeBaseline(BaseModel):

@@ -20,6 +20,10 @@
  *
  * Usage:
  *   npx jest --runner=codeflash/loop-runner
+ *
+ * NOTE: This runner requires jest-runner to be installed in your project.
+ *       It is a Jest-specific feature and does not work with Vitest.
+ *       For Vitest projects, capturePerf() does all loops internally in a single call.
  */
 
 'use strict';
@@ -27,12 +31,27 @@
 const { createRequire } = require('module');
 const path = require('path');
 
-const jestRunnerPath = require.resolve('jest-runner');
-const internalRequire = createRequire(jestRunnerPath);
-const runTest = internalRequire('./runTest').default;
+// Try to load jest-runner - it's a peer dependency that must be installed by the user
+let runTest;
+let jestRunnerAvailable = false;
+
+try {
+    const jestRunnerPath = require.resolve('jest-runner');
+    const internalRequire = createRequire(jestRunnerPath);
+    runTest = internalRequire('./runTest').default;
+    jestRunnerAvailable = true;
+} catch (e) {
+    // jest-runner not installed - this is expected for Vitest projects
+    // The runner will throw a helpful error if someone tries to use it without jest-runner
+    jestRunnerAvailable = false;
+}
 
 // Configuration
-const MAX_BATCHES = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '10000', 10);
+const PERF_LOOP_COUNT = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '10000', 10);
+const PERF_BATCH_SIZE = parseInt(process.env.CODEFLASH_PERF_BATCH_SIZE || '10', 10);
+// MAX_BATCHES = how many batches needed to reach PERF_LOOP_COUNT iterations
+// Add 1 to handle any rounding, but cap at PERF_LOOP_COUNT to avoid excessive batches
+const MAX_BATCHES = Math.min(Math.ceil(PERF_LOOP_COUNT / PERF_BATCH_SIZE) + 1, PERF_LOOP_COUNT);
 const TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
 const MIN_BATCHES = parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
 
@@ -90,6 +109,14 @@ function deepCopy(obj, seen = new WeakMap()) {
  */
 class CodeflashLoopRunner {
     constructor(globalConfig, context) {
+        if (!jestRunnerAvailable) {
+            throw new Error(
+                'codeflash/loop-runner requires jest-runner to be installed.\n' +
+                'Please install it: npm install --save-dev jest-runner\n\n' +
+                'If you are using Vitest, the loop-runner is not needed - ' +
+                'Vitest projects use external looping handled by the Python runner.'
+            );
+        }
         this._globalConfig = globalConfig;
         this._context = context || {};
         this._eventEmitter = new SimpleEventEmitter();

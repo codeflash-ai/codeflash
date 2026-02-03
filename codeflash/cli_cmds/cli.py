@@ -12,6 +12,7 @@ from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
@@ -121,6 +122,15 @@ def parse_args() -> Namespace:
         "--effort", type=str, help="Effort level for optimization", choices=["low", "medium", "high"], default="medium"
     )
 
+    # Config management flags
+    parser.add_argument(
+        "--show-config", action="store_true", help="Show current or auto-detected configuration and exit."
+    )
+    parser.add_argument(
+        "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
+    )
+    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
+
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
     return process_and_validate_cmd_args(args)
@@ -145,6 +155,16 @@ def process_and_validate_cmd_args(args: Namespace) -> Namespace:
 
     if args.version:
         logger.info(f"Codeflash version {version}")
+        sys.exit()
+
+    # Handle --show-config
+    if getattr(args, "show_config", False):
+        _handle_show_config()
+        sys.exit()
+
+    # Handle --reset-config
+    if getattr(args, "reset_config", False):
+        _handle_reset_config(confirm=not getattr(args, "yes", False))
         sys.exit()
 
     if args.command == "vscode-install":
@@ -210,6 +230,11 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
     # Default to module_root if not specified
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+
+    # Set the test framework singleton for JS/TS projects
+    if is_js_ts_project and pyproject_config.get("test_framework"):
+        set_current_test_framework(pyproject_config["test_framework"])
+
     if args.tests_root is None:
         if is_js_ts_project:
             # Try common JS test directories at project root first
@@ -334,3 +359,92 @@ def handle_optimize_all_arg_parsing(args: Namespace) -> Namespace:
     else:
         args.all = Path(args.all).resolve()
     return args
+
+
+def _handle_show_config() -> None:
+    """Show current or auto-detected Codeflash configuration."""
+    from rich.table import Table
+
+    from codeflash.cli_cmds.console import console
+    from codeflash.setup.detector import detect_project, has_existing_config
+
+    project_root = Path.cwd()
+    detected = detect_project(project_root)
+
+    # Check if config exists or is auto-detected
+    config_exists, _ = has_existing_config(project_root)
+    status = "Saved config" if config_exists else "Auto-detected (not saved)"
+
+    console.print()
+    console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+    console.print()
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Setting", style="dim")
+    table.add_column("Value")
+
+    table.add_row("Language", detected.language)
+    table.add_row("Project root", str(detected.project_root))
+    table.add_row("Module root", str(detected.module_root))
+    table.add_row("Tests root", str(detected.tests_root) if detected.tests_root else "(not detected)")
+    table.add_row("Test runner", detected.test_runner or "(not detected)")
+    table.add_row("Formatter", ", ".join(detected.formatter_cmds) if detected.formatter_cmds else "(not detected)")
+    table.add_row(
+        "Ignore paths", ", ".join(str(p) for p in detected.ignore_paths) if detected.ignore_paths else "(none)"
+    )
+    table.add_row("Confidence", f"{detected.confidence:.0%}")
+
+    console.print(table)
+    console.print()
+
+    if not config_exists:
+        console.print("[dim]Run [bold]codeflash --file <file>[/bold] to auto-save this config.[/dim]")
+
+
+def _handle_reset_config(confirm: bool = True) -> None:
+    """Remove Codeflash configuration from project config file.
+
+    Args:
+        confirm: If True, prompt for confirmation before removing.
+
+    """
+    from codeflash.cli_cmds.console import console
+    from codeflash.setup.config_writer import remove_config
+    from codeflash.setup.detector import detect_project, has_existing_config
+
+    project_root = Path.cwd()
+
+    config_exists, _ = has_existing_config(project_root)
+    if not config_exists:
+        console.print("[yellow]No Codeflash configuration found to remove.[/yellow]")
+        return
+
+    detected = detect_project(project_root)
+
+    if confirm:
+        console.print("[bold]This will remove Codeflash configuration from your project.[/bold]")
+        console.print()
+
+        config_file = "pyproject.toml" if detected.language == "python" else "package.json"
+        console.print(f"  Config file: {project_root / config_file}")
+        console.print()
+
+        try:
+            response = console.input("[bold]Are you sure you want to remove the config? [y/N][/bold] ")
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return
+
+        if response.lower() not in ("y", "yes"):
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    success, message = remove_config(project_root, detected.language)
+
+    # Escape brackets in message to prevent Rich markup interpretation
+    escaped_message = message.replace("[", "\\[")
+
+    if success:
+        console.print(f"[green]✓[/green] {escaped_message}")
+    else:
+        console.print(f"[red]✗[/red] {escaped_message}")

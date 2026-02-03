@@ -6,13 +6,13 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
-    FunctionInfo,
     HelperFunction,
     Language,
-    ParentInfo,
+    ReferenceInfo,
     TestInfo,
     TestResult,
 )
@@ -46,6 +46,11 @@ class PythonSupport:
         return (".py", ".pyw")
 
     @property
+    def default_file_extension(self) -> str:
+        """Default file extension for Python."""
+        return ".py"
+
+    @property
     def test_framework(self) -> str:
         """Primary test framework for Python."""
         return "pytest"
@@ -58,7 +63,7 @@ class PythonSupport:
 
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a Python file.
 
         Uses libcst to parse the file and find functions with return statements.
@@ -68,12 +73,12 @@ class PythonSupport:
             filter_criteria: Optional criteria to filter functions.
 
         Returns:
-            List of FunctionInfo objects for discovered functions.
+            List of FunctionToOptimize objects for discovered functions.
 
         """
         import libcst as cst
 
-        from codeflash.discovery.functions_to_optimize import FunctionToOptimize, FunctionVisitor
+        from codeflash.discovery.functions_to_optimize import FunctionVisitor
 
         criteria = filter_criteria or FunctionFilterCriteria()
 
@@ -90,7 +95,7 @@ class PythonSupport:
             function_visitor = FunctionVisitor(file_path=str(file_path))
             wrapper.visit(function_visitor)
 
-            functions: list[FunctionInfo] = []
+            functions: list[FunctionToOptimize] = []
             for func in function_visitor.functions:
                 if not isinstance(func, FunctionToOptimize):
                     continue
@@ -107,23 +112,20 @@ class PythonSupport:
                 if criteria.require_return and func.starting_line is None:
                     continue
 
-                # Convert FunctionToOptimize to FunctionInfo
-                parents = tuple(ParentInfo(name=p.name, type=p.type) for p in func.parents)
-
-                functions.append(
-                    FunctionInfo(
-                        name=func.function_name,
-                        file_path=file_path,
-                        start_line=func.starting_line or 1,
-                        end_line=func.ending_line or 1,
-                        start_col=func.starting_col,
-                        end_col=func.ending_col,
-                        parents=parents,
-                        is_async=func.is_async,
-                        is_method=len(func.parents) > 0,
-                        language=Language.PYTHON,
-                    )
+                # Add is_method field based on parents
+                func_with_is_method = FunctionToOptimize(
+                    function_name=func.function_name,
+                    file_path=file_path,
+                    parents=func.parents,
+                    starting_line=func.starting_line,
+                    ending_line=func.ending_line,
+                    starting_col=func.starting_col,
+                    ending_col=func.ending_col,
+                    is_async=func.is_async,
+                    is_method=len(func.parents) > 0 and any(p.type == "ClassDef" for p in func.parents),
+                    language="python",
                 )
+                functions.append(func_with_is_method)
 
             return functions
 
@@ -131,7 +133,9 @@ class PythonSupport:
             logger.warning("Failed to discover functions in %s: %s", file_path, e)
             return []
 
-    def discover_tests(self, test_root: Path, source_functions: Sequence[FunctionInfo]) -> dict[str, list[TestInfo]]:
+    def discover_tests(
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
+    ) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests via static analysis.
 
         Args:
@@ -155,7 +159,7 @@ class PythonSupport:
                 try:
                     source = test_file.read_text()
                     # Check if function name appears in test file
-                    if func.name in source:
+                    if func.function_name in source:
                         result[func.qualified_name].append(
                             TestInfo(test_name=test_file.stem, test_file=test_file, test_class=None)
                         )
@@ -166,7 +170,7 @@ class PythonSupport:
 
     # === Code Analysis ===
 
-    def extract_code_context(self, function: FunctionInfo, project_root: Path, module_root: Path) -> CodeContext:
+    def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
         """Extract function code and its dependencies.
 
         Uses jedi and libcst for Python code analysis.
@@ -188,8 +192,8 @@ class PythonSupport:
 
         # Extract the function source
         lines = source.splitlines(keepends=True)
-        if function.start_line and function.end_line:
-            target_lines = lines[function.start_line - 1 : function.end_line]
+        if function.starting_line and function.ending_line:
+            target_lines = lines[function.starting_line - 1 : function.ending_line]
             target_code = "".join(target_lines)
         else:
             target_code = ""
@@ -216,7 +220,7 @@ class PythonSupport:
             language=Language.PYTHON,
         )
 
-    def find_helper_functions(self, function: FunctionInfo, project_root: Path) -> list[HelperFunction]:
+    def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         """Find helper functions called by the target function.
 
         Uses jedi for Python code analysis.
@@ -285,20 +289,130 @@ class PythonSupport:
                         )
 
         except Exception as e:
-            logger.warning("Failed to find helpers for %s: %s", function.name, e)
+            logger.warning("Failed to find helpers for %s: %s", function.function_name, e)
 
         return helpers
 
+    def find_references(
+        self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 500
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        Uses jedi to find all places where a Python function is called.
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        try:
+            import jedi
+
+            source = function.file_path.read_text()
+
+            # Find the function position
+            script = jedi.Script(code=source, path=function.file_path)
+            names = script.get_names(all_scopes=True, definitions=True)
+
+            function_pos = None
+            for name in names:
+                if name.type == "function" and name.name == function.name:
+                    # Check for class parent if it's a method
+                    if function.class_name:
+                        parent = name.parent()
+                        if parent and parent.name == function.class_name and parent.type == "class":
+                            function_pos = (name.line, name.column)
+                            break
+                    else:
+                        function_pos = (name.line, name.column)
+                        break
+
+            if function_pos is None:
+                return []
+
+            # Get references using jedi
+            script = jedi.Script(code=source, path=function.file_path, project=jedi.Project(path=project_root))
+            references = script.get_references(line=function_pos[0], column=function_pos[1])
+
+            result: list[ReferenceInfo] = []
+            seen_locations: set[tuple[Path, int, int]] = set()
+
+            for ref in references:
+                if not ref.module_path:
+                    continue
+
+                ref_path = Path(ref.module_path)
+
+                # Skip the definition itself
+                if ref_path == function.file_path and ref.line == function_pos[0]:
+                    continue
+
+                # Skip test files
+                if tests_root:
+                    try:
+                        ref_path.relative_to(tests_root)
+                        continue
+                    except ValueError:
+                        pass
+
+                # Avoid duplicates
+                loc_key = (ref_path, ref.line, ref.column)
+                if loc_key in seen_locations:
+                    continue
+                seen_locations.add(loc_key)
+
+                # Get context line
+                try:
+                    ref_source = ref_path.read_text()
+                    lines = ref_source.splitlines()
+                    context = lines[ref.line - 1] if ref.line <= len(lines) else ""
+                except Exception:
+                    context = ""
+
+                # Determine caller function
+                caller_function = None
+                try:
+                    parent = ref.parent()
+                    if parent and parent.type == "function":
+                        caller_function = parent.name
+                except Exception:
+                    pass
+
+                result.append(
+                    ReferenceInfo(
+                        file_path=ref_path,
+                        line=ref.line,
+                        column=ref.column,
+                        end_line=ref.line,
+                        end_column=ref.column + len(function.function_name),
+                        context=context.strip(),
+                        reference_type="call",
+                        import_name=function.function_name,
+                        caller_function=caller_function,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            logger.warning("Failed to find references for %s: %s", function.function_name, e)
+            return []
+
     # === Code Transformation ===
 
-    def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
+    def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
         """Replace a function in source code with new implementation.
 
         Uses libcst for Python code transformation.
 
         Args:
             source: Original source code.
-            function: FunctionInfo identifying the function to replace.
+            function: FunctionToOptimize identifying the function to replace.
             new_source: New function source code.
 
         Returns:
@@ -319,7 +433,7 @@ class PythonSupport:
                 preexisting_objects=set(),
             )
         except Exception as e:
-            logger.warning("Failed to replace function %s: %s", function.name, e)
+            logger.warning("Failed to replace function %s: %s", function.function_name, e)
             return source
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
@@ -465,7 +579,7 @@ class PythonSupport:
 
     # === Instrumentation ===
 
-    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionInfo]) -> str:
+    def instrument_for_behavior(self, source: str, functions: Sequence[FunctionToOptimize]) -> str:
         """Add behavior instrumentation to capture inputs/outputs.
 
         Args:
@@ -480,7 +594,7 @@ class PythonSupport:
         # This is a pass-through for now
         return source
 
-    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionInfo) -> str:
+    def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code.
 
         Args:
@@ -721,7 +835,9 @@ class PythonSupport:
             mode=testing_mode,
         )
 
-    def instrument_source_for_line_profiler(self, func_info: FunctionInfo, line_profiler_output_file: Path) -> bool:
+    def instrument_source_for_line_profiler(
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
+    ) -> bool:
         """Instrument source code for line profiling.
 
         Args:

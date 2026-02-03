@@ -10,13 +10,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import (
-    FunctionFilterCriteria,
-    FunctionInfo,
-    Language,
-    ParentInfo,
-)
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import FunctionFilterCriteria
 from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
+from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
     pass
@@ -28,7 +25,7 @@ def discover_functions(
     file_path: Path,
     filter_criteria: FunctionFilterCriteria | None = None,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Find all optimizable functions/methods in a Java file.
 
     Uses tree-sitter to parse the file and find methods that can be optimized.
@@ -39,7 +36,7 @@ def discover_functions(
         analyzer: Optional JavaAnalyzer instance (created if not provided).
 
     Returns:
-        List of FunctionInfo objects for discovered functions.
+        List of FunctionToOptimize objects for discovered functions.
 
     """
     criteria = filter_criteria or FunctionFilterCriteria()
@@ -58,7 +55,7 @@ def discover_functions_from_source(
     file_path: Path | None = None,
     filter_criteria: FunctionFilterCriteria | None = None,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Find all optimizable functions/methods in Java source code.
 
     Args:
@@ -68,7 +65,7 @@ def discover_functions_from_source(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        List of FunctionInfo objects for discovered functions.
+        List of FunctionToOptimize objects for discovered functions.
 
     """
     criteria = filter_criteria or FunctionFilterCriteria()
@@ -82,7 +79,7 @@ def discover_functions_from_source(
             include_static=True,
         )
 
-        functions: list[FunctionInfo] = []
+        functions: list[FunctionToOptimize] = []
 
         for method in methods:
             # Apply filters
@@ -90,22 +87,22 @@ def discover_functions_from_source(
                 continue
 
             # Build parents list
-            parents: list[ParentInfo] = []
+            parents: list[FunctionParent] = []
             if method.class_name:
-                parents.append(ParentInfo(name=method.class_name, type="ClassDef"))
+                parents.append(FunctionParent(name=method.class_name, type="ClassDef"))
 
             functions.append(
-                FunctionInfo(
-                    name=method.name,
+                FunctionToOptimize(
+                    function_name=method.name,
                     file_path=file_path or Path("unknown.java"),
-                    start_line=method.start_line,
-                    end_line=method.end_line,
-                    start_col=method.start_col,
-                    end_col=method.end_col,
-                    parents=tuple(parents),
+                    starting_line=method.start_line,
+                    ending_line=method.end_line,
+                    starting_col=method.start_col,
+                    ending_col=method.end_col,
+                    parents=parents,
                     is_async=False,  # Java doesn't have async keyword
                     is_method=method.class_name is not None,
-                    language=Language.JAVA,
+                    language="java",
                     doc_start_line=method.javadoc_start_line,
                 )
             )
@@ -182,7 +179,7 @@ def _should_include_method(
 def discover_test_methods(
     file_path: Path,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Find all JUnit test methods in a Java test file.
 
     Looks for methods annotated with @Test, @ParameterizedTest, @RepeatedTest, etc.
@@ -192,7 +189,7 @@ def discover_test_methods(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        List of FunctionInfo objects for discovered test methods.
+        List of FunctionToOptimize objects for discovered test methods.
 
     """
     try:
@@ -205,7 +202,7 @@ def discover_test_methods(
     source_bytes = source.encode("utf8")
     tree = analyzer.parse(source_bytes)
 
-    test_methods: list[FunctionInfo] = []
+    test_methods: list[FunctionToOptimize] = []
 
     # Find methods with test annotations
     _walk_tree_for_test_methods(tree.root_node, source_bytes, file_path, test_methods, analyzer, current_class=None)
@@ -217,7 +214,7 @@ def _walk_tree_for_test_methods(
     node,
     source_bytes: bytes,
     file_path: Path,
-    test_methods: list[FunctionInfo],
+    test_methods: list[FunctionToOptimize],
     analyzer: JavaAnalyzer,
     current_class: str | None,
 ) -> None:
@@ -250,22 +247,22 @@ def _walk_tree_for_test_methods(
             if name_node:
                 method_name = analyzer.get_node_text(name_node, source_bytes)
 
-                parents: list[ParentInfo] = []
+                parents: list[FunctionParent] = []
                 if current_class:
-                    parents.append(ParentInfo(name=current_class, type="ClassDef"))
+                    parents.append(FunctionParent(name=current_class, type="ClassDef"))
 
                 test_methods.append(
-                    FunctionInfo(
-                        name=method_name,
+                    FunctionToOptimize(
+                        function_name=method_name,
                         file_path=file_path,
-                        start_line=node.start_point[0] + 1,
-                        end_line=node.end_point[0] + 1,
-                        start_col=node.start_point[1],
-                        end_col=node.end_point[1],
-                        parents=tuple(parents),
+                        starting_line=node.start_point[0] + 1,
+                        ending_line=node.end_point[0] + 1,
+                        starting_col=node.start_point[1],
+                        ending_col=node.end_point[1],
+                        parents=list(parents),
                         is_async=False,
                         is_method=current_class is not None,
-                        language=Language.JAVA,
+                        language="java",
                     )
                 )
 
@@ -285,7 +282,7 @@ def get_method_by_name(
     method_name: str,
     class_name: str | None = None,
     analyzer: JavaAnalyzer | None = None,
-) -> FunctionInfo | None:
+) -> FunctionToOptimize | None:
     """Find a specific method by name in a Java file.
 
     Args:
@@ -295,13 +292,13 @@ def get_method_by_name(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        FunctionInfo for the method, or None if not found.
+        FunctionToOptimize for the method, or None if not found.
 
     """
     functions = discover_functions(file_path, analyzer=analyzer)
 
     for func in functions:
-        if func.name == method_name:
+        if func.function_name == method_name:
             if class_name is None or func.class_name == class_name:
                 return func
 
@@ -312,7 +309,7 @@ def get_class_methods(
     file_path: Path,
     class_name: str,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Get all methods in a specific class.
 
     Args:
@@ -321,7 +318,7 @@ def get_class_methods(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        List of FunctionInfo objects for methods in the class.
+        List of FunctionToOptimize objects for methods in the class.
 
     """
     functions = discover_functions(file_path, analyzer=analyzer)

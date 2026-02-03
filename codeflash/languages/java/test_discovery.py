@@ -12,7 +12,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import FunctionInfo, TestInfo
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import TestInfo
 from codeflash.languages.java.config import detect_java_project
 from codeflash.languages.java.discovery import discover_test_methods
 from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def discover_tests(
     test_root: Path,
-    source_functions: Sequence[FunctionInfo],
+    source_functions: Sequence[FunctionToOptimize],
     analyzer: JavaAnalyzer | None = None,
 ) -> dict[str, list[TestInfo]]:
     """Map source functions to their tests via static analysis.
@@ -48,9 +49,9 @@ def discover_tests(
     analyzer = analyzer or get_java_analyzer()
 
     # Build a map of function names for quick lookup
-    function_map: dict[str, FunctionInfo] = {}
+    function_map: dict[str, FunctionToOptimize] = {}
     for func in source_functions:
-        function_map[func.name] = func
+        function_map[func.function_name] = func
         function_map[func.qualified_name] = func
 
     # Find all test files (various naming conventions)
@@ -77,7 +78,7 @@ def discover_tests(
                 for func_name in matched_functions:
                     result[func_name].append(
                         TestInfo(
-                            test_name=test_method.name,
+                            test_name=test_method.function_name,
                             test_file=test_file,
                             test_class=test_method.class_name,
                         )
@@ -90,9 +91,9 @@ def discover_tests(
 
 
 def _match_test_to_functions(
-    test_method: FunctionInfo,
+    test_method: FunctionToOptimize,
     test_source: str,
-    function_map: dict[str, FunctionInfo],
+    function_map: dict[str, FunctionToOptimize],
     analyzer: JavaAnalyzer,
 ) -> list[str]:
     """Match a test method to source functions it might exercise.
@@ -100,7 +101,7 @@ def _match_test_to_functions(
     Args:
         test_method: The test method.
         test_source: Full source code of the test file.
-        function_map: Map of function names to FunctionInfo.
+        function_map: Map of function names to FunctionToOptimize.
         analyzer: JavaAnalyzer instance.
 
     Returns:
@@ -111,10 +112,10 @@ def _match_test_to_functions(
 
     # Strategy 1: Test method name contains function name
     # e.g., testAdd -> add, testCalculatorAdd -> Calculator.add
-    test_name_lower = test_method.name.lower()
+    test_name_lower = test_method.function_name.lower()
 
     for func_name, func_info in function_map.items():
-        if func_info.name.lower() in test_name_lower:
+        if func_info.function_name.lower() in test_name_lower:
             matched.append(func_info.qualified_name)
 
     # Strategy 2: Method call analysis
@@ -126,8 +127,8 @@ def _match_test_to_functions(
     method_calls = _find_method_calls_in_range(
         tree.root_node,
         source_bytes,
-        test_method.start_line,
-        test_method.end_line,
+        test_method.starting_line,
+        test_method.ending_line,
         analyzer,
     )
 
@@ -285,7 +286,7 @@ def _find_method_calls_in_range(
 
 
 def find_tests_for_function(
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     test_root: Path,
     analyzer: JavaAnalyzer | None = None,
 ) -> list[TestInfo]:
@@ -336,7 +337,7 @@ def get_test_class_for_source_class(
 def discover_all_tests(
     test_root: Path,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Discover all test methods in a test directory.
 
     Args:
@@ -344,11 +345,11 @@ def discover_all_tests(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        List of FunctionInfo for all test methods.
+        List of FunctionToOptimize for all test methods.
 
     """
     analyzer = analyzer or get_java_analyzer()
-    all_tests: list[FunctionInfo] = []
+    all_tests: list[FunctionToOptimize] = []
 
     # Find all test files (various naming conventions)
     test_files = (
@@ -408,7 +409,7 @@ def get_test_methods_for_class(
     test_file: Path,
     test_class_name: str | None = None,
     analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionInfo]:
+) -> list[FunctionToOptimize]:
     """Get all test methods in a specific test class.
 
     Args:
@@ -417,7 +418,7 @@ def get_test_methods_for_class(
         analyzer: Optional JavaAnalyzer instance.
 
     Returns:
-        List of FunctionInfo for test methods.
+        List of FunctionToOptimize for test methods.
 
     """
     tests = discover_test_methods(test_file, analyzer)
@@ -455,7 +456,7 @@ def build_test_mapping_for_project(
     # Discover all source functions
     from codeflash.languages.java.discovery import discover_functions
 
-    source_functions: list[FunctionInfo] = []
+    source_functions: list[FunctionToOptimize] = []
     for java_file in config.source_root.rglob("*.java"):
         funcs = discover_functions(java_file, analyzer=analyzer)
         source_functions.extend(funcs)

@@ -13,6 +13,7 @@ from codeflash.code_utils.code_replacer import (
     replace_function_definitions_for_language,
     replace_function_definitions_in_module,
 )
+from codeflash.models.function_types import FunctionParent
 from codeflash.languages.base import Language
 from codeflash.languages import current as language_current
 from codeflash.models.models import CodeStringsMarkdown
@@ -1524,7 +1525,7 @@ public final class Buffer {{
             file_path=java_file,
             starting_line=13,  # Line where 3-arg version starts (1-indexed)
             ending_line=18,
-            parents=(FunctionParent(name="Buffer", type="class"),),
+            parents=[FunctionParent(name="Buffer", type="ClassDef")],
             qualified_name="Buffer.bytesToHexString",
             is_method=True,
         )

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import libcst as cst
+from pydantic import Field
 from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
@@ -26,9 +27,8 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.languages import get_language_support, get_supported_extensions
-from codeflash.languages.base import Language
-from codeflash.languages.registry import is_language_supported
+from codeflash.languages.language_enum import Language
+from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.models.models import FunctionParent
 from codeflash.telemetry.posthog_cf import ph
@@ -39,8 +39,11 @@ if TYPE_CHECKING:
     from libcst import CSTNode
     from libcst.metadata import CodeRange
 
+    from codeflash.languages.base import FunctionInfo
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
+import contextlib
+
 from rich.text import Text
 
 _property_id = "property"
@@ -131,17 +134,23 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
 class FunctionToOptimize:
     """Represent a function that is a candidate for optimization.
 
+    This is the canonical dataclass for representing functions across all languages
+    (Python, JavaScript, TypeScript). It captures all information needed to identify,
+    locate, and work with a function.
+
     Attributes
     ----------
         function_name: The name of the function.
         file_path: The absolute file path where the function is located.
         parents: A list of parent scopes, which could be classes or functions.
-        starting_line: The starting line number of the function in the file.
-        ending_line: The ending line number of the function in the file.
-        starting_col: The starting column offset (for precise location in multi-line contexts).
-        ending_col: The ending column offset (for precise location in multi-line contexts).
+        starting_line: The starting line number of the function in the file (1-indexed).
+        ending_line: The ending line number of the function in the file (1-indexed).
+        starting_col: The starting column offset (0-indexed, for precise location).
+        ending_col: The ending column offset (0-indexed, for precise location).
         is_async: Whether this function is defined as async.
+        is_method: Whether this is a method (belongs to a class).
         language: The programming language of this function (default: "python").
+        doc_start_line: Line where docstring/JSDoc starts (or None if no doc comment).
 
     The qualified_name property provides the full name of the function, including
     any parent class or function names. The qualified_name_with_modules_from_root
@@ -151,23 +160,32 @@ class FunctionToOptimize:
 
     function_name: str
     file_path: Path
-    parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
+    parents: list[FunctionParent] = Field(default_factory=list)  # list[ClassDef | FunctionDef | AsyncFunctionDef]
     starting_line: Optional[int] = None
     ending_line: Optional[int] = None
     starting_col: Optional[int] = None  # Column offset for precise location
     ending_col: Optional[int] = None  # Column offset for precise location
     is_async: bool = False
+    is_method: bool = False  # Whether this is a method (belongs to a class)
     language: str = "python"  # Language identifier for multi-language support
+    doc_start_line: Optional[int] = None  # Line where docstring/JSDoc starts
 
     @property
     def top_level_parent_name(self) -> str:
         return self.function_name if not self.parents else self.parents[0].name
 
+    @property
+    def class_name(self) -> str | None:
+        """Get the immediate parent class name, if any."""
+        for parent in reversed(self.parents):
+            if parent.type == "ClassDef":
+                return parent.name
+        return None
+
     def __str__(self) -> str:
-        return (
-            f"{self.file_path}:{'.'.join([p.name for p in self.parents])}"
-            f"{'.' if self.parents else ''}{self.function_name}"
-        )
+        qualified = f"{'.'.join([p.name for p in self.parents])}{'.' if self.parents else ''}{self.function_name}"
+        line_info = f":{self.starting_line}-{self.ending_line}" if self.starting_line and self.ending_line else ""
+        return f"{self.file_path}:{qualified}{line_info}"
 
     @property
     def qualified_name(self) -> str:
@@ -180,6 +198,28 @@ class FunctionToOptimize:
     def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
         return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
+    @classmethod
+    def from_function_info(cls, func_info: FunctionInfo) -> FunctionToOptimize:
+        """Create a FunctionToOptimize from a FunctionInfo instance.
+
+        This is a temporary method for backward compatibility during migration.
+        Once FunctionInfo is fully removed, this method can be deleted.
+        """
+        parents = [FunctionParent(name=p.name, type=p.type) for p in func_info.parents]
+        return cls(
+            function_name=func_info.name,
+            file_path=func_info.file_path,
+            parents=parents,
+            starting_line=func_info.start_line,
+            ending_line=func_info.end_line,
+            starting_col=func_info.start_col,
+            ending_col=func_info.end_col,
+            is_async=func_info.is_async,
+            is_method=func_info.is_method,
+            language=func_info.language.value,
+            doc_start_line=func_info.doc_start_line,
+        )
+
 
 # =============================================================================
 # Multi-language support helpers
@@ -187,7 +227,7 @@ class FunctionToOptimize:
 
 
 def get_files_for_language(
-    module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
+    module_root_path: Path, ignore_paths: list[Path] | None = None, language: Language | None = None
 ) -> list[Path]:
     """Get all source files for supported languages.
 
@@ -200,20 +240,67 @@ def get_files_for_language(
         List of file paths matching supported extensions.
 
     """
+    if ignore_paths is None:
+        ignore_paths = []
+
     if language is not None:
         support = get_language_support(language)
         extensions = support.file_extensions
     else:
         extensions = tuple(get_supported_extensions())
 
+    # Default directory patterns to always exclude for JS/TS
+    js_ts_default_excludes = {
+        "node_modules",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "coverage",
+        ".cache",
+        ".turbo",
+        ".vercel",
+        "__pycache__",
+    }
+
     files = []
     for ext in extensions:
         pattern = f"*{ext}"
         for file_path in module_root_path.rglob(pattern):
+            # Check explicit ignore paths
             if any(file_path.is_relative_to(ignore_path) for ignore_path in ignore_paths):
+                continue
+            # Check default JS/TS excludes in path parts
+            if any(part in js_ts_default_excludes for part in file_path.parts):
                 continue
             files.append(file_path)
     return files
+
+
+def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bool, str | None]:
+    """Check if a JavaScript/TypeScript function is exported from its module.
+
+    For JS/TS, functions that are not exported cannot be imported by tests,
+    making them impossible to optimize.
+
+    Args:
+        file_path: Path to the source file.
+        function_name: Name of the function to check.
+
+    Returns:
+        Tuple of (is_exported, export_name). export_name may be 'default' for default exports.
+
+    """
+    from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+        analyzer = get_analyzer_for_file(file_path)
+        return analyzer.is_function_exported(source, function_name)
+    except Exception as e:
+        logger.debug(f"Failed to check export status for {function_name}: {e}")
+        # Return True to avoid blocking in case of errors
+        return True, None
 
 
 def _find_all_functions_in_python_file(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
@@ -248,25 +335,8 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
     try:
         lang_support = get_language_support(file_path)
         criteria = FunctionFilterCriteria(require_return=True)
-        function_infos = lang_support.discover_functions(file_path, criteria)
-
-        ftos = []
-        for func_info in function_infos:
-            parents = [FunctionParent(p.name, p.type) for p in func_info.parents]
-            ftos.append(
-                FunctionToOptimize(
-                    function_name=func_info.name,
-                    file_path=func_info.file_path,
-                    parents=parents,
-                    starting_line=func_info.start_line,
-                    ending_line=func_info.end_line,
-                    starting_col=func_info.start_col,
-                    ending_col=func_info.end_col,
-                    is_async=func_info.is_async,
-                    language=func_info.language.value,
-                )
-            )
-        functions[file_path] = ftos
+        # discover_functions already returns FunctionToOptimize objects
+        functions[file_path] = lang_support.discover_functions(file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
 
@@ -338,6 +408,36 @@ def get_functions_to_optimize(
                     exit_with_message(
                         f"Function {only_get_this_function} not found in file {file}\nor the function does not have a 'return' statement or is a property"
                     )
+
+                # For JavaScript/TypeScript, verify that the function (or its parent class) is exported
+                # Non-exported functions cannot be imported by tests
+                if found_function.language in ("javascript", "typescript"):
+                    # For class methods, check if the parent class is exported
+                    # For standalone functions, check if the function itself is exported
+                    if found_function.parents:
+                        # It's a class method - check if the class is exported
+                        name_to_check = found_function.top_level_parent_name
+                    else:
+                        # It's a standalone function - check if the function is exported
+                        name_to_check = found_function.function_name
+
+                    is_exported, export_name = _is_js_ts_function_exported(file, name_to_check)
+                    if not is_exported:
+                        if found_function.parents:
+                            logger.debug(
+                                f"Class '{name_to_check}' containing method '{found_function.function_name}' "
+                                f"is not exported from {file}. "
+                                f"In JavaScript/TypeScript, only exported classes/functions can be optimized "
+                                f"because tests need to import them."
+                            )
+                        else:
+                            logger.debug(
+                                f"Function '{found_function.function_name}' is not exported from {file}. "
+                                f"In JavaScript/TypeScript, only exported functions can be optimized because "
+                                f"tests need to import them."
+                            )
+                        return {}, 0, None
+
                 functions[file] = [found_function]
         else:
             logger.info("Finding all functions modified in the current git diff ...")
@@ -539,9 +639,10 @@ def get_all_replay_test_functions(
         except Exception as e:
             logger.warning(f"Error parsing replay test file {replay_test_file}: {e}")
 
-    if not trace_file_path:
+    if trace_file_path is None:
         logger.error("Could not find trace_file_path in replay test files.")
         exit_with_message("Could not find trace_file_path in replay test files.")
+        raise AssertionError("Unreachable")  # exit_with_message never returns
 
     if not trace_file_path.exists():
         logger.error(f"Trace file not found: {trace_file_path}")
@@ -596,7 +697,7 @@ def get_all_replay_test_functions(
         if filtered_list:
             filtered_valid_functions[file_path] = filtered_list
 
-    return filtered_valid_functions, trace_file_path
+    return dict(filtered_valid_functions), trace_file_path
 
 
 def is_git_repo(file_path: str) -> bool:
@@ -608,11 +709,13 @@ def is_git_repo(file_path: str) -> bool:
 
 
 @cache
-def ignored_submodule_paths(module_root: str) -> list[str]:
+def ignored_submodule_paths(module_root: str) -> list[Path]:
     if is_git_repo(module_root):
         git_repo = git.Repo(module_root, search_parent_directories=True)
         try:
-            return [Path(git_repo.working_tree_dir, submodule.path).resolve() for submodule in git_repo.submodules]
+            working_dir = git_repo.working_tree_dir
+            if working_dir is not None:
+                return [Path(working_dir, submodule.path).resolve() for submodule in git_repo.submodules]
         except Exception as e:
             logger.warning(f"Error getting submodule paths: {e}")
     return []
@@ -626,7 +729,7 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
         self.class_name = class_name
         self.function_name = function_or_method_name
         self.is_top_level = False
-        self.function_has_args = None
+        self.function_has_args: bool | None = None
         self.line_no = line_no
         self.is_staticmethod = False
         self.is_classmethod = False
@@ -740,31 +843,28 @@ def was_function_previously_optimized(
 
     # Check optimization status if repository info is provided
     # already_optimized_count = 0
-    try:
+
+    # Check optimization status if repository info is provided
+    # already_optimized_count = 0
+    owner = None
+    repo = None
+    with contextlib.suppress(git.exc.InvalidGitRepositoryError):
         owner, repo = get_repo_owner_and_name()
-    except git.exc.InvalidGitRepositoryError:
-        logger.warning("No git repository found")
-        owner, repo = None, None
+
     pr_number = get_pr_number()
 
     if not owner or not repo or pr_number is None or getattr(args, "no_pr", False):
         return False
 
-    code_contexts = []
-
     func_hash = code_context.hashing_code_context_hash
-    # Use a unique path identifier that includes function info
 
-    code_contexts.append(
+    code_contexts = [
         {
-            "file_path": function_to_optimize.file_path,
+            "file_path": str(function_to_optimize.file_path),
             "function_name": function_to_optimize.qualified_name,
             "code_hash": func_hash,
         }
-    )
-
-    if not code_contexts:
-        return False
+    ]
 
     try:
         result = is_function_being_optimized_again(owner, repo, pr_number, code_contexts)
@@ -783,7 +883,7 @@ def filter_functions(
     ignore_paths: list[Path],
     project_root: Path,
     module_root: Path,
-    previous_checkpoint_functions: dict[Path, dict[str, Any]] | None = None,
+    previous_checkpoint_functions: dict[str, dict[str, Any]] | None = None,
     *,
     disable_logs: bool = False,
 ) -> tuple[dict[Path, list[FunctionToOptimize]], int]:
@@ -808,21 +908,49 @@ def filter_functions(
     # Normalize paths for case-insensitive comparison on Windows
     tests_root_str = os.path.normcase(str(tests_root))
     module_root_str = os.path.normcase(str(module_root))
+    project_root_str = os.path.normcase(str(project_root))
+
+    # Check if tests_root overlaps with module_root or project_root
+    # In this case, we need to use file pattern matching instead of directory matching
+    tests_root_overlaps_source = tests_root_str in (module_root_str, project_root_str) or module_root_str.startswith(
+        tests_root_str + os.sep
+    )
+
+    # Test file patterns for when tests_root overlaps with source
+    test_file_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
+    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+
+    def is_test_file(file_path_normalized: str) -> bool:
+        """Check if a file is a test file based on patterns."""
+        if tests_root_overlaps_source:
+            # Use file pattern matching when tests_root overlaps with source
+            file_lower = file_path_normalized.lower()
+            # Check filename patterns (e.g., .test.ts, .spec.ts)
+            if any(pattern in file_lower for pattern in test_file_name_patterns):
+                return True
+            # Check directory patterns, but only within the project root
+            # to avoid false positives from parent directories
+            relative_path = file_lower
+            if project_root_str and file_lower.startswith(project_root_str.lower()):
+                relative_path = file_lower[len(project_root_str) :]
+            return any(pattern in relative_path for pattern in test_dir_patterns)
+        # Use directory-based filtering when tests are in a separate directory
+        return file_path_normalized.startswith(tests_root_str + os.sep)
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
         _functions = functions
         file_path = str(file_path_path)
         file_path_normalized = os.path.normcase(file_path)
-        if file_path_normalized.startswith(tests_root_str + os.sep):
+        if is_test_file(file_path_normalized):
             test_functions_removed_count += len(_functions)
             continue
-        if file_path in ignore_paths or any(
+        if file_path_path in ignore_paths or any(
             file_path_normalized.startswith(os.path.normcase(str(ignore_path)) + os.sep) for ignore_path in ignore_paths
         ):
             ignore_paths_removed_count += 1
             continue
-        if file_path in submodule_paths or any(
+        if file_path_path in submodule_paths or any(
             file_path_normalized.startswith(os.path.normcase(str(submodule_path)) + os.sep)
             for submodule_path in submodule_paths
         ):
@@ -914,7 +1042,7 @@ def filter_files_optimized(file_path: Path, tests_root: Path, ignore_paths: list
 
 def function_has_return_statement(function_node: FunctionDef | AsyncFunctionDef) -> bool:
     # Custom DFS, return True as soon as a Return node is found
-    stack = [function_node]
+    stack: list[ast.AST] = [function_node]
     while stack:
         node = stack.pop()
         if isinstance(node, ast.Return):

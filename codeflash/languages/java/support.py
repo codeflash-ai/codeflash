@@ -10,10 +10,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
-    FunctionInfo,
     HelperFunction,
     Language,
     LanguageSupport,
@@ -94,18 +94,18 @@ class JavaSupport(LanguageSupport):
 
     def discover_functions(
         self, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in a Java file."""
         return discover_functions(file_path, filter_criteria, self._analyzer)
 
     def discover_functions_from_source(
         self, source: str, file_path: Path | None = None, filter_criteria: FunctionFilterCriteria | None = None
-    ) -> list[FunctionInfo]:
+    ) -> list[FunctionToOptimize]:
         """Find all optimizable functions in Java source code."""
         return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
 
     def discover_tests(
-        self, test_root: Path, source_functions: Sequence[FunctionInfo]
+        self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
     ) -> dict[str, list[TestInfo]]:
         """Map source functions to their tests."""
         return discover_tests(test_root, source_functions, self._analyzer)
@@ -113,13 +113,13 @@ class JavaSupport(LanguageSupport):
     # === Code Analysis ===
 
     def extract_code_context(
-        self, function: FunctionInfo, project_root: Path, module_root: Path
+        self, function: FunctionToOptimize, project_root: Path, module_root: Path
     ) -> CodeContext:
         """Extract function code and its dependencies."""
         return extract_code_context(function, project_root, module_root, analyzer=self._analyzer)
 
     def find_helper_functions(
-        self, function: FunctionInfo, project_root: Path
+        self, function: FunctionToOptimize, project_root: Path
     ) -> list[HelperFunction]:
         """Find helper functions called by the target function."""
         return find_helper_functions(function, project_root, analyzer=self._analyzer)
@@ -127,7 +127,7 @@ class JavaSupport(LanguageSupport):
     # === Code Transformation ===
 
     def replace_function(
-        self, source: str, function: FunctionInfo, new_source: str
+        self, source: str, function: FunctionToOptimize, new_source: str
     ) -> str:
         """Replace a function in source code with new implementation."""
         return replace_function(source, function, new_source, self._analyzer)
@@ -156,13 +156,13 @@ class JavaSupport(LanguageSupport):
     # === Instrumentation ===
 
     def instrument_for_behavior(
-        self, source: str, functions: Sequence[FunctionInfo]
+        self, source: str, functions: Sequence[FunctionToOptimize]
     ) -> str:
         """Add behavior instrumentation to capture inputs/outputs."""
         return instrument_for_behavior(source, functions, self._analyzer)
 
     def instrument_for_benchmarking(
-        self, test_source: str, target_function: FunctionInfo
+        self, test_source: str, target_function: FunctionToOptimize
     ) -> str:
         """Add timing instrumentation to test code."""
         return instrument_for_benchmarking(test_source, target_function, self._analyzer)
@@ -317,7 +317,7 @@ class JavaSupport(LanguageSupport):
         )
 
     def instrument_source_for_line_profiler(
-        self, func_info: FunctionInfo, line_profiler_output_file: Path
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
     ) -> bool:
         """Instrument source code before line profiling."""
         # Not yet implemented for Java

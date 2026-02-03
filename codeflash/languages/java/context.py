@@ -11,7 +11,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import CodeContext, FunctionInfo, HelperFunction, Language
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import CodeContext, HelperFunction, Language
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.import_resolver import JavaImportResolver, find_helper_files
 from codeflash.languages.java.parser import JavaAnalyzer, JavaClassNode, get_java_analyzer
@@ -29,7 +30,7 @@ class InvalidJavaSyntaxError(Exception):
 
 
 def extract_code_context(
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     project_root: Path,
     module_root: Path | None = None,
     max_helper_depth: int = 2,
@@ -83,7 +84,7 @@ def extract_code_context(
     # This provides necessary context for optimization
     parent_type_name = _get_parent_type_name(function)
     if parent_type_name:
-        type_skeleton = _extract_type_skeleton(source, parent_type_name, function.name, analyzer)
+        type_skeleton = _extract_type_skeleton(source, parent_type_name, function.function_name, analyzer)
         if type_skeleton:
             target_code = _wrap_method_in_type_skeleton(target_code, type_skeleton)
             wrapped_in_skeleton = True
@@ -107,7 +108,7 @@ def extract_code_context(
     if validate_syntax and target_code:
         if not analyzer.validate_syntax(target_code):
             raise InvalidJavaSyntaxError(
-                f"Extracted code for {function.name} is not syntactically valid Java:\n{target_code}"
+                f"Extracted code for {function.function_name} is not syntactically valid Java:\n{target_code}"
             )
 
     return CodeContext(
@@ -120,7 +121,7 @@ def extract_code_context(
     )
 
 
-def _get_parent_type_name(function: FunctionInfo) -> str | None:
+def _get_parent_type_name(function: FunctionToOptimize) -> str | None:
     """Get the parent type name (class, interface, or enum) for a function.
 
     Args:
@@ -558,7 +559,7 @@ def _wrap_method_in_type_skeleton(method_code: str, skeleton: TypeSkeleton) -> s
 _wrap_method_in_class_skeleton = _wrap_method_in_type_skeleton
 
 
-def extract_function_source(source: str, function: FunctionInfo) -> str:
+def extract_function_source(source: str, function: FunctionToOptimize) -> str:
     """Extract the source code of a function from the full file source.
 
     Args:
@@ -572,8 +573,8 @@ def extract_function_source(source: str, function: FunctionInfo) -> str:
     lines = source.splitlines(keepends=True)
 
     # Include Javadoc if present
-    start_line = function.doc_start_line or function.start_line
-    end_line = function.end_line
+    start_line = function.doc_start_line or function.starting_line
+    end_line = function.ending_line
 
     # Convert from 1-indexed to 0-indexed
     start_idx = start_line - 1
@@ -583,7 +584,7 @@ def extract_function_source(source: str, function: FunctionInfo) -> str:
 
 
 def find_helper_functions(
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     project_root: Path,
     max_depth: int = 2,
     analyzer: JavaAnalyzer | None = None,
@@ -624,12 +625,12 @@ def find_helper_functions(
 
                     helpers.append(
                         HelperFunction(
-                            name=func.name,
+                            name=func.function_name,
                             qualified_name=func.qualified_name,
                             file_path=file_path,
                             source_code=func_source,
-                            start_line=func.start_line,
-                            end_line=func.end_line,
+                            start_line=func.starting_line,
+                            end_line=func.ending_line,
                         )
                     )
 
@@ -648,7 +649,7 @@ def find_helper_functions(
 
 
 def _find_same_class_helpers(
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     analyzer: JavaAnalyzer,
 ) -> list[HelperFunction]:
     """Find helper methods in the same class as the target function.
@@ -676,7 +677,7 @@ def _find_same_class_helpers(
         # Find which methods the target function calls
         target_method = None
         for method in methods:
-            if method.name == function.name and method.class_name == function.class_name:
+            if method.name == function.function_name and method.class_name == function.class_name:
                 target_method = method
                 break
 
@@ -689,7 +690,7 @@ def _find_same_class_helpers(
         # Add called methods from the same class as helpers
         for method in methods:
             if (
-                method.name != function.name
+                method.name != function.function_name
                 and method.class_name == function.class_name
                 and method.name in called_methods
             ):
@@ -716,7 +717,7 @@ def _find_same_class_helpers(
 
 def extract_read_only_context(
     source: str,
-    function: FunctionInfo,
+    function: FunctionToOptimize,
     analyzer: JavaAnalyzer,
 ) -> str:
     """Extract read-only context (fields, constants, inner classes).

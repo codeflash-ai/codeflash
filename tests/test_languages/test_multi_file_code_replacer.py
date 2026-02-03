@@ -113,19 +113,20 @@ def test_js_replcement() -> None:
         functions = js_support.discover_functions(main_file)
         target = None
         for func in functions:
-            if func.name == "calculateStats":
+            if func.function_name == "calculateStats":
                 target = func
                 break
         assert target is not None
         func = FunctionToOptimize(
-            function_name=target.name,
+            function_name=target.function_name,
             file_path=target.file_path,
             parents=target.parents,
-            starting_line=target.start_line,
-            ending_line=target.end_line,
-            starting_col=target.start_col,
-            ending_col=target.end_col,
+            starting_line=target.starting_line,
+            ending_line=target.ending_line,
+            starting_col=target.starting_col,
+            ending_col=target.ending_col,
             is_async=target.is_async,
+            is_method=target.is_method,
             language=target.language,
         )
         test_config = TestConfig(

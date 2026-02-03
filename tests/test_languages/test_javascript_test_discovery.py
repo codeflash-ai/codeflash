@@ -1715,7 +1715,7 @@ module.exports = { Calculator };
             functions = js_support.discover_functions(source_file)
 
             # Check qualified names include class
-            add_func = next((f for f in functions if f.name == "add"), None)
+            add_func = next((f for f in functions if f.function_name == "add"), None)
             assert add_func is not None
             assert add_func.class_name == "Calculator"
 

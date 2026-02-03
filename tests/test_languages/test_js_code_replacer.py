@@ -167,12 +167,12 @@ class TestCommonJSToESMConversion:
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
 
-    def test_convert_relative_require_adds_extension(self):
-        """Test that relative imports get .js extension added - exact output."""
+    def test_convert_relative_require_preserves_path(self):
+        """Test that relative imports preserve the original path without adding extension."""
         code = "const { helper } = require('./utils');"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import { helper } from './utils.js';"
+        expected = "import { helper } from './utils';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -182,7 +182,7 @@ class TestCommonJSToESMConversion:
         code = "const myHelper = require('./utils').helperFunction;"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import { helperFunction as myHelper } from './utils.js';"
+        expected = "import { helperFunction as myHelper } from './utils';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -192,7 +192,7 @@ class TestCommonJSToESMConversion:
         code = "const MyClass = require('./class').default;"
         result = convert_commonjs_to_esm(code)
 
-        expected = "import MyClass from './class.js';"
+        expected = "import MyClass from './class';"
         assert result.strip() == expected, (
             f"CJS to ESM conversion failed.\nInput: {code}\nExpected: {expected}\nGot: {result}"
         )
@@ -207,7 +207,7 @@ const path = require('path');"""
         result = convert_commonjs_to_esm(code)
 
         expected = """\
-import { add, subtract } from './math.js';
+import { add, subtract } from './math';
 import lodash from 'lodash';
 import path from 'path';"""
 
@@ -316,7 +316,7 @@ function process() {
         result = ensure_module_system_compatibility(code, ModuleSystem.ES_MODULE)
 
         # Should convert require to import
-        assert "import { helper } from './helpers.js';" in result
+        assert "import { helper } from './helpers';" in result
         assert "require" not in result, f"require should be converted to import. Got:\n{result}"
 
     def test_convert_mixed_code_to_commonjs(self):
@@ -711,7 +711,7 @@ module.exports = { targetFunction, otherFunction };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        target_func = next(f for f in functions if f.name == "targetFunction")
+        target_func = next(f for f in functions if f.function_name == "targetFunction")
 
         optimized_code = """\
 function targetFunction(x) {
@@ -763,7 +763,7 @@ class Calculator {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        add_method = next(f for f in functions if f.name == "add")
+        add_method = next(f for f in functions if f.function_name == "add")
 
         # Optimized version provided in class context
         optimized_code = """\
@@ -826,7 +826,7 @@ class DataProcessor {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_method = next(f for f in functions if f.name == "process")
+        process_method = next(f for f in functions if f.function_name == "process")
 
         optimized_code = """\
 class DataProcessor {
@@ -948,7 +948,7 @@ class Cache {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class Cache {
@@ -1050,7 +1050,7 @@ class ApiClient {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class ApiClient {
@@ -1181,7 +1181,7 @@ class Container<T> {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        get_all_method = next(f for f in functions if f.name == "getAll")
+        get_all_method = next(f for f in functions if f.function_name == "getAll")
 
         optimized_code = """\
 class Container<T> {
@@ -1234,7 +1234,7 @@ function createUser(name: string, email: string): User {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        func = next(f for f in functions if f.name == "createUser")
+        func = next(f for f in functions if f.function_name == "createUser")
 
         optimized_code = """\
 function createUser(name: string, email: string): User {
@@ -1289,7 +1289,7 @@ function processItems(items) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_func = next(f for f in functions if f.name == "processItems")
+        process_func = next(f for f in functions if f.function_name == "processItems")
 
         optimized_code = """\
 function processItems(items) {
@@ -1336,7 +1336,7 @@ class MathUtils {
 
         # First replacement: sum method
         functions = js_support.discover_functions(file_path)
-        sum_method = next(f for f in functions if f.name == "sum")
+        sum_method = next(f for f in functions if f.function_name == "sum")
 
         optimized_sum = """\
 class MathUtils {
@@ -1554,7 +1554,7 @@ module.exports = { main, helper };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 function main(data) {
@@ -1597,7 +1597,7 @@ export function main(data) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 export function main(data) {
@@ -1756,7 +1756,7 @@ export class DataProcessor<T> {
     # find function
     target_func_info = None
     for func in functions:
-        if func.name == target_func and func.parents[0].name == parent_class:
+        if func.function_name == target_func and func.parents[0].name == parent_class:
             target_func_info = func
             break
     assert target_func_info is not None
@@ -1893,3 +1893,252 @@ export class DataProcessor<T> {
 }
 """
 
+
+
+class TestNewVariableFromOptimizedCode:
+    """Tests for handling new variables introduced in optimized code."""
+
+    def test_new_bound_method_variable_added_after_referenced_constant(self, ts_support, temp_project):
+        """Test that a new variable binding a method is added after the constant it references.
+
+        When optimized code introduces a new module-level variable (like `_has`) that
+        references an existing constant (like `CODEFLASH_EMPLOYEE_GITHUB_IDS`), the
+        replacement should:
+        1. Add the new variable after the constant it references
+        2. Replace the function with the optimized version
+        """
+        from codeflash.models.models import CodeStringsMarkdown, CodeString
+
+        original_source = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return CODEFLASH_EMPLOYEE_GITHUB_IDS.has(userId);
+}
+'''
+        file_path = temp_project / "auth.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Optimized code introduces a bound method variable for performance
+        optimized_code = '''const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code,
+                    file_path=Path("auth.ts"),
+                    language="typescript"
+                )
+            ],
+            language="typescript"
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["isCodeflashEmployee"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        assert replaced
+        result = file_path.read_text()
+
+        # Expected result for strict equality check
+        expected_result = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+        assert result == expected_result, (
+            f"Result does not match expected output.\n"
+            f"Expected:\n{expected_result}\n\n"
+            f"Got:\n{result}"
+        )
+
+
+class TestImportedTypeNotDuplicated:
+    """Tests to ensure imported types are not duplicated during code replacement.
+
+    When a type is already imported in the original file, it should NOT be
+    added as a new declaration from the optimized code, even if the optimized
+    code contains the type definition (because it was provided as context).
+
+    See: https://github.com/codeflash-ai/appsmith/pull/20
+    """
+
+    def test_imported_interface_not_added_as_declaration(self, ts_support, temp_project):
+        """Test that an imported interface is not duplicated in the output.
+
+        When TreeNode is imported from another file and the optimized code
+        contains the TreeNode interface definition (from read-only context),
+        the replacement should NOT add the interface to the original file.
+        """
+        from codeflash.models.models import CodeStringsMarkdown, CodeString
+
+        # Original source imports TreeNode
+        original_source = """\
+import type { TreeNode } from "./constants";
+
+export function getNearestAbove(
+    tree: Record<string, TreeNode>,
+    effectedBoxId: string,
+) {
+    const aboves = tree[effectedBoxId].aboves;
+    return aboves.reduce((prev: string[], next: string) => {
+        if (!prev[0]) return [next];
+        let nextBottomRow = tree[next].bottomRow;
+        let prevBottomRow = tree[prev[0]].bottomRow;
+        if (nextBottomRow > prevBottomRow) return [next];
+        return prev;
+    }, []);
+}
+"""
+        file_path = temp_project / "helpers.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Optimized code includes the TreeNode interface (from read-only context)
+        # This simulates what the AI might return when type definitions are included in context
+        optimized_code_with_interface = """\
+interface TreeNode {
+    aboves: string[];
+    belows: string[];
+    topRow: number;
+    bottomRow: number;
+}
+
+export function getNearestAbove(
+    tree: Record<string, TreeNode>,
+    effectedBoxId: string,
+) {
+    const aboves = tree[effectedBoxId].aboves;
+    return aboves.reduce((prev: string[], next: string) => {
+        if (!prev[0]) return [next];
+        // Optimized: cache lookups
+        const nextBottomRow = tree[next].bottomRow;
+        const prevBottomRow = tree[prev[0]].bottomRow;
+        return nextBottomRow > prevBottomRow ? [next] : prev;
+    }, []);
+}
+"""
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code_with_interface,
+                    file_path=Path("helpers.ts"),
+                    language="typescript"
+                )
+            ],
+            language="typescript"
+        )
+
+        replace_function_definitions_for_language(
+            ["getNearestAbove"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        result = file_path.read_text()
+
+        # The TreeNode interface should NOT appear in the result
+        # (it's already imported, so adding it would cause a duplicate)
+        assert "interface TreeNode" not in result, (
+            f"TreeNode interface should NOT be added to the file since it's already imported.\n"
+            f"Result contains:\n{result}"
+        )
+
+        # The import should still be there
+        assert 'import type { TreeNode } from "./constants"' in result, (
+            f"Original import should be preserved.\nResult:\n{result}"
+        )
+
+        # The optimized function should be there
+        assert "// Optimized: cache lookups" in result, (
+            f"Optimized function should be in the result.\nResult:\n{result}"
+        )
+
+        # The result should be valid TypeScript
+        assert ts_support.validate_syntax(result) is True
+
+    def test_multiple_imported_types_not_duplicated(self, ts_support, temp_project):
+        """Test that multiple imported types are not duplicated."""
+        from codeflash.models.models import CodeStringsMarkdown, CodeString
+
+        original_source = """\
+import type { TreeNode, NodeSpace } from "./constants";
+import { MAX_BOX_SIZE } from "./constants";
+
+export function processNode(node: TreeNode, space: NodeSpace): number {
+    return node.topRow + space.top;
+}
+"""
+        file_path = temp_project / "processor.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Optimized code includes both interfaces
+        optimized_code = """\
+interface TreeNode {
+    topRow: number;
+    bottomRow: number;
+}
+
+interface NodeSpace {
+    top: number;
+    bottom: number;
+}
+
+export function processNode(node: TreeNode, space: NodeSpace): number {
+    // Optimized
+    return (node.topRow + space.top) | 0;
+}
+"""
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code,
+                    file_path=Path("processor.ts"),
+                    language="typescript"
+                )
+            ],
+            language="typescript"
+        )
+
+        replace_function_definitions_for_language(
+            ["processNode"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        result = file_path.read_text()
+
+        # Neither interface should be added
+        assert "interface TreeNode" not in result
+        assert "interface NodeSpace" not in result
+
+        # Imports should be preserved
+        assert 'import type { TreeNode, NodeSpace } from "./constants"' in result
+
+        # Optimized code should be there
+        assert "// Optimized" in result
+
+        assert ts_support.validate_syntax(result) is True

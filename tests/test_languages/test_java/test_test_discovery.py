@@ -167,16 +167,17 @@ public class StringUtilsTest {
 """)
 
         # Create source function
-        from codeflash.languages.base import FunctionInfo, Language
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+        from codeflash.languages.base import Language
 
-        func = FunctionInfo(
-            name="reverse",
+        func = FunctionToOptimize(
+            function_name="reverse",
             file_path=tmp_path / "StringUtils.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         tests = find_tests_for_function(func, test_dir)
@@ -246,7 +247,7 @@ public class TestQueryBlob {
         )
 
         # Filter to just bytesToHexString
-        target_functions = [f for f in source_functions if f.name == "bytesToHexString"]
+        target_functions = [f for f in source_functions if f.function_name == "bytesToHexString"]
         assert len(target_functions) == 1, "Should find bytesToHexString function"
 
         # Discover tests

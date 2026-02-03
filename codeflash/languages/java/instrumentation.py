@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import FunctionInfo
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.java.parser import JavaAnalyzer
 
 if TYPE_CHECKING:
@@ -30,16 +30,16 @@ logger = logging.getLogger(__name__)
 
 
 def _get_function_name(func: Any) -> str:
-    """Get the function name from either FunctionInfo or FunctionToOptimize."""
-    if hasattr(func, "name"):
-        return func.name
+    """Get the function name from FunctionToOptimize."""
     if hasattr(func, "function_name"):
         return func.function_name
+    if hasattr(func, "name"):
+        return func.name
     raise AttributeError(f"Cannot get function name from {type(func)}")
 
 
 def _get_qualified_name(func: Any) -> str:
-    """Get the qualified name from either FunctionInfo or FunctionToOptimize."""
+    """Get the qualified name from FunctionToOptimize."""
     if hasattr(func, "qualified_name"):
         return func.qualified_name
     # Build qualified name from function_name and parents
@@ -56,7 +56,7 @@ def _get_qualified_name(func: Any) -> str:
 
 def instrument_for_behavior(
     source: str,
-    functions: Sequence[FunctionInfo],
+    functions: Sequence[FunctionToOptimize],
     analyzer: JavaAnalyzer | None = None,
 ) -> str:
     """Add behavior instrumentation to capture inputs/outputs.
@@ -84,7 +84,7 @@ def instrument_for_behavior(
 
 def instrument_for_benchmarking(
     test_source: str,
-    target_function: FunctionInfo,
+    target_function: FunctionToOptimize,
     analyzer: JavaAnalyzer | None = None,
 ) -> str:
     """Add timing instrumentation to test code.
@@ -109,7 +109,7 @@ def instrument_for_benchmarking(
 def instrument_existing_test(
     test_path: Path,
     call_positions: Sequence,
-    function_to_optimize: Any,  # FunctionInfo or FunctionToOptimize
+    function_to_optimize: Any,  # FunctionToOptimize or FunctionToOptimize
     tests_project_root: Path,
     mode: str,  # "behavior" or "performance"
     analyzer: JavaAnalyzer | None = None,
@@ -573,7 +573,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
 
 def create_benchmark_test(
-    target_function: FunctionInfo,
+    target_function: FunctionToOptimize,
     test_setup_code: str,
     invocation_code: str,
     iterations: int = 1000,

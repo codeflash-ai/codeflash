@@ -18,8 +18,10 @@ from pathlib import Path
 
 import pytest
 
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
+from codeflash.models.function_types import FunctionParent
 from codeflash.languages.java.build_tools import find_maven_executable
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
@@ -76,14 +78,14 @@ public class CalculatorTest {
     }
 }
 """
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=Path("Calculator.java"),
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = instrument_for_benchmarking(source, func)
@@ -108,14 +110,14 @@ public class CalculatorTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -158,14 +160,14 @@ public class CalculatorTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -225,14 +227,14 @@ public class MathTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="calculate",
+        func = FunctionToOptimize(
+            function_name="calculate",
             file_path=tmp_path / "Math.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -317,14 +319,14 @@ public class ServiceTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="call",
+        func = FunctionToOptimize(
+            function_name="call",
             file_path=tmp_path / "Service.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -394,14 +396,14 @@ public class ServiceTest__perfonlyinstrumented {
         """Test handling missing test file."""
         test_file = tmp_path / "NonExistent.java"
 
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=tmp_path / "Calculator.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -562,14 +564,14 @@ class TestCreateBenchmarkTest:
 
     def test_create_benchmark(self):
         """Test creating a benchmark test."""
-        func = FunctionInfo(
-            name="add",
+        func = FunctionToOptimize(
+            function_name="add",
             file_path=Path("Calculator.java"),
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = create_benchmark_test(
@@ -617,14 +619,14 @@ public class TargetBenchmark {
 
     def test_create_benchmark_different_iterations(self):
         """Test benchmark with different iteration count."""
-        func = FunctionInfo(
-            name="multiply",
+        func = FunctionToOptimize(
+            function_name="multiply",
             file_path=Path("Math.java"),
-            start_line=1,
-            end_line=3,
-            parents=(),
+            starting_line=1,
+            ending_line=3,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         result = create_benchmark_test(
@@ -905,14 +907,14 @@ public class BraceTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="process",
+        func = FunctionToOptimize(
+            function_name="process",
             file_path=tmp_path / "Processor.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -998,14 +1000,14 @@ public class ImportTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="size",
+        func = FunctionToOptimize(
+            function_name="size",
             file_path=tmp_path / "Collection.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1068,14 +1070,14 @@ public class EmptyTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="empty",
+        func = FunctionToOptimize(
+            function_name="empty",
             file_path=tmp_path / "Empty.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1134,14 +1136,14 @@ public class NestedTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="process",
+        func = FunctionToOptimize(
+            function_name="process",
             file_path=tmp_path / "Processor.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1210,14 +1212,14 @@ public class InnerClassTest {
 """
         test_file.write_text(source)
 
-        func = FunctionInfo(
-            name="testMethod",
+        func = FunctionToOptimize(
+            function_name="testMethod",
             file_path=tmp_path / "Target.java",
-            start_line=1,
-            end_line=5,
-            parents=(),
+            starting_line=1,
+            ending_line=5,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, result = instrument_existing_test(
@@ -1412,14 +1414,14 @@ public class CalculatorTest {
         test_file = test_dir / "CalculatorTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "Calculator.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1524,14 +1526,14 @@ public class MathUtilsTest {
         test_file = test_dir / "MathUtilsTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="multiply",
+        func_info = FunctionToOptimize(
+            function_name="multiply",
             file_path=src_dir / "MathUtils.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1657,14 +1659,14 @@ public class StringUtilsTest {
         test_file = test_dir / "StringUtilsTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="reverse",
+        func_info = FunctionToOptimize(
+            function_name="reverse",
             file_path=src_dir / "StringUtils.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1759,14 +1761,14 @@ public class BrokenCalcTest {
         test_file = test_dir / "BrokenCalcTest.java"
         test_file.write_text(test_source, encoding="utf-8")
 
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "BrokenCalc.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -1869,14 +1871,14 @@ public class CounterTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for BEHAVIOR mode (this should include SQLite writing)
-        func_info = FunctionInfo(
-            name="increment",
+        func_info = FunctionToOptimize(
+            function_name="increment",
             file_path=src_dir / "Counter.java",
-            start_line=6,
-            end_line=8,
-            parents=(),
+            starting_line=6,
+            ending_line=8,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -2033,14 +2035,14 @@ public class FibonacciTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for performance mode (adds inner loop)
-        func_info = FunctionInfo(
-            name="fib",
+        func_info = FunctionToOptimize(
+            function_name="fib",
             file_path=src_dir / "Fibonacci.java",
-            start_line=4,
-            end_line=7,
-            parents=(),
+            starting_line=4,
+            ending_line=7,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
@@ -2154,14 +2156,14 @@ public class MathOpsTest {
         test_file.write_text(test_source, encoding="utf-8")
 
         # Instrument for performance mode
-        func_info = FunctionInfo(
-            name="add",
+        func_info = FunctionToOptimize(
+            function_name="add",
             file_path=src_dir / "MathOps.java",
-            start_line=4,
-            end_line=6,
-            parents=(),
+            starting_line=4,
+            ending_line=6,
+            parents=[],
             is_method=True,
-            language=Language.JAVA,
+            language="java",
         )
 
         success, instrumented = instrument_existing_test(
