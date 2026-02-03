@@ -222,6 +222,7 @@ def _convert_destructuring_to_imports(names_str: str) -> str:
 
     Returns:
         Import names string with aliases using 'as' syntax
+
     """
     # Split by commas and process each name
     parts = []
