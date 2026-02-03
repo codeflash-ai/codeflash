@@ -258,6 +258,11 @@ class TreeSitterAnalyzer:
                 if func_info.is_arrow and not include_arrow_functions:
                     should_include = False
 
+                # Skip arrow functions that are object properties (e.g., { foo: () => {} })
+                # These are not standalone functions - they're values in object literals
+                if func_info.is_arrow and node.parent and node.parent.type == "pair":
+                    should_include = False
+
                 if should_include:
                     functions.append(func_info)
 
@@ -464,6 +469,7 @@ class TreeSitterAnalyzer:
             source_bytes: Source code bytes.
             imports: List to append found imports to.
             in_function: Whether we're currently inside a function/method body.
+
         """
         # Track when we enter function/method bodies
         # These node types contain function/method bodies where require() should not be treated as imports
