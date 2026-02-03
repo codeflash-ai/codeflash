@@ -15,13 +15,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
-    from codeflash.languages.treesitter_utils import ExportInfo, ImportInfo, TreeSitterAnalyzer
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +70,13 @@ class ReferenceFinder:
     Example usage:
         ```python
         from codeflash.languages.javascript.find_references import ReferenceFinder
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-        finder = ReferenceFinder(project_root=Path("/my/project"))
-        references = finder.find_references(
-            function_name="myHelper",
-            source_file=Path("/my/project/src/utils.ts")
+        func = FunctionToOptimize(
+            function_name="myHelper", file_path=Path("/my/project/src/utils.ts"), parents=[], language="javascript"
         )
+        finder = ReferenceFinder(project_root=Path("/my/project"))
+        references = finder.find_references(func)
         for ref in references:
             print(f"{ref.file_path}:{ref.line} - {ref.context}")
         ```
@@ -96,27 +99,23 @@ class ReferenceFinder:
         self._file_cache: dict[Path, str] = {}
 
     def find_references(
-        self,
-        function_name: str,
-        source_file: Path,
-        include_definition: bool = False,
-        max_files: int = 1000,
-        class_name: str | None = None,
+        self, function_to_optimize: FunctionToOptimize, include_definition: bool = False, max_files: int = 1000
     ) -> list[Reference]:
         """Find all references to a function across the project.
 
         Args:
-            function_name: Name of the function to find references for.
-            source_file: Path to the file where the function is defined.
+            function_to_optimize: The function to find references for.
             include_definition: Whether to include the function definition itself.
             max_files: Maximum number of files to search (prevents runaway searches).
-            class_name: For class methods, the name of the containing class.
 
         Returns:
             List of Reference objects describing each call site.
 
         """
         from codeflash.languages.treesitter_utils import get_analyzer_for_file
+
+        function_name = function_to_optimize.function_name
+        source_file = function_to_optimize.file_path
 
         references: list[Reference] = []
         context = ReferenceSearchContext(max_files=max_files)
@@ -128,7 +127,7 @@ class ReferenceFinder:
             return references
 
         analyzer = get_analyzer_for_file(source_file)
-        exported = self._analyze_exports(function_name, source_file, source_code, analyzer, class_name)
+        exported = self._analyze_exports(function_to_optimize, source_file, source_code, analyzer)
 
         if not exported:
             logger.debug("Function %s is not exported from %s", function_name, source_file)
@@ -179,9 +178,7 @@ class ReferenceFinder:
             # This handles the case where a file re-exports from our source file
             if file_path not in checked_for_reexports:
                 checked_for_reexports.add(file_path)
-                reexport_refs = self._find_reexports_direct(
-                    file_path, file_code, source_file, exported, file_analyzer
-                )
+                reexport_refs = self._find_reexports_direct(file_path, file_code, source_file, exported, file_analyzer)
                 references.extend(reexport_refs)
 
                 # Track re-export files for later searching
@@ -192,10 +189,7 @@ class ReferenceFinder:
         for reexport_file, reexport_name in reexport_files:
             # Create a new ExportedFunction for the re-exported function
             reexported = ExportedFunction(
-                function_name=reexport_name,
-                export_name=reexport_name,
-                is_default=False,
-                file_path=reexport_file,
+                function_name=reexport_name, export_name=reexport_name, is_default=False, file_path=reexport_file
             )
 
             # Search for imports to the re-export file
@@ -252,28 +246,24 @@ class ReferenceFinder:
         return unique_refs
 
     def _analyze_exports(
-        self,
-        function_name: str,
-        file_path: Path,
-        source_code: str,
-        analyzer: TreeSitterAnalyzer,
-        class_name: str | None = None,
+        self, function_to_optimize: FunctionToOptimize, file_path: Path, source_code: str, analyzer: TreeSitterAnalyzer
     ) -> ExportedFunction | None:
         """Analyze how a function is exported from its file.
 
         For class methods, also checks if the containing class is exported.
 
         Args:
-            function_name: Name of the function to check.
+            function_to_optimize: The function to check.
             file_path: Path to the source file.
             source_code: Source code content.
             analyzer: TreeSitterAnalyzer instance.
-            class_name: For class methods, the name of the containing class.
 
         Returns:
             ExportedFunction if the function is exported, None otherwise.
 
         """
+        function_name = function_to_optimize.function_name
+        class_name = function_to_optimize.class_name
         is_exported, export_name = analyzer.is_function_exported(source_code, function_name, class_name)
 
         if not is_exported:
@@ -287,11 +277,7 @@ class ReferenceFinder:
         )
 
     def _find_matching_import(
-        self,
-        imports: list[ImportInfo],
-        source_file: Path,
-        importing_file: Path,
-        exported: ExportedFunction,
+        self, imports: list[ImportInfo], source_file: Path, importing_file: Path, exported: ExportedFunction
     ) -> tuple[str, ImportInfo] | None:
         """Find if any import in a file imports the target function.
 
@@ -379,9 +365,7 @@ class ReferenceFinder:
         # Handle namespace imports (e.g., "utils.helper")
         if "." in search_name:
             namespace, member = search_name.split(".", 1)
-            self._find_member_calls(
-                tree.root_node, source_bytes, lines, file_path, namespace, member, references, None
-            )
+            self._find_member_calls(tree.root_node, source_bytes, lines, file_path, namespace, member, references, None)
         else:
             # Find direct calls and other reference types
             self._find_identifier_references(
@@ -414,8 +398,6 @@ class ReferenceFinder:
             current_function: Name of the containing function (for context).
 
         """
-        from codeflash.languages.treesitter_utils import TreeSitterAnalyzer
-
         # Track current function context
         new_current_function = current_function
         if node.type in ("function_declaration", "method_definition"):
@@ -435,9 +417,7 @@ class ReferenceFinder:
             if func_node and func_node.type == "identifier":
                 name = source_bytes[func_node.start_byte : func_node.end_byte].decode("utf8")
                 if name == search_name:
-                    ref = self._create_reference(
-                        file_path, func_node, lines, "call", search_name, current_function
-                    )
+                    ref = self._create_reference(file_path, func_node, lines, "call", search_name, current_function)
                     references.append(ref)
 
         # Check for identifiers used as callbacks or passed as arguments
@@ -448,9 +428,7 @@ class ReferenceFinder:
                 # Determine reference type based on context
                 ref_type = self._determine_reference_type(node, parent, source_bytes)
                 if ref_type:
-                    ref = self._create_reference(
-                        file_path, node, lines, ref_type, search_name, current_function
-                    )
+                    ref = self._create_reference(file_path, node, lines, ref_type, search_name, current_function)
                     references.append(ref)
 
         # Recurse into children
@@ -803,10 +781,7 @@ class ReferenceFinder:
 
         """
         path_str = str(file_path)
-        for pattern in self.exclude_patterns:
-            if pattern in path_str:
-                return True
-        return False
+        return any(pattern in path_str for pattern in self.exclude_patterns)
 
     def _read_file(self, file_path: Path) -> str | None:
         """Read a file's contents with caching.
@@ -831,22 +806,16 @@ class ReferenceFinder:
 
 
 def find_references(
-    function_name: str,
-    source_file: Path,
-    project_root: Path | None = None,
-    max_files: int = 1000,
-    class_name: str | None = None,
+    function_to_optimize: FunctionToOptimize, project_root: Path | None = None, max_files: int = 1000
 ) -> list[Reference]:
     """Convenience function to find all references to a function.
 
     This is a simple wrapper around ReferenceFinder for common use cases.
 
     Args:
-        function_name: Name of the function to find references for.
-        source_file: Path to the file where the function is defined.
+        function_to_optimize: The function to find references for.
         project_root: Root directory of the project. If None, uses source_file's parent.
         max_files: Maximum number of files to search.
-        class_name: For class methods, the name of the containing class.
 
     Returns:
         List of Reference objects describing each call site.
@@ -855,19 +824,19 @@ def find_references(
         ```python
         from pathlib import Path
         from codeflash.languages.javascript.find_references import find_references
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 
-        refs = find_references(
-            function_name="myHelper",
-            source_file=Path("/my/project/src/utils.ts"),
-            project_root=Path("/my/project")
+        func = FunctionToOptimize(
+            function_name="myHelper", file_path=Path("/my/project/src/utils.ts"), parents=[], language="javascript"
         )
+        refs = find_references(func, project_root=Path("/my/project"))
         for ref in refs:
             print(f"{ref.file_path}:{ref.line}:{ref.column} - {ref.reference_type}")
         ```
 
     """
     if project_root is None:
-        project_root = source_file.parent
+        project_root = function_to_optimize.file_path.parent
 
     finder = ReferenceFinder(project_root)
-    return finder.find_references(function_name, source_file, max_files=max_files, class_name=class_name)
+    return finder.find_references(function_to_optimize, max_files=max_files)

@@ -52,7 +52,7 @@ def add(a, b):
             functions = python_support.discover_functions(Path(f.name))
 
             assert len(functions) == 1
-            assert functions[0].name == "add"
+            assert functions[0].function_name == "add"
             assert functions[0].language == Language.PYTHON
 
     def test_discover_multiple_functions(self, python_support):
@@ -73,7 +73,7 @@ def multiply(a, b):
             functions = python_support.discover_functions(Path(f.name))
 
             assert len(functions) == 3
-            names = {func.name for func in functions}
+            names = {func.function_name for func in functions}
             assert names == {"add", "subtract", "multiply"}
 
     def test_discover_function_with_no_return_excluded(self, python_support):
@@ -92,7 +92,7 @@ def without_return():
 
             # Only the function with return should be discovered
             assert len(functions) == 1
-            assert functions[0].name == "with_return"
+            assert functions[0].function_name == "with_return"
 
     def test_discover_class_methods(self, python_support):
         """Test discovering class methods."""
@@ -130,8 +130,8 @@ def sync_function():
 
             assert len(functions) == 2
 
-            async_func = next(f for f in functions if f.name == "fetch_data")
-            sync_func = next(f for f in functions if f.name == "sync_function")
+            async_func = next(f for f in functions if f.function_name == "fetch_data")
+            sync_func = next(f for f in functions if f.function_name == "sync_function")
 
             assert async_func.is_async is True
             assert sync_func.is_async is False
@@ -151,11 +151,11 @@ def outer():
 
             # Both outer and inner should be discovered
             assert len(functions) == 2
-            names = {func.name for func in functions}
+            names = {func.function_name for func in functions}
             assert names == {"outer", "inner"}
 
             # Inner should have outer as parent
-            inner = next(f for f in functions if f.name == "inner")
+            inner = next(f for f in functions if f.function_name == "inner")
             assert len(inner.parents) == 1
             assert inner.parents[0].name == "outer"
             assert inner.parents[0].type == "FunctionDef"
@@ -174,7 +174,7 @@ class Utils:
             functions = python_support.discover_functions(Path(f.name))
 
             assert len(functions) == 1
-            assert functions[0].name == "helper"
+            assert functions[0].function_name == "helper"
             assert functions[0].class_name == "Utils"
 
     def test_discover_with_filter_exclude_async(self, python_support):
@@ -193,7 +193,7 @@ def sync_func():
             functions = python_support.discover_functions(Path(f.name), criteria)
 
             assert len(functions) == 1
-            assert functions[0].name == "sync_func"
+            assert functions[0].function_name == "sync_func"
 
     def test_discover_with_filter_exclude_methods(self, python_support):
         """Test filtering out class methods."""
@@ -212,7 +212,7 @@ class MyClass:
             functions = python_support.discover_functions(Path(f.name), criteria)
 
             assert len(functions) == 1
-            assert functions[0].name == "standalone"
+            assert functions[0].function_name == "standalone"
 
     def test_discover_line_numbers(self, python_support):
         """Test that line numbers are correctly captured."""
@@ -229,13 +229,13 @@ def func2():
 
             functions = python_support.discover_functions(Path(f.name))
 
-            func1 = next(f for f in functions if f.name == "func1")
-            func2 = next(f for f in functions if f.name == "func2")
+            func1 = next(f for f in functions if f.function_name == "func1")
+            func2 = next(f for f in functions if f.function_name == "func2")
 
-            assert func1.start_line == 1
-            assert func1.end_line == 2
-            assert func2.start_line == 4
-            assert func2.end_line == 7
+            assert func1.starting_line == 1
+            assert func1.ending_line == 2
+            assert func2.starting_line == 4
+            assert func2.ending_line == 7
 
     def test_discover_invalid_file_returns_empty(self, python_support):
         """Test that invalid Python file returns empty list."""
@@ -263,7 +263,7 @@ class TestReplaceFunction:
 def multiply(a, b):
     return a * b
 """
-        func = FunctionInfo(name="add", file_path=Path("/test.py"), start_line=1, end_line=2)
+        func = FunctionInfo(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def add(a, b):
     # Optimized
     return (a + b) | 0
@@ -287,7 +287,7 @@ def other():
 
 # Footer
 """
-        func = FunctionInfo(name="target", file_path=Path("/test.py"), start_line=4, end_line=5)
+        func = FunctionInfo(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
         new_code = """def target():
     return 42
 """
@@ -306,11 +306,11 @@ def other():
         return a + b
 """
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.py"),
-            start_line=2,
-            end_line=3,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=2,
+            ending_line=3,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         # New code has no indentation
         new_code = """def add(self, a, b):
@@ -331,7 +331,7 @@ def other():
 def second():
     return 2
 """
-        func = FunctionInfo(name="first", file_path=Path("/test.py"), start_line=1, end_line=2)
+        func = FunctionInfo(function_name="first", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def first():
     return 100
 """
@@ -348,7 +348,7 @@ def second():
 def last():
     return 999
 """
-        func = FunctionInfo(name="last", file_path=Path("/test.py"), start_line=4, end_line=5)
+        func = FunctionInfo(function_name="last", file_path=Path("/test.py"), starting_line=4, ending_line=5)
         new_code = """def last():
     return 1000
 """
@@ -362,7 +362,7 @@ def last():
         source = """def only():
     return 42
 """
-        func = FunctionInfo(name="only", file_path=Path("/test.py"), start_line=1, end_line=2)
+        func = FunctionInfo(function_name="only", file_path=Path("/test.py"), starting_line=1, ending_line=2)
         new_code = """def only():
     return 100
 """
@@ -474,7 +474,7 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(name="add", file_path=file_path, start_line=1, end_line=2)
+            func = FunctionInfo(function_name="add", file_path=file_path, starting_line=1, ending_line=2)
 
             context = python_support.extract_code_context(func, file_path.parent, file_path.parent)
 
@@ -503,7 +503,7 @@ class TestIntegration:
             functions = python_support.discover_functions(file_path)
             assert len(functions) == 1
             func = functions[0]
-            assert func.name == "fibonacci"
+            assert func.function_name == "fibonacci"
 
             # Replace
             optimized_code = """def fibonacci(n):
