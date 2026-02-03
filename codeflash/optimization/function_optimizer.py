@@ -1776,6 +1776,21 @@ class FunctionOptimizer:
                 return Failure(f"/!\\ NO TESTS GENERATED for {self.function_to_optimize.function_name}")
 
         function_to_concolic_tests, concolic_test_str = future_concolic_tests.result()
+
+        # When --no-gen-tests is set, check if there are any tests available (existing + concolic)
+        if self.args.no_gen_tests:
+            func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
+            has_existing_tests = bool(self.function_to_tests.get(func_qualname))
+            has_concolic_tests = bool(function_to_concolic_tests.get(func_qualname))
+            if not has_existing_tests and not has_concolic_tests:
+                logger.warning(
+                    f"No existing tests found for {self.function_to_optimize.function_name} and --no-gen-tests is set"
+                )
+                return Failure(
+                    f"No existing tests found for '{self.function_to_optimize.function_name}'. "
+                    f"Cannot optimize without tests when --no-gen-tests is set."
+                )
+
         count_tests = len(tests)
         if concolic_test_str:
             count_tests += 1
