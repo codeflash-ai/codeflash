@@ -71,6 +71,8 @@ if (!process[PERF_STATE_KEY]) {
         shouldStop: false,         // Flag to stop all further looping
         currentBatch: 0,           // Current batch number (incremented by runner)
         invocationLoopCounts: {},  // Track loops per invocation: {invocationKey: loopCount}
+        invocationRuntimes: {},    // Track runtimes per invocation for stability: {invocationKey: [runtimes]}
+        stableInvocations: {},     // Invocations that have reached stability: {invocationKey: true}
     };
 }
 const sharedPerfState = process[PERF_STATE_KEY];
@@ -657,9 +659,23 @@ function capturePerf(funcName, lineId, fn, ...args) {
         ? (hasExternalLoopRunner ? PERF_BATCH_SIZE : PERF_LOOP_COUNT)
         : 1;
 
+    // Initialize runtime tracking for this invocation if needed
+    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
+        sharedPerfState.invocationRuntimes[invocationKey] = [];
+    }
+    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
+
+    // Calculate stability window size based on collected runtimes
+    const getStabilityWindow = () => Math.max(PERF_MIN_LOOPS, Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
         if (shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+
+        // Check if this invocation has already reached stability
+        if (PERF_STABILITY_CHECK && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
@@ -687,23 +703,17 @@ function capturePerf(funcName, lineId, fn, ...args) {
             const endTime = getTimeNs();
             durationNs = getDurationNs(startTime, endTime);
 
-            // Handle promises - for async functions, run once and return
+            // Handle promises - for async functions, we need to handle looping differently
+            // Since we can't use await in the sync loop, delegate to async helper
             if (lastReturnValue instanceof Promise) {
-                return lastReturnValue.then(
-                    (resolved) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        sharedPerfState.totalLoopsCompleted++;
-                        return resolved;
-                    },
-                    (err) => {
-                        const asyncEndTime = getTimeNs();
-                        const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
-                        sharedPerfState.totalLoopsCompleted++;
-                        throw err;
-                    }
+                // For async functions, delegate to the async looping helper
+                // Pass along all the context needed for continued looping
+                return _capturePerfAsync(
+                    funcName, lineId, fn, args,
+                    lastReturnValue, startTime, testStdoutTag,
+                    safeModulePath, testClassName, safeTestFunctionName,
+                    invocationKey, runtimes, batchSize, batchIndex,
+                    shouldLoop, getStabilityWindow
                 );
             }
 
@@ -719,6 +729,20 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Update shared loop counter
         sharedPerfState.totalLoopsCompleted++;
 
+        // Track runtime for stability check (convert to microseconds)
+        if (durationNs > 0) {
+            runtimes.push(durationNs / 1000);
+        }
+
+        // Check stability after accumulating enough samples
+        if (PERF_STABILITY_CHECK && runtimes.length >= PERF_MIN_LOOPS) {
+            const window = getStabilityWindow();
+            if (shouldStopStability(runtimes, window, PERF_MIN_LOOPS)) {
+                sharedPerfState.stableInvocations[invocationKey] = true;
+                break;
+            }
+        }
+
         // If we had an error, stop looping
         if (lastError) {
             break;
@@ -732,6 +756,99 @@ function capturePerf(funcName, lineId, fn, ...args) {
         return fn(...args);
     }
 
+    return lastReturnValue;
+}
+
+/**
+ * Async helper for capturePerf to handle async function looping.
+ * This function awaits promises and continues the benchmark loop properly.
+ *
+ * @private
+ */
+async function _capturePerfAsync(
+    funcName, lineId, fn, args,
+    firstPromise, firstStartTime, firstTestStdoutTag,
+    safeModulePath, testClassName, safeTestFunctionName,
+    invocationKey, runtimes, batchSize, startBatchIndex,
+    shouldLoop, getStabilityWindow
+) {
+    let lastReturnValue;
+    let lastError = null;
+
+    // Handle the first promise that was already started
+    try {
+        lastReturnValue = await firstPromise;
+        const asyncEndTime = getTimeNs();
+        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
+        console.log(`!######${firstTestStdoutTag}:${asyncDurationNs}######!`);
+        sharedPerfState.totalLoopsCompleted++;
+        if (asyncDurationNs > 0) {
+            runtimes.push(asyncDurationNs / 1000);
+        }
+    } catch (err) {
+        const asyncEndTime = getTimeNs();
+        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
+        console.log(`!######${firstTestStdoutTag}:${asyncDurationNs}######!`);
+        sharedPerfState.totalLoopsCompleted++;
+        throw err;
+    }
+
+    // Continue looping for remaining iterations
+    for (let batchIndex = startBatchIndex + 1; batchIndex < batchSize; batchIndex++) {
+        // Check shared time limit
+        if (shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+
+        // Check if this invocation has already reached stability
+        if (PERF_STABILITY_CHECK && sharedPerfState.stableInvocations[invocationKey]) {
+            break;
+        }
+
+        // Get the global loop index for this invocation
+        const loopIndex = getInvocationLoopIndex(invocationKey);
+
+        // Check if we've exceeded max loops
+        if (loopIndex > PERF_LOOP_COUNT) {
+            break;
+        }
+
+        // Get invocation index for the timing marker
+        const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
+        const invocationIndex = getInvocationIndex(testId);
+        const invocationId = `${lineId}_${invocationIndex}`;
+
+        // Format stdout tag
+        const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
+
+        try {
+            const startTime = getTimeNs();
+            lastReturnValue = await fn(...args);
+            const endTime = getTimeNs();
+            const durationNs = getDurationNs(startTime, endTime);
+
+            console.log(`!######${testStdoutTag}:${durationNs}######!`);
+            sharedPerfState.totalLoopsCompleted++;
+
+            if (durationNs > 0) {
+                runtimes.push(durationNs / 1000);
+            }
+
+            // Check stability
+            if (PERF_STABILITY_CHECK && runtimes.length >= PERF_MIN_LOOPS) {
+                const window = getStabilityWindow();
+                if (shouldStopStability(runtimes, window, PERF_MIN_LOOPS)) {
+                    sharedPerfState.stableInvocations[invocationKey] = true;
+                    break;
+                }
+            }
+        } catch (e) {
+            lastError = e;
+            break;
+        }
+    }
+
+    if (lastError) throw lastError;
     return lastReturnValue;
 }
 
@@ -790,6 +907,8 @@ function resetPerfState() {
     sharedPerfState.startTime = null;
     sharedPerfState.totalLoopsCompleted = 0;
     sharedPerfState.shouldStop = false;
+    sharedPerfState.invocationRuntimes = {};
+    sharedPerfState.stableInvocations = {};
 }
 
 /**

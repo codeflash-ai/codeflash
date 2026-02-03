@@ -24,6 +24,8 @@
  * NOTE: This runner requires jest-runner to be installed in your project.
  *       It is a Jest-specific feature and does not work with Vitest.
  *       For Vitest projects, capturePerf() does all loops internally in a single call.
+ *
+ * Compatibility: Works with Jest 29.x and Jest 30.x
  */
 
 'use strict';
@@ -31,15 +33,51 @@
 const { createRequire } = require('module');
 const path = require('path');
 
-// Try to load jest-runner - it's a peer dependency that must be installed by the user
+// Try to load jest-runner from the PROJECT's node_modules, not from codeflash package
+// This ensures we use the same version of jest-runner that the project uses
+let TestRunner;
 let runTest;
 let jestRunnerAvailable = false;
+let jestVersion = 0;
 
 try {
-    const jestRunnerPath = require.resolve('jest-runner');
+    // Resolve jest-runner from the current working directory (project root)
+    // This is important because the codeflash package may bundle a different version
+    const projectRoot = process.cwd();
+    const projectRequire = createRequire(path.join(projectRoot, 'node_modules', 'package.json'));
+
+    let jestRunnerPath;
+    try {
+        // First try to resolve from project's node_modules
+        jestRunnerPath = projectRequire.resolve('jest-runner');
+    } catch (e) {
+        // Fall back to default resolution (codeflash's bundled version)
+        jestRunnerPath = require.resolve('jest-runner');
+    }
+
     const internalRequire = createRequire(jestRunnerPath);
-    runTest = internalRequire('./runTest').default;
-    jestRunnerAvailable = true;
+
+    // Try to get the TestRunner class (Jest 30+)
+    const jestRunner = internalRequire(jestRunnerPath);
+    TestRunner = jestRunner.default || jestRunner.TestRunner;
+
+    if (TestRunner && TestRunner.prototype && typeof TestRunner.prototype.runTests === 'function') {
+        // Jest 30+ - use TestRunner class
+        jestVersion = 30;
+        jestRunnerAvailable = true;
+    } else {
+        // Try Jest 29 style import
+        try {
+            runTest = internalRequire('./runTest').default;
+            if (typeof runTest === 'function') {
+                jestVersion = 29;
+                jestRunnerAvailable = true;
+            }
+        } catch (e29) {
+            // Neither Jest 29 nor 30 style import worked
+            jestRunnerAvailable = false;
+        }
+    }
 } catch (e) {
     // jest-runner not installed - this is expected for Vitest projects
     // The runner will throw a helpful error if someone tries to use it without jest-runner
@@ -106,6 +144,9 @@ function deepCopy(obj, seen = new WeakMap()) {
 
 /**
  * Codeflash Loop Runner with Batched Looping
+ *
+ * For Jest 30+, extends the TestRunner class directly.
+ * For Jest 29, uses the runTest function import.
  */
 class CodeflashLoopRunner {
     constructor(globalConfig, context) {
@@ -120,6 +161,11 @@ class CodeflashLoopRunner {
         this._globalConfig = globalConfig;
         this._context = context || {};
         this._eventEmitter = new SimpleEventEmitter();
+
+        // For Jest 30+, create an instance of the base TestRunner for delegation
+        if (jestVersion >= 30 && TestRunner) {
+            this._baseRunner = new TestRunner(globalConfig, context);
+        }
     }
 
     get supportsEventEmitters() {
@@ -143,29 +189,20 @@ class CodeflashLoopRunner {
         let hasFailure = false;
         let allConsoleOutput = '';
 
-        // Import shared state functions from capture module
-        // We need to do this dynamically since the module may be reloaded
-        let checkSharedTimeLimit;
-        let incrementBatch;
-        try {
-            const capture = require('codeflash');
-            checkSharedTimeLimit = capture.checkSharedTimeLimit;
-            incrementBatch = capture.incrementBatch;
-        } catch (e) {
-            // Fallback if codeflash module not available
-            checkSharedTimeLimit = () => {
-                const elapsed = Date.now() - startTime;
-                return elapsed >= TARGET_DURATION_MS && batchCount >= MIN_BATCHES;
-            };
-            incrementBatch = () => {};
-        }
+        // Time limit check - must use local time tracking because Jest runs tests
+        // in worker processes, so shared state from capture.js isn't accessible here
+        const checkTimeLimit = () => {
+            const elapsed = Date.now() - startTime;
+            return elapsed >= TARGET_DURATION_MS && batchCount >= MIN_BATCHES;
+        };
 
         // Batched looping: run all test files multiple times
         while (batchCount < MAX_BATCHES) {
             batchCount++;
 
             // Check time limit BEFORE each batch
-            if (batchCount > MIN_BATCHES && checkSharedTimeLimit()) {
+            if (batchCount > MIN_BATCHES && checkTimeLimit()) {
+                console.log(`[codeflash] Time limit reached after ${batchCount - 1} batches (${Date.now() - startTime}ms elapsed)`);
                 break;
             }
 
@@ -174,13 +211,11 @@ class CodeflashLoopRunner {
                 break;
             }
 
-            // Increment batch counter in shared state and set env var
-            // The env var persists across Jest module resets, ensuring continuous loop indices
-            incrementBatch();
+            // Set env var for batch number - persists across Jest module resets
             process.env.CODEFLASH_PERF_CURRENT_BATCH = String(batchCount);
 
             // Run all test files in this batch
-            const batchResult = await this._runAllTestsOnce(tests, watcher);
+            const batchResult = await this._runAllTestsOnce(tests, watcher, options);
             allConsoleOutput += batchResult.consoleOutput;
 
             if (batchResult.hasFailure) {
@@ -189,7 +224,8 @@ class CodeflashLoopRunner {
             }
 
             // Check time limit AFTER each batch
-            if (checkSharedTimeLimit()) {
+            if (checkTimeLimit()) {
+                console.log(`[codeflash] Time limit reached after ${batchCount} batches (${Date.now() - startTime}ms elapsed)`);
                 break;
             }
         }
@@ -207,8 +243,74 @@ class CodeflashLoopRunner {
 
     /**
      * Run all test files once (one batch).
+     * Uses different approaches for Jest 29 vs Jest 30.
      */
-    async _runAllTestsOnce(tests, watcher) {
+    async _runAllTestsOnce(tests, watcher, options) {
+        if (jestVersion >= 30) {
+            return this._runAllTestsOnceJest30(tests, watcher, options);
+        } else {
+            return this._runAllTestsOnceJest29(tests, watcher);
+        }
+    }
+
+    /**
+     * Jest 30+ implementation - delegates to base TestRunner and collects results.
+     */
+    async _runAllTestsOnceJest30(tests, watcher, options) {
+        let hasFailure = false;
+        let allConsoleOutput = '';
+
+        // For Jest 30, we need to collect results through event listeners
+        const resultsCollector = [];
+
+        // Subscribe to events from the base runner
+        const unsubscribeSuccess = this._baseRunner.on('test-file-success', (testData) => {
+            const [test, result] = testData;
+            resultsCollector.push({ test, result, success: true });
+
+            if (result && result.console && Array.isArray(result.console)) {
+                allConsoleOutput += result.console.map(e => e.message || '').join('\n') + '\n';
+            }
+
+            if (result && result.numFailingTests > 0) {
+                hasFailure = true;
+            }
+
+            // Forward to our event emitter
+            this._eventEmitter.emit('test-file-success', testData);
+        });
+
+        const unsubscribeFailure = this._baseRunner.on('test-file-failure', (testData) => {
+            const [test, error] = testData;
+            resultsCollector.push({ test, error, success: false });
+            hasFailure = true;
+
+            // Forward to our event emitter
+            this._eventEmitter.emit('test-file-failure', testData);
+        });
+
+        const unsubscribeStart = this._baseRunner.on('test-file-start', (testData) => {
+            // Forward to our event emitter
+            this._eventEmitter.emit('test-file-start', testData);
+        });
+
+        try {
+            // Run tests using the base runner (always serial for benchmarking)
+            await this._baseRunner.runTests(tests, watcher, { ...options, serial: true });
+        } finally {
+            // Cleanup subscriptions
+            if (typeof unsubscribeSuccess === 'function') unsubscribeSuccess();
+            if (typeof unsubscribeFailure === 'function') unsubscribeFailure();
+            if (typeof unsubscribeStart === 'function') unsubscribeStart();
+        }
+
+        return { consoleOutput: allConsoleOutput, hasFailure };
+    }
+
+    /**
+     * Jest 29 implementation - uses direct runTest import.
+     */
+    async _runAllTestsOnceJest29(tests, watcher) {
         let hasFailure = false;
         let allConsoleOutput = '';
 
