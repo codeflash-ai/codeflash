@@ -301,32 +301,38 @@ def normalize_java_code(source: str) -> str:
         if in_block_comment:
             if "*/" in line:
                 in_block_comment = False
-                line = line[line.index("*/") + 2 :]
+                line = line[line.index("*/") + 2:]
             else:
                 continue
 
         # Remove line comments
         if "//" in line:
-            # Find // that's not inside a string
-            in_string = False
-            escape_next = False
-            comment_start = -1
-            for i, char in enumerate(line):
-                if escape_next:
-                    escape_next = False
-                    continue
-                if char == "\\":
-                    escape_next = True
-                    continue
-                if char == '"' and not in_string:
-                    in_string = True
-                elif char == '"' and in_string:
-                    in_string = False
-                elif not in_string and i < len(line) - 1 and line[i : i + 2] == "//":
-                    comment_start = i
-                    break
-            if comment_start >= 0:
-                line = line[:comment_start]
+            # Quick check: if no quotes before //, we can safely truncate
+            comment_pos = line.find("//")
+            prefix = line[:comment_pos]
+            if '"' not in prefix:
+                line = prefix
+            else:
+                # Find // that's not inside a string
+                in_string = False
+                escape_next = False
+                comment_start = -1
+                for i, char in enumerate(line):
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    if char == "\\":
+                        escape_next = True
+                        continue
+                    if char == '"' and not in_string:
+                        in_string = True
+                    elif char == '"' and in_string:
+                        in_string = False
+                    elif not in_string and i < len(line) - 1 and line[i : i + 2] == "//":
+                        comment_start = i
+                        break
+                if comment_start >= 0:
+                    line = line[:comment_start]
 
         # Handle start of block comments
         if "/*" in line:
@@ -334,7 +340,7 @@ def normalize_java_code(source: str) -> str:
             if "*/" in line[start_idx:]:
                 # Block comment on single line
                 end_idx = line.index("*/", start_idx)
-                line = line[:start_idx] + line[end_idx + 2 :]
+                line = line[:start_idx] + line[end_idx + 2:]
             else:
                 in_block_comment = True
                 line = line[:start_idx]
