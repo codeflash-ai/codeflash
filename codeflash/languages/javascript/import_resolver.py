@@ -301,20 +301,11 @@ class ImportResolver:
 
         """
         # Relative imports are not external
-        if module_path.startswith("."):
-            return False
-
         # Absolute imports (starting with /) are project-internal
-        if module_path.startswith("/"):
-            return False
-
         # @/ is a common path alias in Next.js/TypeScript projects mapping to project root
         # These are internal imports, not external npm packages
-        if module_path.startswith("@/"):
-            return False
-
         # ~/ is another common path alias pattern
-        if module_path.startswith("~/"):
+        if module_path.startswith((".", "/", "@/", "~/")):
             return False
 
         # Bare imports without ./ or ../ are external packages
