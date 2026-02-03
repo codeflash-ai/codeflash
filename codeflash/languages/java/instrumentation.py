@@ -467,8 +467,11 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     result = []
     i = 0
     iteration_counter = 0
+    n_lines = len(lines)
+    # prefix used when indenting original body lines into the inner try block
+    body_prefix = " " * 8  # 8 extra spaces for inner loop + try
 
-    while i < len(lines):
+    while i < n_lines:
         line = lines[i]
         stripped = line.strip()
 
@@ -478,21 +481,21 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             i += 1
 
             # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
+            while i < n_lines and lines[i].strip().startswith("@"):
                 result.append(lines[i])
                 i += 1
 
             # Now find the method signature and opening brace
             method_lines = []
-            while i < len(lines):
+            while i < n_lines:
                 method_lines.append(lines[i])
                 if "{" in lines[i]:
                     break
                 i += 1
 
             # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
+            # extend is safe and slightly faster than appending in a loop
+            result.extend(method_lines)
             i += 1
 
             # We're now inside the method body
@@ -528,14 +531,26 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
             brace_depth = 1
             body_lines = []
 
-            while i < len(lines) and brace_depth > 0:
+            while i < n_lines and brace_depth > 0:
                 body_line = lines[i]
                 # Count braces (simple approach - doesn't handle strings/comments perfectly)
+                # Fast path: if no braces in the line, we can skip character scanning
+                if "{" not in body_line and "}" not in body_line:
+                    body_lines.append(body_line)
+                    i += 1
+                    continue
+
+                # Fallback: scan characters when braces are present to detect mid-line depth changes
                 for ch in body_line:
                     if ch == "{":
                         brace_depth += 1
                     elif ch == "}":
                         brace_depth -= 1
+
+
+                    # If we've closed the method (depth == 0) mid-line, stop scanning further
+                    if brace_depth == 0:
+                        break
 
                 if brace_depth > 0:
                     body_lines.append(body_line)
@@ -544,7 +559,9 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                     # This line contains the closing brace, but we've hit depth 0
                     # Add indented body lines (inside try block, inside for loop)
                     for bl in body_lines:
-                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
+                        result.append(body_prefix + bl)  # 8 extra spaces for inner loop + try
+
+                    # Add finally block and close inner loop
 
                     # Add finally block and close inner loop
                     method_close_indent = " " * base_indent  # Same level as method signature
