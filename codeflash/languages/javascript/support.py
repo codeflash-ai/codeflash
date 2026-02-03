@@ -1879,16 +1879,70 @@ class JavaScriptSupport:
         except Exception as e:
             errors.append(f"Failed to check npm: {e}")
 
-        # Check node_modules exists
+        # Check node_modules exists (local or in parent directories for monorepo)
         node_modules = project_root / "node_modules"
-        if not node_modules.exists():
+        found_node_modules = node_modules.exists()
+
+        if not found_node_modules:
+            # Check parent directories for monorepo support
+            current = project_root.parent
+            max_depth = 5
+            depth = 0
+            while current != current.parent and depth < max_depth:
+                parent_node_modules = current / "node_modules"
+                if parent_node_modules.exists():
+                    found_node_modules = True
+                    break
+                current = current.parent
+                depth += 1
+
+        if not found_node_modules:
             errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                f"node_modules not found in {project_root} or parent directories. "
+                f"Please run 'npm install' to install dependencies."
             )
         else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            # Check test framework is installed (check local and parent directories)
+            framework_found = False
+
+            # First check local node_modules
+            if node_modules.exists():
+                framework_path = node_modules / test_framework
+                if framework_path.exists():
+                    framework_found = True
+
+            # If not found locally, check parent directories (monorepo pattern)
+            if not framework_found:
+                current = project_root.parent
+                max_depth = 5
+                depth = 0
+                while current != current.parent and depth < max_depth:
+                    parent_node_modules = current / "node_modules"
+                    if parent_node_modules.exists():
+                        framework_path = parent_node_modules / test_framework
+                        if framework_path.exists():
+                            framework_found = True
+                            break
+                    current = current.parent
+                    depth += 1
+
+            # Final check: try using npx which handles monorepo resolution
+            if not framework_found:
+                try:
+                    result = subprocess.run(
+                        ["npx", test_framework, "--version"],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        cwd=project_root,
+                    )
+                    if result.returncode == 0:
+                        framework_found = True
+                except Exception:
+                    pass
+
+            if not framework_found:
                 errors.append(
                     f"{test_framework} is not installed. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
