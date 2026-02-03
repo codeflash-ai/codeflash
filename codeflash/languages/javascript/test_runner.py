@@ -323,44 +323,6 @@ def _find_monorepo_root(start_path: Path) -> Path | None:
     return None
 
 
-def _get_jest_runner_version(project_root: Path) -> tuple[int, int, int] | None:
-    """Get the installed jest-runner version.
-
-    Args:
-        project_root: JavaScript project root directory.
-
-    Returns:
-        Version tuple (major, minor, patch) or None if not found.
-
-    """
-    # Check project's node_modules first
-    jest_runner_pkg = project_root / "node_modules" / "jest-runner" / "package.json"
-
-    # If not found, check monorepo root
-    if not jest_runner_pkg.exists():
-        monorepo_root = _find_monorepo_root(project_root)
-        if monorepo_root:
-            jest_runner_pkg = monorepo_root / "node_modules" / "jest-runner" / "package.json"
-
-    if not jest_runner_pkg.exists():
-        return None
-
-    try:
-        import json
-
-        with open(jest_runner_pkg, encoding="utf-8") as f:
-            pkg_data = json.load(f)
-            version_str = pkg_data.get("version", "")
-            # Parse version string like "30.2.0" or "29.7.0"
-            parts = version_str.split(".")
-            if len(parts) >= 3:
-                return (int(parts[0]), int(parts[1]), int(parts[2]))
-    except (json.JSONDecodeError, ValueError, OSError):
-        pass
-
-    return None
-
-
 def _find_jest_config(project_root: Path) -> Path | None:
     """Find Jest configuration file in the project.
 
@@ -824,39 +786,16 @@ def run_jest_benchmarking_tests(
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
 
-    # Check jest-runner version to determine looping strategy
-    jest_runner_version = _get_jest_runner_version(effective_cwd)
-    use_loop_runner = False
-
-    if jest_runner_version:
-        major_version = jest_runner_version[0]
-        logger.debug(f"Detected jest-runner version: {'.'.join(map(str, jest_runner_version))}")
-
-        # Loop runner only works with jest-runner v29.x
-        # v30+ uses webpack bundling that doesn't export runTest
-        if major_version < 30:
-            use_loop_runner = True
-            logger.debug("Using loop-runner for in-process batching (jest-runner < 30)")
-        else:
-            logger.debug("Using external looping for jest-runner >= 30 (loop-runner not compatible)")
-    else:
-        # If we can't detect version, try loop-runner (fallback for older behavior)
-        use_loop_runner = True
-        logger.debug("Could not detect jest-runner version, attempting loop-runner")
-
-    # Build Jest command for performance tests
+    # Build Jest command for performance tests with custom loop runner
     jest_cmd = [
         "npx",
         "jest",
         "--reporters=default",
         "--reporters=jest-junit",
-        "--runInBand",  # Ensure serial execution
+        "--runInBand",  # Ensure serial execution even though runner enforces it
         "--forceExit",
+        "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
-
-    # Add custom loop runner only for v29.x
-    if use_loop_runner:
-        jest_cmd.append("--runner=codeflash/loop-runner")
 
     # Add Jest config if found - needed for TypeScript transformation
     # Uses codeflash-compatible config if project has bundler moduleResolution
@@ -912,106 +851,34 @@ def run_jest_benchmarking_tests(
     # Account for startup overhead + target duration + buffer
     total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
 
+    logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
+    logger.debug(
+        f"Jest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
+        f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
+    )
+
     total_start_time = time.time()
 
-    if use_loop_runner:
-        # V29 path: Use loop-runner for in-process batching
-        logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
-        logger.debug(
-            f"Jest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
-            f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
+    try:
+        run_args = get_cross_platform_subprocess_run_args(
+            cwd=effective_cwd, env=jest_env, timeout=total_timeout, check=False, text=True, capture_output=True
         )
+        result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
 
-        try:
-            run_args = get_cross_platform_subprocess_run_args(
-                cwd=effective_cwd, env=jest_env, timeout=total_timeout, check=False, text=True, capture_output=True
-            )
-            result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        # Combine stderr into stdout for timing markers
+        stdout = result.stdout or ""
+        if result.stderr:
+            stdout = stdout + "\n" + result.stderr if stdout else result.stderr
 
-            # Combine stderr into stdout for timing markers
-            stdout = result.stdout or ""
-            if result.stderr:
-                stdout = stdout + "\n" + result.stderr if stdout else result.stderr
+        # Create result with combined stdout
+        result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
 
-            # Create result with combined stdout
-            result = subprocess.CompletedProcess(args=result.args, returncode=result.returncode, stdout=stdout, stderr="")
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Jest benchmarking timed out after {total_timeout}s")
-            result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking timed out")
-        except FileNotFoundError:
-            logger.error("Jest not found for benchmarking")
-            result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
-
-    else:
-        # V30+ path: Use external looping (run Jest multiple times)
-        logger.debug(f"Running Jest benchmarking tests with external looping: {' '.join(jest_cmd)}")
-        logger.debug(
-            f"Jest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
-            f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
-        )
-
-        combined_stdout = ""
-        combined_stderr = ""
-        last_returncode = 0
-        iterations_completed = 0
-
-        try:
-            run_args = get_cross_platform_subprocess_run_args(
-                cwd=effective_cwd, env=jest_env, timeout=timeout or 120, check=False, text=True, capture_output=True
-            )
-
-            # External loop: Run Jest multiple times until time/iteration limits
-            for iteration in range(1, max_loops + 1):
-                # Check time limit
-                elapsed_ms = (time.time() - total_start_time) * 1000
-                if iteration > min_loops and elapsed_ms >= target_duration_ms:
-                    logger.debug(
-                        f"Stopping external loop after {iteration - 1} iterations (elapsed: {elapsed_ms:.0f}ms)"
-                    )
-                    break
-
-                # Update iteration counter in environment
-                jest_env["CODEFLASH_LOOP_INDEX"] = str(iteration)
-                jest_env["CODEFLASH_TEST_ITERATION"] = str(iteration - 1)
-
-                # Run Jest for this iteration
-                iteration_result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
-
-                # Collect output
-                if iteration_result.stdout:
-                    combined_stdout += iteration_result.stdout + "\n"
-                if iteration_result.stderr:
-                    combined_stderr += iteration_result.stderr + "\n"
-
-                last_returncode = iteration_result.returncode
-                iterations_completed = iteration
-
-                # Stop on failure
-                if iteration_result.returncode != 0:
-                    logger.warning(f"Jest failed on iteration {iteration}, stopping external loop")
-                    break
-
-                # Check total timeout
-                if (time.time() - total_start_time) >= total_timeout:
-                    logger.warning(f"Total timeout reached after {iteration} iterations")
-                    break
-
-            logger.debug(f"External looping completed {iterations_completed} iterations")
-
-            # Combine stderr into stdout for timing markers
-            stdout = combined_stdout
-            if combined_stderr:
-                stdout = stdout + "\n" + combined_stderr if stdout else combined_stderr
-
-            result = subprocess.CompletedProcess(args=jest_cmd, returncode=last_returncode, stdout=stdout, stderr="")
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Jest iteration timed out during external looping")
-            result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout=combined_stdout, stderr="Iteration timed out")
-        except FileNotFoundError:
-            logger.error("Jest not found for benchmarking")
-            result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Jest benchmarking timed out after {total_timeout}s")
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Benchmarking timed out")
+    except FileNotFoundError:
+        logger.error("Jest not found for benchmarking")
+        result = subprocess.CompletedProcess(args=jest_cmd, returncode=-1, stdout="", stderr="Jest not found")
 
     wall_clock_seconds = time.time() - total_start_time
     logger.debug(f"Jest benchmarking completed in {wall_clock_seconds:.2f}s")
