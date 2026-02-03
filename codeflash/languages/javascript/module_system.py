@@ -44,9 +44,10 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     """Detect the module system used by a JavaScript/TypeScript project.
 
     Detection strategy:
-    1. Check package.json for "type" field
-    2. If file_path provided, check file extension (.mjs = ESM, .cjs = CommonJS)
-    3. Analyze import statements in the file
+    1. Check file extension for explicit module type (.mjs, .cjs, .ts, .tsx, .mts)
+       - TypeScript files always use ESM syntax regardless of package.json
+    2. Check package.json for explicit "type" field (only if explicitly set)
+    3. Analyze import/export statements in the file content
     4. Default to CommonJS if uncertain
 
     Args:
@@ -57,13 +58,29 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
         ModuleSystem constant (COMMONJS, ES_MODULE, or UNKNOWN).
 
     """
-    # Strategy 1: Check package.json
+    # Strategy 1: Check file extension first for explicit module type indicators
+    # TypeScript files always use ESM syntax (import/export)
+    if file_path:
+        suffix = file_path.suffix.lower()
+        if suffix == ".mjs":
+            logger.debug("Detected ES Module from .mjs extension")
+            return ModuleSystem.ES_MODULE
+        if suffix == ".cjs":
+            logger.debug("Detected CommonJS from .cjs extension")
+            return ModuleSystem.COMMONJS
+        if suffix in (".ts", ".tsx", ".mts"):
+            # TypeScript always uses ESM syntax (import/export)
+            # even if package.json doesn't have "type": "module"
+            logger.debug("Detected ES Module from TypeScript file extension")
+            return ModuleSystem.ES_MODULE
+
+    # Strategy 2: Check package.json for explicit type field
     package_json = project_root / "package.json"
     if package_json.exists():
         try:
             with package_json.open("r") as f:
                 pkg = json.load(f)
-                pkg_type = pkg.get("type", "commonjs")
+                pkg_type = pkg.get("type")  # Don't default - only use if explicitly set
 
                 if pkg_type == "module":
                     logger.debug("Detected ES Module from package.json type field")
@@ -71,44 +88,35 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
                 if pkg_type == "commonjs":
                     logger.debug("Detected CommonJS from package.json type field")
                     return ModuleSystem.COMMONJS
+                # If type is not explicitly set, continue to file content analysis
 
         except Exception as e:
             logger.warning("Failed to parse package.json: %s", e)
 
-    # Strategy 2: Check file extension
-    if file_path:
-        suffix = file_path.suffix
-        if suffix == ".mjs":
-            logger.debug("Detected ES Module from .mjs extension")
-            return ModuleSystem.ES_MODULE
-        if suffix == ".cjs":
-            logger.debug("Detected CommonJS from .cjs extension")
-            return ModuleSystem.COMMONJS
+    # Strategy 3: Analyze file content for import/export patterns
+    if file_path and file_path.exists():
+        try:
+            content = file_path.read_text()
 
-        # Strategy 3: Analyze file content
-        if file_path.exists():
-            try:
-                content = file_path.read_text()
+            # Look for ES module syntax
+            has_import = "import " in content and "from " in content
+            has_export = "export " in content or "export default" in content or "export {" in content
 
-                # Look for ES module syntax
-                has_import = "import " in content and "from " in content
-                has_export = "export " in content or "export default" in content or "export {" in content
+            # Look for CommonJS syntax
+            has_require = "require(" in content
+            has_module_exports = "module.exports" in content or "exports." in content
 
-                # Look for CommonJS syntax
-                has_require = "require(" in content
-                has_module_exports = "module.exports" in content or "exports." in content
+            # Determine based on what we found
+            if (has_import or has_export) and not (has_require or has_module_exports):
+                logger.debug("Detected ES Module from import/export statements")
+                return ModuleSystem.ES_MODULE
 
-                # Determine based on what we found
-                if (has_import or has_export) and not (has_require or has_module_exports):
-                    logger.debug("Detected ES Module from import/export statements")
-                    return ModuleSystem.ES_MODULE
+            if (has_require or has_module_exports) and not (has_import or has_export):
+                logger.debug("Detected CommonJS from require/module.exports")
+                return ModuleSystem.COMMONJS
 
-                if (has_require or has_module_exports) and not (has_import or has_export):
-                    logger.debug("Detected CommonJS from require/module.exports")
-                    return ModuleSystem.COMMONJS
-
-            except Exception as e:
-                logger.warning("Failed to analyze file %s: %s", file_path, e)
+        except Exception as e:
+            logger.warning("Failed to analyze file %s: %s", file_path, e)
 
     # Default to CommonJS (more common and backward compatible)
     logger.debug("Defaulting to CommonJS")
@@ -330,3 +338,71 @@ def ensure_module_system_compatibility(code: str, target_module_system: str) -> 
             return convert_esm_to_commonjs(code)
 
     return code
+
+
+def ensure_vitest_imports(code: str, test_framework: str) -> str:
+    """Ensure vitest test globals are imported when using vitest framework.
+
+    Vitest by default does not enable globals (describe, test, expect, etc.),
+    so they must be explicitly imported. This function adds the import if missing.
+
+    Args:
+        code: JavaScript/TypeScript test code.
+        test_framework: The test framework being used (vitest, jest, mocha).
+
+    Returns:
+        Code with vitest imports added if needed.
+
+    """
+    if test_framework != "vitest":
+        return code
+
+    # Check if vitest imports already exist
+    if "from 'vitest'" in code or 'from "vitest"' in code:
+        return code
+
+    # Check if the code uses test functions that need to be imported
+    test_globals = ["describe", "test", "it", "expect", "vi", "beforeEach", "afterEach", "beforeAll", "afterAll"]
+
+    # Combine detection and collection into a single pass
+    used_globals = [g for g in test_globals if f"{g}(" in code or f"{g} (" in code]
+    if not used_globals:
+        return code
+
+    # Build the import statement
+    import_statement = f"import {{ {', '.join(used_globals)} }} from 'vitest';\n"
+
+    # Find the first line that isn't a comment or empty
+    lines = code.split("\n")
+    insert_index = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (
+            stripped
+            and not stripped.startswith("//")
+            and not stripped.startswith("/*")
+            and not stripped.startswith("*")
+        ):
+            # Check if this line is an import/require - insert after imports
+            if stripped.startswith(("import ", "const ", "let ")):
+                continue
+            insert_index = i
+            break
+        insert_index = i + 1
+
+    # Find the last import line to insert after it
+    last_import_index = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("import ") and "from " in stripped:
+            last_import_index = i
+
+    if last_import_index >= 0:
+        # Insert after the last import
+        lines.insert(last_import_index + 1, import_statement.rstrip())
+    else:
+        # Insert at the beginning (after any leading comments)
+        lines.insert(insert_index, import_statement.rstrip())
+
+    logger.debug("Added vitest imports: %s", used_globals)
+    return "\n".join(lines)
