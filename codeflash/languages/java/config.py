@@ -79,23 +79,42 @@ def detect_java_project(project_root: Path) -> JavaProjectConfig | None:
     # Get basic project info
     project_info = get_project_info(project_root)
 
-    # Detect test framework
-    test_framework, has_junit5, has_junit4, has_testng = _detect_test_framework(
-        project_root, build_tool
-    )
+    # Initialize variables
+    has_junit5 = False
+    has_junit4 = False
+    has_testng = False
+    has_mockito = False
+    has_assertj = False
+    compiler_source = None
+    compiler_target = None
+    surefire_includes: list[str] = []
+    surefire_excludes: list[str] = []
 
-    # Detect other dependencies
-    has_mockito, has_assertj = _detect_test_dependencies(project_root, build_tool)
+    # Parse build files based on build tool (single pass)
+    if build_tool == BuildTool.MAVEN:
+        (has_junit5, has_junit4, has_testng, has_mockito, has_assertj,
+         compiler_source, compiler_target, surefire_includes, surefire_excludes) = _parse_maven_pom(project_root)
+    elif build_tool == BuildTool.GRADLE:
+        has_junit5, has_junit4, has_testng, has_mockito, has_assertj = _parse_gradle_build(project_root)
 
     # Get source/test roots
     source_root = find_source_root(project_root)
     test_root = find_test_root(project_root)
 
-    # Get compiler settings
-    compiler_source, compiler_target = _get_compiler_settings(project_root, build_tool)
+    # Scan test sources only if needed
+    has_junit5, has_junit4, has_testng = _detect_test_framework_from_sources(
+        test_root, has_junit5, has_junit4, has_testng
+    )
 
-    # Get surefire configuration
-    surefire_includes, surefire_excludes = _get_surefire_config(project_root)
+    # Determine primary framework (prefer JUnit 5)
+    if has_junit5:
+        test_framework = "junit5"
+    elif has_junit4:
+        test_framework = "junit4"
+    elif has_testng:
+        test_framework = "testng"
+    else:
+        test_framework = "junit5"  # Default
 
     return JavaProjectConfig(
         project_root=project_root,
@@ -424,3 +443,270 @@ def get_test_class_pattern(config: JavaProjectConfig) -> str:
 
     """
     return r".*Test(s)?$|^Test.*"
+
+
+
+
+
+def _parse_maven_pom(project_root: Path) -> tuple[bool, bool, bool, bool, bool, str | None, str | None, list[str], list[str]]:
+    """Parse Maven pom.xml once and extract all needed information.
+
+    Returns:
+        Tuple of (has_junit5, has_junit4, has_testng, has_mockito, has_assertj,
+                  compiler_source, compiler_target, surefire_includes, surefire_excludes)
+    """
+    pom_path = project_root / "pom.xml"
+    if not pom_path.exists():
+        return False, False, False, False, False, None, None, [], []
+
+    has_junit5 = False
+    has_junit4 = False
+    has_testng = False
+    has_mockito = False
+    has_assertj = False
+    compiler_source = None
+    compiler_target = None
+    surefire_includes: list[str] = []
+    surefire_excludes: list[str] = []
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        content_lower = content.lower()
+
+        # Check dependencies via string matching for fast detection
+        has_junit5 = "org.junit.jupiter" in content or "junit-jupiter" in content_lower
+        has_junit4 = ("junit" in content_lower and "junit-jupiter" not in content) or "junit:junit" in content
+        has_testng = "testng" in content_lower
+        has_mockito = "mockito" in content_lower
+        has_assertj = "assertj" in content_lower
+
+        # Parse XML for compiler settings
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+        # Check properties
+        for props_path in ["properties", "m:properties"]:
+            props = root.find(props_path, ns) if "m:" in props_path else root.find(props_path)
+            if props is not None:
+                for child in props:
+                    tag = child.tag.replace("{http://maven.apache.org/POM/4.0.0}", "")
+                    if tag == "maven.compiler.source":
+                        compiler_source = child.text
+                    elif tag == "maven.compiler.target":
+                        compiler_target = child.text
+
+        # Get surefire configuration
+        if "maven-surefire-plugin" in content:
+            # Default patterns if surefire is configured
+            surefire_includes = ["**/Test*.java", "**/*Test.java", "**/*Tests.java", "**/*TestCase.java"]
+            surefire_excludes = ["**/*IT.java", "**/*IntegrationTest.java"]
+
+    except Exception:
+        pass
+
+    return has_junit5, has_junit4, has_testng, has_mockito, has_assertj, compiler_source, compiler_target, surefire_includes, surefire_excludes
+
+
+
+def _parse_gradle_build(project_root: Path) -> tuple[bool, bool, bool, bool, bool]:
+    """Parse Gradle build files and extract dependency information.
+
+    Returns:
+        Tuple of (has_junit5, has_junit4, has_testng, has_mockito, has_assertj)
+    """
+    has_junit5 = False
+    has_junit4 = False
+    has_testng = False
+    has_mockito = False
+    has_assertj = False
+
+    for gradle_file in ["build.gradle", "build.gradle.kts"]:
+        gradle_path = project_root / gradle_file
+        if gradle_path.exists():
+            try:
+                content = gradle_path.read_text(encoding="utf-8")
+                content_lower = content.lower()
+
+                if "org.junit.jupiter" in content or "junit-jupiter" in content_lower:
+                    has_junit5 = True
+                if "junit:junit" in content or ("junit" in content_lower and "junit-jupiter" not in content):
+                    has_junit4 = True
+                if "testng" in content_lower:
+                    has_testng = True
+                if "mockito" in content_lower:
+                    has_mockito = True
+                if "assertj" in content_lower:
+                    has_assertj = True
+            except Exception:
+                pass
+
+    return has_junit5, has_junit4, has_testng, has_mockito, has_assertj
+
+
+
+def _detect_test_framework_from_sources(
+    test_root: Path, has_junit5: bool, has_junit4: bool, has_testng: bool
+) -> tuple[bool, bool, bool]:
+    """Scan test source files for framework imports.
+
+    Returns:
+        Updated tuple of (has_junit5, has_junit4, has_testng)
+    """
+    # Early termination if all frameworks already detected
+    if has_junit5 and has_junit4 and has_testng:
+        return has_junit5, has_junit4, has_testng
+
+    if not test_root or not test_root.exists():
+        return has_junit5, has_junit4, has_testng
+
+    for test_file in test_root.rglob("*.java"):
+        try:
+            content = test_file.read_text(encoding="utf-8")
+            if not has_junit5 and "org.junit.jupiter" in content:
+                has_junit5 = True
+            if not has_junit4 and ("org.junit.Test" in content or "org.junit.Assert" in content):
+                has_junit4 = True
+            if not has_testng and "org.testng" in content:
+                has_testng = True
+
+            # Early termination
+            if has_junit5 and has_junit4 and has_testng:
+                break
+        except Exception:
+            pass
+
+    return has_junit5, has_junit4, has_testng
+
+
+
+
+def _parse_maven_pom(project_root: Path) -> tuple[bool, bool, bool, bool, bool, str | None, str | None, list[str], list[str]]:
+    """Parse Maven pom.xml once and extract all needed information.
+
+    Returns:
+        Tuple of (has_junit5, has_junit4, has_testng, has_mockito, has_assertj,
+                  compiler_source, compiler_target, surefire_includes, surefire_excludes)
+    """
+    pom_path = project_root / "pom.xml"
+    if not pom_path.exists():
+        return False, False, False, False, False, None, None, [], []
+
+    has_junit5 = False
+    has_junit4 = False
+    has_testng = False
+    has_mockito = False
+    has_assertj = False
+    compiler_source = None
+    compiler_target = None
+    surefire_includes: list[str] = []
+    surefire_excludes: list[str] = []
+
+    try:
+        content = pom_path.read_text(encoding="utf-8")
+        content_lower = content.lower()
+
+        # Check dependencies via string matching for fast detection
+        has_junit5 = "org.junit.jupiter" in content or "junit-jupiter" in content_lower
+        has_junit4 = ("junit" in content_lower and "junit-jupiter" not in content) or "junit:junit" in content
+        has_testng = "testng" in content_lower
+        has_mockito = "mockito" in content_lower
+        has_assertj = "assertj" in content_lower
+
+        # Parse XML for compiler settings
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+
+        ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+        # Check properties
+        for props_path in ["properties", "m:properties"]:
+            props = root.find(props_path, ns) if "m:" in props_path else root.find(props_path)
+            if props is not None:
+                for child in props:
+                    tag = child.tag.replace("{http://maven.apache.org/POM/4.0.0}", "")
+                    if tag == "maven.compiler.source":
+                        compiler_source = child.text
+                    elif tag == "maven.compiler.target":
+                        compiler_target = child.text
+
+        # Get surefire configuration
+        if "maven-surefire-plugin" in content:
+            # Default patterns if surefire is configured
+            surefire_includes = ["**/Test*.java", "**/*Test.java", "**/*Tests.java", "**/*TestCase.java"]
+            surefire_excludes = ["**/*IT.java", "**/*IntegrationTest.java"]
+
+    except Exception:
+        pass
+
+    return has_junit5, has_junit4, has_testng, has_mockito, has_assertj, compiler_source, compiler_target, surefire_includes, surefire_excludes
+
+
+def _parse_gradle_build(project_root: Path) -> tuple[bool, bool, bool, bool, bool]:
+    """Parse Gradle build files and extract dependency information.
+
+    Returns:
+        Tuple of (has_junit5, has_junit4, has_testng, has_mockito, has_assertj)
+    """
+    has_junit5 = False
+    has_junit4 = False
+    has_testng = False
+    has_mockito = False
+    has_assertj = False
+
+    for gradle_file in ["build.gradle", "build.gradle.kts"]:
+        gradle_path = project_root / gradle_file
+        if gradle_path.exists():
+            try:
+                content = gradle_path.read_text(encoding="utf-8")
+                content_lower = content.lower()
+
+                if "org.junit.jupiter" in content or "junit-jupiter" in content_lower:
+                    has_junit5 = True
+                if "junit:junit" in content or ("junit" in content_lower and "junit-jupiter" not in content):
+                    has_junit4 = True
+                if "testng" in content_lower:
+                    has_testng = True
+                if "mockito" in content_lower:
+                    has_mockito = True
+                if "assertj" in content_lower:
+                    has_assertj = True
+            except Exception:
+                pass
+
+    return has_junit5, has_junit4, has_testng, has_mockito, has_assertj
+
+
+def _detect_test_framework_from_sources(
+    test_root: Path, has_junit5: bool, has_junit4: bool, has_testng: bool
+) -> tuple[bool, bool, bool]:
+    """Scan test source files for framework imports.
+
+    Returns:
+        Updated tuple of (has_junit5, has_junit4, has_testng)
+    """
+    # Early termination if all frameworks already detected
+    if has_junit5 and has_junit4 and has_testng:
+        return has_junit5, has_junit4, has_testng
+
+    if not test_root or not test_root.exists():
+        return has_junit5, has_junit4, has_testng
+
+    for test_file in test_root.rglob("*.java"):
+        try:
+            content = test_file.read_text(encoding="utf-8")
+            if not has_junit5 and "org.junit.jupiter" in content:
+                has_junit5 = True
+            if not has_junit4 and ("org.junit.Test" in content or "org.junit.Assert" in content):
+                has_junit4 = True
+            if not has_testng and "org.testng" in content:
+                has_testng = True
+
+            # Early termination
+            if has_junit5 and has_junit4 and has_testng:
+                break
+        except Exception:
+            pass
+
+    return has_junit5, has_junit4, has_testng
