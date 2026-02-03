@@ -303,6 +303,7 @@ def run_behavioral_tests(
     project_root: Path | None = None,
     enable_coverage: bool = False,
     candidate_index: int = 0,
+    java_test_module: str | None = None,
 ) -> tuple[Path, Any, Path | None, Path | None]:
     """Run behavioral tests for Java code.
 
@@ -318,6 +319,7 @@ def run_behavioral_tests(
         project_root: Project root directory.
         enable_coverage: Whether to collect coverage information.
         candidate_index: Index of the candidate being tested.
+        java_test_module: Module name for multi-module Java projects (e.g., "server").
 
     Returns:
         Tuple of (result_xml_path, subprocess_result, sqlite_db_path, coverage_xml_path).
@@ -327,6 +329,12 @@ def run_behavioral_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Use provided java_test_module as fallback if detection didn't find a module
+    if test_module is None and java_test_module:
+        test_module = java_test_module
+        maven_root = project_root
+        logger.debug(f"Using configured Java test module: {test_module}")
 
     # Create SQLite database path for behavior capture - use standard path that parse_test_results expects
     sqlite_db_path = get_run_tmp_file(Path(f"test_return_values_{candidate_index}.sqlite"))
@@ -832,6 +840,7 @@ def run_benchmarking_tests(
     max_loops: int = 3,
     target_duration_seconds: float = 10.0,
     inner_iterations: int = 10,
+    java_test_module: str | None = None,
 ) -> tuple[Path, Any]:
     """Run benchmarking tests for Java code with compile-once-run-many optimization.
 
@@ -855,6 +864,7 @@ def run_benchmarking_tests(
         max_loops: Maximum number of outer loops (JVM invocations). Default: 3.
         target_duration_seconds: Target duration for benchmarking in seconds.
         inner_iterations: Number of inner loop iterations per JVM invocation. Default: 100.
+        java_test_module: Module name for multi-module Java projects (e.g., "server").
 
     Returns:
         Tuple of (result_file_path, subprocess_result with aggregated stdout).
@@ -866,6 +876,12 @@ def run_benchmarking_tests(
 
     # Detect multi-module Maven projects where tests are in a different module
     maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Use provided java_test_module as fallback if detection didn't find a module
+    if test_module is None and java_test_module:
+        test_module = java_test_module
+        maven_root = project_root
+        logger.debug(f"Using configured Java test module for benchmarking: {test_module}")
 
     # Get test class names
     test_classes = _get_test_class_names(test_paths, mode="performance")

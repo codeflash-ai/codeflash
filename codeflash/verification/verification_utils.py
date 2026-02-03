@@ -157,6 +157,40 @@ class TestConfig:
             pass
         return "junit5"  # Default fallback
 
+    @property
+    def java_test_module(self) -> str | None:
+        """Extract Java module name from tests_root for multi-module projects.
+
+        For multi-module Gradle/Maven projects, if tests_root is like "server/src/test/java",
+        this extracts "server" as the module name.
+
+        Returns:
+            Module name if detected, None otherwise.
+        """
+        if not is_java():
+            return None
+
+        try:
+            # Convert to relative path from project root
+            if self.tests_root.is_absolute():
+                try:
+                    rel_path = self.tests_root.relative_to(self.project_root_path)
+                except ValueError:
+                    # tests_root is outside project_root
+                    return None
+            else:
+                rel_path = self.tests_root
+
+            parts = rel_path.parts
+            # Check for module pattern: module/src/test/...
+            if len(parts) >= 3 and parts[1] == "src" and parts[2] == "test":
+                module_name = parts[0]
+                return module_name
+        except Exception:
+            pass
+
+        return None
+
     def set_language(self, language: str) -> None:
         """Set the language for this test config.
 

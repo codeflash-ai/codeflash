@@ -337,6 +337,7 @@ class JavaSupport(LanguageSupport):
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
+        java_test_module: str | None = None,
     ) -> tuple[Path, Any, Path | None, Path | None]:
         """Run behavioral tests for Java."""
         return run_behavioral_tests(
@@ -347,6 +348,7 @@ class JavaSupport(LanguageSupport):
             project_root,
             enable_coverage,
             candidate_index,
+            java_test_module,
         )
 
     def run_benchmarking_tests(
@@ -357,6 +359,7 @@ class JavaSupport(LanguageSupport):
         timeout: int | None = None,
         project_root: Path | None = None,
         min_loops: int = 1,
+        java_test_module: str | None = None,
         max_loops: int = 3,
         target_duration_seconds: float = 10.0,
         inner_iterations: int = 10,
@@ -372,6 +375,7 @@ class JavaSupport(LanguageSupport):
             max_loops,
             target_duration_seconds,
             inner_iterations,
+            java_test_module,
         )
 
 

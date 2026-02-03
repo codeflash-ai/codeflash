@@ -2813,6 +2813,7 @@ class FunctionOptimizer:
                     enable_coverage=enable_coverage,
                     js_project_root=self.test_cfg.js_project_root,
                     candidate_index=optimization_iteration,
+                    java_test_module=self.test_cfg.java_test_module,
                 )
             elif testing_type == TestingMode.LINE_PROFILE:
                 result_file_path, run_result = run_line_profile_tests(
@@ -2838,6 +2839,7 @@ class FunctionOptimizer:
                     pytest_max_loops=pytest_max_loops,
                     test_framework=self.test_cfg.test_framework,
                     js_project_root=self.test_cfg.js_project_root,
+                    java_test_module=self.test_cfg.java_test_module,
                 )
             else:
                 msg = f"Unexpected testing type: {testing_type}"

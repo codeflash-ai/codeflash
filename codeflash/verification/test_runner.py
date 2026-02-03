@@ -126,6 +126,7 @@ def run_behavioral_tests(
     enable_coverage: bool = False,
     js_project_root: Path | None = None,
     candidate_index: int = 0,
+    java_test_module: str | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess, Path | None, Path | None]:
     """Run behavioral tests with optional coverage."""
     # Check if there's a language support for this test framework that implements run_behavioral_tests
@@ -139,6 +140,7 @@ def run_behavioral_tests(
             project_root=js_project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
+            java_test_module=java_test_module,
         )
     if is_python():
         test_files: list[str] = []
@@ -324,6 +326,7 @@ def run_benchmarking_tests(
     pytest_min_loops: int = 5,
     pytest_max_loops: int = 100_000,
     js_project_root: Path | None = None,
+    java_test_module: str | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
@@ -337,6 +340,7 @@ def run_benchmarking_tests(
             min_loops=pytest_min_loops,
             max_loops=pytest_max_loops,
             target_duration_seconds=pytest_target_runtime_seconds,
+            java_test_module=java_test_module,
         )
     if is_python():  # pytest runs both pytest and unittest tests
         pytest_cmd_list = (
