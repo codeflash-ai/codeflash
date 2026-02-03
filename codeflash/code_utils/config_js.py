@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from codeflash.setup.detector import is_build_output_dir
+
 PACKAGE_JSON_CACHE: dict[Path, Path] = {}
 PACKAGE_JSON_DATA_CACHE: dict[Path, dict[str, Any]] = {}
 
@@ -44,18 +46,6 @@ def detect_language(project_root: Path) -> str:
     """
     tsconfig_path = project_root / "tsconfig.json"
     return "typescript" if tsconfig_path.exists() else "javascript"
-
-
-def is_build_output_dir(path: Path) -> bool:
-    """Check if a path is within a common build output directory.
-
-    Build output directories contain compiled code and should be skipped
-    in favor of source directories.
-
-    """
-    build_dirs = {"build", "dist", "out", ".next", ".nuxt"}
-    parts = path.as_posix().split("/")
-    return any(part in build_dirs for part in parts)
 
 
 def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
