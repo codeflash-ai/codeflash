@@ -216,12 +216,10 @@ class JavaImportResolver:
         """
         if not import_path:
             return None
-        parts = import_path.split(".")
-        if parts:
-            last_part = parts[-1]
-            # Check if it looks like a class name (starts with uppercase)
-            if last_part and last_part[0].isupper():
-                return last_part
+        # Use rpartition to avoid allocating a list from split()
+        last_part = import_path.rpartition(".")[2]
+        if last_part and last_part[0].isupper():
+            return last_part
         return None
 
     def find_class_file(self, class_name: str, package_hint: str | None = None) -> Path | None:
