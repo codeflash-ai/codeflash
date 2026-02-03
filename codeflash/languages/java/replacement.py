@@ -67,28 +67,24 @@ def _parse_optimization_source(
         methods = analyzer.find_methods(new_source)
         fields = analyzer.find_fields(new_source)
 
-        # Find the target method
-        target_method = None
-        for method in methods:
-            if method.name == target_method_name:
-                target_method = method
-                break
-
-        if target_method:
+        # Pre-split lines once to avoid repeated split/join work
+        lines: list[str] | None = None
+        if methods:
             # Extract target method source (including Javadoc if present)
             lines = new_source.splitlines(keepends=True)
-            start = (target_method.javadoc_start_line or target_method.start_line) - 1
-            end = target_method.end_line
-            target_method_source = "".join(lines[start:end])
 
-        # Extract helper methods (methods other than the target)
-        for method in methods:
-            if method.name != target_method_name:
-                lines = new_source.splitlines(keepends=True)
+            # Single pass: extract target method and helper methods
+            for method in methods:
                 start = (method.javadoc_start_line or method.start_line) - 1
                 end = method.end_line
-                helper_source = "".join(lines[start:end])
-                new_helper_methods.append(helper_source)
+                # Defensive: ensure lines is present
+                snippet = "".join(lines[start:end])
+                if method.name == target_method_name:
+                    target_method_source = snippet
+                else:
+                    new_helper_methods.append(snippet)
+
+        # Extract fields
 
         # Extract fields
         for field in fields:

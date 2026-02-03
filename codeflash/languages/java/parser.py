@@ -161,7 +161,11 @@ class JavaAnalyzer:
             List of JavaMethodNode objects describing found methods.
 
         """
-        source_bytes = source.encode("utf8")
+        # Avoid double-encoding if caller already provided bytes
+        if isinstance(source, str):
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
         tree = self.parse(source_bytes)
         methods: list[JavaMethodNode] = []
 
@@ -318,7 +322,11 @@ class JavaAnalyzer:
             List of JavaClassNode objects.
 
         """
-        source_bytes = source.encode("utf8")
+        # Avoid double-encoding if caller already provided bytes
+        if isinstance(source, str):
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
         tree = self.parse(source_bytes)
         classes: list[JavaClassNode] = []
 
@@ -485,7 +493,11 @@ class JavaAnalyzer:
             List of JavaFieldInfo objects.
 
         """
-        source_bytes = source.encode("utf8")
+        # Avoid double-encoding if caller already provided bytes
+        if isinstance(source, str):
+            source_bytes = source.encode("utf8")
+        else:
+            source_bytes = source
         tree = self.parse(source_bytes)
         fields: list[JavaFieldInfo] = []
 
