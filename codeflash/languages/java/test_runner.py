@@ -27,6 +27,8 @@ from codeflash.languages.java.build_tools import (
     is_jacoco_configured,
 )
 
+_VALID_JAVA_CLASS_NAME_WITH_WILDCARD = re.compile(r'^[a-zA-Z_$*][a-zA-Z0-9_$.*]*$')
+
 logger = logging.getLogger(__name__)
 
 # Regex pattern for valid Java class names (package.ClassName format)
@@ -64,13 +66,11 @@ def _validate_test_filter(test_filter: str) -> str:
         ValueError: If the test filter contains invalid characters.
     """
     # Split by comma for multiple test patterns
-    patterns = [p.strip() for p in test_filter.split(',')]
+    for raw in test_filter.split(','):
+        pattern = raw.strip()
 
-    for pattern in patterns:
-        # Remove wildcards for validation (they're allowed in test filters)
-        name_to_validate = pattern.replace('*', 'A')  # Replace * with a valid char
-
-        if not _validate_java_class_name(name_to_validate):
+        # Validate allowing wildcards directly (equivalent to replacing '*' with a valid char)
+        if not _VALID_JAVA_CLASS_NAME_WITH_WILDCARD.match(pattern):
             raise ValueError(
                 f"Invalid test class name or pattern: '{pattern}'. "
                 f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
