@@ -166,6 +166,8 @@ cython_debug/
 *.xml
 # Allow pom.xml in test fixtures for Maven project detection
 !tests/test_languages/fixtures/**/pom.xml
+# Allow pom.xml in Java sample project
+!code_to_optimize/java/pom.xml
 *.pem
 
 # Ruff cache
