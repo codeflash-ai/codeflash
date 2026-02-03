@@ -21,6 +21,8 @@ from typing import Any
 
 import tomlkit
 
+BUILD_DIRS: frozenset[str] = frozenset({"build", "dist", "out", ".next", ".nuxt"})
+
 
 @dataclass
 class DetectedProject:
@@ -384,9 +386,11 @@ def is_build_output_dir(path: Path) -> bool:
     in favor of source directories.
 
     """
-    build_dirs = {"build", "dist", "out", ".next", ".nuxt"}
-    parts = path.as_posix().split("/")
-    return any(part in build_dirs for part in parts)
+    parts = path.parts
+    for part in parts:
+        if part in BUILD_DIRS:
+            return True
+    return False
 
 
 def _extract_entry_path(exports: Any) -> str | None:
