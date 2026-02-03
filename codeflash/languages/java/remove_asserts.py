@@ -502,14 +502,19 @@ class JavaAssertTransformer:
         """Extract calls to the target function from assertion arguments."""
         target_calls: list[TargetCall] = []
 
-        # Pattern to match method calls: (receiver.)?func_name(args)
-        # Handles: obj.method(args), ClassName.staticMethod(args), method(args)
-        pattern = re.compile(rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+        # Pattern to match method calls with various receiver styles:
+        # - obj.method(args)
+        # - ClassName.staticMethod(args)
+        # - new ClassName().method(args)
+        # - new ClassName(args).method(args)
+        # - method(args) (no receiver)
+        #
+        # Strategy: Find the function name, then look backwards for the receiver
+        pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
 
         for match in pattern.finditer(content):
-            receiver_prefix = match.group(1) or ""
-            receiver = receiver_prefix.rstrip(".") if receiver_prefix else None
-            method_name = match.group(2)
+            method_name = match.group(1)
+            method_start = match.start()
 
             # Find the arguments
             paren_pos = match.end() - 1
@@ -517,7 +522,50 @@ class JavaAssertTransformer:
             if args_content is None:
                 continue
 
-            full_call = content[match.start() : end_pos]
+            # Look backwards from the method name to find the receiver
+            receiver_start = method_start
+
+            # Check if there's a dot before the method name (indicating a receiver)
+            before_method = content[:method_start]
+            stripped_before = before_method.rstrip()
+            if stripped_before.endswith("."):
+                dot_pos = len(stripped_before) - 1
+                before_dot = content[:dot_pos]
+
+                # Check for new ClassName() or new ClassName(args)
+                stripped_before_dot = before_dot.rstrip()
+                if stripped_before_dot.endswith(")"):
+                    # Find matching opening paren for constructor args
+                    close_paren_pos = len(stripped_before_dot) - 1
+                    paren_depth = 1
+                    i = close_paren_pos - 1
+                    while i >= 0 and paren_depth > 0:
+                        if stripped_before_dot[i] == ")":
+                            paren_depth += 1
+                        elif stripped_before_dot[i] == "(":
+                            paren_depth -= 1
+                        i -= 1
+                    if paren_depth == 0:
+                        open_paren_pos = i + 1
+                        # Look for "new ClassName" before the opening paren
+                        before_paren = stripped_before_dot[:open_paren_pos].rstrip()
+                        new_match = re.search(r"new\s+[a-zA-Z_]\w*\s*$", before_paren)
+                        if new_match:
+                            receiver_start = new_match.start()
+                        else:
+                            # Could be chained call like something().method()
+                            # For now, just use the part from open paren
+                            receiver_start = open_paren_pos
+                else:
+                    # Simple identifier: obj.method() or Class.method() or pkg.Class.method()
+                    ident_match = re.search(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$", stripped_before_dot)
+                    if ident_match:
+                        receiver_start = ident_match.start()
+
+            full_call = content[receiver_start:end_pos]
+            receiver = (
+                content[receiver_start:method_start].rstrip(".").strip() if receiver_start < method_start else None
+            )
 
             target_calls.append(
                 TargetCall(
@@ -525,7 +573,7 @@ class JavaAssertTransformer:
                     method_name=method_name,
                     arguments=args_content,
                     full_call=full_call,
-                    start_pos=base_offset + match.start(),
+                    start_pos=base_offset + receiver_start,
                     end_pos=base_offset + end_pos,
                 )
             )

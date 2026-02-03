@@ -704,7 +704,13 @@ class TestInstrumentGeneratedJavaTest:
     """Tests for instrument_generated_java_test."""
 
     def test_instrument_generated_test_behavior_mode(self):
-        """Test instrumenting generated test in behavior mode."""
+        """Test instrumenting generated test in behavior mode.
+
+        Behavior mode should:
+        1. Remove assertions containing the target function call
+        2. Capture the function return value instead
+        3. Rename the class with __perfinstrumented suffix
+        """
         test_code = """import org.junit.jupiter.api.Test;
 
 public class CalculatorTest {
@@ -721,12 +727,13 @@ public class CalculatorTest {
             mode="behavior",
         )
 
+        # Behavior mode transforms assertions to capture return values
         expected = """import org.junit.jupiter.api.Test;
 
 public class CalculatorTest__perfinstrumented {
     @Test
     public void testAdd() {
-        assertEquals(4, new Calculator().add(2, 2));
+        Object _cf_result1 = new Calculator().add(2, 2);
     }
 }
 """
