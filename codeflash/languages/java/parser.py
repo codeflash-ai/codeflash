@@ -502,14 +502,31 @@ class JavaAnalyzer:
         target_class: str | None,
     ) -> None:
         """Recursively walk the tree to find field declarations."""
-        new_class = current_class
-
-        if node.type == "class_declaration":
+        # Cache node.type to avoid repeated attribute lookups
+        node_type = node.type
+        
+        # Handle class declarations
+        if node_type == "class_declaration":
             name_node = node.child_by_field_name("name")
             if name_node:
                 new_class = self.get_node_text(name_node, source_bytes)
-
-        if node.type == "field_declaration":
+            else:
+                new_class = current_class
+            
+            # Process children with updated class context
+            for child in node.children:
+                self._walk_tree_for_fields(
+                    child,
+                    source_bytes,
+                    fields,
+                    current_class=new_class,
+                    target_class=target_class,
+                )
+            return
+        
+        # Handle field declarations
+        if node_type == "field_declaration":
+            # Only include if we're in the target class (or no target specified)
             # Only include if we're in the target class (or no target specified)
             if target_class is None or current_class == target_class:
                 field_info = self._extract_field_info(node, source_bytes)
@@ -521,7 +538,7 @@ class JavaAnalyzer:
                 child,
                 source_bytes,
                 fields,
-                current_class=new_class if node.type == "class_declaration" else current_class,
+                current_class=current_class,
                 target_class=target_class,
             )
 
