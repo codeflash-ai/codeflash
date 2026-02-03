@@ -1840,6 +1840,49 @@ class JavaScriptSupport:
             rel_path = source_file.relative_to(project_root)
             return "../" + rel_path.with_suffix("").as_posix()
 
+    def _find_package_in_monorepo(self, start_path: Path, package_name: str) -> Path | None:
+        """Find a package in node_modules, checking parent directories for monorepos.
+
+        Walks up the directory tree looking for node_modules/<package_name>,
+        stopping at workspace root markers (yarn.lock, pnpm-workspace.yaml, etc.).
+
+        Args:
+            start_path: The starting directory to search from.
+            package_name: The npm package name to find.
+
+        Returns:
+            Path to the package if found, None otherwise.
+
+        """
+        monorepo_markers = ["yarn.lock", "pnpm-workspace.yaml", "lerna.json", "package-lock.json"]
+        current_dir = start_path
+        visited_dirs: set[Path] = set()
+
+        while current_dir != current_dir.parent:
+            # Avoid infinite loops
+            if current_dir in visited_dirs:
+                break
+            visited_dirs.add(current_dir)
+
+            # Check for package in node_modules at this level
+            node_modules = current_dir / "node_modules"
+            package_path = node_modules / package_name
+            if package_path.exists() and (package_path / "package.json").exists():
+                logger.debug("Found %s at %s", package_name, package_path)
+                return package_path
+
+            # Check if this is a workspace root (has monorepo markers)
+            is_workspace_root = any((current_dir / marker).exists() for marker in monorepo_markers)
+
+            if is_workspace_root:
+                # Found workspace root but no package - stop searching
+                logger.debug("Reached workspace root at %s, %s not found", current_dir, package_name)
+                break
+
+            current_dir = current_dir.parent
+
+        return None
+
     def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
         """Verify that all JavaScript requirements are met.
 
@@ -1879,18 +1922,22 @@ class JavaScriptSupport:
         except Exception as e:
             errors.append(f"Failed to check npm: {e}")
 
-        # Check node_modules exists
+        # Check node_modules exists (either locally or in parent directories for monorepos)
         node_modules = project_root / "node_modules"
         if not node_modules.exists():
-            errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
-            )
-        else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            # Try to find node_modules in parent directories (monorepo support)
+            parent_node_modules = self._find_package_in_monorepo(project_root, "..")
+            if parent_node_modules is None:
                 errors.append(
-                    f"{test_framework} is not installed. "
+                    f"node_modules not found in {project_root} or parent directories. "
+                    "Please run 'npm install' to install dependencies."
+                )
+        else:
+            # Check test framework is installed (with monorepo support)
+            framework_path = self._find_package_in_monorepo(project_root, test_framework)
+            if framework_path is None:
+                errors.append(
+                    f"{test_framework} is not installed in {project_root} or workspace root. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
                 )
 

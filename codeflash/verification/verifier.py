@@ -66,6 +66,7 @@ def generate_tests(
         if is_javascript():
             from codeflash.languages.javascript.instrument import (
                 TestingMode,
+                adjust_relative_imports_for_test_location,
                 instrument_generated_js_test,
                 validate_and_fix_import_style,
             )
@@ -75,6 +76,11 @@ def generate_tests(
             )
 
             source_file = Path(function_to_optimize.file_path)
+
+            # Adjust relative import paths for test file location
+            generated_test_source = adjust_relative_imports_for_test_location(
+                generated_test_source, source_file, test_path
+            )
 
             # Validate and fix import styles (default vs named exports)
             generated_test_source = validate_and_fix_import_style(

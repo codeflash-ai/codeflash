@@ -777,6 +777,108 @@ def _instrument_js_test_code(
     return code
 
 
+def adjust_relative_imports_for_test_location(test_code: str, source_file_path: Path, test_file_path: Path) -> str:
+    """Adjust relative import paths in test code based on test file location.
+
+    When AI generates test code, it copies import paths from the source file.
+    But the test file will be placed in a different directory (e.g., src/tests/), so we need
+    to recalculate those import paths from the test file's perspective.
+
+    Only adjusts imports that exist in the source file - imports of the function under test
+    are left unchanged as they're already correct for the test location.
+
+    Args:
+        test_code: The generated test code.
+        source_file_path: Path to the source file being tested.
+        test_file_path: Path where the test file will be placed.
+
+    Returns:
+        Test code with adjusted relative import paths.
+
+    """
+    import os
+
+    # Read source file to get its imports
+    try:
+        source_code = source_file_path.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.debug("Could not read source file %s: %s", source_file_path, e)
+        return test_code
+
+    # Extract relative imports from source file
+    source_import_pattern = re.compile(r"""(?:import\s+.*?\s+from\s+['"]|\brequire\s*\(\s*['""])(\.\.?/[^'"]+)['"]""")
+    source_imports = set(source_import_pattern.findall(source_code))
+
+    if not source_imports:
+        return test_code
+
+    logger.debug("Found %d relative imports in source file: %s", len(source_imports), source_imports)
+
+    # Find all relative imports in the test code (both CommonJS, ESM, and jest.mock)
+    # Patterns for: import ... from './path' or require('./path') or jest.mock('./path')
+    import_pattern = re.compile(
+        r"""(import\s+.*?\s+from\s+['"]|\brequire\s*\(\s*['"]|jest\.mock\s*\(\s*['"])(\.[^'"]+)(['"])"""
+    )
+
+    def adjust_import_path(match: re.Match) -> str:
+        prefix = match.group(1)  # "import ... from '" or "require('" or "jest.mock('"
+        old_relative_path = match.group(2)  # "./foo" or "../bar/baz"
+        suffix = match.group(3)  # "'"
+
+        # Only adjust if this import path appears in the source file
+        if old_relative_path not in source_imports:
+            logger.debug("Skipping adjustment of %s (not in source imports)", old_relative_path)
+            return match.group(0)
+
+        try:
+            # Resolve the import relative to the source file to get absolute path
+            source_dir = source_file_path.parent
+            resolved_path = source_dir / old_relative_path
+
+            # Try with various extensions if the path doesn't exist
+            if not resolved_path.exists():
+                for ext in [".ts", ".js", ".tsx", ".jsx", ""]:
+                    test_path = resolved_path.with_suffix(ext) if ext else resolved_path
+                    if test_path.exists():
+                        resolved_path = test_path
+                        break
+
+            # If still doesn't exist, skip adjustment
+            if not resolved_path.exists():
+                logger.debug("Could not resolve %s from source location", old_relative_path)
+                return match.group(0)
+
+            # Calculate new relative path from test file location
+            test_dir = test_file_path.parent
+            new_relative_path = os.path.relpath(str(resolved_path), str(test_dir))
+            new_relative_path = new_relative_path.replace("\\", "/")
+
+            # Remove extension (Node.js/TypeScript convention)
+            for ext in [".ts", ".js", ".tsx", ".jsx"]:
+                if new_relative_path.endswith(ext):
+                    new_relative_path = new_relative_path[: -len(ext)]
+                    break
+
+            # Ensure it starts with ./ or ../
+            if not new_relative_path.startswith("./") and not new_relative_path.startswith("../"):
+                new_relative_path = "./" + new_relative_path
+
+            logger.debug(
+                "Adjusted import path from %s to %s (test: %s, source: %s)",
+                old_relative_path,
+                new_relative_path,
+                test_file_path.name,
+                source_file_path.name,
+            )
+            return f"{prefix}{new_relative_path}{suffix}"
+        except Exception as e:
+            logger.debug("Could not adjust import path %s: %s", old_relative_path, e)
+            return match.group(0)  # Return original if we can't adjust
+
+    # Replace all relative imports
+    return import_pattern.sub(adjust_import_path, test_code)
+
+
 def validate_and_fix_import_style(test_code: str, source_file_path: Path, function_name: str) -> str:
     """Validate and fix import style in generated test code to match source export.
 
