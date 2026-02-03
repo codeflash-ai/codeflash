@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import git
 import libcst as cst
-from pydantic import Field
 from pydantic.dataclasses import dataclass
 from rich.tree import Tree
 
@@ -30,8 +29,11 @@ from codeflash.discovery.discover_unit_tests import discover_unit_tests
 from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.models.models import FunctionParent
+from codeflash.models.function_types import FunctionParent, FunctionToOptimize
 from codeflash.telemetry.posthog_cf import ph
+
+# Re-export for backward compatibility
+__all__ = ["FunctionParent", "FunctionToOptimize"]
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -39,7 +41,6 @@ if TYPE_CHECKING:
     from libcst import CSTNode
     from libcst.metadata import CodeRange
 
-    from codeflash.languages.base import FunctionInfo
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
 import contextlib
@@ -128,97 +129,6 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         super().generic_visit(node)
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.pop()
-
-
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
-class FunctionToOptimize:
-    """Represent a function that is a candidate for optimization.
-
-    This is the canonical dataclass for representing functions across all languages
-    (Python, JavaScript, TypeScript). It captures all information needed to identify,
-    locate, and work with a function.
-
-    Attributes
-    ----------
-        function_name: The name of the function.
-        file_path: The absolute file path where the function is located.
-        parents: A list of parent scopes, which could be classes or functions.
-        starting_line: The starting line number of the function in the file (1-indexed).
-        ending_line: The ending line number of the function in the file (1-indexed).
-        starting_col: The starting column offset (0-indexed, for precise location).
-        ending_col: The ending column offset (0-indexed, for precise location).
-        is_async: Whether this function is defined as async.
-        is_method: Whether this is a method (belongs to a class).
-        language: The programming language of this function (default: "python").
-        doc_start_line: Line where docstring/JSDoc starts (or None if no doc comment).
-
-    The qualified_name property provides the full name of the function, including
-    any parent class or function names. The qualified_name_with_modules_from_root
-    method extends this with the module name from the project root.
-
-    """
-
-    function_name: str
-    file_path: Path
-    parents: list[FunctionParent] = Field(default_factory=list)  # list[ClassDef | FunctionDef | AsyncFunctionDef]
-    starting_line: Optional[int] = None
-    ending_line: Optional[int] = None
-    starting_col: Optional[int] = None  # Column offset for precise location
-    ending_col: Optional[int] = None  # Column offset for precise location
-    is_async: bool = False
-    is_method: bool = False  # Whether this is a method (belongs to a class)
-    language: str = "python"  # Language identifier for multi-language support
-    doc_start_line: Optional[int] = None  # Line where docstring/JSDoc starts
-
-    @property
-    def top_level_parent_name(self) -> str:
-        return self.function_name if not self.parents else self.parents[0].name
-
-    @property
-    def class_name(self) -> str | None:
-        """Get the immediate parent class name, if any."""
-        for parent in reversed(self.parents):
-            if parent.type == "ClassDef":
-                return parent.name
-        return None
-
-    def __str__(self) -> str:
-        qualified = f"{'.'.join([p.name for p in self.parents])}{'.' if self.parents else ''}{self.function_name}"
-        line_info = f":{self.starting_line}-{self.ending_line}" if self.starting_line and self.ending_line else ""
-        return f"{self.file_path}:{qualified}{line_info}"
-
-    @property
-    def qualified_name(self) -> str:
-        if not self.parents:
-            return self.function_name
-        # Join all parent names with dots to handle nested classes properly
-        parent_path = ".".join(parent.name for parent in self.parents)
-        return f"{parent_path}.{self.function_name}"
-
-    def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
-        return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
-
-    @classmethod
-    def from_function_info(cls, func_info: FunctionInfo) -> FunctionToOptimize:
-        """Create a FunctionToOptimize from a FunctionInfo instance.
-
-        This is a temporary method for backward compatibility during migration.
-        Once FunctionInfo is fully removed, this method can be deleted.
-        """
-        parents = [FunctionParent(name=p.name, type=p.type) for p in func_info.parents]
-        return cls(
-            function_name=func_info.name,
-            file_path=func_info.file_path,
-            parents=parents,
-            starting_line=func_info.start_line,
-            ending_line=func_info.end_line,
-            starting_col=func_info.start_col,
-            ending_col=func_info.end_col,
-            is_async=func_info.is_async,
-            is_method=func_info.is_method,
-            language=func_info.language.value,
-            doc_start_line=func_info.doc_start_line,
-        )
 
 
 # =============================================================================
@@ -421,7 +331,7 @@ def get_functions_to_optimize(
                         # It's a standalone function - check if the function is exported
                         name_to_check = found_function.function_name
 
-                    is_exported, export_name = _is_js_ts_function_exported(file, name_to_check)
+                    is_exported, _ = _is_js_ts_function_exported(file, name_to_check)
                     if not is_exported:
                         if found_function.parents:
                             logger.debug(
