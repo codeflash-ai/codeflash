@@ -81,16 +81,35 @@ class MavenTestResult:
     returncode: int
 
 
-def detect_build_tool(project_root: Path) -> BuildTool:
+@dataclass
+class GradleTestResult:
+    """Result of running Gradle tests."""
+
+    success: bool
+    tests_run: int
+    failures: int
+    errors: int
+    skipped: int
+    test_results_dir: Path | None
+    stdout: str
+    stderr: str
+    returncode: int
+
+
+def detect_build_tool(project_root: Path | str) -> BuildTool:
     """Detect which build tool a Java project uses.
 
     Args:
-        project_root: Root directory of the Java project.
+        project_root: Root directory of the Java project (Path or string).
 
     Returns:
         The detected BuildTool enum value.
 
     """
+    # Ensure project_root is a Path object
+    if isinstance(project_root, str):
+        project_root = Path(project_root)
+
     # Check for Maven (pom.xml)
     if (project_root / "pom.xml").exists():
         return BuildTool.MAVEN
@@ -303,14 +322,26 @@ def find_maven_executable() -> str | None:
     return None
 
 
-def find_gradle_executable() -> str | None:
+def find_gradle_executable(project_root: Path | None = None) -> str | None:
     """Find the Gradle executable.
+
+    Args:
+        project_root: Optional project root to check for wrapper. If None, checks current directory.
 
     Returns:
         Path to gradle executable, or None if not found.
 
     """
-    # Check for Gradle wrapper first
+    # If project_root provided, check there first
+    if project_root:
+        gradlew = project_root / "gradlew"
+        if gradlew.exists():
+            return str(gradlew.absolute())
+        gradlew_bat = project_root / "gradlew.bat"
+        if gradlew_bat.exists():
+            return str(gradlew_bat.absolute())
+
+    # Check for Gradle wrapper in current directory
     if os.path.exists("gradlew"):
         return "./gradlew"
     if os.path.exists("gradlew.bat"):
@@ -526,6 +557,271 @@ def compile_maven_project(
 
     # Skip test execution
     cmd.append("-DskipTests")
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        return result.returncode == 0, result.stdout, result.stderr
+
+    except subprocess.TimeoutExpired:
+        return False, "", f"Compilation timed out after {timeout} seconds"
+    except Exception as e:
+        return False, "", str(e)
+
+
+def run_gradle_tests(
+    project_root: Path,
+    test_classes: list[str] | None = None,
+    test_methods: list[str] | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+    skip_compilation: bool = False,
+    enable_coverage: bool = False,
+    test_module: str | None = None,
+) -> GradleTestResult:
+    """Run Gradle tests.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        test_classes: Optional list of test class names to run.
+        test_methods: Optional list of specific test methods (format: ClassName.methodName).
+        env: Optional environment variables.
+        timeout: Maximum time in seconds for test execution.
+        skip_compilation: Whether to skip compilation (useful when only running tests).
+        enable_coverage: Whether to enable JaCoCo coverage collection.
+        test_module: For multi-module projects, the module containing tests.
+
+    Returns:
+        GradleTestResult with test execution results.
+
+    """
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        logger.error("Gradle not found. Please install Gradle or use Gradle wrapper.")
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr="Gradle not found",
+            returncode=-1,
+        )
+
+    cmd = [gradle]
+
+    # Build the test task
+    if test_module:
+        # Multi-module project: :module:test
+        test_task = f":{test_module}:test"
+    else:
+        test_task = "test"
+
+    # Add test task
+    cmd.append(test_task)
+
+    # Add specific test filters if provided
+    if test_classes or test_methods:
+        test_patterns = []
+        if test_classes:
+            test_patterns.extend(test_classes)
+        if test_methods:
+            test_patterns.extend(test_methods)
+
+        for pattern in test_patterns:
+            cmd.extend(["--tests", pattern])
+
+    # Skip compilation if requested
+    if skip_compilation:
+        cmd.append("-x")
+        if test_module:
+            cmd.append(f":{test_module}:compileTestJava")
+        else:
+            cmd.append("compileTestJava")
+
+    # Add JaCoCo coverage if requested
+    if enable_coverage:
+        if test_module:
+            cmd.append(f":{test_module}:jacocoTestReport")
+        else:
+            cmd.append("jacocoTestReport")
+
+    # Add common flags
+    cmd.extend([
+        "--no-daemon",  # Avoid daemon issues
+        "--console=plain",  # Plain output for parsing
+    ])
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            cwd=project_root,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        # Determine test results directory
+        if test_module:
+            test_results_dir = project_root / test_module / "build" / "test-results" / "test"
+        else:
+            test_results_dir = project_root / "build" / "test-results" / "test"
+
+        # Parse test results from XML files
+        tests_run, failures, errors, skipped = 0, 0, 0, 0
+        if test_results_dir.exists():
+            tests_run, failures, errors, skipped = _parse_gradle_test_results(test_results_dir)
+
+        success = result.returncode == 0
+
+        return GradleTestResult(
+            success=success,
+            tests_run=tests_run,
+            failures=failures,
+            errors=errors,
+            skipped=skipped,
+            test_results_dir=test_results_dir if test_results_dir.exists() else None,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            returncode=result.returncode,
+        )
+
+    except subprocess.TimeoutExpired:
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr=f"Tests timed out after {timeout} seconds",
+            returncode=-1,
+        )
+    except Exception as e:
+        logger.exception("Error running Gradle tests")
+        return GradleTestResult(
+            success=False,
+            tests_run=0,
+            failures=0,
+            errors=0,
+            skipped=0,
+            test_results_dir=None,
+            stdout="",
+            stderr=str(e),
+            returncode=-1,
+        )
+
+
+def _parse_gradle_test_results(test_results_dir: Path) -> tuple[int, int, int, int]:
+    """Parse Gradle XML test results.
+
+    Gradle uses JUnit XML format (same as Maven Surefire).
+
+    Args:
+        test_results_dir: Directory containing TEST-*.xml files.
+
+    Returns:
+        Tuple of (tests_run, failures, errors, skipped).
+
+    """
+    tests_run = 0
+    failures = 0
+    errors = 0
+    skipped = 0
+
+    # Find all TEST-*.xml files
+    xml_files = list(test_results_dir.glob("TEST-*.xml"))
+
+    for xml_file in xml_files:
+        try:
+            tree = _safe_parse_xml(xml_file)
+            root = tree.getroot()
+
+            # Safely parse numeric attributes
+            try:
+                tests_run += int(root.get("tests", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'tests' value in %s, defaulting to 0", xml_file)
+
+            try:
+                failures += int(root.get("failures", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'failures' value in %s, defaulting to 0", xml_file)
+
+            try:
+                errors += int(root.get("errors", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'errors' value in %s, defaulting to 0", xml_file)
+
+            try:
+                skipped += int(root.get("skipped", "0"))
+            except (ValueError, TypeError):
+                logger.warning("Invalid 'skipped' value in %s, defaulting to 0", xml_file)
+
+        except ET.ParseError as e:
+            logger.warning("Failed to parse Gradle test report %s: %s", xml_file, e)
+        except Exception as e:
+            logger.warning("Unexpected error parsing Gradle test report %s: %s", xml_file, e)
+
+    return tests_run, failures, errors, skipped
+
+
+def compile_with_gradle(
+    project_root: Path,
+    include_tests: bool = True,
+    env: dict[str, str] | None = None,
+    timeout: int = 300,
+) -> tuple[bool, str, str]:
+    """Compile a Gradle project.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        include_tests: Whether to compile test classes as well.
+        env: Optional environment variables.
+        timeout: Maximum time in seconds for compilation.
+
+    Returns:
+        Tuple of (success, stdout, stderr).
+
+    """
+    gradle = find_gradle_executable(project_root)
+    if not gradle:
+        return False, "", "Gradle not found"
+
+    cmd = [gradle]
+
+    # Add compilation tasks
+    if include_tests:
+        cmd.extend(["compileJava", "compileTestJava"])
+    else:
+        cmd.append("compileJava")
+
+    # Add common flags
+    cmd.extend([
+        "--no-daemon",
+        "--console=plain",
+    ])
 
     run_env = os.environ.copy()
     if env:
