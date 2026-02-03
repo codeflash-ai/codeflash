@@ -839,11 +839,13 @@ def filter_functions(
             if any(pattern in file_lower for pattern in test_file_name_patterns):
                 return True
             # Check directory patterns, but only within the project root
-            # to avoid false positives from parent directories
-            relative_path = file_lower
+            # to avoid false positives from parent directories (e.g., project at /home/user/tests/myproject)
             if project_root_str and file_lower.startswith(project_root_str.lower()):
                 relative_path = file_lower[len(project_root_str) :]
-            return any(pattern in relative_path for pattern in test_dir_patterns)
+                return any(pattern in relative_path for pattern in test_dir_patterns)
+            # If we can't compute relative path from project root, don't check directory patterns
+            # This avoids false positives when project is inside a folder named "tests"
+            return False
         # Use directory-based filtering when tests are in a separate directory
         return file_path_normalized.startswith(tests_root_str + os.sep)
 
