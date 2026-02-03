@@ -616,10 +616,30 @@ def _detect_module_from_test_classes(project_root: Path, test_patterns: list[str
 
             # Search for this test class in module test directories
             for module in module_names:
+                # Check both absolute and relative paths
                 test_file = project_root / module / "src" / "test" / "java" / f"{class_path}.java"
-                if test_file.exists():
-                    logger.debug(f"Detected module '{module}' from test class {pattern}")
+
+                # Also check if pattern already contains module path
+                if class_path.startswith(module + '/'):
+                    logger.debug(f"Detected module '{module}' from test class path {pattern}")
                     return module
+
+                if test_file.exists():
+                    logger.debug(f"Detected module '{module}' from test class file {test_file}")
+                    return module
+
+        # Fallback: glob search for any test file in module directories
+        for module in module_names:
+            test_dir = project_root / module / "src" / "test" / "java"
+            if test_dir.exists():
+                # Check if any test files exist in this module
+                for pattern in test_patterns:
+                    # Extract just the class name
+                    class_name = pattern.split('.')[-1] if '.' in pattern else pattern
+                    test_files = list(test_dir.rglob(f"*{class_name}*.java"))
+                    if test_files:
+                        logger.debug(f"Detected module '{module}' from glob search, found {test_files[0]}")
+                        return module
 
     except Exception as e:
         logger.debug(f"Failed to detect module from test classes: {e}")
