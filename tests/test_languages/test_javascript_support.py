@@ -55,7 +55,7 @@ function add(a, b) {
             functions = js_support.discover_functions(Path(f.name))
 
             assert len(functions) == 1
-            assert functions[0].name == "add"
+            assert functions[0].function_name == "add"
             assert functions[0].language == Language.JAVASCRIPT
 
     def test_discover_multiple_functions(self, js_support):
@@ -79,7 +79,7 @@ function multiply(a, b) {
             functions = js_support.discover_functions(Path(f.name))
 
             assert len(functions) == 3
-            names = {func.name for func in functions}
+            names = {func.function_name for func in functions}
             assert names == {"add", "subtract", "multiply"}
 
     def test_discover_arrow_function(self, js_support):
@@ -97,7 +97,7 @@ const multiply = (x, y) => x * y;
             functions = js_support.discover_functions(Path(f.name))
 
             assert len(functions) == 2
-            names = {func.name for func in functions}
+            names = {func.function_name for func in functions}
             assert names == {"add", "multiply"}
 
     def test_discover_function_without_return_excluded(self, js_support):
@@ -118,7 +118,7 @@ function withoutReturn() {
 
             # Only the function with return should be discovered
             assert len(functions) == 1
-            assert functions[0].name == "withReturn"
+            assert functions[0].function_name == "withReturn"
 
     def test_discover_class_methods(self, js_support):
         """Test discovering class methods."""
@@ -161,8 +161,8 @@ function syncFunction() {
 
             assert len(functions) == 2
 
-            async_func = next(f for f in functions if f.name == "fetchData")
-            sync_func = next(f for f in functions if f.name == "syncFunction")
+            async_func = next(f for f in functions if f.function_name == "fetchData")
+            sync_func = next(f for f in functions if f.function_name == "syncFunction")
 
             assert async_func.is_async is True
             assert sync_func.is_async is False
@@ -185,7 +185,7 @@ function syncFunc() {
             functions = js_support.discover_functions(Path(f.name), criteria)
 
             assert len(functions) == 1
-            assert functions[0].name == "syncFunc"
+            assert functions[0].function_name == "syncFunc"
 
     def test_discover_with_filter_exclude_methods(self, js_support):
         """Test filtering out class methods."""
@@ -207,7 +207,7 @@ class MyClass {
             functions = js_support.discover_functions(Path(f.name), criteria)
 
             assert len(functions) == 1
-            assert functions[0].name == "standalone"
+            assert functions[0].function_name == "standalone"
 
     def test_discover_line_numbers(self, js_support):
         """Test that line numbers are correctly captured."""
@@ -226,13 +226,13 @@ function func2() {
 
             functions = js_support.discover_functions(Path(f.name))
 
-            func1 = next(f for f in functions if f.name == "func1")
-            func2 = next(f for f in functions if f.name == "func2")
+            func1 = next(f for f in functions if f.function_name == "func1")
+            func2 = next(f for f in functions if f.function_name == "func2")
 
-            assert func1.start_line == 1
-            assert func1.end_line == 3
-            assert func2.start_line == 5
-            assert func2.end_line == 9
+            assert func1.starting_line == 1
+            assert func1.ending_line == 3
+            assert func2.starting_line == 5
+            assert func2.ending_line == 9
 
     def test_discover_generator_function(self, js_support):
         """Test discovering generator functions."""
@@ -249,7 +249,7 @@ function* numberGenerator() {
             functions = js_support.discover_functions(Path(f.name))
 
             assert len(functions) == 1
-            assert functions[0].name == "numberGenerator"
+            assert functions[0].function_name == "numberGenerator"
 
     def test_discover_invalid_file_returns_empty(self, js_support):
         """Test that invalid JavaScript file returns empty list."""
@@ -280,7 +280,7 @@ const add = function(a, b) {
             functions = js_support.discover_functions(Path(f.name))
 
             assert len(functions) == 1
-            assert functions[0].name == "add"
+            assert functions[0].function_name == "add"
 
     def test_discover_immediately_invoked_function_excluded(self, js_support):
         """Test that IIFEs without names are excluded when require_name is True."""
@@ -300,7 +300,7 @@ function named() {
 
             # Only the named function should be discovered
             assert len(functions) == 1
-            assert functions[0].name == "named"
+            assert functions[0].function_name == "named"
 
 
 class TestReplaceFunction:
@@ -316,7 +316,7 @@ function multiply(a, b) {
     return a * b;
 }
 """
-        func = FunctionInfo(name="add", file_path=Path("/test.js"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
         new_code = """function add(a, b) {
     // Optimized
     return (a + b) | 0;
@@ -343,7 +343,7 @@ function other() {
 
 // Footer
 """
-        func = FunctionInfo(name="target", file_path=Path("/test.js"), start_line=4, end_line=6)
+        func = FunctionInfo(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
         new_code = """function target() {
     return 42;
 }
@@ -365,11 +365,11 @@ function other() {
 }
 """
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.js"),
-            start_line=2,
-            end_line=4,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=2,
+            ending_line=4,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         # New code has no indentation
         new_code = """add(a, b) {
@@ -391,7 +391,7 @@ function other() {
 
 const multiply = (x, y) => x * y;
 """
-        func = FunctionInfo(name="add", file_path=Path("/test.js"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
         new_code = """const add = (a, b) => {
     return (a + b) | 0;
 };
@@ -483,7 +483,7 @@ class TestExtractCodeContext:
             f.flush()
             file_path = Path(f.name)
 
-            func = FunctionInfo(name="add", file_path=file_path, start_line=1, end_line=3)
+            func = FunctionInfo(function_name="add", file_path=file_path, starting_line=1, ending_line=3)
 
             context = js_support.extract_code_context(func, file_path.parent, file_path.parent)
 
@@ -508,7 +508,7 @@ function main(a) {
 
             # First discover functions to get accurate line numbers
             functions = js_support.discover_functions(file_path)
-            main_func = next(f for f in functions if f.name == "main")
+            main_func = next(f for f in functions if f.function_name == "main")
 
             context = js_support.extract_code_context(main_func, file_path.parent, file_path.parent)
 
@@ -538,7 +538,7 @@ class TestIntegration:
             functions = js_support.discover_functions(file_path)
             assert len(functions) == 1
             func = functions[0]
-            assert func.name == "fibonacci"
+            assert func.function_name == "fibonacci"
 
             # Replace
             optimized_code = """function fibonacci(n) {
@@ -626,7 +626,7 @@ export default Button;
             functions = js_support.discover_functions(file_path)
 
             # Should find both components
-            names = {f.name for f in functions}
+            names = {f.function_name for f in functions}
             assert "Button" in names
             assert "Card" in names
 
@@ -688,7 +688,7 @@ class TestClassMethodExtraction:
 
             # Discover the method
             functions = js_support.discover_functions(file_path)
-            add_method = next(f for f in functions if f.name == "add")
+            add_method = next(f for f in functions if f.function_name == "add")
 
             # Extract code context
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -725,7 +725,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_method = next(f for f in functions if f.name == "add")
+            add_method = next(f for f in functions if f.function_name == "add")
 
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
@@ -764,7 +764,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            fib_method = next(f for f in functions if f.name == "fibonacci")
+            fib_method = next(f for f in functions if f.function_name == "fibonacci")
 
             context = js_support.extract_code_context(fib_method, file_path.parent, file_path.parent)
 
@@ -802,7 +802,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_method = next((f for f in functions if f.name == "add"), None)
+            add_method = next((f for f in functions if f.function_name == "add"), None)
 
             if add_method:
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -831,7 +831,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            fetch_method = next(f for f in functions if f.name == "fetchData")
+            fetch_method = next(f for f in functions if f.function_name == "fetchData")
 
             context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
 
@@ -863,7 +863,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_method = next((f for f in functions if f.name == "add"), None)
+            add_method = next((f for f in functions if f.function_name == "add"), None)
 
             if add_method:
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -891,7 +891,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            method = next(f for f in functions if f.name == "simpleMethod")
+            method = next(f for f in functions if f.function_name == "simpleMethod")
 
             context = js_support.extract_code_context(method, file_path.parent, file_path.parent)
 
@@ -922,11 +922,11 @@ class TestClassMethodReplacement:
 }
 """
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.js"),
-            start_line=2,
-            end_line=4,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=2,
+            ending_line=4,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
             is_method=True,
         )
         new_code = """    add(a, b) {
@@ -963,12 +963,12 @@ class TestClassMethodReplacement:
 }
 """
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.js"),
-            start_line=5,  # Method starts here
-            end_line=7,
+            starting_line=5,  # Method starts here
+            ending_line=7,
             doc_start_line=2,  # JSDoc starts here
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
             is_method=True,
         )
         new_code = """    /**
@@ -1000,11 +1000,11 @@ class TestClassMethodReplacement:
 """
         # Replace add first
         add_func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.js"),
-            start_line=2,
-            end_line=4,
-            parents=(ParentInfo(name="Math", type="ClassDef"),),
+            starting_line=2,
+            ending_line=4,
+            parents=[ParentInfo(name="Math", type="ClassDef")],
             is_method=True,
         )
         source = js_support.replace_function(
@@ -1032,11 +1032,11 @@ class TestClassMethodReplacement:
     }
 """
         func = FunctionInfo(
-            name="innerMethod",
+            function_name="innerMethod",
             file_path=Path("/test.js"),
-            start_line=2,
-            end_line=4,
-            parents=(ParentInfo(name="Indented", type="ClassDef"),),
+            starting_line=2,
+            ending_line=4,
+            parents=[ParentInfo(name="Indented", type="ClassDef")],
             is_method=True,
         )
         # New code with no indentation
@@ -1077,7 +1077,7 @@ class TestClassMethodEdgeCases:
             functions = js_support.discover_functions(file_path)
 
             # Should find constructor and increment
-            names = {f.name for f in functions}
+            names = {f.function_name for f in functions}
             assert "constructor" in names or "increment" in names
 
     def test_class_with_getters_setters(self, js_support):
@@ -1107,7 +1107,7 @@ class TestClassMethodEdgeCases:
             functions = js_support.discover_functions(file_path)
 
             # Should find at least greet
-            names = {f.name for f in functions}
+            names = {f.function_name for f in functions}
             assert "greet" in names
 
     def test_class_extending_another(self, js_support):
@@ -1135,7 +1135,7 @@ class Dog extends Animal {
             functions = js_support.discover_functions(file_path)
 
             # Find Dog's fetch method
-            fetch_method = next((f for f in functions if f.name == "fetch" and f.class_name == "Dog"), None)
+            fetch_method = next((f for f in functions if f.function_name == "fetch" and f.class_name == "Dog"), None)
 
             if fetch_method:
                 context = js_support.extract_code_context(fetch_method, file_path.parent, file_path.parent)
@@ -1169,7 +1169,7 @@ class Dog extends Animal {
             functions = js_support.discover_functions(file_path)
 
             # Should at least find publicMethod
-            names = {f.name for f in functions}
+            names = {f.function_name for f in functions}
             assert "publicMethod" in names
 
     def test_commonjs_class_export(self, js_support):
@@ -1187,7 +1187,7 @@ module.exports = { Calculator };
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_method = next(f for f in functions if f.name == "add")
+            add_method = next(f for f in functions if f.function_name == "add")
 
             context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
 
@@ -1209,7 +1209,7 @@ module.exports = { Calculator };
             functions = js_support.discover_functions(file_path)
 
             # Find the add method
-            add_method = next((f for f in functions if f.name == "add"), None)
+            add_method = next((f for f in functions if f.function_name == "add"), None)
 
             if add_method:
                 context = js_support.extract_code_context(add_method, file_path.parent, file_path.parent)
@@ -1260,7 +1260,7 @@ module.exports = { Counter };
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            increment_func = next(fn for fn in functions if fn.name == "increment")
+            increment_func = next(fn for fn in functions if fn.function_name == "increment")
 
             # Step 1: Extract code context (includes constructor for AI context)
             context = js_support.extract_code_context(increment_func, file_path.parent, file_path.parent)
@@ -1359,7 +1359,7 @@ export { User };
             file_path = Path(f.name)
 
             functions = ts_support.discover_functions(file_path)
-            get_name_func = next(fn for fn in functions if fn.name == "getName")
+            get_name_func = next(fn for fn in functions if fn.function_name == "getName")
 
             # Step 1: Extract code context (includes fields and constructor)
             context = ts_support.extract_code_context(get_name_func, file_path.parent, file_path.parent)
@@ -1461,7 +1461,7 @@ class Calculator {
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_func = next(fn for fn in functions if fn.name == "add")
+            add_func = next(fn for fn in functions if fn.function_name == "add")
 
             # Extract context for add
             context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)
@@ -1547,7 +1547,7 @@ module.exports = { MathUtils };
             file_path = Path(f.name)
 
             functions = js_support.discover_functions(file_path)
-            add_func = next(fn for fn in functions if fn.name == "add")
+            add_func = next(fn for fn in functions if fn.function_name == "add")
 
             # Extract context
             context = js_support.extract_code_context(add_func, file_path.parent, file_path.parent)

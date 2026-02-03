@@ -92,7 +92,7 @@ const multiply = (a, b) => a * b;
         functions = js_support.discover_functions(file_path)
         assert len(functions) == 1
         func = functions[0]
-        assert func.name == "multiply"
+        assert func.function_name == "multiply"
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
@@ -270,7 +270,7 @@ class CacheManager {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_or_compute = next(f for f in functions if f.name == "getOrCompute")
+        get_or_compute = next(f for f in functions if f.function_name == "getOrCompute")
 
         context = js_support.extract_code_context(get_or_compute, temp_project, temp_project)
 
@@ -372,7 +372,7 @@ function validateUserData(data, validators) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        func = next(f for f in functions if f.name == "validateUserData")
+        func = next(f for f in functions if f.function_name == "validateUserData")
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
@@ -468,7 +468,7 @@ async function fetchWithRetry(endpoint, options = {}) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        func = next(f for f in functions if f.name == "fetchWithRetry")
+        func = next(f for f in functions if f.function_name == "fetchWithRetry")
 
         context = js_support.extract_code_context(func, temp_project, temp_project)
 
@@ -617,7 +617,7 @@ function processUserInput(rawInput) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_func = next(f for f in functions if f.name == "processUserInput")
+        process_func = next(f for f in functions if f.function_name == "processUserInput")
 
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
 
@@ -672,7 +672,7 @@ function generateReport(data) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        report_func = next(f for f in functions if f.name == "generateReport")
+        report_func = next(f for f in functions if f.function_name == "generateReport")
 
         context = js_support.extract_code_context(report_func, temp_project, temp_project)
 
@@ -770,7 +770,7 @@ class Graph {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        topo_sort = next(f for f in functions if f.name == "topologicalSort")
+        topo_sort = next(f for f in functions if f.function_name == "topologicalSort")
 
         context = js_support.extract_code_context(topo_sort, temp_project, temp_project)
 
@@ -845,7 +845,7 @@ class MainClass {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_method = next(f for f in functions if f.name == "mainMethod" and f.class_name == "MainClass")
+        main_method = next(f for f in functions if f.function_name == "mainMethod" and f.class_name == "MainClass")
 
         context = js_support.extract_code_context(main_method, temp_project, temp_project)
 
@@ -901,7 +901,7 @@ module.exports = { sortFromAnotherFile };
         main_path.write_text(main_code, encoding="utf-8")
 
         functions = js_support.discover_functions(main_path)
-        main_func = next(f for f in functions if f.name == "sortFromAnotherFile")
+        main_func = next(f for f in functions if f.function_name == "sortFromAnotherFile")
 
         context = js_support.extract_code_context(main_func, temp_project, temp_project)
 
@@ -954,7 +954,7 @@ export { processNumber };
         main_path.write_text(main_code, encoding="utf-8")
 
         functions = js_support.discover_functions(main_path)
-        process_func = next(f for f in functions if f.name == "processNumber")
+        process_func = next(f for f in functions if f.function_name == "processNumber")
 
         context = js_support.extract_code_context(process_func, temp_project, temp_project)
 
@@ -1022,7 +1022,7 @@ export { handleUserInput };
         main_path.write_text(main_code, encoding="utf-8")
 
         functions = js_support.discover_functions(main_path)
-        handle_func = next(f for f in functions if f.name == "handleUserInput")
+        handle_func = next(f for f in functions if f.function_name == "handleUserInput")
 
         context = js_support.extract_code_context(handle_func, temp_project, temp_project)
 
@@ -1163,7 +1163,7 @@ class TypedCache<T> {
         file_path.write_text(code, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         context = ts_support.extract_code_context(get_method, temp_project, temp_project)
 
@@ -1249,7 +1249,7 @@ export { createUser };
         service_path.write_text(service_code, encoding="utf-8")
 
         functions = ts_support.discover_functions(service_path)
-        func = next(f for f in functions if f.name == "createUser")
+        func = next(f for f in functions if f.function_name == "createUser")
 
         context = ts_support.extract_code_context(func, temp_project, temp_project)
 
@@ -1333,7 +1333,7 @@ function isOdd(n) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        is_even = next(f for f in functions if f.name == "isEven")
+        is_even = next(f for f in functions if f.function_name == "isEven")
 
         context = js_support.extract_code_context(is_even, temp_project, temp_project)
 
@@ -1395,7 +1395,7 @@ function collectAllValues(root) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        collect_func = next(f for f in functions if f.name == "collectAllValues")
+        collect_func = next(f for f in functions if f.function_name == "collectAllValues")
 
         context = js_support.extract_code_context(collect_func, temp_project, temp_project)
 
@@ -1460,7 +1460,7 @@ async function fetchUserProfile(userId) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        profile_func = next(f for f in functions if f.name == "fetchUserProfile")
+        profile_func = next(f for f in functions if f.function_name == "fetchUserProfile")
 
         context = js_support.extract_code_context(profile_func, temp_project, temp_project)
 
@@ -1515,7 +1515,7 @@ module.exports = { Counter };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        increment_func = next(fn for fn in functions if fn.name == "increment")
+        increment_func = next(fn for fn in functions if fn.function_name == "increment")
 
         # Step 1: Extract code context
         context = js_support.extract_code_context(increment_func, temp_project, temp_project)
@@ -1637,7 +1637,7 @@ function* fibonacci(limit) {
         file_path.write_text(code, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        range_func = next(f for f in functions if f.name == "range")
+        range_func = next(f for f in functions if f.function_name == "range")
 
         context = js_support.extract_code_context(range_func, temp_project, temp_project)
 
@@ -2008,7 +2008,7 @@ class Calculator {
         functions = js_support.discover_functions(file_path)
 
         for func in functions:
-            if func.name != "constructor":
+            if func.function_name != "constructor":
                 context = js_support.extract_code_context(func, temp_project, temp_project)
                 is_valid = js_support.validate_syntax(context.target_code)
                 assert is_valid is True, f"Invalid syntax for {func.name}:\n{context.target_code}"

@@ -86,10 +86,13 @@ class TestConfig:
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.
 
-        Returns 'jest' for JavaScript/TypeScript, 'pytest' for Python (default).
+        For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
+        For Python: uses pytest as default.
         """
         if is_javascript():
-            return "jest"
+            from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+            return get_js_test_framework_or_default()
         return "pytest"
 
     def set_language(self, language: str) -> None:

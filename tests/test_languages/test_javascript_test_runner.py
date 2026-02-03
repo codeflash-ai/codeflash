@@ -18,7 +18,7 @@ class TestJestRootsConfiguration:
 
         # Create mock test files in a test directory
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
+            tmpdir_path = Path(tmpdir).resolve()
             test_dir = tmpdir_path / "test"
             test_dir.mkdir()
 
@@ -90,7 +90,7 @@ class TestJestRootsConfiguration:
         from codeflash.models.test_type import TestType
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
+            tmpdir_path = Path(tmpdir).resolve()
             test_dir = tmpdir_path / "test"
             test_dir.mkdir()
 

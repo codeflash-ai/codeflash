@@ -87,138 +87,138 @@ class TestParentInfo:
 
 
 class TestFunctionInfo:
-    """Tests for the FunctionInfo dataclass."""
+    """Tests for the FunctionInfo dataclass (alias for FunctionToOptimize)."""
 
     def test_function_info_creation_minimal(self):
         """Test creating FunctionInfo with minimal args."""
-        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
-        assert func.name == "add"
+        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
+        assert func.function_name == "add"
         assert func.file_path == Path("/test/example.py")
-        assert func.start_line == 1
-        assert func.end_line == 3
-        assert func.parents == ()
+        assert func.starting_line == 1
+        assert func.ending_line == 3
+        assert func.parents == []
         assert func.is_async is False
         assert func.is_method is False
-        assert func.language == Language.PYTHON
+        assert func.language == "python"
 
     def test_function_info_creation_full(self):
         """Test creating FunctionInfo with all args."""
-        parents = (ParentInfo(name="Calculator", type="ClassDef"),)
+        parents = [ParentInfo(name="Calculator", type="ClassDef")]
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test/example.py"),
-            start_line=10,
-            end_line=15,
+            starting_line=10,
+            ending_line=15,
             parents=parents,
             is_async=True,
             is_method=True,
-            language=Language.PYTHON,
-            start_col=4,
-            end_col=20,
+            language="python",
+            starting_col=4,
+            ending_col=20,
         )
-        assert func.name == "add"
+        assert func.function_name == "add"
         assert func.parents == parents
         assert func.is_async is True
         assert func.is_method is True
-        assert func.start_col == 4
-        assert func.end_col == 20
+        assert func.starting_col == 4
+        assert func.ending_col == 20
 
     def test_function_info_frozen(self):
         """Test that FunctionInfo is immutable."""
-        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         with pytest.raises(AttributeError):
-            func.name = "new_name"
+            func.function_name = "new_name"
 
     def test_qualified_name_no_parents(self):
         """Test qualified_name without parents."""
-        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.qualified_name == "add"
 
     def test_qualified_name_with_class(self):
         """Test qualified_name with class parent."""
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         assert func.qualified_name == "Calculator.add"
 
     def test_qualified_name_nested(self):
         """Test qualified_name with nested parents."""
         func = FunctionInfo(
-            name="inner",
+            function_name="inner",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")],
         )
         assert func.qualified_name == "Outer.Inner.inner"
 
     def test_class_name_with_class(self):
         """Test class_name property with class parent."""
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         assert func.class_name == "Calculator"
 
     def test_class_name_without_class(self):
         """Test class_name property without class parent."""
-        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.class_name is None
 
     def test_class_name_nested_function(self):
         """Test class_name for function nested in another function."""
         func = FunctionInfo(
-            name="inner",
+            function_name="inner",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="outer", type="FunctionDef"),),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="outer", type="FunctionDef")],
         )
         assert func.class_name is None
 
     def test_class_name_method_in_nested_class(self):
         """Test class_name for method in nested class."""
         func = FunctionInfo(
-            name="method",
+            function_name="method",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")],
         )
         # Should return the immediate parent class
         assert func.class_name == "Inner"
 
     def test_top_level_parent_name_no_parents(self):
         """Test top_level_parent_name without parents."""
-        func = FunctionInfo(name="add", file_path=Path("/test/example.py"), start_line=1, end_line=3)
+        func = FunctionInfo(function_name="add", file_path=Path("/test/example.py"), starting_line=1, ending_line=3)
         assert func.top_level_parent_name == "add"
 
     def test_top_level_parent_name_with_parents(self):
         """Test top_level_parent_name with parents."""
         func = FunctionInfo(
-            name="method",
+            function_name="method",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Outer", type="ClassDef"), ParentInfo(name="Inner", type="ClassDef")],
         )
         assert func.top_level_parent_name == "Outer"
 
     def test_function_info_str(self):
         """Test string representation."""
         func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test/example.py"),
-            start_line=1,
-            end_line=3,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=1,
+            ending_line=3,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         s = str(func)
         assert "Calculator.add" in s
