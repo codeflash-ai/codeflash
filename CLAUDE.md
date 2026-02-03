@@ -62,6 +62,8 @@ codeflash/
 - Use libcst, not ast - For Python, always use `libcst` for code parsing/modification to preserve formatting.
 - Code context extraction and replacement tests must always assert for full string equality, no substring matching.
 - Any new feature or bug fix that can be tested automatically must have test cases.
+- If changes affect existing test expectations, update the tests accordingly. Tests must always pass after changes.
+- NEVER use leading underscores for function names (e.g., `_helper`). Python has no true private functions. Always use public names.
 
 ## Code Style
 
@@ -70,7 +72,7 @@ codeflash/
 - **Tooling**: Ruff for linting/formatting, mypy strict mode, pre-commit hooks
 - **Comments**: Minimal - only explain "why", not "what"
 - **Docstrings**: Do not add unless explicitly requested
-- **Naming**: Prefer public functions (no leading underscore) - Python doesn't have true private functions
+- **Naming**: NEVER use leading underscores (`_function_name`) - Python has no true private functions, use public names
 - **Paths**: Always use absolute paths, handle encoding explicitly (UTF-8)
 
 ## Git Commits & Pull Requests
