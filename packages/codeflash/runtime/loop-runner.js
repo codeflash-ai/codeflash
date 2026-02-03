@@ -43,12 +43,13 @@ let jestVersion = 0;
 try {
     // Resolve jest-runner from the current working directory (project root)
     // This is important because the codeflash package may bundle a different version
-    const projectRoot = process.cwd();
+    // In monorepos, use CODEFLASH_MONOREPO_ROOT if available (set by Python runner)
+    const projectRoot = process.env.CODEFLASH_MONOREPO_ROOT || process.cwd();
     const projectRequire = createRequire(path.join(projectRoot, 'node_modules', 'package.json'));
 
     let jestRunnerPath;
     try {
-        // First try to resolve from project's node_modules
+        // First try to resolve from project's node_modules (or monorepo root)
         jestRunnerPath = projectRequire.resolve('jest-runner');
     } catch (e) {
         // Fall back to default resolution (codeflash's bundled version)
