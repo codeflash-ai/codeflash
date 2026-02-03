@@ -13,8 +13,13 @@ def test_find_leftover_instrumented_test_files_java(tmp_path):
     # Create Java instrumented test files (should be found)
     java_perf1 = test_root / "FibonacciTest__perfinstrumented.java"
     java_perf2 = test_root / "KnapsackTest__perfonlyinstrumented.java"
+    # Create files with numeric suffixes (also should be found)
+    java_perf3 = test_root / "FibonacciTest__perfinstrumented_2.java"
+    java_perf4 = test_root / "KnapsackTest__perfonlyinstrumented_3.java"
     java_perf1.touch()
     java_perf2.touch()
+    java_perf3.touch()
+    java_perf4.touch()
 
     # Create normal Java test file (should NOT be found)
     normal_test = test_root / "CalculatorTest.java"
@@ -24,15 +29,17 @@ def test_find_leftover_instrumented_test_files_java(tmp_path):
     leftover_files = Optimizer.find_leftover_instrumented_test_files(tmp_path)
     leftover_names = {f.name for f in leftover_files}
 
-    # Assert instrumented files are found
+    # Assert instrumented files are found (including those with numeric suffixes)
     assert "FibonacciTest__perfinstrumented.java" in leftover_names
     assert "KnapsackTest__perfonlyinstrumented.java" in leftover_names
+    assert "FibonacciTest__perfinstrumented_2.java" in leftover_names
+    assert "KnapsackTest__perfonlyinstrumented_3.java" in leftover_names
 
     # Assert normal test file is NOT found
     assert "CalculatorTest.java" not in leftover_names
 
-    # Should find exactly 2 files
-    assert len(leftover_files) == 2
+    # Should find exactly 4 files
+    assert len(leftover_files) == 4
 
 
 def test_find_leftover_instrumented_test_files_python(tmp_path):

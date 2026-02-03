@@ -3,3 +3,4 @@
 [tool.codeflash]
 module-root = "src/main/java"
 tests-root = "src/test/java"
+formatter-cmds = []

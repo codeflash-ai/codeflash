@@ -639,6 +639,8 @@ class Optimizer:
         Java patterns:
         - '*Test__perfinstrumented.java'
         - '*Test__perfonlyinstrumented.java'
+        - '*Test__perfinstrumented_{n}.java' (with optional numeric suffix)
+        - '*Test__perfonlyinstrumented_{n}.java' (with optional numeric suffix)
 
         Returns a list of matching file paths.
         """
@@ -650,8 +652,8 @@ class Optimizer:
             r"test.*__perf_test_\d?\.py|test_.*__unit_test_\d?\.py|test_.*__perfinstrumented\.py|test_.*__perfonlyinstrumented\.py|"
             # JavaScript/TypeScript patterns (new naming with .test/.spec preserved)
             r".*__perfinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|.*__perfonlyinstrumented\.(?:test|spec)\.(?:js|ts|jsx|tsx)|"
-            # Java patterns
-            r".*Test__perfinstrumented\.java|.*Test__perfonlyinstrumented\.java"
+            # Java patterns (with optional numeric suffix _2, _3, etc.)
+            r".*Test__perfinstrumented(?:_\d+)?\.java|.*Test__perfonlyinstrumented(?:_\d+)?\.java"
             r")$"
         )
 
