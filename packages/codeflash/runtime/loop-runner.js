@@ -32,6 +32,67 @@
 
 const { createRequire } = require('module');
 const path = require('path');
+const fs = require('fs');
+
+/**
+ * Resolve jest-runner with monorepo support.
+ * Uses CODEFLASH_MONOREPO_ROOT environment variable if available,
+ * otherwise walks up the directory tree looking for node_modules/jest-runner.
+ */
+function resolveJestRunner() {
+    // Try standard resolution first (works in simple projects)
+    try {
+        return require.resolve('jest-runner');
+    } catch (e) {
+        // Standard resolution failed - try monorepo-aware resolution
+    }
+
+    // If Python detected a monorepo root, check there first
+    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
+    if (monorepoRoot) {
+        const jestRunnerPath = path.join(monorepoRoot, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+    }
+
+    // Fallback: Walk up from cwd looking for node_modules/jest-runner
+    const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
+    let currentDir = process.cwd();
+    const visitedDirs = new Set();
+
+    while (currentDir !== path.dirname(currentDir)) {
+        // Avoid infinite loops
+        if (visitedDirs.has(currentDir)) break;
+        visitedDirs.add(currentDir);
+
+        // Try node_modules/jest-runner at this level
+        const jestRunnerPath = path.join(currentDir, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+
+        // Check if this is a workspace root (has monorepo markers)
+        const isWorkspaceRoot = monorepoMarkers.some(marker =>
+            fs.existsSync(path.join(currentDir, marker))
+        );
+
+        if (isWorkspaceRoot) {
+            // Found workspace root but no jest-runner - stop searching
+            break;
+        }
+
+        currentDir = path.dirname(currentDir);
+    }
+
+    throw new Error('jest-runner not found');
+}
 
 // Try to load jest-runner from the PROJECT's node_modules, not from codeflash package
 // This ensures we use the same version of jest-runner that the project uses
@@ -41,20 +102,7 @@ let jestRunnerAvailable = false;
 let jestVersion = 0;
 
 try {
-    // Resolve jest-runner from the current working directory (project root)
-    // This is important because the codeflash package may bundle a different version
-    const projectRoot = process.cwd();
-    const projectRequire = createRequire(path.join(projectRoot, 'node_modules', 'package.json'));
-
-    let jestRunnerPath;
-    try {
-        // First try to resolve from project's node_modules
-        jestRunnerPath = projectRequire.resolve('jest-runner');
-    } catch (e) {
-        // Fall back to default resolution (codeflash's bundled version)
-        jestRunnerPath = require.resolve('jest-runner');
-    }
-
+    const jestRunnerPath = resolveJestRunner();
     const internalRequire = createRequire(jestRunnerPath);
 
     // Try to get the TestRunner class (Jest 30+)

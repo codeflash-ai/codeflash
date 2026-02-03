@@ -1822,15 +1822,15 @@ export const sendSlackMessage = async (
         target_func = "sendSlackMessage"
 
         functions = ts_support.discover_functions(file_path)
-        func_info = next(f for f in functions if f.name == target_func)
+        func_info = next(f for f in functions if f.function_name == target_func)
         fto = FunctionToOptimize(
             function_name=target_func,
             file_path=file_path,
             parents=func_info.parents,
-            starting_line=func_info.start_line,
-            ending_line=func_info.end_line,
-            starting_col=func_info.start_col,
-            ending_col=func_info.end_col,
+            starting_line=func_info.starting_line,
+            ending_line=func_info.ending_line,
+            starting_col=func_info.starting_col,
+            ending_col=func_info.ending_col,
             is_async=func_info.is_async,
             language="typescript",
         )

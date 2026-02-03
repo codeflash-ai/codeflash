@@ -127,13 +127,14 @@ class TestDetectModuleRoot:
         assert result == "lib"
 
     def test_detects_from_exports_object_dot(self, tmp_path: Path) -> None:
-        """Should detect module root from exports object with '.' key."""
+        """Should skip build output dirs and return '.' when no src dir exists."""
         (tmp_path / "dist").mkdir()
         package_data = {"exports": {".": "./dist/index.js"}}
 
         result = detect_module_root(tmp_path, package_data)
 
-        assert result == "dist"
+        # dist is a build output directory, so it's skipped
+        assert result == "."
 
     def test_detects_from_exports_object_nested(self, tmp_path: Path) -> None:
         """Should detect module root from nested exports object."""
@@ -227,13 +228,14 @@ class TestDetectModuleRoot:
         assert result == "src"
 
     def test_handles_deeply_nested_exports(self, tmp_path: Path) -> None:
-        """Should handle deeply nested export paths."""
+        """Should handle deeply nested export paths but skip build output dirs."""
         (tmp_path / "packages" / "core" / "dist").mkdir(parents=True)
         package_data = {"exports": {".": {"import": "./packages/core/dist/index.mjs"}}}
 
         result = detect_module_root(tmp_path, package_data)
 
-        assert result == "packages/core/dist"
+        # dist is a build output directory, so it's skipped even when nested
+        assert result == "."
 
     def test_handles_empty_exports(self, tmp_path: Path) -> None:
         """Should handle empty exports gracefully."""
@@ -756,7 +758,7 @@ class TestRealWorldPackageJsonExamples:
         assert config["formatter_cmds"] == ["npx eslint --fix $file"]
 
     def test_library_with_exports(self, tmp_path: Path) -> None:
-        """Should handle library with modern exports field."""
+        """Should handle library with modern exports field, skipping build output dirs."""
         (tmp_path / "dist").mkdir()
         package_json = tmp_path / "package.json"
         package_json.write_text(
@@ -773,7 +775,8 @@ class TestRealWorldPackageJsonExamples:
 
         assert result is not None
         config, _ = result
-        assert config["module_root"] == str((tmp_path / "dist").resolve())
+        # dist is a build output directory, so it's skipped and falls back to project root
+        assert config["module_root"] == str(tmp_path.resolve())
 
     def test_monorepo_package(self, tmp_path: Path) -> None:
         """Should handle monorepo package configuration."""
