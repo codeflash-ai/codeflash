@@ -254,6 +254,12 @@ class JavaAssertTransformer:
         imports = self.analyzer.find_imports(source)
 
         # First pass: check for specific assertion libraries
+
+        # Single-pass detection: prefer specific assertion libraries but note
+        # presence of junit variants to fall back to them if no specific one found.
+        found_junit5 = False
+        found_junit4 = False
+
         for imp in imports:
             path = imp.import_path.lower()
             if "org.assertj" in path:
@@ -264,14 +270,17 @@ class JavaAssertTransformer:
                 return "truth"
             if "org.testng" in path:
                 return "testng"
-
-        # Second pass: check for JUnit versions
-        for imp in imports:
-            path = imp.import_path.lower()
             if "org.junit.jupiter" in path or "junit.jupiter" in path:
-                return "junit5"
-            if "org.junit" in path:
-                return "junit4"
+                found_junit5 = True
+            elif "org.junit" in path:
+                found_junit4 = True
+
+        if found_junit5:
+            return "junit5"
+        if found_junit4:
+            return "junit4"
+
+        # Default to JUnit 5 if no specific imports found
 
         # Default to JUnit 5 if no specific imports found
         return "junit5"

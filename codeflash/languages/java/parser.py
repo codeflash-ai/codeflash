@@ -7,8 +7,9 @@ using tree-sitter, following the same patterns as the JavaScript/TypeScript impl
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 from tree_sitter import Language, Parser
 
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from tree_sitter import Node, Tree
+
+_IMPORT_RE = re.compile(r'^\s*import\s+(static\s+)?([A-Za-z_$][\w$\.]*(?:\.\*)?)\s*;?\s*$', re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +114,9 @@ class JavaAnalyzer:
 
     def __init__(self) -> None:
         """Initialize the Java analyzer."""
-        self._parser: Parser | None = None
+        # Keep parser attribute for compatibility with any external expectations.
+        # We do not rely on tree-sitter for import scanning to improve performance.
+        self._parser = None  # type: ignore[assignment]
 
     @property
     def parser(self) -> Parser:
@@ -426,17 +431,11 @@ class JavaAnalyzer:
             List of JavaImportInfo objects.
 
         """
-        source_bytes = source.encode("utf8")
-        tree = self.parse(source_bytes)
-        imports: list[JavaImportInfo] = []
-
-        for child in tree.root_node.children:
-            if child.type == "import_declaration":
-                import_info = self._extract_import_info(child, source_bytes)
-                if import_info:
-                    imports.append(import_info)
-
-        return imports
+        # Fast path: use line-based regex scanner to avoid heavy parsing.
+        # This preserves ordering and extracts the same logical import information
+        # used elsewhere (import path, static flag, wildcard, and line numbers).
+        lines = source.splitlines(keepends=True)
+        return self._scan_import_lines(lines)
 
     def _extract_import_info(self, node: Node, source_bytes: bytes) -> JavaImportInfo | None:
         """Extract import information from an import_declaration node."""
@@ -683,6 +682,69 @@ class JavaAnalyzer:
                         return self.get_node_text(pkg_child, source_bytes)
 
         return None
+
+    def _scan_import_lines(self, lines: Iterable[str]) -> list[JavaImportInfo]:
+        """Scan given lines for import declarations using a compiled regex.
+
+        This helper assumes each import is contained in a single logical source line,
+        and it skips content inside block comments. It returns JavaImportInfo objects
+        in the order they appear.
+        """
+        imports: list[JavaImportInfo] = []
+        in_block_comment = False
+
+        for idx, raw_line in enumerate(lines):
+            line = raw_line.rstrip("\n")
+
+            # Track block comments to avoid matching imports inside them.
+            if in_block_comment:
+                end_idx = line.find("*/")
+                if end_idx != -1:
+                    # End of block comment; continue scanning the rest of the line after it.
+                    line = line[end_idx + 2 :]
+                    in_block_comment = False
+                else:
+                    # Still inside a block comment
+                    continue
+
+            # Remove single-line comment part to avoid false positives.
+            single_line_comment_idx = line.find("//")
+            if single_line_comment_idx != -1:
+                line = line[:single_line_comment_idx]
+
+            # Detect start of block comment and strip following part as potential false positives.
+            block_start_idx = line.find("/*")
+            if block_start_idx != -1:
+                block_end_idx = line.find("*/", block_start_idx + 2)
+                if block_end_idx != -1:
+                    # Block comment starts and ends on the same line - remove it and continue.
+                    line = line[:block_start_idx] + line[block_end_idx + 2 :]
+                else:
+                    # Block comment continues; strip the rest of this line and set flag.
+                    line = line[:block_start_idx]
+                    in_block_comment = True
+
+            if not line.strip():
+                continue
+
+            m = _IMPORT_RE.match(line)
+            if m:
+                is_static = bool(m.group(1))
+                path = m.group(2) or ""
+                is_wildcard = path.endswith(".*")
+                # Clean up import_path similar to prior behavior
+                import_path = path.rstrip(".*").rstrip(".")
+                imports.append(
+                    JavaImportInfo(
+                        import_path=import_path,
+                        is_static=is_static,
+                        is_wildcard=is_wildcard,
+                        start_line=idx + 1,
+                        end_line=idx + 1,
+                    )
+                )
+
+        return imports
 
 
 def get_java_analyzer() -> JavaAnalyzer:
