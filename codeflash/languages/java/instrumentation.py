@@ -464,35 +464,44 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     # We process line by line for cleaner handling
 
     lines = source.split("\n")
-    result = []
+    result: list[str] = []
     i = 0
     iteration_counter = 0
 
-    while i < len(lines):
-        line = lines[i]
+    # Local bindings to avoid repeated attribute lookups
+    lines_local = lines
+    len_lines = len(lines_local)
+    res_append = result.append
+    # constant prefix used when inserting indented body lines (preserve original spacing behavior)
+    body_prefix = "        "
+
+    while i < len_lines:
+        line = lines_local[i]
         stripped = line.strip()
 
         # Look for @Test annotation
         if stripped.startswith("@Test"):
-            result.append(line)
+            res_append(line)
             i += 1
 
             # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
-                result.append(lines[i])
+            while i < len_lines and lines_local[i].strip().startswith("@"):
+                res_append(lines_local[i])
                 i += 1
 
             # Now find the method signature and opening brace
-            method_lines = []
-            while i < len(lines):
-                method_lines.append(lines[i])
-                if "{" in lines[i]:
+            method_lines: list[str] = []
+            while i < len_lines:
+                cur_line = lines_local[i]
+                method_lines.append(cur_line)
+                # stop when we find the opening brace on the method signature
+                if "{" in cur_line:
                     break
                 i += 1
 
             # Add the method signature lines
             for ml in method_lines:
-                result.append(ml)
+                res_append(ml)
             i += 1
 
             # We're now inside the method body
@@ -526,25 +535,28 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
             # Collect method body until we find matching closing brace
             brace_depth = 1
-            body_lines = []
+            body_lines: list[str] = []
 
-            while i < len(lines) and brace_depth > 0:
-                body_line = lines[i]
-                # Count braces (simple approach - doesn't handle strings/comments perfectly)
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
+            # Use local bindings to speed loop
+            lines_l = lines_local
+            append_body = body_lines.append
+
+            while i < len_lines and brace_depth > 0:
+                body_line = lines_l[i]
+                # Count braces efficiently using str.count (C implementation)
+                brace_depth += body_line.count("{") - body_line.count("}")
+
 
                 if brace_depth > 0:
-                    body_lines.append(body_line)
+                    append_body(body_line)
                     i += 1
                 else:
                     # This line contains the closing brace, but we've hit depth 0
                     # Add indented body lines (inside try block, inside for loop)
                     for bl in body_lines:
-                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
+                        res_append(body_prefix + bl)  # 8 extra spaces for inner loop + try
+
+                    # Add finally block and close inner loop
 
                     # Add finally block and close inner loop
                     method_close_indent = " " * base_indent  # Same level as method signature
@@ -560,7 +572,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
                     result.extend(timing_end_code)
                     i += 1
         else:
-            result.append(line)
+            res_append(line)
             i += 1
 
     return "\n".join(result)
@@ -674,11 +686,12 @@ def instrument_generated_java_test(
         new_class_name = f"{original_class_name}__perfonlyinstrumented"
 
     # Rename the class in the source
-    modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b",
-        rf"\1class {new_class_name}",
-        test_code,
-    )
+    pattern = re.compile(rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b")
+    # Use a callable replacement to precisely preserve the optional "public " group content
+    modified_code = pattern.sub(lambda m: (m.group(1) or "") + "class " + new_class_name, test_code)
+
+    # For performance mode, add timing instrumentation
+    # Use original class name (without suffix) in timing markers for consistency with Python
 
     # For performance mode, add timing instrumentation
     # Use original class name (without suffix) in timing markers for consistency with Python
