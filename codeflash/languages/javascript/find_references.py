@@ -210,7 +210,7 @@ class ReferenceFinder:
 
                 # Check if this file imports from the re-export file
                 import_info = self._find_matching_import(imports, reexport_file, file_path, reexported)
-
+                trigger_check = True
                 if import_info:
                     context.visited_files.add(file_path)
                     import_name, original_import = import_info
