@@ -21,6 +21,8 @@ from typing import Any
 
 import tomlkit
 
+_BUILD_DIRS = frozenset({"build", "dist", "out", ".next", ".nuxt"})
+
 
 @dataclass
 class DetectedProject:
@@ -384,9 +386,7 @@ def is_build_output_dir(path: Path) -> bool:
     in favor of source directories.
 
     """
-    build_dirs = {"build", "dist", "out", ".next", ".nuxt"}
-    parts = path.as_posix().split("/")
-    return any(part in build_dirs for part in parts)
+    return not _BUILD_DIRS.isdisjoint(path.parts)
 
 
 def _extract_entry_path(exports: Any) -> str | None:
