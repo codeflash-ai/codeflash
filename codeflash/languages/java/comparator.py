@@ -19,6 +19,39 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _compare_json_values(json1: str | None, json2: str | None) -> bool:
+    """Compare two JSON strings for semantic equality.
+
+    This function parses JSON strings and compares the deserialized objects,
+    handling differences in whitespace and key ordering.
+
+    Args:
+        json1: First JSON string (or None).
+        json2: Second JSON string (or None).
+
+    Returns:
+        True if the JSON values are semantically equal, False otherwise.
+    """
+    # Handle None cases
+    if json1 is None and json2 is None:
+        return True
+    if json1 is None or json2 is None:
+        return False
+
+    # Try exact string match first (fast path)
+    if json1 == json2:
+        return True
+
+    # Parse and compare as JSON
+    try:
+        obj1 = json.loads(json1)
+        obj2 = json.loads(json2)
+        return obj1 == obj2
+    except (json.JSONDecodeError, TypeError):
+        # If JSON parsing fails, fall back to string comparison
+        return json1 == json2
+
+
 def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
     """Find the codeflash-runtime JAR with the Comparator class.
 
@@ -308,8 +341,8 @@ def compare_invocations_directly(
                         original_pytest_error=orig_error,
                     )
                 )
-            elif orig_result != cand_result:
-                # Results differ
+            elif not _compare_json_values(orig_result, cand_result):
+                # Results differ (using JSON-aware comparison)
                 test_diffs.append(
                     TestDiff(
                         scope=TestDiffScope.RETURN_VALUE,
