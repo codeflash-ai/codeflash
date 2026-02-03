@@ -146,7 +146,9 @@ def parse_config_file(
         "disable-imports-sorting": False,
         "benchmark": False,
     }
-    list_str_keys = {"formatter-cmds": ["black $file"]}
+    # Note: formatter-cmds defaults to empty list. For Python projects, black is typically
+    # detected by the project detector. For Java projects, no formatter is supported yet.
+    list_str_keys = {"formatter-cmds": []}
 
     for key, default_value in str_keys.items():
         if key in config:

@@ -507,10 +507,14 @@ def _detect_formatter(project_root: Path, language: str) -> tuple[list[str], str
 
     Python: ruff > black
     JavaScript: prettier > eslint --fix
+    Java: not supported yet (returns empty)
 
     """
     if language in ("javascript", "typescript"):
         return _detect_js_formatter(project_root)
+    if language == "java":
+        # Java formatter support not implemented yet
+        return [], "not supported for Java"
     return _detect_python_formatter(project_root)
 
 
