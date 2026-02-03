@@ -30,13 +30,61 @@
 
 const { createRequire } = require('module');
 const path = require('path');
+const fs = require('fs');
+
+/**
+ * Resolve jest-runner with monorepo support.
+ * Walks up the directory tree looking for node_modules/jest-runner.
+ */
+function resolveJestRunner() {
+    // Try standard resolution first (works in simple projects)
+    try {
+        return require.resolve('jest-runner');
+    } catch (e) {
+        // Standard resolution failed - try monorepo-aware resolution
+    }
+
+    // Walk up from cwd looking for workspace root markers and node_modules
+    const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
+    let currentDir = process.cwd();
+    const visitedDirs = new Set();
+
+    while (currentDir !== path.dirname(currentDir)) {
+        // Avoid infinite loops
+        if (visitedDirs.has(currentDir)) break;
+        visitedDirs.add(currentDir);
+
+        // Try node_modules/jest-runner at this level
+        const jestRunnerPath = path.join(currentDir, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+
+        // Check if this is a workspace root (has monorepo markers)
+        const isWorkspaceRoot = monorepoMarkers.some(marker =>
+            fs.existsSync(path.join(currentDir, marker))
+        );
+
+        if (isWorkspaceRoot) {
+            // Found workspace root but no jest-runner - stop searching
+            break;
+        }
+
+        currentDir = path.dirname(currentDir);
+    }
+
+    throw new Error('jest-runner not found');
+}
 
 // Try to load jest-runner - it's a peer dependency that must be installed by the user
 let runTest;
 let jestRunnerAvailable = false;
 
 try {
-    const jestRunnerPath = require.resolve('jest-runner');
+    const jestRunnerPath = resolveJestRunner();
     const internalRequire = createRequire(jestRunnerPath);
     runTest = internalRequire('./runTest').default;
     jestRunnerAvailable = true;
