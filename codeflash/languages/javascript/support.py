@@ -1533,6 +1533,11 @@ class JavaScriptSupport:
         if not junit_xml_path.exists():
             return results
 
+        # Parse timing markers from console output (for performance tests)
+        from codeflash.languages.javascript.test_runner import _parse_timing_from_jest_output
+
+        timing_from_console = _parse_timing_from_jest_output(stdout)
+
         try:
             tree = ET.parse(junit_xml_path)
             root = tree.getroot()
@@ -1542,11 +1547,30 @@ class JavaScriptSupport:
                 classname = testcase.get("classname", "")
                 time_str = testcase.get("time", "0")
 
-                # Convert time to nanoseconds
+                # Convert time to nanoseconds from XML
                 try:
-                    runtime_ns = int(float(time_str) * 1_000_000_000)
+                    runtime_ns_xml = int(float(time_str) * 1_000_000_000)
                 except ValueError:
-                    runtime_ns = None
+                    runtime_ns_xml = None
+
+                # Try to get more accurate timing from console markers (for performance tests)
+                # The console markers are more accurate than JUnit XML time for benchmarking
+                runtime_ns = runtime_ns_xml
+                if timing_from_console:
+                    # Try to match this test case to timing data from console
+                    # Console timing uses format: module:testClass:funcName:invocationId
+                    # We need to find matching entries
+                    for timing_key, timing_value in timing_from_console.items():
+                        # timing_key format: "module:testClass:funcName:invocationId"
+                        # Check if this timing entry matches the current test
+                        if name in timing_key or classname in timing_key:
+                            # Use console timing if it's non-zero and looks more accurate
+                            if timing_value > 0:
+                                runtime_ns = timing_value
+                                logger.debug(
+                                    f"Using console timing for {name}: {timing_value}ns (XML had {runtime_ns_xml}ns)"
+                                )
+                                break
 
                 # Check for failure/error
                 failure = testcase.find("failure")
