@@ -77,6 +77,42 @@ class TestVerifyRequirements:
         package_json.write_text(json.dumps({"name": "test-project"}))
         return tmp_path
 
+    @pytest.fixture
+    def monorepo_with_jest(self, tmp_path):
+        """Create a monorepo structure with Jest at root level.
+
+        Structure:
+        tmp_path/
+          node_modules/
+            jest/
+          packages/
+            server/
+              src/
+              package.json
+        """
+        # Create root-level node_modules with jest
+        root_node_modules = tmp_path / "node_modules"
+        root_node_modules.mkdir()
+        (root_node_modules / "jest").mkdir()
+
+        # Create package directory structure
+        packages_dir = tmp_path / "packages"
+        packages_dir.mkdir()
+        server_dir = packages_dir / "server"
+        server_dir.mkdir()
+        (server_dir / "src").mkdir()
+
+        # Server has its own limited node_modules (no jest)
+        server_node_modules = server_dir / "node_modules"
+        server_node_modules.mkdir()
+        (server_node_modules / "some-local-package").mkdir()
+
+        # Server package.json
+        package_json = server_dir / "package.json"
+        package_json.write_text(json.dumps({"name": "server"}))
+
+        return server_dir
+
     def test_verify_requirements_success_with_jest(self, js_support, project_with_jest):
         """Test successful verification when Jest is installed."""
         with patch("subprocess.run") as mock_run:
@@ -136,16 +172,25 @@ class TestVerifyRequirements:
             assert success is False
             assert len(errors) == 1
             expected_error = (
-                f"node_modules not found in {project_without_node_modules}. "
+                f"node_modules not found in {project_without_node_modules} or parent directories. "
                 f"Please run 'npm install' to install dependencies."
             )
             assert errors[0] == expected_error
 
     def test_verify_requirements_fails_without_test_framework(self, js_support, project_without_jest):
         """Test verification fails when test framework is not installed."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
 
+        def mock_run_side_effect(cmd, **kwargs):
+            if cmd[0] == "node":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npm":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npx" and cmd[1] == "jest":
+                # Simulate npx not finding jest
+                return MagicMock(returncode=1)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run_side_effect):
             success, errors = js_support.verify_requirements(project_without_jest, "jest")
 
             assert success is False
@@ -169,9 +214,18 @@ class TestVerifyRequirements:
 
     def test_verify_requirements_vitest_not_installed(self, js_support, project_with_jest):
         """Test verification fails when Vitest is requested but only Jest is installed."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
 
+        def mock_run_side_effect(cmd, **kwargs):
+            if cmd[0] == "node":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npm":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npx" and cmd[1] == "vitest":
+                # Simulate npx not finding vitest
+                return MagicMock(returncode=1)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run_side_effect):
             success, errors = js_support.verify_requirements(project_with_jest, "vitest")
 
             assert success is False
@@ -181,15 +235,59 @@ class TestVerifyRequirements:
 
     def test_verify_requirements_jest_not_installed(self, js_support, project_with_vitest):
         """Test verification fails when Jest is requested but only Vitest is installed."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
 
+        def mock_run_side_effect(cmd, **kwargs):
+            if cmd[0] == "node":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npm":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npx" and cmd[1] == "jest":
+                # Simulate npx not finding jest
+                return MagicMock(returncode=1)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=mock_run_side_effect):
             success, errors = js_support.verify_requirements(project_with_vitest, "jest")
 
             assert success is False
             assert len(errors) == 1
             expected_error = "jest is not installed. Please run 'npm install --save-dev jest' to install it."
             assert errors[0] == expected_error
+
+    def test_verify_requirements_monorepo_jest_in_parent(self, js_support, monorepo_with_jest):
+        """Test successful verification when Jest is in parent node_modules (monorepo)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+
+            success, errors = js_support.verify_requirements(monorepo_with_jest, "jest")
+
+            assert success is True
+            assert errors == []
+
+    def test_verify_requirements_monorepo_with_npx_fallback(self, js_support, tmp_path):
+        """Test verification succeeds via npx when Jest is not in node_modules but accessible."""
+        # Create a project without jest in node_modules
+        node_modules = tmp_path / "node_modules"
+        node_modules.mkdir()
+
+        package_json = tmp_path / "package.json"
+        package_json.write_text(json.dumps({"name": "test-project"}))
+
+        def mock_run_side_effect(cmd, **kwargs):
+            if cmd[0] == "node":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npm":
+                return MagicMock(returncode=0)
+            if cmd[0] == "npx" and cmd[1] == "jest":
+                # Simulate npx finding jest (e.g., in parent or globally)
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=1)
+
+        with patch("subprocess.run", side_effect=mock_run_side_effect):
+            success, errors = js_support.verify_requirements(tmp_path, "jest")
+
+            assert success is True
+            assert errors == []
 
 
 class TestVerifyRequirementsIntegration:
