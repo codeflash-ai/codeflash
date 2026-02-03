@@ -113,6 +113,12 @@ class JavaAnalyzer:
         """Initialize the Java analyzer."""
         self._parser: Parser | None = None
 
+        # Cache for decoded node text slices keyed by (start_byte, end_byte)
+        # The cache is associated with a specific source bytes object (by id).
+        self._last_source_id: int | None = None
+        self._node_text_cache: dict[tuple[int, int], str] = {}
+        self._cache_size_limit: int = 1024
+
     @property
     def parser(self) -> Parser:
         """Get the parser, creating it lazily."""
@@ -145,7 +151,23 @@ class JavaAnalyzer:
             The text content of the node.
 
         """
-        return source[node.start_byte : node.end_byte].decode("utf8")
+        source_id = id(source)
+        if self._last_source_id != source_id:
+            self._last_source_id = source_id
+            self._node_text_cache.clear()
+
+        key = (node.start_byte, node.end_byte)
+        cached = self._node_text_cache.get(key)
+        if cached is not None:
+            return cached
+
+        text = source[node.start_byte : node.end_byte].decode("utf8")
+
+        if len(self._node_text_cache) >= self._cache_size_limit:
+            self._node_text_cache.clear()
+        self._node_text_cache[key] = text
+
+        return text
 
     def find_methods(
         self, source: str, include_private: bool = True, include_static: bool = True
@@ -365,14 +387,13 @@ class JavaAnalyzer:
             name = self.get_node_text(name_node, source_bytes)
 
         # Check modifiers
-        for child in node.children:
-            if child.type == "modifiers":
-                modifier_text = self.get_node_text(child, source_bytes)
-                is_public = "public" in modifier_text
-                is_abstract = "abstract" in modifier_text
-                is_final = "final" in modifier_text
-                is_static = "static" in modifier_text
-                break
+        modifiers_node = node.child_by_field_name("modifiers")
+        if modifiers_node:
+            modifier_text = self.get_node_text(modifiers_node, source_bytes)
+            is_public = "public" in modifier_text
+            is_abstract = "abstract" in modifier_text
+            is_final = "final" in modifier_text
+            is_static = "static" in modifier_text
 
         # Get superclass
         superclass_node = node.child_by_field_name("superclass")
@@ -384,14 +405,14 @@ class JavaAnalyzer:
                     break
 
         # Get interfaces (super_interfaces node contains the implements clause)
-        for child in node.children:
-            if child.type == "super_interfaces":
-                # Find the type_list inside super_interfaces
-                for subchild in child.children:
-                    if subchild.type == "type_list":
-                        for type_node in subchild.children:
-                            if type_node.type == "type_identifier":
-                                implements.append(self.get_node_text(type_node, source_bytes))
+        super_interfaces_node = node.child_by_field_name("super_interfaces")
+        if super_interfaces_node:
+            # Find the type_list inside super_interfaces
+            for subchild in super_interfaces_node.children:
+                if subchild.type == "type_list":
+                    for type_node in subchild.children:
+                        if type_node.type == "type_identifier":
+                            implements.append(self.get_node_text(type_node, source_bytes))
 
         # Get source text
         source_text = self.get_node_text(node, source_bytes)
