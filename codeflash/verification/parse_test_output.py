@@ -763,7 +763,17 @@ def parse_jest_test_xml(
             # IMPORTANT: Must match Jest helper's sanitization exactly for marker matching to work
             # Pattern from capture.js: /[!#: ()\[\]{}|\\/*?^$.+\-]/g
             sanitized_test_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_name)
-            matching_starts = [m for m in start_matches if sanitized_test_name in m.group(2)]
+
+            # Extract function name for fallback matching (handle "test > description" format)
+            test_func_name = test_name.split(" > ")[0] if " > " in test_name else test_name
+            sanitized_func_name = re.sub(r"[!#: ()\[\]{}|\\/*?^$.+\-]", "_", test_func_name)
+
+            # Match by test name (group 2), or fallback to function name (group 3) for markers
+            # where test name is "unknown" (e.g., when vitest doesn't provide test context)
+            matching_starts = [
+                m for m in start_matches
+                if sanitized_test_name in m.group(2) or sanitized_func_name == m.group(3)
+            ]
 
             # For performance tests (capturePerf), there are no START markers - only END markers with duration
             # Check for END markers directly if no START markers found
@@ -773,7 +783,10 @@ def parse_jest_test_xml(
                 # END marker format: !######module:testName:funcName:loopIndex:invocationId:durationNs######!
                 for end_key, end_match in end_matches_dict.items():
                     # end_key is (module, testName, funcName, loopIndex, invocationId)
-                    if len(end_key) >= 2 and sanitized_test_name in end_key[1]:
+                    # Match by test name OR function name (for "unknown" test names)
+                    if len(end_key) >= 3 and (
+                        sanitized_test_name in end_key[1] or sanitized_func_name == end_key[2]
+                    ):
                         matching_ends_direct.append(end_match)
 
             if not matching_starts and not matching_ends_direct:
