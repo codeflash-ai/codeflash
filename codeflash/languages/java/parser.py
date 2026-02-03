@@ -113,6 +113,9 @@ class JavaAnalyzer:
         """Initialize the Java analyzer."""
         self._parser: Parser | None = None
 
+        # Track type context (class, interface, or enum) - single allocation
+        self._type_declarations = ("class_declaration", "interface_declaration", "enum_declaration")
+
     @property
     def parser(self) -> Parser:
         """Get the parser, creating it lazily."""
@@ -165,8 +168,10 @@ class JavaAnalyzer:
         tree = self.parse(source_bytes)
         methods: list[JavaMethodNode] = []
 
+
+        root = tree.root_node
         self._walk_tree_for_methods(
-            tree.root_node,
+            root,
             source_bytes,
             methods,
             include_private=include_private,
@@ -186,41 +191,42 @@ class JavaAnalyzer:
         current_class: str | None,
     ) -> None:
         """Recursively walk the tree to find method definitions."""
-        new_class = current_class
+        # Use an explicit stack to avoid recursion overhead and repeated allocations.
+        stack: list[tuple[Node, str | None]] = [(node, current_class)]
+        type_declarations = self._type_declarations  # local ref for slightly faster access
 
-        # Track type context (class, interface, or enum)
-        type_declarations = ("class_declaration", "interface_declaration", "enum_declaration")
-        if node.type in type_declarations:
-            name_node = node.child_by_field_name("name")
-            if name_node:
-                new_class = self.get_node_text(name_node, source_bytes)
+        while stack:
+            node, current_class = stack.pop()
 
-        if node.type == "method_declaration":
-            method_info = self._extract_method_info(node, source_bytes, current_class)
+            # Track type context (class, interface, or enum)
+            new_class = current_class
+            node_type = node.type
+            if node_type in type_declarations:
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    new_class = self.get_node_text(name_node, source_bytes)
 
-            if method_info:
-                # Apply filters
-                should_include = True
+            if node_type == "method_declaration":
+                method_info = self._extract_method_info(node, source_bytes, current_class)
 
-                if method_info.is_private and not include_private:
-                    should_include = False
+                if method_info:
+                    # Apply filters
+                    should_include = True
 
-                if method_info.is_static and not include_static:
-                    should_include = False
+                    if method_info.is_private and not include_private:
+                        should_include = False
 
-                if should_include:
-                    methods.append(method_info)
+                    if method_info.is_static and not include_static:
+                        should_include = False
 
-        # Recurse into children
-        for child in node.children:
-            self._walk_tree_for_methods(
-                child,
-                source_bytes,
-                methods,
-                include_private=include_private,
-                include_static=include_static,
-                current_class=new_class if node.type in type_declarations else current_class,
-            )
+                    if should_include:
+                        methods.append(method_info)
+
+            # Push children in reverse order to preserve original left-to-right DFS order
+            children = node.children
+            if children:
+                for child in reversed(children):
+                    stack.append((child, new_class))
 
     def _extract_method_info(
         self, node: Node, source_bytes: bytes, current_class: str | None
