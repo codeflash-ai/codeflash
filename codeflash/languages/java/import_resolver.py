@@ -111,24 +111,18 @@ class JavaImportResolver:
         """
         import_path = import_info.import_path
 
-        # Check if it's a standard library import
-        if self._is_standard_library(import_path):
-            return ResolvedImport(
-                import_path=import_path,
-                file_path=None,
-                is_external=True,
-                is_wildcard=import_info.is_wildcard,
-                class_name=self._extract_class_name(import_path),
-            )
+        # Compute class name once to avoid repeated work in multiple branches
+        class_name = self._extract_class_name(import_path)
 
-        # Check if it's a known external library
-        if self._is_external_library(import_path):
+        # Check if it's a standard library import or known external library.
+        # Both cases return the same resolved shape (external with no file path).
+        if self._is_standard_library(import_path) or self._is_external_library(import_path):
             return ResolvedImport(
                 import_path=import_path,
                 file_path=None,
                 is_external=True,
                 is_wildcard=import_info.is_wildcard,
-                class_name=self._extract_class_name(import_path),
+                class_name=class_name,
             )
 
         # Try to resolve within the project
@@ -139,7 +133,7 @@ class JavaImportResolver:
             file_path=resolved_path,
             is_external=resolved_path is None,
             is_wildcard=import_info.is_wildcard,
-            class_name=self._extract_class_name(import_path),
+            class_name=class_name,
         )
 
     def resolve_imports(self, imports: list[JavaImportInfo]) -> list[ResolvedImport]:
