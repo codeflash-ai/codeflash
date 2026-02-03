@@ -693,14 +693,16 @@ function capturePerf(funcName, lineId, fn, ...args) {
                     (resolved) => {
                         const asyncEndTime = getTimeNs();
                         const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                        // Use process.stdout.write to bypass Vitest's console.log interception
+                        process.stdout.write(`!######${testStdoutTag}:${asyncDurationNs}######!\n`);
                         sharedPerfState.totalLoopsCompleted++;
                         return resolved;
                     },
                     (err) => {
                         const asyncEndTime = getTimeNs();
                         const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
-                        console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
+                        // Use process.stdout.write to bypass Vitest's console.log interception
+                        process.stdout.write(`!######${testStdoutTag}:${asyncDurationNs}######!\n`);
                         sharedPerfState.totalLoopsCompleted++;
                         throw err;
                     }
@@ -714,7 +716,8 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // Print end tag with timing
-        console.log(`!######${testStdoutTag}:${durationNs}######!`);
+        // Use process.stdout.write to bypass Vitest's console.log interception
+        process.stdout.write(`!######${testStdoutTag}:${durationNs}######!\n`);
 
         // Update shared loop counter
         sharedPerfState.totalLoopsCompleted++;
