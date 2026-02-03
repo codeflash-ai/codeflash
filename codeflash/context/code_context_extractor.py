@@ -23,8 +23,7 @@ from codeflash.context.unused_definition_remover import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 
 # Language support imports for multi-language code context extraction
-from codeflash.languages import is_python
-from codeflash.languages.base import Language
+from codeflash.languages import Language, is_python
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
@@ -234,27 +233,13 @@ def get_code_optimization_context_for_language(
 
     """
     from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, ParentInfo
 
     # Get language support for this function
     language = Language(function_to_optimize.language)
     lang_support = get_language_support(language)
 
-    # Convert FunctionToOptimize to FunctionInfo for language support
-    parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
-    func_info = FunctionInfo(
-        name=function_to_optimize.function_name,
-        file_path=function_to_optimize.file_path,
-        start_line=function_to_optimize.starting_line or 1,
-        end_line=function_to_optimize.ending_line or 1,
-        parents=parents,
-        is_async=function_to_optimize.is_async,
-        is_method=len(function_to_optimize.parents) > 0,
-        language=language,
-    )
-
     # Extract code context using language support
-    code_context = lang_support.extract_code_context(func_info, project_root_path, project_root_path)
+    code_context = lang_support.extract_code_context(function_to_optimize, project_root_path, project_root_path)
 
     # Build imports string if available
     imports_code = "\n".join(code_context.imports) if code_context.imports else ""

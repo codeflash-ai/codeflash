@@ -39,7 +39,7 @@ class TestCodeExtractorCJS:
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
 
         expected_methods = {"calculateCompoundInterest", "permutation", "quickAdd"}
         assert method_names == expected_methods, f"Expected methods {expected_methods}, got {method_names}"
@@ -51,15 +51,15 @@ class TestCodeExtractorCJS:
 
         for func in functions:
             # All methods should belong to Calculator class
-            assert func.is_method is True, f"{func.name} should be a method"
-            assert func.class_name == "Calculator", f"{func.name} should belong to Calculator, got {func.class_name}"
+            assert func.is_method is True, f"{func.function_name} should be a method"
+            assert func.class_name == "Calculator", f"{func.function_name} should belong to Calculator, got {func.class_name}"
 
     def test_extract_permutation_code(self, js_support, cjs_project):
         """Test permutation method code extraction."""
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        permutation_func = next(f for f in functions if f.name == "permutation")
+        permutation_func = next(f for f in functions if f.function_name == "permutation")
 
         context = js_support.extract_code_context(
             function=permutation_func, project_root=cjs_project, module_root=cjs_project
@@ -95,7 +95,7 @@ class Calculator {
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        permutation_func = next(f for f in functions if f.name == "permutation")
+        permutation_func = next(f for f in functions if f.function_name == "permutation")
 
         context = js_support.extract_code_context(
             function=permutation_func, project_root=cjs_project, module_root=cjs_project
@@ -136,7 +136,7 @@ function factorial(n) {
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+        compound_func = next(f for f in functions if f.function_name == "calculateCompoundInterest")
 
         context = js_support.extract_code_context(
             function=compound_func, project_root=cjs_project, module_root=cjs_project
@@ -182,7 +182,7 @@ class Calculator {
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+        compound_func = next(f for f in functions if f.function_name == "calculateCompoundInterest")
 
         context = js_support.extract_code_context(
             function=compound_func, project_root=cjs_project, module_root=cjs_project
@@ -266,7 +266,7 @@ function validateInput(value, name) {
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+        compound_func = next(f for f in functions if f.function_name == "calculateCompoundInterest")
 
         context = js_support.extract_code_context(
             function=compound_func, project_root=cjs_project, module_root=cjs_project
@@ -287,7 +287,7 @@ function validateInput(value, name) {
         calculator_file = cjs_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        quick_add_func = next(f for f in functions if f.name == "quickAdd")
+        quick_add_func = next(f for f in functions if f.function_name == "quickAdd")
 
         context = js_support.extract_code_context(
             function=quick_add_func, project_root=cjs_project, module_root=cjs_project
@@ -352,7 +352,7 @@ class TestCodeExtractorESM:
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
 
         # Should find same methods as CJS version
         expected_methods = {"calculateCompoundInterest", "permutation", "quickAdd"}
@@ -363,7 +363,7 @@ class TestCodeExtractorESM:
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        permutation_func = next(f for f in functions if f.name == "permutation")
+        permutation_func = next(f for f in functions if f.function_name == "permutation")
 
         context = js_support.extract_code_context(
             function=permutation_func, project_root=esm_project, module_root=esm_project
@@ -413,7 +413,7 @@ export function factorial(n) {
         calculator_file = esm_project / "calculator.js"
         functions = js_support.discover_functions(calculator_file)
 
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+        compound_func = next(f for f in functions if f.function_name == "calculateCompoundInterest")
 
         context = js_support.extract_code_context(
             function=compound_func, project_root=esm_project, module_root=esm_project
@@ -539,7 +539,7 @@ class TestCodeExtractorTypeScript:
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
-        method_names = {f.name for f in functions}
+        method_names = {f.function_name for f in functions}
 
         # TypeScript has additional getHistory method
         expected_methods = {"calculateCompoundInterest", "permutation", "getHistory", "quickAdd"}
@@ -550,7 +550,7 @@ class TestCodeExtractorTypeScript:
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
-        permutation_func = next(f for f in functions if f.name == "permutation")
+        permutation_func = next(f for f in functions if f.function_name == "permutation")
 
         context = ts_support.extract_code_context(
             function=permutation_func, project_root=ts_project, module_root=ts_project
@@ -603,7 +603,7 @@ export function factorial(n: number): number {
         calculator_file = ts_project / "calculator.ts"
         functions = ts_support.discover_functions(calculator_file)
 
-        compound_func = next(f for f in functions if f.name == "calculateCompoundInterest")
+        compound_func = next(f for f in functions if f.function_name == "calculateCompoundInterest")
 
         context = ts_support.extract_code_context(
             function=compound_func, project_root=ts_project, module_root=ts_project
@@ -712,7 +712,7 @@ module.exports = { standalone };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        func = next(f for f in functions if f.name == "standalone")
+        func = next(f for f in functions if f.function_name == "standalone")
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
@@ -745,7 +745,7 @@ module.exports = { processArray };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        func = next(f for f in functions if f.name == "processArray")
+        func = next(f for f in functions if f.function_name == "processArray")
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
@@ -780,7 +780,7 @@ module.exports = { fibonacci };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        func = next(f for f in functions if f.name == "fibonacci")
+        func = next(f for f in functions if f.function_name == "fibonacci")
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
@@ -813,7 +813,7 @@ module.exports = { processValue };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        func = next(f for f in functions if f.name == "processValue")
+        func = next(f for f in functions if f.function_name == "processValue")
 
         context = js_support.extract_code_context(function=func, project_root=tmp_path, module_root=tmp_path)
 
@@ -871,7 +871,7 @@ module.exports = { Counter };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        increment_func = next(f for f in functions if f.name == "increment")
+        increment_func = next(f for f in functions if f.function_name == "increment")
 
         context = js_support.extract_code_context(function=increment_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -910,7 +910,7 @@ module.exports = { MathUtils };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        add_func = next(f for f in functions if f.name == "add")
+        add_func = next(f for f in functions if f.function_name == "add")
 
         context = js_support.extract_code_context(function=add_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -948,7 +948,7 @@ export { User };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        get_name_func = next(f for f in functions if f.name == "getName")
+        get_name_func = next(f for f in functions if f.function_name == "getName")
 
         context = ts_support.extract_code_context(function=get_name_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -989,7 +989,7 @@ export { Config };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        get_url_func = next(f for f in functions if f.name == "getUrl")
+        get_url_func = next(f for f in functions if f.function_name == "getUrl")
 
         context = ts_support.extract_code_context(function=get_url_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1030,7 +1030,7 @@ module.exports = { Logger };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        get_prefix_func = next(f for f in functions if f.name == "getPrefix")
+        get_prefix_func = next(f for f in functions if f.function_name == "getPrefix")
 
         context = js_support.extract_code_context(function=get_prefix_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1072,7 +1072,7 @@ module.exports = { Factory };
         test_file.write_text(source)
 
         functions = js_support.discover_functions(test_file)
-        create_func = next(f for f in functions if f.name == "create")
+        create_func = next(f for f in functions if f.function_name == "create")
 
         context = js_support.extract_code_context(function=create_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1114,19 +1114,20 @@ class TestCodeExtractorIntegration:
         calculator_file = cjs_project / "calculator.js"
 
         functions = js_support.discover_functions(calculator_file)
-        target = next(f for f in functions if f.name == "permutation")
+        target = next(f for f in functions if f.function_name == "permutation")
 
         parents = [FunctionParent(name=p.name, type=p.type) for p in target.parents]
 
         func = FunctionToOptimize(
-            function_name=target.name,
+            function_name=target.function_name,
             file_path=target.file_path,
             parents=parents,
-            starting_line=target.start_line,
-            ending_line=target.end_line,
-            starting_col=target.start_col,
-            ending_col=target.end_col,
+            starting_line=target.starting_line,
+            ending_line=target.ending_line,
+            starting_col=target.starting_col,
+            ending_col=target.ending_col,
             is_async=target.is_async,
+            is_method=target.is_method,
             language=target.language,
         )
 
@@ -1223,7 +1224,7 @@ export { distance };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        distance_func = next(f for f in functions if f.name == "distance")
+        distance_func = next(f for f in functions if f.function_name == "distance")
 
         context = ts_support.extract_code_context(function=distance_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1267,7 +1268,7 @@ export { processStatus };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        process_func = next(f for f in functions if f.name == "processStatus")
+        process_func = next(f for f in functions if f.function_name == "processStatus")
 
         context = ts_support.extract_code_context(function=process_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1304,7 +1305,7 @@ export { compute };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        compute_func = next(f for f in functions if f.name == "compute")
+        compute_func = next(f for f in functions if f.function_name == "compute")
 
         context = ts_support.extract_code_context(function=compute_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1348,7 +1349,7 @@ export { Service };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        get_timeout_func = next(f for f in functions if f.name == "getTimeout")
+        get_timeout_func = next(f for f in functions if f.function_name == "getTimeout")
 
         context = ts_support.extract_code_context(
             function=get_timeout_func, project_root=tmp_path, module_root=tmp_path
@@ -1381,7 +1382,7 @@ export { add };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        add_func = next(f for f in functions if f.name == "add")
+        add_func = next(f for f in functions if f.function_name == "add")
 
         context = ts_support.extract_code_context(function=add_func, project_root=tmp_path, module_root=tmp_path)
 
@@ -1414,7 +1415,7 @@ export { createRect };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        create_rect_func = next(f for f in functions if f.name == "createRect")
+        create_rect_func = next(f for f in functions if f.function_name == "createRect")
 
         context = ts_support.extract_code_context(
             function=create_rect_func, project_root=tmp_path, module_root=tmp_path
@@ -1462,7 +1463,7 @@ export { calculateDistance };
 """)
 
         functions = ts_support.discover_functions(geometry_file)
-        calc_distance_func = next(f for f in functions if f.name == "calculateDistance")
+        calc_distance_func = next(f for f in functions if f.function_name == "calculateDistance")
 
         context = ts_support.extract_code_context(
             function=calc_distance_func, project_root=ts_types_project, module_root=ts_types_project
@@ -1515,7 +1516,7 @@ export { greetUser };
         test_file.write_text(source)
 
         functions = ts_support.discover_functions(test_file)
-        greet_func = next(f for f in functions if f.name == "greetUser")
+        greet_func = next(f for f in functions if f.function_name == "greetUser")
 
         context = ts_support.extract_code_context(function=greet_func, project_root=tmp_path, module_root=tmp_path)
 

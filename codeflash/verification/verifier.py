@@ -69,14 +69,17 @@ def generate_tests(
                 instrument_generated_js_test,
                 validate_and_fix_import_style,
             )
-            from codeflash.languages.javascript.module_system import ensure_module_system_compatibility
+            from codeflash.languages.javascript.module_system import (
+                ensure_module_system_compatibility,
+                ensure_vitest_imports,
+            )
 
             source_file = Path(function_to_optimize.file_path)
-            func_name = function_to_optimize.function_name
-            qualified_name = function_to_optimize.qualified_name
 
             # Validate and fix import styles (default vs named exports)
-            generated_test_source = validate_and_fix_import_style(generated_test_source, source_file, func_name)
+            generated_test_source = validate_and_fix_import_style(
+                generated_test_source, source_file, function_to_optimize.function_name
+            )
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
             # Skip conversion if ts-jest is installed (handles interop natively)
@@ -84,23 +87,20 @@ def generate_tests(
                 generated_test_source, project_module_system, test_cfg.tests_project_rootdir
             )
 
+            # Ensure vitest imports are present when using vitest framework
+            generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
+
             # Instrument for behavior verification (writes to SQLite)
             instrumented_behavior_test_source = instrument_generated_js_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode=TestingMode.BEHAVIOR,
+                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.BEHAVIOR
             )
 
             # Instrument for performance measurement (prints to stdout)
             instrumented_perf_test_source = instrument_generated_js_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode=TestingMode.PERFORMANCE,
+                test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
             )
 
-            logger.debug(f"Instrumented JS/TS tests locally for {func_name}")
+            logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
         else:
             # Python: instrumentation is done by aiservice, just replace temp dir placeholders
             instrumented_behavior_test_source = instrumented_behavior_test_source.replace(

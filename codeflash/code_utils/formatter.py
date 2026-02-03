@@ -13,7 +13,6 @@ from typing import Any, Optional, Union
 import isort
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.languages.registry import get_language_support
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
@@ -43,6 +42,8 @@ def generate_unified_diff(original: str, modified: str, from_file: str, to_file:
 def apply_formatter_cmds(
     cmds: list[str], path: Path, test_dir_str: Optional[str], print_status: bool, exit_on_failure: bool = True
 ) -> tuple[Path, str, bool]:
+    from codeflash.languages.registry import get_language_support
+
     if not path.exists():
         msg = f"File {path} does not exist. Cannot apply formatter commands."
         raise FileNotFoundError(msg)
@@ -90,6 +91,8 @@ def get_diff_lines_count(diff_output: str) -> int:
 
 
 def format_generated_code(generated_test_source: str, formatter_cmds: list[str], language: str = "python") -> str:
+    from codeflash.languages.registry import get_language_support
+
     formatter_name = formatter_cmds[0].lower() if formatter_cmds else "disabled"
     if formatter_name == "disabled":  # nothing to do if no formatter provided
         return re.sub(r"\n{2,}", "\n\n", generated_test_source)
@@ -114,6 +117,8 @@ def format_code(
     print_status: bool = True,
     exit_on_failure: bool = True,
 ) -> str:
+    from codeflash.languages.registry import get_language_support
+
     if is_LSP_enabled():
         exit_on_failure = False
 

@@ -288,8 +288,9 @@ def process_pyproject_config(args: Namespace) -> Namespace:
         normalized_ignore_paths = []
         for path in args.ignore_paths:
             path_obj = Path(path)
-            assert path_obj.exists(), f"ignore-paths config must be a valid path. Path {path} does not exist"
-            normalized_ignore_paths.append(path_obj.resolve())
+            if path_obj.exists():
+                normalized_ignore_paths.append(path_obj.resolve())
+            # Silently skip non-existent paths (e.g., .next, dist before build)
         args.ignore_paths = normalized_ignore_paths
     # Project root path is one level above the specified directory, because that's where the module can be imported from
     args.module_root = Path(args.module_root).resolve()
@@ -358,7 +359,7 @@ def _handle_show_config() -> None:
     detected = detect_project(project_root)
 
     # Check if config exists or is auto-detected
-    config_exists = has_existing_config(project_root)
+    config_exists, _ = has_existing_config(project_root)
     status = "Saved config" if config_exists else "Auto-detected (not saved)"
 
     console.print()
@@ -400,7 +401,8 @@ def _handle_reset_config(confirm: bool = True) -> None:
 
     project_root = Path.cwd()
 
-    if not has_existing_config(project_root):
+    config_exists, _ = has_existing_config(project_root)
+    if not config_exists:
         console.print("[yellow]No Codeflash configuration found to remove.[/yellow]")
         return
 
