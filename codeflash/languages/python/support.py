@@ -321,7 +321,7 @@ class PythonSupport:
 
             function_pos = None
             for name in names:
-                if name.type == "function" and name.name == function.name:
+                if name.type == "function" and name.name == function.function_name:
                     # Check for class parent if it's a method
                     if function.class_name:
                         parent = name.parent()
