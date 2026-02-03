@@ -49,6 +49,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           use_foundry: "true"
+          claude_args: '--allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status*),Bash(git diff*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git log*),Bash(uv run pre-commit *),Bash(uv run ruff *),Bash(uv run pytest *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(gh pr comment*),Bash(gh pr view*),Bash(gh pr diff*)"'
           additional_permissions: |
             actions: read
         env:
