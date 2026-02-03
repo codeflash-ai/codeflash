@@ -199,11 +199,41 @@ def add_js_extension(module_path: str) -> str:
     return module_path
 
 
+def _convert_destructuring_to_imports(names_str: str) -> str:
+    """Convert destructuring aliases to import aliases.
+
+    Converts:
+        a, b             -> a, b
+        a: aliasA        -> a as aliasA
+        a, b: aliasB     -> a, b as aliasB
+
+    Args:
+        names_str: The destructuring pattern string (e.g., "a, b: aliasB")
+
+    Returns:
+        Import names string with aliases using 'as' syntax
+    """
+    # Split by commas and process each name
+    parts = []
+    for name in names_str.split(","):
+        name = name.strip()
+        if ":" in name:
+            # Convert destructuring alias to import alias
+            # "a: aliasA" -> "a as aliasA"
+            original, alias = name.split(":", 1)
+            parts.append(f"{original.strip()} as {alias.strip()}")
+        else:
+            parts.append(name)
+    return ", ".join(parts)
+
+
 # Replace destructured requires with named imports
 def replace_destructured(match: re.Match) -> str:
     names = match.group(2).strip()
     module_path = add_js_extension(match.group(3))
-    return f"import {{ {names} }} from '{module_path}';"
+    # Convert destructuring aliases (a: b) to import aliases (a as b)
+    converted_names = _convert_destructuring_to_imports(names)
+    return f"import {{ {converted_names} }} from '{module_path}';"
 
 
 # Replace property access requires with named imports with alias
@@ -234,12 +264,14 @@ def convert_commonjs_to_esm(code: str) -> str:
     """Convert CommonJS require statements to ES Module imports.
 
     Converts:
-        const { foo, bar } = require('./module');  ->  import { foo, bar } from './module';
-        const foo = require('./module');           ->  import foo from './module';
-        const foo = require('./module').default;   ->  import foo from './module';
-        const foo = require('./module').bar;       ->  import { bar as foo } from './module';
+        const { foo, bar } = require('./module');       ->  import { foo, bar } from './module';
+        const { foo: alias } = require('./module');     ->  import { foo as alias } from './module';
+        const foo = require('./module');                ->  import foo from './module';
+        const foo = require('./module').default;        ->  import foo from './module';
+        const foo = require('./module').bar;            ->  import { bar as foo } from './module';
 
     Special handling:
+        - Destructuring aliases (a: b) are converted to import aliases (a as b)
         - Local codeflash helper (./codeflash-jest-helper) is converted to npm package codeflash
           because the local helper uses CommonJS exports which don't work in ESM projects
 
