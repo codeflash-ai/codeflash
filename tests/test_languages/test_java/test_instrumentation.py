@@ -136,8 +136,8 @@ public class CalculatorTest {
         assert "import java.sql.Statement;" in result
         assert "class CalculatorTest__perfinstrumented" in result
         assert "CODEFLASH_OUTPUT_FILE" in result
-        assert "CREATE TABLE IF NOT EXISTS test_results" in result
-        assert "INSERT INTO test_results VALUES" in result
+        assert "CREATE TABLE IF NOT EXISTS invocations" in result
+        assert "INSERT INTO invocations" in result
         assert "_cf_loop1" in result
         assert "_cf_iter1" in result
         assert "System.nanoTime()" in result
