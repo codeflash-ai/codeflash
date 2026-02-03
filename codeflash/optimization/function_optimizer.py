@@ -315,7 +315,7 @@ class CandidateProcessor:
                 self.future_all_code_repair,
                 "Repairing {0} candidates",
                 "Added {0} candidates from repair, total candidates now: {1}",
-                lambda: self.future_all_code_repair.clear(),
+                self.future_all_code_repair.clear,
             )
         if self.line_profiler_done and not self.refinement_done:
             return self._process_candidates(
@@ -330,7 +330,7 @@ class CandidateProcessor:
                 self.future_adaptive_optimizations,
                 "Applying adaptive optimizations to {0} candidates",
                 "Added {0} candidates from adaptive optimization, total candidates now: {1}",
-                lambda: self.future_adaptive_optimizations.clear(),
+                self.future_adaptive_optimizations.clear,
             )
         return None  # All done
 
@@ -440,12 +440,10 @@ class FunctionOptimizer:
     ) -> None:
         self.project_root = test_cfg.project_root_path
         self.test_cfg = test_cfg
-        self.aiservice_client = aiservice_client if aiservice_client else AiServiceClient()
+        self.aiservice_client = aiservice_client or AiServiceClient()
         self.function_to_optimize = function_to_optimize
         self.function_to_optimize_source_code = (
-            function_to_optimize_source_code
-            if function_to_optimize_source_code
-            else function_to_optimize.file_path.read_text(encoding="utf8")
+            function_to_optimize_source_code or function_to_optimize.file_path.read_text(encoding="utf8")
         )
         self.language_support = current_language_support()
         if not function_to_optimize_ast:
@@ -459,7 +457,7 @@ class FunctionOptimizer:
                 )
         else:
             self.function_to_optimize_ast = function_to_optimize_ast
-        self.function_to_tests = function_to_tests if function_to_tests else {}
+        self.function_to_tests = function_to_tests or {}
 
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
@@ -476,9 +474,9 @@ class FunctionOptimizer:
             tests_root=test_cfg.tests_root,
         )
 
-        self.function_benchmark_timings = function_benchmark_timings if function_benchmark_timings else {}
-        self.total_benchmark_timings = total_benchmark_timings if total_benchmark_timings else {}
-        self.replay_tests_dir = replay_tests_dir if replay_tests_dir else None
+        self.function_benchmark_timings = function_benchmark_timings or {}
+        self.total_benchmark_timings = total_benchmark_timings or {}
+        self.replay_tests_dir = replay_tests_dir or None
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=n_tests + 3 if self.experiment_id is None else n_tests + 4
@@ -2083,7 +2081,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
+        existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
