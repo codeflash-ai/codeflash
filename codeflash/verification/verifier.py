@@ -82,7 +82,10 @@ def generate_tests(
             )
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
+            # Skip conversion if ts-jest is installed (handles interop natively)
+            generated_test_source = ensure_module_system_compatibility(
+                generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+            )
 
             # Ensure vitest imports are present when using vitest framework
             generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
