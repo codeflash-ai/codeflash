@@ -269,11 +269,10 @@ class TestEdgeCases:
             "1": {"result_json": '{ "a": 1, "b": 2 }', "error_json": None},  # With spaces
         }
 
-        # Note: Direct string comparison will see these as different
-        # The Java comparator would handle this correctly by parsing JSON
+        # JSON-aware comparison should handle whitespace differences
         equivalent, diffs = compare_invocations_directly(original, candidate)
-        # This will fail with direct comparison - expected behavior
-        assert equivalent is False  # String comparison doesn't normalize whitespace
+        assert equivalent is True  # JSON comparison normalizes whitespace
+        assert len(diffs) == 0
 
     def test_large_number_of_invocations(self):
         """Test handling large number of invocations."""
@@ -308,3 +307,114 @@ class TestEdgeCases:
 
         equivalent, diffs = compare_invocations_directly(original, candidate)
         assert equivalent is True
+
+
+class TestJsonComparison:
+    """Tests for JSON-aware comparison in compare_invocations_directly."""
+
+    def test_json_key_ordering_difference(self):
+        """Test that different JSON key ordering is handled correctly."""
+        original = {
+            "1": {"result_json": '{"a":1,"b":2,"c":3}', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '{"c":3,"a":1,"b":2}', "error_json": None},  # Different order
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_json_whitespace_and_ordering_combined(self):
+        """Test combined whitespace and key ordering differences."""
+        original = {
+            "1": {"result_json": '{"name":"test","value":42,"active":true}', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '{ "active": true, "value": 42, "name": "test" }', "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_json_nested_object_comparison(self):
+        """Test that nested JSON objects are compared correctly."""
+        original = {
+            "1": {"result_json": '{"outer":{"inner":{"value":123}}}', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '{ "outer": { "inner": { "value": 123 } } }', "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_json_array_comparison_order_matters(self):
+        """Test that array element order matters in comparison."""
+        original = {
+            "1": {"result_json": '[1,2,3]', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '[3,2,1]', "error_json": None},  # Different order
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False  # Array order matters
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+
+    def test_json_invalid_json_falls_back_to_string(self):
+        """Test that invalid JSON falls back to string comparison."""
+        original = {
+            "1": {"result_json": 'not valid json {', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": 'not valid json {', "error_json": None},  # Same invalid JSON
+        }
+
+        # Should fall back to string comparison
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_json_null_vs_string_null(self):
+        """Test comparison of JSON null vs string 'null'."""
+        original = {
+            "1": {"result_json": 'null', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": 'null', "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_json_empty_object_vs_null(self):
+        """Test that empty object and null are different."""
+        original = {
+            "1": {"result_json": '{}', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": 'null', "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_json_numeric_equivalence(self):
+        """Test that numerically equivalent JSON values match."""
+        original = {
+            "1": {"result_json": '{"value":42}', "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '{"value":42.0}', "error_json": None},  # Int vs float
+        }
+
+        # Python JSON parsing treats 42 and 42.0 as equal
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
