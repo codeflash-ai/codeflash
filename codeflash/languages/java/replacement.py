@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
+from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
 
 if TYPE_CHECKING:
     pass
@@ -434,9 +434,11 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
     # Detect the existing indentation from the first non-empty line
     # This includes Javadoc/comment lines to handle them correctly
     existing_indent = ""
+    existing_indent_len = 0
     for line in lines:
         if line.strip():  # First non-empty line
-            existing_indent = _get_indentation(line)
+            existing_indent_len = len(line) - len(line.lstrip())
+            existing_indent = line[:existing_indent_len]
             break
 
     result_lines = []
@@ -447,11 +449,11 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
             # Remove existing indentation and apply new base indentation
             stripped_line = line.lstrip()
             # Calculate relative indentation
-            line_indent = _get_indentation(line)
+            line_indent_len = len(line) - len(stripped_line)
             # When existing_indent is empty (first line has no indent), the relative
             # indent is the full line indent. Otherwise, calculate the difference.
-            if line_indent.startswith(existing_indent):
-                relative_indent = line_indent[len(existing_indent) :]
+            if line_indent_len >= existing_indent_len and line[:existing_indent_len] == existing_indent:
+                relative_indent = line[existing_indent_len:line_indent_len]
             else:
                 relative_indent = ""
             result_lines.append(base_indent + relative_indent + stripped_line)
