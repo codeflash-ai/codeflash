@@ -319,14 +319,47 @@ class JavaSupport(LanguageSupport):
     def instrument_source_for_line_profiler(
         self, func_info: FunctionInfo, line_profiler_output_file: Path
     ) -> bool:
-        """Instrument source code before line profiling."""
-        # Not yet implemented for Java
-        return False
+        """Instrument source code for line profiling.
+
+        Args:
+            func_info: Function to instrument.
+            line_profiler_output_file: Path where profiling results will be written.
+
+        Returns:
+            True if instrumentation succeeded, False otherwise.
+
+        """
+        from codeflash.languages.java.line_profiler import JavaLineProfiler
+
+        try:
+            # Read source file
+            source = func_info.file_path.read_text(encoding="utf-8")
+
+            # Instrument with line profiler
+            profiler = JavaLineProfiler(output_file=line_profiler_output_file)
+            instrumented = profiler.instrument_source(source, func_info.file_path, [func_info], self._analyzer)
+
+            # Write instrumented source back
+            func_info.file_path.write_text(instrumented, encoding="utf-8")
+
+            return True
+        except Exception as e:
+            logger.error("Failed to instrument %s for line profiling: %s", func_info.name, e)
+            return False
 
     def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
-        """Parse line profiler output."""
-        # Not yet implemented for Java
-        return {}
+        """Parse line profiler output for Java.
+
+        Args:
+            line_profiler_output_file: Path to profiler output file.
+
+        Returns:
+            Dict with timing information in standard format.
+
+        """
+        from codeflash.languages.java.line_profiler import JavaLineProfiler
+
+        return JavaLineProfiler.parse_results(line_profiler_output_file)
 
     def run_behavioral_tests(
         self,
@@ -372,6 +405,40 @@ class JavaSupport(LanguageSupport):
             max_loops,
             target_duration_seconds,
             inner_iterations,
+        )
+
+    def run_line_profile_tests(
+        self,
+        test_paths: Any,
+        test_env: dict[str, str],
+        cwd: Path,
+        timeout: int | None = None,
+        project_root: Path | None = None,
+        line_profile_output_file: Path | None = None,
+    ) -> tuple[Path, Any]:
+        """Run tests with line profiling enabled.
+
+        Args:
+            test_paths: TestFiles object containing test file information.
+            test_env: Environment variables for test execution.
+            cwd: Working directory for running tests.
+            timeout: Optional timeout in seconds.
+            project_root: Project root directory.
+            line_profile_output_file: Path where profiling results will be written.
+
+        Returns:
+            Tuple of (result_file_path, subprocess_result).
+
+        """
+        from codeflash.languages.java.test_runner import run_line_profile_tests as _run_line_profile_tests
+
+        return _run_line_profile_tests(
+            test_paths=test_paths,
+            test_env=test_env,
+            cwd=cwd,
+            timeout=timeout,
+            project_root=project_root,
+            line_profile_output_file=line_profile_output_file,
         )
 
 

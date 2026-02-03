@@ -1366,6 +1366,62 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
     return results
 
 
+def run_line_profile_tests(
+    test_paths: Any,
+    test_env: dict[str, str],
+    cwd: Path,
+    timeout: int | None = None,
+    project_root: Path | None = None,
+    line_profile_output_file: Path | None = None,
+) -> tuple[Path, Any]:
+    """Run tests with line profiling enabled.
+
+    Runs the instrumented tests once to collect line profiling data.
+    The profiler will save results to line_profile_output_file on JVM exit.
+
+    Args:
+        test_paths: TestFiles object or list of test file paths.
+        test_env: Environment variables for the test run.
+        cwd: Working directory for running tests.
+        timeout: Optional timeout in seconds.
+        project_root: Project root directory.
+        line_profile_output_file: Path where profiling results will be written.
+
+    Returns:
+        Tuple of (result_file_path, subprocess_result).
+
+    """
+    project_root = project_root or cwd
+
+    # Detect multi-module Maven projects
+    maven_root, test_module = _find_multi_module_root(project_root, test_paths)
+
+    # Set up environment with profiling mode
+    run_env = os.environ.copy()
+    run_env.update(test_env)
+    run_env["CODEFLASH_MODE"] = "line_profile"
+    if line_profile_output_file:
+        run_env["CODEFLASH_LINE_PROFILE_OUTPUT"] = str(line_profile_output_file)
+
+    # Run tests once with profiling
+    logger.debug("Running line profiling tests (single run)")
+    result = _run_maven_tests(
+        maven_root,
+        test_paths,
+        run_env,
+        timeout=timeout or 120,
+        mode="line_profile",
+        test_module=test_module,
+    )
+
+    # Get result XML path
+    target_dir = _get_test_module_target_dir(maven_root, test_module)
+    surefire_dir = target_dir / "surefire-reports"
+    result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
+
+    return result_xml_path, result
+
+
 def get_test_run_command(
     project_root: Path,
     test_classes: list[str] | None = None,
