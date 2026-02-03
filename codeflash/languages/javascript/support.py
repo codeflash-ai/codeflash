@@ -2076,6 +2076,13 @@ class JavaScriptSupport:
                 candidate_index=candidate_index,
             )
 
+        if framework == "mocha":
+            logger.warning(
+                "Mocha test framework detected but not yet supported. "
+                "Please add Jest to your project: npm install --save-dev jest @types/jest ts-jest"
+            )
+            # Fall through to Jest runner as fallback
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -2135,6 +2142,12 @@ class JavaScriptSupport:
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
+        if framework == "mocha":
+            logger.warning(
+                "Mocha test framework detected but not yet supported. "
+                "Please add Jest to your project: npm install --save-dev jest @types/jest ts-jest"
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -2187,6 +2200,12 @@ class JavaScriptSupport:
                 timeout=timeout,
                 project_root=project_root,
                 line_profile_output_file=line_profile_output_file,
+            )
+
+        if framework == "mocha":
+            logger.warning(
+                "Mocha test framework detected but not yet supported. "
+                "Please add Jest to your project: npm install --save-dev jest @types/jest ts-jest"
             )
 
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
