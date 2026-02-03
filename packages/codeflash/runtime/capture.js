@@ -682,7 +682,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
     const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
 
     // Calculate stability window size based on collected runtimes
-    const getStabilityWindow = () => Math.max(PERF_MIN_LOOPS, Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+    const getStabilityWindow = () => Math.max(getPerfMinLoops(), Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
 
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
@@ -691,7 +691,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // Check if this invocation has already reached stability
-        if (PERF_STABILITY_CHECK && sharedPerfState.stableInvocations[invocationKey]) {
+        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
@@ -751,9 +751,9 @@ function capturePerf(funcName, lineId, fn, ...args) {
         }
 
         // Check stability after accumulating enough samples
-        if (PERF_STABILITY_CHECK && runtimes.length >= PERF_MIN_LOOPS) {
+        if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
             const window = getStabilityWindow();
-            if (shouldStopStability(runtimes, window, PERF_MIN_LOOPS)) {
+            if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
                 sharedPerfState.stableInvocations[invocationKey] = true;
                 break;
             }
@@ -817,7 +817,7 @@ async function _capturePerfAsync(
         }
 
         // Check if this invocation has already reached stability
-        if (PERF_STABILITY_CHECK && sharedPerfState.stableInvocations[invocationKey]) {
+        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
@@ -825,7 +825,7 @@ async function _capturePerfAsync(
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
         // Check if we've exceeded max loops
-        if (loopIndex > PERF_LOOP_COUNT) {
+        if (loopIndex > getPerfLoopCount()) {
             break;
         }
 
@@ -851,9 +851,9 @@ async function _capturePerfAsync(
             }
 
             // Check stability
-            if (PERF_STABILITY_CHECK && runtimes.length >= PERF_MIN_LOOPS) {
+            if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
                 const window = getStabilityWindow();
-                if (shouldStopStability(runtimes, window, PERF_MIN_LOOPS)) {
+                if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
                     sharedPerfState.stableInvocations[invocationKey] = true;
                     break;
                 }
