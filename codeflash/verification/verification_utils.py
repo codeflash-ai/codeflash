@@ -7,7 +7,6 @@ from typing import Optional
 from pydantic.dataclasses import dataclass
 
 from codeflash.languages import current_language_support, is_javascript
-from codeflash.languages.test_framework import get_js_test_framework_or_default
 
 
 def get_test_file_path(test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit") -> Path:
@@ -87,11 +86,12 @@ class TestConfig:
     def test_framework(self) -> str:
         """Returns the appropriate test framework based on language.
 
-        For JavaScript/TypeScript, returns the detected framework from the singleton
-        (jest, vitest, or mocha). Falls back to 'jest' if not set.
-        For Python, returns 'pytest' (default).
+        For JavaScript/TypeScript: uses the configured framework (vitest, jest, or mocha).
+        For Python: uses pytest as default.
         """
         if is_javascript():
+            from codeflash.languages.test_framework import get_js_test_framework_or_default
+
             return get_js_test_framework_or_default()
         return "pytest"
 
