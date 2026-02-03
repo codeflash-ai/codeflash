@@ -203,6 +203,11 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     ]
 
     # Find position to insert imports (after package, before class)
+
+    # Pre-compile the regex pattern once before processing
+    method_call_pattern = _get_method_call_pattern(func_name)
+
+    # Find position to insert imports (after package, before class)
     lines = source.split("\n")
     result = []
     imports_added = False
@@ -229,8 +234,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 continue
             if stripped.startswith("public class") or stripped.startswith("class"):
                 # No imports found, add before class
-                for imp in import_statements:
-                    result.append(imp)
+                result.extend(import_statements)
                 result.append("")
                 imports_added = True
 
@@ -238,15 +242,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
         i += 1
 
     # Now add timing and SQLite instrumentation to test methods
-    source = "\n".join(result)
-    lines = source.split("\n")
+    lines = result
     result = []
     i = 0
     iteration_counter = 0
-
-
-    # Pre-compile the regex pattern once
-    method_call_pattern = _get_method_call_pattern(func_name)
 
     while i < len(lines):
         line = lines[i]
@@ -271,8 +270,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 i += 1
 
             # Add the method signature lines
-            for ml in method_lines:
-                result.append(ml)
+            result.extend(method_lines)
             i += 1
 
             # We're now inside the method body
@@ -291,9 +289,8 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
                 # Count braces more efficiently using string methods
-                open_count = body_line.count('{')
-                close_count = body_line.count('}')
-                brace_depth += open_count - close_count
+                brace_depth += body_line.count('{') - body_line.count('}')
+
 
 
                 if brace_depth > 0:
@@ -308,16 +305,6 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # Look for patterns like: obj.funcName(args) or new Class().funcName(args)
             call_counter = 0
             wrapped_body_lines = []
-
-            # Use regex to find method calls with the target function
-            # Pattern matches: receiver.funcName(args) where receiver can be:
-            # - identifier (counter, calc, etc.)
-            # - new ClassName()
-            # - new ClassName(args)
-            # - this
-            method_call_pattern = re.compile(
-                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
-            )
 
             for body_line in body_lines:
                 # Check if this line contains a call to the target function
@@ -358,7 +345,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 serialize_expr = '"null"'
 
             # Add behavior instrumentation code
-            behavior_start_code = [
+            method_close_indent = " " * base_indent
+            
+            result.extend([
                 f"{indent}// Codeflash behavior instrumentation",
                 f'{indent}int _cf_loop{iter_id} = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));',
                 f"{indent}int _cf_iter{iter_id} = {iter_id};",
@@ -372,8 +361,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}long _cf_start{iter_id} = System.nanoTime();",
                 f"{indent}String _cf_serializedResult{iter_id} = null;",
                 f"{indent}try {{",
-            ]
-            result.extend(behavior_start_code)
+            ])
+
+            # Add the wrapped body lines with extra indentation
 
             # Add the wrapped body lines with extra indentation
             for bl in wrapped_body_lines:
@@ -383,8 +373,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             result.append(f"{indent}    _cf_serializedResult{iter_id} = {serialize_expr};")
 
             # Add finally block with SQLite write
-            method_close_indent = " " * base_indent
-            behavior_end_code = [
+            result.extend([
                 f"{indent}}} finally {{",
                 f"{indent}    long _cf_end{iter_id} = System.nanoTime();",
                 f"{indent}    long _cf_dur{iter_id} = _cf_end{iter_id} - _cf_start{iter_id};",
@@ -420,8 +409,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}    }}",
                 f"{indent}}}",
                 f"{method_close_indent}}}",  # Method closing brace
-            ]
-            result.extend(behavior_end_code)
+            ])
         else:
             result.append(line)
             i += 1
