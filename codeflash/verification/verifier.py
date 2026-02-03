@@ -89,7 +89,10 @@ def generate_tests(
 
             og2 = generated_test_source
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
+            # Skip conversion if ts-jest is installed (handles interop natively)
+            generated_test_source = ensure_module_system_compatibility(
+                generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+            )
             diff = unified_diff_strings(og2, generated_test_source)
             log_something("ensure_module_system_compatibility", diff)
 

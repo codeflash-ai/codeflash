@@ -11,6 +11,8 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from codeflash.languages.current import is_typescript
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -299,34 +301,87 @@ def convert_esm_to_commonjs(code: str) -> str:
     return default_import.sub(replace_default, code)
 
 
-def ensure_module_system_compatibility(code: str, target_module_system: str) -> str:
+def uses_ts_jest(project_root: Path) -> bool:
+    """Check if the project uses ts-jest for TypeScript transformation.
+
+    ts-jest handles module interoperability internally, allowing mixed
+    CommonJS/ESM imports without explicit conversion.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if ts-jest is being used, False otherwise.
+
+    """
+    # Check for ts-jest in devDependencies or dependencies
+    package_json = project_root / "package.json"
+    if package_json.exists():
+        try:
+            with package_json.open("r") as f:
+                pkg = json.load(f)
+                dev_deps = pkg.get("devDependencies", {})
+                deps = pkg.get("dependencies", {})
+                if "ts-jest" in dev_deps or "ts-jest" in deps:
+                    return True
+        except Exception as e:
+            logger.debug(f"Failed to read package.json for ts-jest detection: {e}")  # noqa: G004
+
+    # Also check for jest.config with ts-jest preset
+    for config_file in ["jest.config.js", "jest.config.cjs", "jest.config.ts", "jest.config.mjs"]:
+        config_path = project_root / config_file
+        if config_path.exists():
+            try:
+                content = config_path.read_text()
+                if "ts-jest" in content:
+                    return True
+            except Exception as e:
+                logger.debug(f"Failed to read {config_file}: {e}")  # noqa: G004
+
+    return False
+
+
+def ensure_module_system_compatibility(code: str, target_module_system: str, project_root: Path | None = None) -> str:
     """Ensure code uses the correct module system syntax.
 
-    Detects the current module system in the code and converts if needed.
-    Handles mixed-style code (e.g., ESM imports with CommonJS require for npm packages).
+    If the project uses ts-jest, no conversion is performed because ts-jest
+    handles module interoperability internally. Otherwise, converts between
+    CommonJS and ES Modules as needed.
 
     Args:
         code: JavaScript code to check and potentially convert.
         target_module_system: Target ModuleSystem (COMMONJS or ES_MODULE).
+        project_root: Project root directory for ts-jest detection.
 
     Returns:
-        Code with correct module system syntax.
+        Converted code, or unchanged if ts-jest handles interop.
 
     """
+    # If ts-jest is installed, skip conversion - it handles interop natively
+    if is_typescript() and project_root and uses_ts_jest(project_root):
+        logger.debug(
+            f"Skipping module system conversion (target was {target_module_system}). "  # noqa: G004
+            "ts-jest handles interop natively."
+        )
+        return code
+
     # Detect current module system in code
     has_require = "require(" in code
+    has_module_exports = "module.exports" in code or "exports." in code
     has_import = "import " in code and "from " in code
+    has_export = "export " in code
 
-    if target_module_system == ModuleSystem.ES_MODULE:
-        # Convert any require() statements to imports for ESM projects
-        # This handles mixed code (ESM imports + CommonJS requires for npm packages)
-        if has_require:
-            logger.debug("Converting CommonJS requires to ESM imports")
-            return convert_commonjs_to_esm(code)
-    elif target_module_system == ModuleSystem.COMMONJS:
-        # Convert any import statements to requires for CommonJS projects
-        if has_import:
-            logger.debug("Converting ESM imports to CommonJS requires")
-            return convert_esm_to_commonjs(code)
+    is_commonjs = has_require or has_module_exports
+    is_esm = has_import or has_export
 
+    # Convert if needed
+    if target_module_system == ModuleSystem.ES_MODULE and is_commonjs and not is_esm:
+        logger.debug("Converting CommonJS to ES Module syntax")
+        return convert_commonjs_to_esm(code)
+
+    if target_module_system == ModuleSystem.COMMONJS and is_esm and not is_commonjs:
+        logger.debug("Converting ES Module to CommonJS syntax")
+        return convert_esm_to_commonjs(code)
+
+    logger.debug("No module system conversion needed")
     return code
