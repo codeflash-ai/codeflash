@@ -94,6 +94,7 @@ class GradleTestResult:
     stdout: str
     stderr: str
     returncode: int
+    coverage_exec_path: Path | None = None
 
 
 def detect_build_tool(project_root: Path | str) -> BuildTool:
@@ -620,6 +621,7 @@ def run_gradle_tests(
             stdout="",
             stderr="Gradle not found",
             returncode=-1,
+            coverage_exec_path=None,
         )
 
     cmd = [gradle]
@@ -653,13 +655,6 @@ def run_gradle_tests(
         else:
             cmd.append("compileTestJava")
 
-    # Add JaCoCo coverage if requested
-    if enable_coverage:
-        if test_module:
-            cmd.append(f":{test_module}:jacocoTestReport")
-        else:
-            cmd.append("jacocoTestReport")
-
     # Add common flags
     cmd.extend([
         "--no-daemon",  # Avoid daemon issues
@@ -669,6 +664,41 @@ def run_gradle_tests(
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
+
+    # Configure JaCoCo coverage collection using Java agent (no build system changes needed)
+    coverage_exec_path = None
+    if enable_coverage:
+        try:
+            # Get JaCoCo agent JAR (downloads automatically if needed)
+            agent_jar = get_jacoco_agent_jar()
+
+            # Determine output path for coverage data
+            if test_module:
+                coverage_exec_path = project_root / test_module / "build" / "jacoco" / "test.exec"
+            else:
+                coverage_exec_path = project_root / "build" / "jacoco" / "test.exec"
+
+            coverage_exec_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Configure JaCoCo agent via JAVA_TOOL_OPTIONS environment variable
+            # This instruments all Java code at runtime without requiring build.gradle changes
+            agent_options = f"destfile={coverage_exec_path.absolute()}"
+            java_tool_options = f"-javaagent:{agent_jar.absolute()}={agent_options}"
+
+            # Add to existing JAVA_TOOL_OPTIONS if present
+            existing_options = run_env.get("JAVA_TOOL_OPTIONS", "")
+            if existing_options:
+                run_env["JAVA_TOOL_OPTIONS"] = f"{existing_options} {java_tool_options}"
+            else:
+                run_env["JAVA_TOOL_OPTIONS"] = java_tool_options
+
+            logger.info(f"JaCoCo agent enabled: {java_tool_options}")
+            logger.info(f"Coverage data will be written to: {coverage_exec_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to configure JaCoCo agent: {e}")
+            logger.warning("Coverage collection will be disabled for this run")
+            coverage_exec_path = None
 
     try:
         result = subprocess.run(
@@ -704,6 +734,7 @@ def run_gradle_tests(
             stdout=result.stdout,
             stderr=result.stderr,
             returncode=result.returncode,
+            coverage_exec_path=coverage_exec_path if coverage_exec_path and coverage_exec_path.exists() else None,
         )
 
     except subprocess.TimeoutExpired:
@@ -717,6 +748,7 @@ def run_gradle_tests(
             stdout="",
             stderr=f"Tests timed out after {timeout} seconds",
             returncode=-1,
+            coverage_exec_path=None,
         )
     except Exception as e:
         logger.exception("Error running Gradle tests")
@@ -730,6 +762,7 @@ def run_gradle_tests(
             stdout="",
             stderr=str(e),
             returncode=-1,
+            coverage_exec_path=None,
         )
 
 
@@ -1312,3 +1345,172 @@ def _get_gradle_classpath(project_root: Path) -> str | None:
     Returns None for now as Gradle support is not fully implemented.
     """
     return None
+
+
+def get_jacoco_agent_jar(codeflash_home: Path | None = None) -> Path:
+    """Get JaCoCo agent JAR, downloading if needed.
+
+    This function downloads the JaCoCo Java agent JAR from Maven Central
+    if it's not already present. The agent is used for runtime bytecode
+    instrumentation to collect code coverage data without requiring
+    build system configuration.
+
+    Args:
+        codeflash_home: Optional CodeFlash home directory. Defaults to ~/.codeflash
+
+    Returns:
+        Path to the JaCoCo agent JAR file.
+
+    """
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    agent_dir = codeflash_home / "java_agents"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+
+    agent_jar = agent_dir / "jacocoagent.jar"
+
+    if not agent_jar.exists():
+        # Download JaCoCo agent from Maven Central
+        import urllib.request
+
+        jacoco_version = "0.8.11"
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.agent/{jacoco_version}/"
+            f"org.jacoco.agent-{jacoco_version}-runtime.jar"
+        )
+
+        logger.info(f"Downloading JaCoCo agent from {url}")
+        logger.info(f"Saving to {agent_jar}")
+
+        try:
+            urllib.request.urlretrieve(url, agent_jar)
+            logger.info(f"Successfully downloaded JaCoCo agent to {agent_jar}")
+        except Exception as e:
+            logger.error(f"Failed to download JaCoCo agent: {e}")
+            raise
+
+    return agent_jar
+
+
+def get_jacoco_cli_jar(codeflash_home: Path | None = None) -> Path:
+    """Get JaCoCo CLI JAR, downloading if needed.
+
+    The CLI is used to convert binary .exec coverage files to XML format.
+
+    Args:
+        codeflash_home: Optional CodeFlash home directory. Defaults to ~/.codeflash
+
+    Returns:
+        Path to the JaCoCo CLI JAR file.
+
+    """
+    if codeflash_home is None:
+        codeflash_home = Path.home() / ".codeflash"
+
+    cli_dir = codeflash_home / "java_agents"
+    cli_dir.mkdir(parents=True, exist_ok=True)
+
+    cli_jar = cli_dir / "jacococli.jar"
+
+    if not cli_jar.exists():
+        # Download JaCoCo CLI from Maven Central
+        import urllib.request
+
+        jacoco_version = "0.8.11"
+        url = (
+            f"https://repo1.maven.org/maven2/org/jacoco/org.jacoco.cli/{jacoco_version}/"
+            f"org.jacoco.cli-{jacoco_version}-nodeps.jar"
+        )
+
+        logger.info(f"Downloading JaCoCo CLI from {url}")
+        logger.info(f"Saving to {cli_jar}")
+
+        try:
+            urllib.request.urlretrieve(url, cli_jar)
+            logger.info(f"Successfully downloaded JaCoCo CLI to {cli_jar}")
+        except Exception as e:
+            logger.error(f"Failed to download JaCoCo CLI: {e}")
+            raise
+
+    return cli_jar
+
+
+def convert_jacoco_exec_to_xml(
+    exec_path: Path,
+    classes_dirs: list[Path],
+    sources_dirs: list[Path],
+    xml_path: Path,
+) -> bool:
+    """Convert JaCoCo .exec binary coverage file to XML format.
+
+    Uses the JaCoCo CLI tool to generate an XML report from the binary
+    execution data file.
+
+    Args:
+        exec_path: Path to the .exec file generated by JaCoCo agent.
+        classes_dirs: List of directories containing compiled .class files.
+        sources_dirs: List of directories containing source .java files.
+        xml_path: Output path for the XML report.
+
+    Returns:
+        True if conversion succeeded, False otherwise.
+
+    """
+    if not exec_path.exists():
+        logger.error(f"JaCoCo .exec file not found: {exec_path}")
+        return False
+
+    # Get JaCoCo CLI
+    try:
+        cli_jar = get_jacoco_cli_jar()
+    except Exception as e:
+        logger.error(f"Failed to get JaCoCo CLI: {e}")
+        return False
+
+    # Build command
+    cmd = [
+        "java",
+        "-jar",
+        str(cli_jar),
+        "report",
+        str(exec_path),
+    ]
+
+    # Add class directories
+    for classes_dir in classes_dirs:
+        if classes_dir.exists():
+            cmd.extend(["--classfiles", str(classes_dir)])
+
+    # Add source directories
+    for sources_dir in sources_dirs:
+        if sources_dir.exists():
+            cmd.extend(["--sourcefiles", str(sources_dir)])
+
+    # Add XML output
+    cmd.extend(["--xml", str(xml_path)])
+
+    logger.info(f"Converting JaCoCo .exec to XML: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Successfully converted .exec to XML: {xml_path}")
+            return True
+        else:
+            logger.error(f"Failed to convert .exec to XML: {result.stderr}")
+            return False
+
+    except subprocess.TimeoutExpired:
+        logger.error("JaCoCo CLI conversion timed out")
+        return False
+    except Exception as e:
+        logger.exception(f"Error converting .exec to XML: {e}")
+        return False

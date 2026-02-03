@@ -232,7 +232,6 @@ BUILD FAILED in 2s
         (tmp_path / "build.gradle").write_text("""
 plugins {
     id 'java'
-    id 'jacoco'
 }
 """)
         (tmp_path / "gradlew").write_text("#!/bin/bash")
@@ -240,12 +239,22 @@ plugins {
 
         monkeypatch.chdir(tmp_path)
 
+        # Create the coverage file that would be created by JaCoCo agent
+        coverage_dir = tmp_path / "build" / "jacoco"
+        coverage_dir.mkdir(parents=True, exist_ok=True)
+        (coverage_dir / "test.exec").touch()
+
         with patch("codeflash.languages.java.build_tools.subprocess.run", return_value=mock_gradle_success) as mock_run:
             result = run_gradle_tests(tmp_path, enable_coverage=True)
 
-        # Verify JaCoCo task is included
+        # Verify JaCoCo agent is configured via environment variables
         call_args = mock_run.call_args
-        assert "jacocoTestReport" in " ".join(call_args[0][0])
+        env = call_args[1]["env"]
+        assert "JAVA_TOOL_OPTIONS" in env
+        assert "javaagent" in env["JAVA_TOOL_OPTIONS"]
+        assert "jacocoagent.jar" in env["JAVA_TOOL_OPTIONS"]
+        assert result.coverage_exec_path is not None
+        assert result.coverage_exec_path == coverage_dir / "test.exec"
 
 
 class TestGradleCompilation:

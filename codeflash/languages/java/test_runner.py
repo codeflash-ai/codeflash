@@ -339,11 +339,14 @@ def run_behavioral_tests(
     run_env["CODEFLASH_TEST_ITERATION"] = str(candidate_index)
     run_env["CODEFLASH_OUTPUT_FILE"] = str(sqlite_db_path)  # SQLite output path
 
-    # If coverage is enabled, ensure JaCoCo is configured
-    # For multi-module projects, add JaCoCo to the test module's pom.xml (where tests run)
+    # If coverage is enabled, prepare coverage paths
+    # For Maven: configure JaCoCo plugin in pom.xml
+    # For Gradle: coverage will be collected via Java agent (no build changes needed)
     coverage_xml_path: Path | None = None
-    if enable_coverage:
-        # Determine which pom.xml to configure JaCoCo in
+    build_tool = detect_build_tool(maven_root)
+
+    if enable_coverage and build_tool == BuildTool.MAVEN:
+        # Maven: ensure JaCoCo plugin is configured in pom.xml
         if test_module:
             # Multi-module project: add JaCoCo to test module
             test_module_pom = maven_root / test_module / "pom.xml"
@@ -360,9 +363,16 @@ def run_behavioral_tests(
                     logger.info("Adding JaCoCo plugin to pom.xml for coverage collection")
                     add_jacoco_plugin_to_pom(pom_path)
                 coverage_xml_path = get_jacoco_xml_path(project_root)
+    elif enable_coverage and build_tool == BuildTool.GRADLE:
+        # Gradle: coverage will be collected via Java agent
+        # Expected XML path after conversion from .exec
+        if test_module:
+            coverage_xml_path = maven_root / test_module / "build" / "jacoco" / "test.xml"
+        else:
+            coverage_xml_path = maven_root / "build" / "jacoco" / "test.xml"
 
-    # Run Maven tests from the appropriate root
-    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase)
+    # Run tests from the appropriate root
+    # Use a minimum timeout of 60s for Java builds (120s when coverage is enabled due to verify phase for Maven)
     min_timeout = 120 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
     result = _run_maven_tests(
@@ -380,6 +390,11 @@ def run_behavioral_tests(
     target_dir = _get_test_module_target_dir(maven_root, test_module)
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
+
+    # Check if coverage XML was actually generated (for Gradle with agent, verify the file exists)
+    if coverage_xml_path and not coverage_xml_path.exists():
+        logger.warning(f"Expected coverage XML not found: {coverage_xml_path}")
+        coverage_xml_path = None
 
     # Return coverage_xml_path as the fourth element when coverage is enabled
     return result_xml_path, result, sqlite_db_path, coverage_xml_path
@@ -1239,6 +1254,43 @@ def _run_gradle_tests_impl(
         enable_coverage=enable_coverage,
         test_module=test_module,
     )
+
+    # Convert JaCoCo .exec to XML if coverage was enabled
+    if enable_coverage and result.coverage_exec_path and result.coverage_exec_path.exists():
+        from codeflash.languages.java.build_tools import convert_jacoco_exec_to_xml
+
+        xml_path = result.coverage_exec_path.with_suffix('.xml')
+
+        # Determine class and source directories
+        classes_dirs = []
+        sources_dirs = []
+
+        if test_module:
+            # Multi-module project
+            module_path = project_root / test_module
+            classes_dirs.append(module_path / "build" / "classes" / "java" / "main")
+            classes_dirs.append(module_path / "build" / "classes" / "java" / "test")
+            sources_dirs.append(module_path / "src" / "main" / "java")
+            sources_dirs.append(module_path / "src" / "test" / "java")
+        else:
+            # Single module project
+            classes_dirs.append(project_root / "build" / "classes" / "java" / "main")
+            classes_dirs.append(project_root / "build" / "classes" / "java" / "test")
+            sources_dirs.append(project_root / "src" / "main" / "java")
+            sources_dirs.append(project_root / "src" / "test" / "java")
+
+        # Convert .exec to XML
+        success = convert_jacoco_exec_to_xml(
+            result.coverage_exec_path,
+            classes_dirs,
+            sources_dirs,
+            xml_path
+        )
+
+        if success:
+            logger.info(f"JaCoCo coverage XML generated: {xml_path}")
+        else:
+            logger.warning(f"Failed to convert JaCoCo .exec to XML")
 
     # Convert GradleTestResult to CompletedProcess for compatibility
     return subprocess.CompletedProcess(
