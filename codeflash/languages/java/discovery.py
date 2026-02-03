@@ -14,6 +14,7 @@ from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import FunctionFilterCriteria
 from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
 from codeflash.models.function_types import FunctionParent
+import fnmatch
 
 if TYPE_CHECKING:
     pass
@@ -81,6 +82,8 @@ def discover_functions_from_source(
 
         functions: list[FunctionToOptimize] = []
 
+        default_file_path = file_path or Path("unknown.java")
+
         for method in methods:
             # Apply filters
             if not _should_include_method(method, criteria, source, analyzer):
@@ -94,7 +97,7 @@ def discover_functions_from_source(
             functions.append(
                 FunctionToOptimize(
                     function_name=method.name,
-                    file_path=file_path or Path("unknown.java"),
+                    file_path=default_file_path,
                     starting_line=method.start_line,
                     ending_line=method.end_line,
                     starting_col=method.start_col,
@@ -141,15 +144,19 @@ def _should_include_method(
         return False
 
     # Check include patterns
+
+    # Check include_methods - in Java, all functions in classes are methods
+    if not criteria.include_methods and method.class_name is not None:
+        return False
+
+    # Check include patterns
     if criteria.include_patterns:
-        import fnmatch
 
         if not any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.include_patterns):
             return False
 
     # Check exclude patterns
     if criteria.exclude_patterns:
-        import fnmatch
 
         if any(fnmatch.fnmatch(method.name, pattern) for pattern in criteria.exclude_patterns):
             return False
@@ -162,16 +169,14 @@ def _should_include_method(
         if not analyzer.has_return_statement(method, source):
             return False
 
-    # Check include_methods - in Java, all functions in classes are methods
-    if not criteria.include_methods and method.class_name is not None:
-        return False
-
     # Check line count
-    method_lines = method.end_line - method.start_line + 1
-    if criteria.min_lines is not None and method_lines < criteria.min_lines:
-        return False
-    if criteria.max_lines is not None and method_lines > criteria.max_lines:
-        return False
+    if criteria.min_lines is not None or criteria.max_lines is not None:
+        method_lines = method.end_line - method.start_line + 1
+        if criteria.min_lines is not None and method_lines < criteria.min_lines:
+            return False
+        if criteria.max_lines is not None and method_lines > criteria.max_lines:
+            return False
+
 
     return True
 
