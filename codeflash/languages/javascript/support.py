@@ -1568,7 +1568,10 @@ class JavaScriptSupport:
                             if timing_value > 0:
                                 runtime_ns = timing_value
                                 logger.debug(
-                                    f"Using console timing for {name}: {timing_value}ns (XML had {runtime_ns_xml}ns)"
+                                    "Using console timing for %s: %sns (XML had %sns)",
+                                    name,
+                                    timing_value,
+                                    runtime_ns_xml,
                                 )
                                 break
 
