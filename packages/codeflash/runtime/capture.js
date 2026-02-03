@@ -71,6 +71,8 @@ if (!process[PERF_STATE_KEY]) {
         shouldStop: false,         // Flag to stop all further looping
         currentBatch: 0,           // Current batch number (incremented by runner)
         invocationLoopCounts: {},  // Track loops per invocation: {invocationKey: loopCount}
+        invocationRuntimes: {},    // Track runtimes per invocation for stability: {invocationKey: [runtimes]}
+        stableInvocations: {},     // Invocations that have reached stability: {invocationKey: true}
     };
 }
 const sharedPerfState = process[PERF_STATE_KEY];
@@ -657,9 +659,23 @@ function capturePerf(funcName, lineId, fn, ...args) {
         ? (hasExternalLoopRunner ? PERF_BATCH_SIZE : PERF_LOOP_COUNT)
         : 1;
 
+    // Initialize runtime tracking for this invocation if needed
+    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
+        sharedPerfState.invocationRuntimes[invocationKey] = [];
+    }
+    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
+
+    // Calculate stability window size based on collected runtimes
+    const getStabilityWindow = () => Math.max(PERF_MIN_LOOPS, Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
         // Check shared time limit BEFORE each iteration
         if (shouldLoop && checkSharedTimeLimit()) {
+            break;
+        }
+
+        // Check if this invocation has already reached stability
+        if (PERF_STABILITY_CHECK && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
@@ -695,6 +711,8 @@ function capturePerf(funcName, lineId, fn, ...args) {
                         const asyncDurationNs = getDurationNs(startTime, asyncEndTime);
                         console.log(`!######${testStdoutTag}:${asyncDurationNs}######!`);
                         sharedPerfState.totalLoopsCompleted++;
+                        // Track runtime for stability (convert to microseconds for stability check)
+                        runtimes.push(asyncDurationNs / 1000);
                         return resolved;
                     },
                     (err) => {
@@ -718,6 +736,20 @@ function capturePerf(funcName, lineId, fn, ...args) {
 
         // Update shared loop counter
         sharedPerfState.totalLoopsCompleted++;
+
+        // Track runtime for stability check (convert to microseconds)
+        if (durationNs > 0) {
+            runtimes.push(durationNs / 1000);
+        }
+
+        // Check stability after accumulating enough samples
+        if (PERF_STABILITY_CHECK && runtimes.length >= PERF_MIN_LOOPS) {
+            const window = getStabilityWindow();
+            if (shouldStopStability(runtimes, window, PERF_MIN_LOOPS)) {
+                sharedPerfState.stableInvocations[invocationKey] = true;
+                break;
+            }
+        }
 
         // If we had an error, stop looping
         if (lastError) {
@@ -790,6 +822,8 @@ function resetPerfState() {
     sharedPerfState.startTime = null;
     sharedPerfState.totalLoopsCompleted = 0;
     sharedPerfState.shouldStop = false;
+    sharedPerfState.invocationRuntimes = {};
+    sharedPerfState.stableInvocations = {};
 }
 
 /**
