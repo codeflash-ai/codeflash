@@ -185,6 +185,17 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+        
+        # Pre-compile regex patterns to avoid repeated compilation
+        all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
+        self._junit_pattern = re.compile(
+            rf"(\s*)((?:Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE
+        )
+        self._target_call_pattern = re.compile(
+            rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE
+        )
+        self._lambda_pattern = re.compile(r"\(\s*\)\s*->\s*")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -300,10 +311,7 @@ class JavaAssertTransformer:
         # - assertEquals (static import)
         # - Assert.assertEquals (JUnit 4)
         # - Assertions.assertEquals (JUnit 5)
-        all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
-        pattern = re.compile(rf"(\s*)((?:Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(source):
+        for match in self._junit_pattern.finditer(source):
             leading_ws = match.group(1)
             full_method = match.group(2)
             assertion_method = match.group(3)
@@ -504,9 +512,7 @@ class JavaAssertTransformer:
 
         # Pattern to match method calls: (receiver.)?func_name(args)
         # Handles: obj.method(args), ClassName.staticMethod(args), method(args)
-        pattern = re.compile(rf"((?:[a-zA-Z_]\w*\.)*)?({re.escape(self.func_name)})\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(content):
+        for match in self._target_call_pattern.finditer(content):
             receiver_prefix = match.group(1) or ""
             receiver = receiver_prefix.rstrip(".") if receiver_prefix else None
             method_name = match.group(2)
@@ -539,7 +545,7 @@ class JavaAssertTransformer:
         For assertThrows(Exception.class, () -> { code(); }), we want 'code();'.
         """
         # Look for lambda: () -> expr or () -> { block }
-        lambda_match = re.search(r"\(\s*\)\s*->\s*", content)
+        lambda_match = self._lambda_pattern.search(content)
         if not lambda_match:
             return None
 
@@ -548,10 +554,11 @@ class JavaAssertTransformer:
 
         if remaining.startswith("{"):
             # Block lambda: () -> { code }
-            _, block_end = self._find_balanced_braces(content, body_start + content[body_start:].index("{"))
+            brace_idx = content.index("{", body_start)
+            _, block_end = self._find_balanced_braces(content, brace_idx)
             if block_end != -1:
                 # Extract content inside braces
-                brace_content = content[body_start + content[body_start:].index("{") + 1 : block_end - 1]
+                brace_content = content[brace_idx + 1 : block_end - 1]
                 return brace_content.strip()
         else:
             # Expression lambda: () -> expr
@@ -589,22 +596,24 @@ class JavaAssertTransformer:
         in_string = False
         string_char = None
         in_char = False
+        code_len = len(code)
 
-        while pos < len(code) and depth > 0:
+        while pos < code_len and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             # Handle character literals
-            if char == "'" and not in_string and prev_char != "\\":
-                in_char = not in_char
+            if char == "'" and not in_string:
+                if pos == 0 or code[pos - 1] != "\\":
+                    in_char = not in_char
             # Handle string literals (double quotes)
-            elif char == '"' and not in_char and prev_char != "\\":
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
+            elif char == '"' and not in_char:
+                if pos == 0 or code[pos - 1] != "\\":
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
             elif not in_string and not in_char:
                 if char == "(":
                     depth += 1
