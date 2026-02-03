@@ -611,6 +611,12 @@ def parse_jest_test_xml(
     """
     test_results = TestResults()
 
+    # Check if test execution timed out - skip parsing since XML won't exist
+    if run_result is not None and run_result.returncode == -1:
+        if "timed out" in (run_result.stderr or "").lower():
+            logger.debug("Skipping Jest XML parsing - test execution timed out")
+            return test_results
+
     if not test_xml_file_path.exists():
         logger.warning(f"No JavaScript test results for {test_xml_file_path} found.")
         return test_results
