@@ -20,6 +20,7 @@ from codeflash.code_utils.formatter import sort_imports
 from codeflash.code_utils.line_profile_utils import ImportAdder
 from codeflash.languages import is_python
 from codeflash.models.models import FunctionParent
+import logging
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -601,13 +602,19 @@ def _extract_function_from_code(
             if func.function_name == function_name:
                 # Extract the function's source using line numbers
                 # Use doc_start_line if available to include JSDoc/docstring
-                lines = source_code.splitlines(keepends=True)
+                # Extract the function's source using line numbers
+                # Use doc_start_line if available to include JSDoc/docstring
                 effective_start = func.doc_start_line or func.starting_line
+                # Only split the source into lines if we have valid start/end info
+                if not (effective_start and func.ending_line):
+                    continue
+                lines = source_code.splitlines(keepends=True)
                 if effective_start and func.ending_line and effective_start <= len(lines):
                     func_lines = lines[effective_start - 1 : func.ending_line]
                     return "".join(func_lines)
     except Exception as e:
-        logger.debug(f"Error extracting function {function_name}: {e}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Error extracting function {function_name}: {e}")
 
     return None
 
