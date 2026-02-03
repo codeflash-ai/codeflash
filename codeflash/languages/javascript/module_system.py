@@ -330,3 +330,70 @@ def ensure_module_system_compatibility(code: str, target_module_system: str) -> 
             return convert_esm_to_commonjs(code)
 
     return code
+
+
+def ensure_vitest_imports(code: str, test_framework: str) -> str:
+    """Ensure vitest test globals are imported when using vitest framework.
+
+    Vitest by default does not enable globals (describe, test, expect, etc.),
+    so they must be explicitly imported. This function adds the import if missing.
+
+    Args:
+        code: JavaScript/TypeScript test code.
+        test_framework: The test framework being used (vitest, jest, mocha).
+
+    Returns:
+        Code with vitest imports added if needed.
+
+    """
+    if test_framework != "vitest":
+        return code
+
+    # Check if vitest imports already exist
+    if "from 'vitest'" in code or 'from "vitest"' in code:
+        return code
+
+    # Check if the code uses test functions that need to be imported
+    test_globals = ["describe", "test", "it", "expect", "vi", "beforeEach", "afterEach", "beforeAll", "afterAll"]
+    needs_import = any(f"{global_name}(" in code or f"{global_name} (" in code for global_name in test_globals)
+
+    if not needs_import:
+        return code
+
+    # Determine which globals are actually used in the code
+    used_globals = [g for g in test_globals if f"{g}(" in code or f"{g} (" in code]
+    if not used_globals:
+        return code
+
+    # Build the import statement
+    import_statement = f"import {{ {', '.join(used_globals)} }} from 'vitest';\n"
+
+    # Find the first line that isn't a comment or empty
+    lines = code.split("\n")
+    insert_index = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("//") and not stripped.startswith("/*") and not stripped.startswith("*"):
+            # Check if this line is an import/require - insert after imports
+            if stripped.startswith("import ") or stripped.startswith("const ") or stripped.startswith("let "):
+                continue
+            insert_index = i
+            break
+        insert_index = i + 1
+
+    # Find the last import line to insert after it
+    last_import_index = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("import ") and "from " in stripped:
+            last_import_index = i
+
+    if last_import_index >= 0:
+        # Insert after the last import
+        lines.insert(last_import_index + 1, import_statement.rstrip())
+    else:
+        # Insert at the beginning (after any leading comments)
+        lines.insert(insert_index, import_statement.rstrip())
+
+    logger.debug("Added vitest imports: %s", used_globals)
+    return "\n".join(lines)
