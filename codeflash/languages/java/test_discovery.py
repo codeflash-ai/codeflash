@@ -115,7 +115,8 @@ def _match_test_to_functions(
 
     for func_name, func_info in function_map.items():
         if func_info.name.lower() in test_name_lower:
-            matched.append(func_info.qualified_name)
+            if func_info.qualified_name not in matched:
+                matched.append(func_info.qualified_name)
 
     # Strategy 2: Method call analysis
     # Look for direct method calls in the test code
@@ -137,9 +138,10 @@ def _match_test_to_functions(
             if qualified not in matched:
                 matched.append(qualified)
 
-    # Strategy 3: Test class naming convention
+    # Strategy 3: Test class naming convention (fallback only)
     # e.g., CalculatorTest tests Calculator, TestCalculator tests Calculator
-    if test_method.class_name:
+    # Only use this if no matches found yet (too broad otherwise)
+    if not matched and test_method.class_name:
         # Remove "Test/Tests" suffix or "Test" prefix
         source_class_name = test_method.class_name
         if source_class_name.endswith("Tests"):
