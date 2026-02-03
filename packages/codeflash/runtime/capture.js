@@ -47,14 +47,30 @@ const TEST_MODULE = process.env.CODEFLASH_TEST_MODULE;
 //   Batch 1: Test1(5 loops) → Test2(5 loops) → Test3(5 loops)
 //   Batch 2: Test1(5 loops) → Test2(5 loops) → Test3(5 loops)
 //   ...until time budget exhausted
-const PERF_LOOP_COUNT = parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '1', 10);
-const PERF_MIN_LOOPS = parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
-const PERF_TARGET_DURATION_MS = parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
-const PERF_BATCH_SIZE = parseInt(process.env.CODEFLASH_PERF_BATCH_SIZE || '10', 10);
-const PERF_STABILITY_CHECK = (process.env.CODEFLASH_PERF_STABILITY_CHECK || 'false').toLowerCase() === 'true';
+//
+// IMPORTANT: These are getter functions, NOT constants!
+// Vitest caches modules and may load this file before env vars are set.
+// Using getter functions ensures we read the env vars at runtime when they're actually needed.
+function getPerfLoopCount() {
+    return parseInt(process.env.CODEFLASH_PERF_LOOP_COUNT || '1', 10);
+}
+function getPerfMinLoops() {
+    return parseInt(process.env.CODEFLASH_PERF_MIN_LOOPS || '5', 10);
+}
+function getPerfTargetDurationMs() {
+    return parseInt(process.env.CODEFLASH_PERF_TARGET_DURATION_MS || '10000', 10);
+}
+function getPerfBatchSize() {
+    return parseInt(process.env.CODEFLASH_PERF_BATCH_SIZE || '10', 10);
+}
+function getPerfStabilityCheck() {
+    return (process.env.CODEFLASH_PERF_STABILITY_CHECK || 'false').toLowerCase() === 'true';
+}
 // Current batch number - set by loop-runner before each batch
 // This allows continuous loop indices even when Jest resets module state
-const PERF_CURRENT_BATCH = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '0', 10);
+function getPerfCurrentBatch() {
+    return parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '0', 10);
+}
 
 // Stability constants (matching Python's config_consts.py)
 const STABILITY_WINDOW_SIZE = 0.35;
@@ -88,7 +104,7 @@ function checkSharedTimeLimit() {
         return false;
     }
     const elapsed = Date.now() - sharedPerfState.startTime;
-    if (elapsed >= PERF_TARGET_DURATION_MS && sharedPerfState.totalLoopsCompleted >= PERF_MIN_LOOPS) {
+    if (elapsed >= getPerfTargetDurationMs() && sharedPerfState.totalLoopsCompleted >= getPerfMinLoops()) {
         sharedPerfState.shouldStop = true;
         return true;
     }
@@ -113,7 +129,7 @@ function getInvocationLoopIndex(invocationKey) {
     // Calculate global loop index using batch number from environment
     // PERF_CURRENT_BATCH is 1-based (set by loop-runner before each batch)
     const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
-    const globalIndex = (currentBatch - 1) * PERF_BATCH_SIZE + localIndex;
+    const globalIndex = (currentBatch - 1) * getPerfBatchSize() + localIndex;
 
     return globalIndex;
 }
@@ -608,7 +624,7 @@ function capture(funcName, lineId, fn, ...args) {
  */
 function capturePerf(funcName, lineId, fn, ...args) {
     // Check if we should skip looping entirely (shared time budget exceeded)
-    const shouldLoop = PERF_LOOP_COUNT > 1 && !checkSharedTimeLimit();
+    const shouldLoop = getPerfLoopCount() > 1 && !checkSharedTimeLimit();
 
     // Get test context (computed once, reused across batch)
     let testModulePath;
@@ -638,9 +654,9 @@ function capturePerf(funcName, lineId, fn, ...args) {
     // If so, just execute the function once without timing (for test assertions)
     const peekLoopIndex = (sharedPerfState.invocationLoopCounts[invocationKey] || 0);
     const currentBatch = parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '1', 10);
-    const nextGlobalIndex = (currentBatch - 1) * PERF_BATCH_SIZE + peekLoopIndex + 1;
+    const nextGlobalIndex = (currentBatch - 1) * getPerfBatchSize() + peekLoopIndex + 1;
 
-    if (shouldLoop && nextGlobalIndex > PERF_LOOP_COUNT) {
+    if (shouldLoop && nextGlobalIndex > getPerfLoopCount()) {
         // All loops completed, just execute once for test assertion
         return fn(...args);
     }
@@ -656,7 +672,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
     // Batched looping: run BATCH_SIZE loops per capturePerf call when using loop-runner
     // For Vitest (no loop-runner), do all loops internally in a single call
     const batchSize = shouldLoop
-        ? (hasExternalLoopRunner ? PERF_BATCH_SIZE : PERF_LOOP_COUNT)
+        ? (hasExternalLoopRunner ? getPerfBatchSize() : getPerfLoopCount())
         : 1;
 
     // Initialize runtime tracking for this invocation if needed
@@ -683,7 +699,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
         // Check if we've exceeded max loops for this invocation
-        if (loopIndex > PERF_LOOP_COUNT) {
+        if (loopIndex > getPerfLoopCount()) {
             break;
         }
 
@@ -906,7 +922,11 @@ module.exports = {
     LOOP_INDEX,
     OUTPUT_FILE,
     TEST_ITERATION,
-    // Batch configuration
-    PERF_BATCH_SIZE,
-    PERF_LOOP_COUNT,
+    // Batch configuration (getter functions for dynamic env var reading)
+    getPerfBatchSize,
+    getPerfLoopCount,
+    getPerfMinLoops,
+    getPerfTargetDurationMs,
+    getPerfStabilityCheck,
+    getPerfCurrentBatch,
 };
