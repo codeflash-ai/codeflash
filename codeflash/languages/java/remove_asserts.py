@@ -455,38 +455,41 @@ class JavaAssertTransformer:
     def _find_fluent_chain_end(self, source: str, start_pos: int) -> int:
         """Find the end of a fluent assertion chain."""
         pos = start_pos
+        s = source
+        n = len(s)
+        ws = " \t\n\r"
 
-        while pos < len(source):
+        while pos < n:
             # Skip whitespace
-            while pos < len(source) and source[pos] in " \t\n\r":
+            while pos < n and s[pos] in ws:
                 pos += 1
 
-            if pos >= len(source) or source[pos] != ".":
+            if pos >= n or s[pos] != ".":
                 break
 
             pos += 1  # Skip dot
 
             # Skip whitespace after dot
-            while pos < len(source) and source[pos] in " \t\n\r":
+            while pos < n and s[pos] in ws:
                 pos += 1
 
             # Read method name
             method_start = pos
-            while pos < len(source) and (source[pos].isalnum() or source[pos] == "_"):
+            while pos < n and (s[pos].isalnum() or s[pos] == "_"):
                 pos += 1
 
             if pos == method_start:
                 break
 
-            method_name = source[method_start:pos]
+            method_name = s[method_start:pos]
 
             # Skip whitespace before potential parens
-            while pos < len(source) and source[pos] in " \t\n\r":
+            while pos < n and s[pos] in ws:
                 pos += 1
 
             # Check for parentheses
-            if pos < len(source) and source[pos] == "(":
-                _, new_pos = self._find_balanced_parens(source, pos)
+            if pos < n and s[pos] == "(":
+                _, new_pos = self._find_balanced_parens(s, pos)
                 if new_pos == -1:
                     break
                 pos = new_pos
@@ -581,7 +584,8 @@ class JavaAssertTransformer:
             Tuple of (content inside parens, position after closing paren) or (None, -1).
 
         """
-        if open_paren_pos >= len(code) or code[open_paren_pos] != "(":
+        n = len(code)
+        if open_paren_pos >= n or code[open_paren_pos] != "(":
             return None, -1
 
         depth = 1
@@ -590,9 +594,11 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
+        # Initialize prev_char to the character before pos to match previous behavior
+        prev_char = code[pos - 1] if pos > 0 else ""
+
+        while pos < n and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             # Handle character literals
             if char == "'" and not in_string and prev_char != "\\":
@@ -612,6 +618,8 @@ class JavaAssertTransformer:
                     depth -= 1
 
             pos += 1
+
+            prev_char = char
 
         if depth != 0:
             return None, -1
