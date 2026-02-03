@@ -679,6 +679,9 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Format stdout tag with current loop index
         const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
 
+        // Print start tag (needed for throughput calculation and timing marker matching)
+        console.log(`!$######${testStdoutTag}######$!`);
+
         // Timing with nanosecond precision
         let durationNs;
         try {
