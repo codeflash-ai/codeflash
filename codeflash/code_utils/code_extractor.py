@@ -1740,16 +1740,31 @@ def _extract_calling_function_python(source_code: str, function_name: str, ref_l
         import ast
 
         tree = ast.parse(source_code)
-        lines = source_code.splitlines()
 
-        for node in ast.walk(tree):
+        # Use a pruned DFS traversal to avoid visiting nodes outside the reference line range
+        stack = [tree]
+        while stack:
+            node = stack.pop()
+
+            # If node has line info, prune subtree if ref_line is outside node range
+            node_start = getattr(node, "lineno", None)
+            if node_start is not None:
+                node_end = getattr(node, "end_lineno", node_start) or node_start
+                if not (node_start <= ref_line <= node_end):
+                    continue
+
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name == function_name:
                     # Check if the reference line is within this function
                     start_line = node.lineno
                     end_line = node.end_lineno or start_line
                     if start_line <= ref_line <= end_line:
+                        lines = source_code.splitlines()
                         return "\n".join(lines[start_line - 1 : end_line])
+
+            for child in ast.iter_child_nodes(node):
+                stack.append(child)
+
         return None
     except Exception:
         return None
