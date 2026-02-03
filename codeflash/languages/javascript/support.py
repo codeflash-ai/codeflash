@@ -28,6 +28,7 @@ from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterL
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeflash.languages.base import ReferenceInfo
     from codeflash.languages.treesitter_utils import TypeDefinition
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,11 @@ class JavaScriptSupport:
     def file_extensions(self) -> tuple[str, ...]:
         """File extensions supported by JavaScript."""
         return (".js", ".jsx", ".mjs", ".cjs")
+
+    @property
+    def default_file_extension(self) -> str:
+        """Default file extension for JavaScript."""
+        return ".js"
 
     @property
     def test_framework(self) -> str:
@@ -959,6 +965,64 @@ class JavaScriptSupport:
             logger.warning("Failed to find helpers for %s: %s", function.name, e)
             return []
 
+    def find_references(
+        self, function: FunctionInfo, project_root: Path, tests_root: Path | None = None, max_files: int = 500
+    ) -> list[ReferenceInfo]:
+        """Find all references (call sites) to a function across the codebase.
+
+        Uses tree-sitter to find all places where a JavaScript/TypeScript function
+        is called, including direct calls, callbacks, memoized versions, and re-exports.
+
+        Args:
+            function: The function to find references for.
+            project_root: Root of the project to search.
+            tests_root: Root of tests directory (references in tests are excluded).
+            max_files: Maximum number of files to search.
+
+        Returns:
+            List of ReferenceInfo objects describing each reference location.
+
+        """
+        from codeflash.languages.base import ReferenceInfo
+        from codeflash.languages.javascript.find_references import ReferenceFinder
+
+        try:
+            finder = ReferenceFinder(project_root)
+            refs = finder.find_references(
+                function.name, function.file_path, max_files=max_files, class_name=function.class_name
+            )
+
+            # Convert to ReferenceInfo and filter out tests
+            result: list[ReferenceInfo] = []
+            for ref in refs:
+                # Exclude test files if tests_root is provided
+                if tests_root:
+                    try:
+                        ref.file_path.relative_to(tests_root)
+                        continue  # Skip if in tests_root
+                    except ValueError:
+                        pass  # Not in tests_root, include it
+
+                result.append(
+                    ReferenceInfo(
+                        file_path=ref.file_path,
+                        line=ref.line,
+                        column=ref.column,
+                        end_line=ref.end_line,
+                        end_column=ref.end_column,
+                        context=ref.context,
+                        reference_type=ref.reference_type,
+                        import_name=ref.import_name,
+                        caller_function=ref.caller_function,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            logger.warning("Failed to find references for %s: %s", function.name, e)
+            return []
+
     # === Code Transformation ===
 
     def replace_function(self, source: str, function: FunctionInfo, new_source: str) -> str:
@@ -1719,51 +1783,98 @@ class JavaScriptSupport:
             rel_path = source_file.relative_to(project_root)
             return "../" + rel_path.with_suffix("").as_posix()
 
+    def verify_requirements(self, project_root: Path, test_framework: str = "jest") -> tuple[bool, list[str]]:
+        """Verify that all JavaScript requirements are met.
+
+        Checks for:
+        1. Node.js installation
+        2. npm availability
+        3. Test framework (jest/vitest) installation
+        4. node_modules existence
+
+        Args:
+            project_root: The project root directory.
+            test_framework: The test framework to check for ("jest" or "vitest").
+
+        Returns:
+            Tuple of (success, list of error messages).
+
+        """
+        errors: list[str] = []
+
+        # Check Node.js
+        try:
+            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except FileNotFoundError:
+            errors.append("Node.js is not installed. Please install Node.js 18+ from https://nodejs.org/")
+        except Exception as e:
+            errors.append(f"Failed to check Node.js: {e}")
+
+        # Check npm
+        try:
+            result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except FileNotFoundError:
+            errors.append("npm is not available. Please ensure npm is installed with Node.js.")
+        except Exception as e:
+            errors.append(f"Failed to check npm: {e}")
+
+        # Check node_modules exists
+        node_modules = project_root / "node_modules"
+        if not node_modules.exists():
+            errors.append(
+                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+            )
+        else:
+            # Check test framework is installed
+            framework_path = node_modules / test_framework
+            if not framework_path.exists():
+                errors.append(
+                    f"{test_framework} is not installed. "
+                    f"Please run 'npm install --save-dev {test_framework}' to install it."
+                )
+
+        return len(errors) == 0, errors
+
     def ensure_runtime_environment(self, project_root: Path) -> bool:
         """Ensure codeflash npm package is installed.
 
         Attempts to install the npm package for test instrumentation.
-        Falls back to copying files if npm install fails.
 
         Args:
             project_root: The project root directory.
 
         Returns:
-            True if npm package is installed, False if falling back to file copy.
+            True if npm package is installed, False otherwise.
 
         """
-        import subprocess
-
         from codeflash.cli_cmds.console import logger
 
-        # Check if package is already installed
         node_modules_pkg = project_root / "node_modules" / "codeflash"
         if node_modules_pkg.exists():
             logger.debug("codeflash already installed")
             return True
 
-        # Try to install from local package first (for development)
-        local_package_path = Path(__file__).parent.parent.parent.parent / "packages" / "cli"
-        if local_package_path.exists():
-            try:
-                result = subprocess.run(
-                    ["npm", "install", "--save-dev", str(local_package_path)],
-                    check=False,
-                    cwd=project_root,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-                if result.returncode == 0:
-                    logger.debug("Installed codeflash from local package")
-                    return True
-                logger.warning(f"Failed to install local package: {result.stderr}")
-            except Exception as e:
-                logger.warning(f"Error installing local package: {e}")
+        try:
+            result = subprocess.run(
+                ["npm", "install", "--save-dev", "codeflash"],
+                check=False,
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.debug("Installed codeflash from npm registry")
+                return True
+            logger.warning(f"Failed to install codeflash: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Error installing codeflash: {e}")
 
-        # Could try npm registry here in the future:
-        # subprocess.run(["npm", "install", "--save-dev", "codeflash"], ...)
-
+        logger.error("Could not install codeflash. Please run: npm install --save-dev codeflash")
         return False
 
     def instrument_existing_test(
@@ -1875,8 +1986,9 @@ class JavaScriptSupport:
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any, Path | None, Path | None]:
-        """Run Jest behavioral tests.
+        """Run behavioral tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1886,11 +1998,29 @@ class JavaScriptSupport:
             project_root: Project root directory.
             enable_coverage: Whether to collect coverage information.
             candidate_index: Index of the candidate being tested.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_behavioral_tests
+
+            return run_vitest_behavioral_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                enable_coverage=enable_coverage,
+                candidate_index=candidate_index,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_behavioral_tests
 
         return run_jest_behavioral_tests(
@@ -1913,8 +2043,9 @@ class JavaScriptSupport:
         min_loops: int = 5,
         max_loops: int = 100_000,
         target_duration_seconds: float = 10.0,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
-        """Run Jest benchmarking tests.
+        """Run benchmarking tests using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1925,11 +2056,30 @@ class JavaScriptSupport:
             min_loops: Minimum number of loops for benchmarking.
             max_loops: Maximum number of loops for benchmarking.
             target_duration_seconds: Target duration for benchmarking in seconds.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
+
+            return run_vitest_benchmarking_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                min_loops=min_loops,
+                max_loops=max_loops,
+                target_duration_ms=int(target_duration_seconds * 1000),
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_benchmarking_tests
 
         return run_jest_benchmarking_tests(
@@ -1951,8 +2101,9 @@ class JavaScriptSupport:
         timeout: int | None = None,
         project_root: Path | None = None,
         line_profile_output_file: Path | None = None,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any]:
-        """Run Jest tests for line profiling.
+        """Run tests for line profiling using the detected test framework.
 
         Args:
             test_paths: TestFiles object containing test file information.
@@ -1961,11 +2112,28 @@ class JavaScriptSupport:
             timeout: Optional timeout in seconds.
             project_root: Project root directory.
             line_profile_output_file: Path where line profile results will be written.
+            test_framework: Test framework to use ("jest" or "vitest"). If None, uses singleton.
 
         Returns:
             Tuple of (result_file_path, subprocess_result).
 
         """
+        from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+        framework = test_framework or get_js_test_framework_or_default()
+
+        if framework == "vitest":
+            from codeflash.languages.javascript.vitest_runner import run_vitest_line_profile_tests
+
+            return run_vitest_line_profile_tests(
+                test_paths=test_paths,
+                test_env=test_env,
+                cwd=cwd,
+                timeout=timeout,
+                project_root=project_root,
+                line_profile_output_file=line_profile_output_file,
+            )
+
         from codeflash.languages.javascript.test_runner import run_jest_line_profile_tests
 
         return run_jest_line_profile_tests(

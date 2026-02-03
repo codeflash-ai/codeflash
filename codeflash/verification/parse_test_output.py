@@ -612,7 +612,7 @@ def parse_jest_test_xml(
     test_results = TestResults()
 
     if not test_xml_file_path.exists():
-        logger.warning(f"No Jest test results for {test_xml_file_path} found.")
+        logger.warning(f"No JavaScript test results for {test_xml_file_path} found.")
         return test_results
 
     # Log file size for debugging
@@ -1326,6 +1326,9 @@ def parse_test_results(
     get_run_tmp_file(Path("unittest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_results.xml")).unlink(missing_ok=True)
     get_run_tmp_file(Path("jest_perf_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_perf_results.xml")).unlink(missing_ok=True)
+    get_run_tmp_file(Path("vitest_line_profile_results.xml")).unlink(missing_ok=True)
 
     # For Jest tests, SQLite cleanup is deferred until after comparison
     # (comparison happens via language_support.compare_test_results)

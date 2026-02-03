@@ -12,6 +12,7 @@ from codeflash.cli_cmds.extension import install_vscode_extension
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.config_parser import parse_config_file
+from codeflash.languages.test_framework import set_current_test_framework
 from codeflash.lsp.helpers import is_LSP_enabled
 from codeflash.version import __version__ as version
 
@@ -229,6 +230,11 @@ def process_pyproject_config(args: Namespace) -> Namespace:
     # For JS/TS projects, tests_root is optional (Jest auto-discovers tests)
     # Default to module_root if not specified
     is_js_ts_project = pyproject_config.get("language") in ("javascript", "typescript")
+
+    # Set the test framework singleton for JS/TS projects
+    if is_js_ts_project and pyproject_config.get("test_framework"):
+        set_current_test_framework(pyproject_config["test_framework"])
+
     if args.tests_root is None:
         if is_js_ts_project:
             # Try common JS test directories at project root first
