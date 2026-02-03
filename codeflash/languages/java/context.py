@@ -20,6 +20,8 @@ from codeflash.languages.java.parser import JavaAnalyzer, JavaClassNode, get_jav
 if TYPE_CHECKING:
     from tree_sitter import Node
 
+_PARENT_TYPE_NAMES: frozenset[str] = frozenset(("ClassDef", "InterfaceDef", "EnumDef"))
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,7 +140,7 @@ def _get_parent_type_name(function: FunctionToOptimize) -> str | None:
     # Check parents for interface/enum
     if function.parents:
         for parent in function.parents:
-            if parent.type in ("ClassDef", "InterfaceDef", "EnumDef"):
+            if parent.type in _PARENT_TYPE_NAMES:
                 return parent.name
 
     return None
