@@ -34,7 +34,8 @@ const fs = require('fs');
 
 /**
  * Resolve jest-runner with monorepo support.
- * Walks up the directory tree looking for node_modules/jest-runner.
+ * Uses CODEFLASH_MONOREPO_ROOT environment variable if available,
+ * otherwise walks up the directory tree looking for node_modules/jest-runner.
  */
 function resolveJestRunner() {
     // Try standard resolution first (works in simple projects)
@@ -44,7 +45,19 @@ function resolveJestRunner() {
         // Standard resolution failed - try monorepo-aware resolution
     }
 
-    // Walk up from cwd looking for workspace root markers and node_modules
+    // If Python detected a monorepo root, check there first
+    const monorepoRoot = process.env.CODEFLASH_MONOREPO_ROOT;
+    if (monorepoRoot) {
+        const jestRunnerPath = path.join(monorepoRoot, 'node_modules', 'jest-runner');
+        if (fs.existsSync(jestRunnerPath)) {
+            const packageJsonPath = path.join(jestRunnerPath, 'package.json');
+            if (fs.existsSync(packageJsonPath)) {
+                return jestRunnerPath;
+            }
+        }
+    }
+
+    // Fallback: Walk up from cwd looking for node_modules/jest-runner
     const monorepoMarkers = ['yarn.lock', 'pnpm-workspace.yaml', 'lerna.json', 'package-lock.json'];
     let currentDir = process.cwd();
     const visitedDirs = new Set();
