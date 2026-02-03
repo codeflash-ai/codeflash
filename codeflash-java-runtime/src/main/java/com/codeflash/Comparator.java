@@ -160,23 +160,59 @@ public final class Comparator {
 
     private static List<Invocation> getInvocations(Connection conn) throws SQLException {
         List<Invocation> invocations = new ArrayList<>();
-        String sql = "SELECT call_id, method_id, args_json, result_json, error_json FROM invocations ORDER BY call_id";
+        String sql = "SELECT test_class_name, function_getting_tested, loop_index, iteration_id, return_value " +
+                     "FROM test_results ORDER BY loop_index, iteration_id";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
+                String testClassName = rs.getString("test_class_name");
+                String functionName = rs.getString("function_getting_tested");
+                int loopIndex = rs.getInt("loop_index");
+                String iterationId = rs.getString("iteration_id");
+                String returnValue = rs.getString("return_value");
+
+                // Create unique call_id from loop_index and iteration_id
+                // Parse iteration_id which is in format "iter_testIteration" (e.g., "1_0")
+                long callId = (loopIndex * 10000L) + parseIterationId(iterationId);
+
+                // Construct method_id as "ClassName.methodName"
+                String methodId = testClassName + "." + functionName;
+
                 invocations.add(new Invocation(
-                    rs.getLong("call_id"),
-                    rs.getString("method_id"),
-                    rs.getString("args_json"),
-                    rs.getString("result_json"),
-                    rs.getString("error_json")
+                    callId,
+                    methodId,
+                    null,  // args_json not captured in test_results schema
+                    returnValue,  // return_value maps to resultJson
+                    null   // error_json not captured in test_results schema
                 ));
             }
         }
 
         return invocations;
+    }
+
+    /**
+     * Parse iteration_id string to extract the numeric iteration number.
+     * Format: "iter_testIteration" (e.g., "1_0" → 1)
+     */
+    private static long parseIterationId(String iterationId) {
+        if (iterationId == null || iterationId.isEmpty()) {
+            return 0;
+        }
+        try {
+            // Split by underscore and take the first part
+            String[] parts = iterationId.split("_");
+            return Long.parseLong(parts[0]);
+        } catch (Exception e) {
+            // If parsing fails, try to parse the whole string
+            try {
+                return Long.parseLong(iterationId);
+            } catch (Exception ex) {
+                return 0;
+            }
+        }
     }
 
     /**
