@@ -7,6 +7,7 @@ using tree-sitter, following the same patterns as the JavaScript/TypeScript impl
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from tree_sitter import Node, Tree
+
+_PACKAGE_SIMPLE_RE = re.compile(r'\bpackage\s+([^;]+);')
+
+_PACKAGE_IDENT_RE = re.compile(r'^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$')
 
 logger = logging.getLogger(__name__)
 
@@ -670,6 +675,11 @@ class JavaAnalyzer:
             The package name, or None if not found.
 
         """
+        m = _PACKAGE_SIMPLE_RE.search(source)
+        if m:
+            candidate = m.group(1).strip()
+            if _PACKAGE_IDENT_RE.match(candidate):
+                return candidate
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
 
