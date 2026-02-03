@@ -754,10 +754,10 @@ def parse_jest_test_xml(
                 test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)
             if test_type is None:
                 # Infer test type from filename pattern
+                # Note: For Jest, both __perf_test_ and __unit_test_ are GENERATED_REGRESSION tests
+                # The distinction between behavior and performance is handled by test mode, not test type
                 filename = test_file_path.name
-                if "__perf_test_" in filename or "_perf_test_" in filename:
-                    test_type = TestType.GENERATED_PERFORMANCE
-                elif "__unit_test_" in filename or "_unit_test_" in filename:
+                if "__perf_test_" in filename or "_perf_test_" in filename or "__unit_test_" in filename or "_unit_test_" in filename:
                     test_type = TestType.GENERATED_REGRESSION
                 else:
                     # Default to GENERATED_REGRESSION for Jest tests
