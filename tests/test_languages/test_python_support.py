@@ -555,3 +555,125 @@ def standalone():
 
             standalone_funcs = [f for f in functions if f.class_name is None]
             assert len(standalone_funcs) == 1
+
+
+# === Tests for find_references method ===
+# These tests verify that PythonSupport correctly finds references to functions
+# using jedi, including the fix for using function.function_name instead of function.name.
+
+
+def test_find_references_simple_function(python_support, tmp_path):
+    """Test finding references to a simple function.
+
+    This test specifically exercises the code path that was fixed in the
+    regression where function.name was used instead of function.function_name.
+    """
+    from codeflash.models.function_types import FunctionToOptimize
+
+    # Create source file with function definition
+    source_file = tmp_path / "utils.py"
+    source_file.write_text("""def helper_function(x):
+    return x * 2
+""")
+
+    # Create a file that imports and uses the function
+    consumer_file = tmp_path / "consumer.py"
+    consumer_file.write_text("""from utils import helper_function
+
+def process(value):
+    return helper_function(value) + 1
+""")
+
+    func = FunctionToOptimize(
+        function_name="helper_function",
+        file_path=source_file,
+        starting_line=1,
+        ending_line=2,
+    )
+
+    refs = python_support.find_references(func, project_root=tmp_path)
+
+    assert len(refs) >= 1
+    ref_files = {str(r.file_path) for r in refs}
+    assert any("consumer.py" in f for f in ref_files)
+
+
+def test_find_references_class_method(python_support, tmp_path):
+    """Test finding references to a class method.
+
+    This verifies the class_name attribute is correctly used to disambiguate methods.
+    """
+    from codeflash.models.function_types import FunctionParent, FunctionToOptimize
+
+    # Create source file with class and method
+    source_file = tmp_path / "calculator.py"
+    source_file.write_text("""class Calculator:
+    def add(self, a, b):
+        return a + b
+""")
+
+    # Create a file that uses the class method
+    consumer_file = tmp_path / "main.py"
+    consumer_file.write_text("""from calculator import Calculator
+
+def compute():
+    calc = Calculator()
+    return calc.add(1, 2)
+""")
+
+    func = FunctionToOptimize(
+        function_name="add",
+        file_path=source_file,
+        parents=[FunctionParent(name="Calculator", type="ClassDef")],
+        starting_line=2,
+        ending_line=3,
+        is_method=True,
+    )
+
+    refs = python_support.find_references(func, project_root=tmp_path)
+
+    assert len(refs) >= 1
+    ref_files = {str(r.file_path) for r in refs}
+    assert any("main.py" in f for f in ref_files)
+
+
+def test_find_references_no_references(python_support, tmp_path):
+    """Test that find_references returns empty list when no references exist."""
+    from codeflash.models.function_types import FunctionToOptimize
+
+    source_file = tmp_path / "isolated.py"
+    source_file.write_text("""def isolated_function():
+    return 42
+""")
+
+    func = FunctionToOptimize(
+        function_name="isolated_function",
+        file_path=source_file,
+        starting_line=1,
+        ending_line=2,
+    )
+
+    refs = python_support.find_references(func, project_root=tmp_path)
+
+    assert refs == []
+
+
+def test_find_references_nonexistent_function(python_support, tmp_path):
+    """Test that find_references handles nonexistent functions gracefully."""
+    from codeflash.models.function_types import FunctionToOptimize
+
+    source_file = tmp_path / "source.py"
+    source_file.write_text("""def existing_function():
+    return 1
+""")
+
+    func = FunctionToOptimize(
+        function_name="nonexistent_function",
+        file_path=source_file,
+        starting_line=1,
+        ending_line=2,
+    )
+
+    refs = python_support.find_references(func, project_root=tmp_path)
+
+    assert refs == []
