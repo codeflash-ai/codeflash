@@ -145,8 +145,6 @@ def _insert_class_members(
     if not body_node:
         logger.warning("Class %s has no body", class_name)
         return source
-
-    source_bytes = source.encode("utf8")
     lines = source.splitlines(keepends=True)
 
     # Get class indentation
@@ -157,58 +155,51 @@ def _insert_class_members(
     result = source
 
     # Insert fields at the beginning of the class body (after opening brace)
+    result_bytes = result.encode("utf8")
+
+    # Track byte offset adjustments
+    offset = 0
+
+    # Insert fields at the beginning of the class body (after opening brace)
     if fields:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
+        insert_point = body_node.start_byte + 1 + offset  # After opening brace
 
-        if body_node:
-            result_bytes = result.encode("utf8")
-            insert_point = body_node.start_byte + 1  # After opening brace
+        # Format fields
+        field_text = "\n"
+        for field in fields:
+            field_lines = field.strip().splitlines(keepends=True)
+            indented_field = _apply_indentation(field_lines, member_indent)
+            field_text += indented_field
+            if not indented_field.endswith("\n"):
+                field_text += "\n"
 
-            # Format fields
-            field_text = "\n"
-            for field in fields:
-                field_lines = field.strip().splitlines(keepends=True)
-                indented_field = _apply_indentation(field_lines, member_indent)
-                field_text += indented_field
-                if not indented_field.endswith("\n"):
-                    field_text += "\n"
+        field_bytes = field_text.encode("utf8")
+        before = result_bytes[:insert_point]
+        after = result_bytes[insert_point:]
+        result_bytes = before + field_bytes + after
+        offset += len(field_bytes)
 
-            before = result_bytes[:insert_point]
-            after = result_bytes[insert_point:]
-            result = (before + field_text.encode("utf8") + after).decode("utf8")
+    # Insert methods at the end of the class body (before closing brace)
 
     # Insert methods at the end of the class body (before closing brace)
     if methods:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
+        insert_point = body_node.end_byte - 1 + offset  # Before closing brace
 
-        if body_node:
-            result_bytes = result.encode("utf8")
-            insert_point = body_node.end_byte - 1  # Before closing brace
+        # Format methods
+        method_text = "\n"
+        for method in methods:
+            method_lines = method.strip().splitlines(keepends=True)
+            indented_method = _apply_indentation(method_lines, member_indent)
+            method_text += indented_method
+            if not indented_method.endswith("\n"):
+                method_text += "\n"
 
-            # Format methods
-            method_text = "\n"
-            for method in methods:
-                method_lines = method.strip().splitlines(keepends=True)
-                indented_method = _apply_indentation(method_lines, member_indent)
-                method_text += indented_method
-                if not indented_method.endswith("\n"):
-                    method_text += "\n"
+        method_bytes = method_text.encode("utf8")
+        before = result_bytes[:insert_point]
+        after = result_bytes[insert_point:]
+        result_bytes = before + method_bytes + after
 
-            before = result_bytes[:insert_point]
-            after = result_bytes[insert_point:]
-            result = (before + method_text.encode("utf8") + after).decode("utf8")
-
-    return result
+    return result_bytes.decode("utf8")
 
 
 def replace_function(
@@ -413,8 +404,10 @@ def _get_indentation(line: str) -> str:
         The indentation string (spaces/tabs).
 
     """
-    match = re.match(r"^(\s*)", line)
-    return match.group(1) if match else ""
+    for i, char in enumerate(line):
+        if char not in (' ', '\t'):
+            return line[:i]
+    return line
 
 
 def _apply_indentation(lines: list[str], base_indent: str) -> str:
@@ -441,11 +434,10 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
 
     result_lines = []
     for line in lines:
-        if not line.strip():
+        stripped = line.strip()
+        if not stripped:
             result_lines.append(line)
         else:
-            # Remove existing indentation and apply new base indentation
-            stripped_line = line.lstrip()
             # Calculate relative indentation
             line_indent = _get_indentation(line)
             # When existing_indent is empty (first line has no indent), the relative
@@ -454,7 +446,8 @@ def _apply_indentation(lines: list[str], base_indent: str) -> str:
                 relative_indent = line_indent[len(existing_indent) :]
             else:
                 relative_indent = ""
-            result_lines.append(base_indent + relative_indent + stripped_line)
+            result_lines.append(base_indent + relative_indent + line.lstrip())
+
 
     return "".join(result_lines)
 
