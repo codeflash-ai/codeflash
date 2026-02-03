@@ -92,7 +92,7 @@ class ImportResolver:
 
         # Collect named imports
         for name, alias in import_info.named_imports:
-            imported_names.append(alias if alias else name)
+            imported_names.append(alias or name)
 
         # Add default import if present
         if import_info.default_import:

@@ -168,7 +168,7 @@ class ReferenceFinder:
             if import_info:
                 # Found an import - mark as visited and search for calls
                 context.visited_files.add(file_path)
-                import_name, original_import = import_info
+                import_name, _ = import_info
                 file_refs = self._find_references_in_file(
                     file_path, file_code, function_name, import_name, file_analyzer, include_self=True
                 )
@@ -213,7 +213,7 @@ class ReferenceFinder:
 
                 if import_info:
                     context.visited_files.add(file_path)
-                    import_name, original_import = import_info
+                    import_name, _ = import_info
                     file_refs = self._find_references_in_file(
                         file_path, file_code, reexport_name, import_name, file_analyzer, include_self=True
                     )
@@ -317,7 +317,7 @@ class ReferenceFinder:
                 export_name = exported.export_name or exported.function_name
                 for name, alias in imp.named_imports:
                     if name == export_name:
-                        return (alias if alias else name, imp)
+                        return (alias or name, imp)
 
                 # Check namespace import
                 if imp.namespace_import:
@@ -360,7 +360,7 @@ class ReferenceFinder:
         lines = source_code.splitlines()
 
         # The name to search for (either imported name or original)
-        search_name = import_name if import_name else function_name
+        search_name = import_name or function_name
 
         # Handle namespace imports (e.g., "utils.helper")
         if "." in search_name:
@@ -404,7 +404,7 @@ class ReferenceFinder:
             name_node = node.child_by_field_name("name")
             if name_node:
                 new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
-        elif node.type in ("variable_declarator",):
+        elif node.type == "variable_declarator":
             # Arrow function or function expression assigned to variable
             name_node = node.child_by_field_name("name")
             value_node = node.child_by_field_name("value")
@@ -673,7 +673,7 @@ class ReferenceFinder:
                         end_column=0,
                         context=context_line.strip(),
                         reference_type="reexport",
-                        import_name=alias if alias else name,
+                        import_name=alias or name,
                         caller_function=None,
                     )
                     references.append(ref)
@@ -745,7 +745,7 @@ class ReferenceFinder:
                         end_column=0,
                         context=context_line.strip(),
                         reference_type="reexport",
-                        import_name=alias if alias else name,
+                        import_name=alias or name,
                         caller_function=None,
                     )
                     references.append(ref)

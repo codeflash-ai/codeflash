@@ -37,7 +37,7 @@ def extract_test_context_from_env() -> tuple[str, str | None, str]:
     test_function = os.environ["CODEFLASH_TEST_FUNCTION"]
 
     if test_module and test_function:
-        return (test_module, test_class if test_class else None, test_function)
+        return (test_module, test_class or None, test_function)
 
     raise RuntimeError(
         "Test context environment variables not set - ensure tests are run through codeflash test runner"
