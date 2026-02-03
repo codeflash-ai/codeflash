@@ -55,9 +55,7 @@ def _get_qualified_name(func: Any) -> str:
 
 
 def instrument_for_behavior(
-    source: str,
-    functions: Sequence[FunctionToOptimize],
-    analyzer: JavaAnalyzer | None = None,
+    source: str, functions: Sequence[FunctionToOptimize], analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add behavior instrumentation to capture inputs/outputs.
 
@@ -83,9 +81,7 @@ def instrument_for_behavior(
 
 
 def instrument_for_benchmarking(
-    test_source: str,
-    target_function: FunctionToOptimize,
-    analyzer: JavaAnalyzer | None = None,
+    test_source: str, target_function: FunctionToOptimize, analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add timing instrumentation to test code.
 
@@ -168,19 +164,9 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(
-            modified_source,
-            original_class_name,
-            func_name,
-        )
+        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
 
-    logger.debug(
-        "Java %s testing for %s: renamed class %s -> %s",
-        mode,
-        func_name,
-        original_class_name,
-        new_class_name,
-    )
+    logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
 
     return True, modified_source
 
@@ -325,8 +311,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             # - new ClassName(args)
             # - this
             method_call_pattern = re.compile(
-                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
-                re.MULTILINE
+                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
             )
 
             for body_line in body_lines:
@@ -346,7 +331,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
                             # Replace this occurrence with the variable
-                            new_line = new_line[:match.start()] + var_name + new_line[match.end():]
+                            new_line = new_line[: match.start()] + var_name + new_line[match.end() :]
 
                             # Insert capture line
                             capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
@@ -573,10 +558,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
 
 def create_benchmark_test(
-    target_function: FunctionToOptimize,
-    test_setup_code: str,
-    invocation_code: str,
-    iterations: int = 1000,
+    target_function: FunctionToOptimize, test_setup_code: str, invocation_code: str, iterations: int = 1000
 ) -> str:
     """Create a benchmark test for a function.
 
@@ -654,6 +636,11 @@ def instrument_generated_java_test(
 ) -> str:
     """Instrument a generated Java test for behavior or performance testing.
 
+    For generated tests (AI-generated), this function:
+    1. Removes assertions and captures function return values (for regression testing)
+    2. Renames the class to include mode suffix
+    3. Adds timing instrumentation for performance mode
+
     Args:
         test_code: The generated test source code.
         function_name: Name of the function being tested.
@@ -664,6 +651,13 @@ def instrument_generated_java_test(
         Instrumented test source code.
 
     """
+    from codeflash.languages.java.remove_asserts import transform_java_assertions
+
+    # For behavior mode, remove assertions and capture function return values
+    # This converts the generated test into a regression test that captures outputs
+    if mode == "behavior":
+        test_code = transform_java_assertions(test_code, function_name, qualified_name)
+
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
     class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
@@ -681,9 +675,7 @@ def instrument_generated_java_test(
 
     # Rename the class in the source
     modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b",
-        rf"\1class {new_class_name}",
-        test_code,
+        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b", rf"\1class {new_class_name}", test_code
     )
 
     # For performance mode, add timing instrumentation
