@@ -26,12 +26,14 @@ from codeflash.code_utils.code_utils import (
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.code_utils.git_utils import get_git_diff, get_repo_owner_and_name
 from codeflash.discovery.discover_unit_tests import discover_unit_tests
-from codeflash.languages import get_language_support, get_supported_extensions
-from codeflash.languages.base import Language
-from codeflash.languages.registry import is_language_supported
+from codeflash.languages.language_enum import Language
+from codeflash.languages.registry import get_language_support, get_supported_extensions, is_language_supported
 from codeflash.lsp.helpers import is_LSP_enabled
-from codeflash.models.models import FunctionParent
+from codeflash.models.function_types import FunctionParent, FunctionToOptimize
 from codeflash.telemetry.posthog_cf import ph
+
+# Re-export for backward compatibility
+__all__ = ["FunctionParent", "FunctionToOptimize"]
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -127,60 +129,6 @@ class FunctionWithReturnStatement(ast.NodeVisitor):
         super().generic_visit(node)
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
             self.ast_path.pop()
-
-
-@dataclass(frozen=True, config={"arbitrary_types_allowed": True})
-class FunctionToOptimize:
-    """Represent a function that is a candidate for optimization.
-
-    Attributes
-    ----------
-        function_name: The name of the function.
-        file_path: The absolute file path where the function is located.
-        parents: A list of parent scopes, which could be classes or functions.
-        starting_line: The starting line number of the function in the file.
-        ending_line: The ending line number of the function in the file.
-        starting_col: The starting column offset (for precise location in multi-line contexts).
-        ending_col: The ending column offset (for precise location in multi-line contexts).
-        is_async: Whether this function is defined as async.
-        language: The programming language of this function (default: "python").
-
-    The qualified_name property provides the full name of the function, including
-    any parent class or function names. The qualified_name_with_modules_from_root
-    method extends this with the module name from the project root.
-
-    """
-
-    function_name: str
-    file_path: Path
-    parents: list[FunctionParent]  # list[ClassDef | FunctionDef | AsyncFunctionDef]
-    starting_line: Optional[int] = None
-    ending_line: Optional[int] = None
-    starting_col: Optional[int] = None  # Column offset for precise location
-    ending_col: Optional[int] = None  # Column offset for precise location
-    is_async: bool = False
-    language: str = "python"  # Language identifier for multi-language support
-
-    @property
-    def top_level_parent_name(self) -> str:
-        return self.function_name if not self.parents else self.parents[0].name
-
-    def __str__(self) -> str:
-        return (
-            f"{self.file_path}:{'.'.join([p.name for p in self.parents])}"
-            f"{'.' if self.parents else ''}{self.function_name}"
-        )
-
-    @property
-    def qualified_name(self) -> str:
-        if not self.parents:
-            return self.function_name
-        # Join all parent names with dots to handle nested classes properly
-        parent_path = ".".join(parent.name for parent in self.parents)
-        return f"{parent_path}.{self.function_name}"
-
-    def qualified_name_with_modules_from_root(self, project_root_path: Path) -> str:
-        return f"{module_name_from_file_path(self.file_path, project_root_path)}.{self.qualified_name}"
 
 
 # =============================================================================
@@ -297,25 +245,8 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
     try:
         lang_support = get_language_support(file_path)
         criteria = FunctionFilterCriteria(require_return=True)
-        function_infos = lang_support.discover_functions(file_path, criteria)
-
-        ftos = []
-        for func_info in function_infos:
-            parents = [FunctionParent(p.name, p.type) for p in func_info.parents]
-            ftos.append(
-                FunctionToOptimize(
-                    function_name=func_info.name,
-                    file_path=func_info.file_path,
-                    parents=parents,
-                    starting_line=func_info.start_line,
-                    ending_line=func_info.end_line,
-                    starting_col=func_info.start_col,
-                    ending_col=func_info.end_col,
-                    is_async=func_info.is_async,
-                    language=func_info.language.value,
-                )
-            )
-        functions[file_path] = ftos
+        # discover_functions already returns FunctionToOptimize objects
+        functions[file_path] = lang_support.discover_functions(file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
 
@@ -400,7 +331,7 @@ def get_functions_to_optimize(
                         # It's a standalone function - check if the function is exported
                         name_to_check = found_function.function_name
 
-                    is_exported, export_name = _is_js_ts_function_exported(file, name_to_check)
+                    is_exported, _ = _is_js_ts_function_exported(file, name_to_check)
                     if not is_exported:
                         if found_function.parents:
                             logger.debug(

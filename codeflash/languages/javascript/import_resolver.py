@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from codeflash.languages.base import FunctionInfo, HelperFunction
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.base import HelperFunction
     from codeflash.languages.treesitter_utils import ImportInfo, TreeSitterAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,8 @@ class ImportResolver:
             project_root: Root directory of the project.
 
         """
-        self.project_root = project_root
+        # Resolve to real path to handle macOS symlinks like /var -> /private/var
+        self.project_root = project_root.resolve()
         self._resolution_cache: dict[tuple[Path, str], Path | None] = {}
 
     def resolve_import(self, import_info: ImportInfo, source_file: Path) -> ResolvedImport | None:
@@ -352,7 +354,7 @@ class MultiFileHelperFinder:
 
     def find_helpers(
         self,
-        function: FunctionInfo,
+        function: FunctionToOptimize,
         source: str,
         analyzer: TreeSitterAnalyzer,
         imports: list[ImportInfo],
@@ -378,7 +380,7 @@ class MultiFileHelperFinder:
         all_functions = analyzer.find_functions(source, include_methods=True)
         target_func = None
         for func in all_functions:
-            if func.name == function.name and func.start_line == function.start_line:
+            if func.name == function.function_name and func.start_line == function.starting_line:
                 target_func = func
                 break
 
@@ -555,7 +557,7 @@ class MultiFileHelperFinder:
             Dictionary mapping file paths to lists of helper functions.
 
         """
-        from codeflash.languages.base import FunctionInfo
+        from codeflash.discovery.functions_to_optimize import FunctionToOptimize
         from codeflash.languages.treesitter_utils import get_analyzer_for_file
 
         if context.current_depth >= context.max_depth:
@@ -575,9 +577,13 @@ class MultiFileHelperFinder:
         analyzer = get_analyzer_for_file(file_path)
         imports = analyzer.find_imports(source)
 
-        # Create FunctionInfo for the helper
-        func_info = FunctionInfo(
-            name=helper.name, file_path=file_path, start_line=helper.start_line, end_line=helper.end_line, parents=()
+        # Create FunctionToOptimize for the helper
+        func_info = FunctionToOptimize(
+            function_name=helper.name,
+            file_path=file_path,
+            parents=[],
+            starting_line=helper.start_line,
+            ending_line=helper.end_line,
         )
 
         # Recursively find helpers

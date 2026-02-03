@@ -172,7 +172,7 @@ function multiply(a, b) {
         js_support = get_language_support(Language.JAVASCRIPT)
 
         func_info = FunctionInfo(
-            name="add", file_path=Path("/tmp/test.js"), start_line=2, end_line=4, language=Language.JAVASCRIPT
+            function_name="add", file_path=Path("/tmp/test.js"), starting_line=2, ending_line=4, language="javascript"
         )
 
         result = js_support.replace_function(original_source, func_info, new_function)
@@ -216,7 +216,7 @@ class TestJavaScriptTestDiscovery:
 
         fib_file = js_project_dir / "fibonacci.js"
         func_info = FunctionInfo(
-            name="fibonacci", file_path=fib_file, start_line=11, end_line=16, language=Language.JAVASCRIPT
+            function_name="fibonacci", file_path=fib_file, starting_line=11, ending_line=16, language="javascript"
         )
 
         tests = js_support.discover_tests(test_root, [func_info])

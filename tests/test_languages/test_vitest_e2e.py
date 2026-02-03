@@ -177,7 +177,7 @@ class TestVitestTestDiscovery:
 
         fib_file = vitest_project_dir / "fibonacci.ts"
         func_info = FunctionInfo(
-            name="fibonacci", file_path=fib_file, start_line=11, end_line=16, language=Language.TYPESCRIPT
+            function_name="fibonacci", file_path=fib_file, starting_line=11, ending_line=16, language="typescript"
         )
 
         tests = ts_support.discover_tests(test_root, [func_info])

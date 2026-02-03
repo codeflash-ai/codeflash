@@ -311,13 +311,7 @@ def _find_jest_config(project_root: Path) -> Path | None:
 
     """
     # Common Jest config file names, in order of preference
-    config_names = [
-        "jest.config.ts",
-        "jest.config.js",
-        "jest.config.mjs",
-        "jest.config.cjs",
-        "jest.config.json",
-    ]
+    config_names = ["jest.config.ts", "jest.config.js", "jest.config.mjs", "jest.config.cjs", "jest.config.json"]
 
     # First check the project root itself
     for config_name in config_names:
@@ -474,14 +468,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
-        result = subprocess.run(
-            install_cmd,
-            check=False,
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
         if result.returncode == 0:
             logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
