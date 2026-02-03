@@ -124,12 +124,12 @@ class {self.profiler_class} {{
     private static final java.util.Map<String, String> lineContents = initLineContents();
     private static final ThreadLocal<Long> lastLineTime = new ThreadLocal<>();
     private static final ThreadLocal<String> lastKey = new ThreadLocal<>();
-    private static int totalHits = 0;
+    private static final java.util.concurrent.atomic.AtomicInteger totalHits = new java.util.concurrent.atomic.AtomicInteger(0);
     private static final String OUTPUT_FILE = {str(self.output_file)!r};
 
     static class LineStats {{
-        public long hits = 0;
-        public long timeNs = 0;
+        public final java.util.concurrent.atomic.AtomicLong hits = new java.util.concurrent.atomic.AtomicLong(0);
+        public final java.util.concurrent.atomic.AtomicLong timeNs = new java.util.concurrent.atomic.AtomicLong(0);
         public String file;
         public int line;
 
@@ -169,21 +169,21 @@ class {self.profiler_class} {{
         if (prevKey != null && prevTime != null) {{
             LineStats prevStats = stats.get(prevKey);
             if (prevStats != null) {{
-                prevStats.timeNs += (now - prevTime);
+                prevStats.timeNs.addAndGet(now - prevTime);
             }}
         }}
 
         String key = file + ":" + line;
-        stats.computeIfAbsent(key, k -> new LineStats(file, line)).hits++;
+        stats.computeIfAbsent(key, k -> new LineStats(file, line)).hits.incrementAndGet();
 
         // Record current line as the one now executing
         lastKey.set(key);
         lastLineTime.set(now);
 
-        totalHits++;
+        int hits = totalHits.incrementAndGet();
 
         // Save every 100 hits to ensure we capture results even if JVM exits abruptly
-        if (totalHits % 100 == 0) {{
+        if (hits % 100 == 0) {{
             save();
         }}
     }}
@@ -216,8 +216,8 @@ class {self.profiler_class} {{
                 content = content.replace("\\"", "\\\\\\"");
 
                 json.append("  \\"").append(key).append("\\": {{\n");
-                json.append("    \\"hits\\": ").append(st.hits).append(",\n");
-                json.append("    \\"time\\": ").append(st.timeNs).append(",\n");
+                json.append("    \\"hits\\": ").append(st.hits.get()).append(",\n");
+                json.append("    \\"time\\": ").append(st.timeNs.get()).append(",\n");
                 json.append("    \\"file\\": \\"").append(st.file).append("\\",\n");
                 json.append("    \\"line\\": ").append(st.line).append(",\n");
                 json.append("    \\"content\\": \\"").append(content).append("\\"\\n");
