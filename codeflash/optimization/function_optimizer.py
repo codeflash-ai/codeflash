@@ -566,7 +566,7 @@ class FunctionOptimizer:
 
         # Normalize codeflash imports in JS/TS tests to use npm package
         if not is_python():
-            module_system = detect_module_system(self.project_root)
+            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
                 generated_tests = inject_test_globals(generated_tests)
             if is_typescript():

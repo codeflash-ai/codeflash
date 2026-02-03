@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from codeflash.setup.detector import is_build_output_dir
+
 PACKAGE_JSON_CACHE: dict[Path, Path] = {}
 PACKAGE_JSON_DATA_CACHE: dict[Path, dict[str, Any]] = {}
 
@@ -50,11 +52,14 @@ def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
     """Detect module root from package.json fields or directory conventions.
 
     Detection order:
-    1. package.json "exports" field (extract directory from main export)
-    2. package.json "module" field (ESM entry point)
-    3. package.json "main" field (CJS entry point)
-    4. "src/" directory if it exists
+    1. src/, lib/, source/ directories (common source directories)
+    2. package.json "exports" field (if not in build output directory)
+    3. package.json "module" field (ESM, if not in build output directory)
+    4. package.json "main" field (CJS, if not in build output directory)
     5. Fall back to "." (project root)
+
+    Build output directories (build/, dist/, out/) are skipped since they contain
+    compiled code, not source files.
 
     Args:
         project_root: Root directory of the project.
@@ -64,6 +69,11 @@ def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
         Detected module root path (relative to project root).
 
     """
+    # Check for common source directories first - these are always preferred
+    for src_dir in ["src", "lib", "source"]:
+        if (project_root / src_dir).is_dir():
+            return src_dir
+
     # Check exports field (modern Node.js)
     exports = package_data.get("exports")
     if exports:
@@ -80,26 +90,37 @@ def detect_module_root(project_root: Path, package_data: dict[str, Any]) -> str:
 
         if entry_path and isinstance(entry_path, str):
             parent = Path(entry_path).parent
-            if parent != Path() and (project_root / parent).is_dir():
+            if (
+                parent != Path()
+                and parent.as_posix() != "."
+                and (project_root / parent).is_dir()
+                and not is_build_output_dir(parent)
+            ):
                 return parent.as_posix()
 
     # Check module field (ESM)
     module_field = package_data.get("module")
     if module_field and isinstance(module_field, str):
         parent = Path(module_field).parent
-        if parent != Path() and (project_root / parent).is_dir():
+        if (
+            parent != Path()
+            and parent.as_posix() != "."
+            and (project_root / parent).is_dir()
+            and not is_build_output_dir(parent)
+        ):
             return parent.as_posix()
 
     # Check main field (CJS)
     main_field = package_data.get("main")
     if main_field and isinstance(main_field, str):
         parent = Path(main_field).parent
-        if parent != Path() and (project_root / parent).is_dir():
+        if (
+            parent != Path()
+            and parent.as_posix() != "."
+            and (project_root / parent).is_dir()
+            and not is_build_output_dir(parent)
+        ):
             return parent.as_posix()
-
-    # Check for src/ directory convention
-    if (project_root / "src").is_dir():
-        return "src"
 
     # Default to project root
     return "."
