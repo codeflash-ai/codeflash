@@ -1196,12 +1196,14 @@ def _path_to_class_name(path: Path) -> str | None:
         Fully qualified class name, or None if unable to determine.
 
     """
-    if not path.suffix == ".java":
+    # Cache path.parts to avoid repeated property access
+    parts = path.parts
+    
+    if not parts[-1].endswith(".java"):
         return None
 
     # Try to extract package from path
     # e.g., src/test/java/com/example/CalculatorTest.java -> com.example.CalculatorTest
-    parts = list(path.parts)
 
     # Look for standard Maven/Gradle source directories
     # Find 'java' that comes after 'main' or 'test'
@@ -1219,9 +1221,9 @@ def _path_to_class_name(path: Path) -> str | None:
                 break
 
     if java_idx is not None:
-        class_parts = parts[java_idx + 1:]
+        class_parts = list(parts[java_idx + 1:])
         # Remove .java extension from last part
-        class_parts[-1] = class_parts[-1].replace(".java", "")
+        class_parts[-1] = class_parts[-1].removesuffix(".java")
         return ".".join(class_parts)
 
     # Fallback: just use the file name
