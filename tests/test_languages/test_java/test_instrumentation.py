@@ -18,6 +18,9 @@ from pathlib import Path
 
 import pytest
 
+# Set API key for tests that instantiate Optimizer
+os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
+
 from codeflash.languages.base import FunctionInfo, Language
 from codeflash.languages.current import set_current_language
 from codeflash.languages.java.build_tools import find_maven_executable
