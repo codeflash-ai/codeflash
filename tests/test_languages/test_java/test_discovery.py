@@ -333,3 +333,88 @@ class TestFileBasedDiscovery:
 
         tests = discover_test_methods(test_file)
         assert len(tests) > 0
+
+
+class TestQualifiedNameWithPackage:
+    """Tests for qualified name including package in Java functions."""
+
+    def test_qualified_name_includes_package(self):
+        """Test that qualified name includes the package for Java functions.
+
+        This fixes the issue where Java functions showed up as "Calculator.add"
+        instead of "com.example.Calculator.add" in markdown output.
+        """
+        source = """
+package com.example;
+
+public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.name == "add"
+        assert func.class_name == "Calculator"
+        # qualified_name should include package
+        assert func.qualified_name == "com.example.Calculator.add"
+
+    def test_qualified_name_with_nested_package(self):
+        """Test qualified name with deeply nested package."""
+        source = """
+package com.aerospike.client.command;
+
+public class Buffer {
+    public static String bytesToHexString(byte[] buf) {
+        return "";
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.name == "bytesToHexString"
+        assert func.qualified_name == "com.aerospike.client.command.Buffer.bytesToHexString"
+
+    def test_qualified_name_without_package(self):
+        """Test qualified name when no package is declared (default package)."""
+        source = """
+public class Utils {
+    public static String format(String s) {
+        return s.toUpperCase();
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.name == "format"
+        # Without package, should just be class.method
+        assert func.qualified_name == "Utils.format"
+
+    def test_parents_include_package_and_class(self):
+        """Test that parents tuple includes both package and class info."""
+        source = """
+package com.example.utils;
+
+public class StringHelper {
+    public String reverse(String s) {
+        return new StringBuilder(s).reverse().toString();
+    }
+}
+"""
+        functions = discover_functions_from_source(source)
+        assert len(functions) == 1
+
+        func = functions[0]
+        # Should have 2 parents: package and class
+        assert len(func.parents) == 2
+        assert func.parents[0].name == "com.example.utils"
+        assert func.parents[0].type == "package"
+        assert func.parents[1].name == "StringHelper"
+        assert func.parents[1].type == "ClassDef"

@@ -82,6 +82,9 @@ def discover_functions_from_source(
             include_static=True,
         )
 
+        # Extract package name for qualified names
+        package_name = analyzer.get_package_name(source)
+
         functions: list[FunctionInfo] = []
 
         for method in methods:
@@ -89,8 +92,10 @@ def discover_functions_from_source(
             if not _should_include_method(method, criteria, source, analyzer):
                 continue
 
-            # Build parents list
+            # Build parents list - include package for fully qualified names
             parents: list[ParentInfo] = []
+            if package_name:
+                parents.append(ParentInfo(name=package_name, type="package"))
             if method.class_name:
                 parents.append(ParentInfo(name=method.class_name, type="ClassDef"))
 
