@@ -77,7 +77,7 @@ from codeflash.context.unused_definition_remover import detect_unused_helper_fun
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
@@ -2172,10 +2172,10 @@ class FunctionOptimizer:
             else self.function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
-            #"concolic_tests": concolic_tests,
+            # "concolic_tests": concolic_tests,
             "language": self.function_to_optimize.language,
-            #"original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
-            #"optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
+            # "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+            # "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
         }
 
         raise_pr = not self.args.no_pr
@@ -2842,18 +2842,8 @@ class FunctionOptimizer:
                 # NOTE: currently this handles single file only, add support to multi file instrumentation (or should it be kept for the main file only)
                 original_source = Path(self.function_to_optimize.file_path).read_text()
                 # Instrument source code
-                func_info = FunctionInfo(
-                    name=self.function_to_optimize.function_name,
-                    file_path=self.function_to_optimize.file_path,
-                    start_line=self.function_to_optimize.starting_line,
-                    end_line=self.function_to_optimize.ending_line,
-                    start_col=self.function_to_optimize.starting_col,
-                    end_col=self.function_to_optimize.ending_col,
-                    is_async=self.function_to_optimize.is_async,
-                    language=self.language_support.language,
-                )
                 success = self.language_support.instrument_source_for_line_profiler(
-                    func_info=func_info, line_profiler_output_file=line_profiler_output_path
+                    func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
                 )
                 if not success:
                     return {"timings": {}, "unit": 0, "str_out": ""}

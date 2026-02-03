@@ -4,8 +4,12 @@ If you might want to work with us on finally making performance a
 solved problem, please reach out to us at careers@codeflash.ai. We're hiring!
 """
 
+from __future__ import annotations
+
+import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from codeflash.cli_cmds.cli import parse_args, process_pyproject_config
 from codeflash.cli_cmds.cmd_init import CODEFLASH_LOGO, ask_run_end_to_end_test
@@ -16,6 +20,9 @@ from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.version_check import check_for_newer_minor_version
 from codeflash.telemetry import posthog_cf
 from codeflash.telemetry.sentry import init_sentry
+
+if TYPE_CHECKING:
+    from argparse import Namespace
 
 
 def main() -> None:
@@ -41,9 +48,10 @@ def main() -> None:
         ask_run_end_to_end_test(args)
     else:
         # Check for first-run experience (no config exists)
-        args = _handle_config_loading(args)
-        if args is None:
+        loaded_args = _handle_config_loading(args)
+        if loaded_args is None:
             sys.exit(0)
+        args = loaded_args
 
         if not env_utils.check_formatter_installed(args.formatter_cmds):
             return
@@ -56,7 +64,7 @@ def main() -> None:
         optimizer.run_with_args(args)
 
 
-def _handle_config_loading(args):
+def _handle_config_loading(args: Namespace) -> Namespace | None:
     """Handle config loading with first-run experience support.
 
     If no config exists and not in CI, triggers the first-run experience.
@@ -73,14 +81,13 @@ def _handle_config_loading(args):
 
     # Check if we're in CI environment
     is_ci = any(
-        var in ("true", "1", "True")
-        for var in [env_utils.os.environ.get("CI", ""), env_utils.os.environ.get("GITHUB_ACTIONS", "")]
+        var in ("true", "1", "True") for var in [os.environ.get("CI", ""), os.environ.get("GITHUB_ACTIONS", "")]
     )
 
     # Check if first run (no config exists)
     if is_first_run() and not is_ci:
         # Skip API key check if already set
-        skip_api_key = bool(env_utils.os.environ.get("CODEFLASH_API_KEY"))
+        skip_api_key = bool(os.environ.get("CODEFLASH_API_KEY"))
 
         # Handle first-run experience
         result = handle_first_run(args=args, skip_confirm=getattr(args, "yes", False), skip_api_key=skip_api_key)

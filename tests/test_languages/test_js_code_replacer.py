@@ -711,7 +711,7 @@ module.exports = { targetFunction, otherFunction };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        target_func = next(f for f in functions if f.name == "targetFunction")
+        target_func = next(f for f in functions if f.function_name == "targetFunction")
 
         optimized_code = """\
 function targetFunction(x) {
@@ -763,7 +763,7 @@ class Calculator {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        add_method = next(f for f in functions if f.name == "add")
+        add_method = next(f for f in functions if f.function_name == "add")
 
         # Optimized version provided in class context
         optimized_code = """\
@@ -826,7 +826,7 @@ class DataProcessor {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_method = next(f for f in functions if f.name == "process")
+        process_method = next(f for f in functions if f.function_name == "process")
 
         optimized_code = """\
 class DataProcessor {
@@ -948,7 +948,7 @@ class Cache {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class Cache {
@@ -1050,7 +1050,7 @@ class ApiClient {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class ApiClient {
@@ -1181,7 +1181,7 @@ class Container<T> {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        get_all_method = next(f for f in functions if f.name == "getAll")
+        get_all_method = next(f for f in functions if f.function_name == "getAll")
 
         optimized_code = """\
 class Container<T> {
@@ -1234,7 +1234,7 @@ function createUser(name: string, email: string): User {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        func = next(f for f in functions if f.name == "createUser")
+        func = next(f for f in functions if f.function_name == "createUser")
 
         optimized_code = """\
 function createUser(name: string, email: string): User {
@@ -1289,7 +1289,7 @@ function processItems(items) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_func = next(f for f in functions if f.name == "processItems")
+        process_func = next(f for f in functions if f.function_name == "processItems")
 
         optimized_code = """\
 function processItems(items) {
@@ -1336,7 +1336,7 @@ class MathUtils {
 
         # First replacement: sum method
         functions = js_support.discover_functions(file_path)
-        sum_method = next(f for f in functions if f.name == "sum")
+        sum_method = next(f for f in functions if f.function_name == "sum")
 
         optimized_sum = """\
 class MathUtils {
@@ -1554,7 +1554,7 @@ module.exports = { main, helper };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 function main(data) {
@@ -1597,7 +1597,7 @@ export function main(data) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 export function main(data) {
@@ -1756,7 +1756,7 @@ export class DataProcessor<T> {
     # find function
     target_func_info = None
     for func in functions:
-        if func.name == target_func and func.parents[0].name == parent_class:
+        if func.function_name == target_func and func.parents[0].name == parent_class:
             target_func_info = func
             break
     assert target_func_info is not None
