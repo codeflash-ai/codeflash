@@ -582,6 +582,51 @@ def compile_maven_project(
         return False, "", str(e)
 
 
+def _detect_module_from_test_classes(project_root: Path, test_patterns: list[str]) -> str | None:
+    """Detect module name from test class patterns.
+
+    For multi-module projects, infer the module from the package structure of test classes.
+
+    Args:
+        project_root: Root directory of the Gradle project.
+        test_patterns: List of test class names or patterns.
+
+    Returns:
+        Module name if detected, None otherwise.
+
+    """
+    # Check if this is a multi-module project
+    settings_path = project_root / "settings.gradle"
+    settings_kts_path = project_root / "settings.gradle.kts"
+    settings_file = settings_path if settings_path.exists() else (settings_kts_path if settings_kts_path.exists() else None)
+
+    if not settings_file:
+        return None
+
+    try:
+        import re
+        content = settings_file.read_text(encoding="utf-8")
+        modules = re.findall(r"include\s*[(\[]?\s*['\"]([^'\"]+)['\"]", content)
+        module_names = [m.lstrip(':').replace(':', '/') for m in modules]
+
+        # Try to find test classes on disk to determine their module
+        for pattern in test_patterns:
+            # Convert package pattern to path (e.g., org.elasticsearch.Test -> org/elasticsearch/Test)
+            class_path = pattern.replace('.', '/')
+
+            # Search for this test class in module test directories
+            for module in module_names:
+                test_file = project_root / module / "src" / "test" / "java" / f"{class_path}.java"
+                if test_file.exists():
+                    logger.debug(f"Detected module '{module}' from test class {pattern}")
+                    return module
+
+    except Exception as e:
+        logger.debug(f"Failed to detect module from test classes: {e}")
+
+    return None
+
+
 def run_gradle_tests(
     project_root: Path,
     test_classes: list[str] | None = None,
@@ -608,6 +653,10 @@ def run_gradle_tests(
         GradleTestResult with test execution results.
 
     """
+    # Detect test module from test class paths if not provided
+    if test_module is None and (test_classes or test_methods):
+        test_module = _detect_module_from_test_classes(project_root, test_classes or test_methods)
+
     gradle = find_gradle_executable(project_root)
     if not gradle:
         logger.error("Gradle not found. Please install Gradle or use Gradle wrapper.")
