@@ -607,7 +607,7 @@ def get_imported_class_definitions(code_context: CodeStringsMarkdown, project_ro
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 if alias.name != "*":
-                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_name = alias.asname or alias.name
                     imported_names[imported_name] = node.module
 
     if not imported_names:
@@ -751,7 +751,7 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
                 if alias.name != "*":
-                    imported_name = alias.asname if alias.asname else alias.name
+                    imported_name = alias.asname or alias.name
                     imported_names[imported_name] = node.module
         elif isinstance(node, ast.ClassDef):
             for base in node.bases:
@@ -869,14 +869,14 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
     for node in module_tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
-                name = alias.asname if alias.asname else alias.name.split(".")[0]
+                name = alias.asname or alias.name.split(".")[0]
                 if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
                     added_imports.add(node.lineno)
                     break
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                name = alias.asname if alias.asname else alias.name
+                name = alias.asname or alias.name
                 if name in needed_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
                     added_imports.add(node.lineno)

@@ -328,7 +328,7 @@ class AiServiceClient:
         console.rule()
 
         # Set python_version for backward compatibility with Python, or use language_version
-        python_version = language_version if language_version else platform.python_version()
+        python_version = language_version or platform.python_version()
 
         payload = {
             "source_code": source_code,
@@ -868,7 +868,7 @@ class AiServiceClient:
             "replay_tests": replay_tests,
             "speedup": f"{(100 * float(explanation.speedup)):.2f}%",
             "loop_count": explanation.winning_benchmarking_test_results.number_of_loops(),
-            "benchmark_details": explanation.benchmark_details if explanation.benchmark_details else None,
+            "benchmark_details": explanation.benchmark_details or None,
             "optimized_runtime": humanize_runtime(explanation.best_runtime_ns),
             "original_runtime": humanize_runtime(explanation.original_runtime_ns),
             "codeflash_version": codeflash_version,

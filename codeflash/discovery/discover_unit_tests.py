@@ -244,7 +244,7 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         for alias in node.names:
-            module_name = alias.asname if alias.asname else alias.name
+            module_name = alias.asname or alias.name
             self.imported_modules.add(module_name)
 
             # Check for dynamic import modules
@@ -305,7 +305,7 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.wildcard_modules.add(mod)
                 continue
 
-            imported_name = alias.asname if alias.asname else aname
+            imported_name = alias.asname or aname
             self.imported_modules.add(imported_name)
 
             if alias.asname:
@@ -656,7 +656,7 @@ def discover_unit_tests(
 
     # Existing Python logic
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
-    strategy = framework_strategies.get(cfg.test_framework, None)
+    strategy = framework_strategies.get(cfg.test_framework)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)

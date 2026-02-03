@@ -1436,7 +1436,7 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
                 module_root = alias.name.split(".")[0]
                 if module_root in NUMERICAL_MODULES:
                     # Use the alias if present, otherwise the module name
-                    name = alias.asname if alias.asname else alias.name.split(".")[0]
+                    name = alias.asname or alias.name.split(".")[0]
                     numerical_names.add(name)
                     modules_used.add(module_root)
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -1448,7 +1448,7 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
                         # Can't track star imports, but mark the module as numerical
                         numerical_names.add(module_root)
                     else:
-                        name = alias.asname if alias.asname else alias.name
+                        name = alias.asname or alias.name
                         numerical_names.add(name)
                 modules_used.add(module_root)
 
