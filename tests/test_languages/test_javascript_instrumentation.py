@@ -3,6 +3,8 @@
 This module tests the line profiling and tracing instrumentation for JavaScript code.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

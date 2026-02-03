@@ -1709,7 +1709,7 @@ def _format_references_as_markdown(references: list, file_path: Path, project_ro
                 context_len += len(context_code)
 
         if caller_contexts:
-            fn_call_context += f"```{lang_hint}:{path_relative}\n"
+            fn_call_context += f"```{lang_hint}:{path_relative.as_posix()}\n"
             fn_call_context += "\n".join(caller_contexts)
             fn_call_context += "\n```\n"
 

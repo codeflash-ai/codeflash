@@ -358,7 +358,7 @@ def _handle_show_config() -> None:
     detected = detect_project(project_root)
 
     # Check if config exists or is auto-detected
-    config_exists = has_existing_config(project_root)
+    config_exists, _ = has_existing_config(project_root)
     status = "Saved config" if config_exists else "Auto-detected (not saved)"
 
     console.print()
@@ -400,7 +400,8 @@ def _handle_reset_config(confirm: bool = True) -> None:
 
     project_root = Path.cwd()
 
-    if not has_existing_config(project_root):
+    config_exists, _ = has_existing_config(project_root)
+    if not config_exists:
         console.print("[yellow]No Codeflash configuration found to remove.[/yellow]")
         return
 

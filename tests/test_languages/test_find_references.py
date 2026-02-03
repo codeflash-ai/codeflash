@@ -8,6 +8,8 @@ Each test verifies:
 2. The formatted markdown output from _format_references_as_markdown
 """
 
+from __future__ import annotations
+
 import pytest
 from pathlib import Path
 

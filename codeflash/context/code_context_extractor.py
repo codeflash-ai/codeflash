@@ -23,8 +23,7 @@ from codeflash.context.unused_definition_remover import (
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize  # noqa: TC001
 
 # Language support imports for multi-language code context extraction
-from codeflash.languages import is_python
-from codeflash.languages.base import Language
+from codeflash.languages import Language, is_python
 from codeflash.models.models import (
     CodeContextType,
     CodeOptimizationContext,
