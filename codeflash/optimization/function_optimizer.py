@@ -693,7 +693,12 @@ class FunctionOptimizer:
         perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
 
         # Build paths with package structure
-        test_dir = self.test_cfg.tests_root
+        # For multi-module projects, use module-aware test root based on source file location
+        from codeflash.languages.java.build_tools import find_test_root
+        test_dir = find_test_root(self.function_to_optimize.project_root, self.function_to_optimize.file_path)
+        if test_dir is None:
+            # Fall back to configured test root if detection fails
+            test_dir = self.test_cfg.tests_root
 
         if package_name:
             package_path = package_name.replace(".", "/")

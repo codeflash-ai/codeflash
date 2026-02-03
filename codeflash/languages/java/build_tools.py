@@ -1238,11 +1238,15 @@ def get_jacoco_xml_path(project_root: Path) -> Path:
     return project_root / "target" / "site" / "jacoco" / "jacoco.xml"
 
 
-def find_test_root(project_root: Path) -> Path | None:
+def find_test_root(project_root: Path, source_file_path: Path | None = None) -> Path | None:
     """Find the test root directory for a Java project.
+
+    For multi-module Maven/Gradle projects, if source_file_path is provided and belongs to a module,
+    returns the test directory for that specific module (e.g., server/src/test/java).
 
     Args:
         project_root: Root directory of the Java project.
+        source_file_path: Optional path to the source file being optimized.
 
     Returns:
         Path to test root, or None if not found.
@@ -1250,6 +1254,25 @@ def find_test_root(project_root: Path) -> Path | None:
     """
     build_tool = detect_build_tool(project_root)
 
+    # If source_file_path provided, detect module and return module-specific test directory
+    if source_file_path:
+        try:
+            rel_path = source_file_path.relative_to(project_root)
+            parts = rel_path.parts
+
+            # Check if source file is in a module (e.g., server/src/main/java/...)
+            if len(parts) >= 4 and parts[1] == "src" and parts[2] == "main":
+                module_name = parts[0]
+                module_test_root = project_root / module_name / "src" / "test" / "java"
+                if module_test_root.exists() or (project_root / module_name / "src" / "main").exists():
+                    # Return even if it doesn't exist yet - we'll create it
+                    logger.debug(f"Detected module '{module_name}' for source file, using test root: {module_test_root}")
+                    return module_test_root
+        except (ValueError, IndexError):
+            # source_file_path not relative to project_root or unexpected structure
+            pass
+
+    # Standard single-module or fallback behavior
     if build_tool in (BuildTool.MAVEN, BuildTool.GRADLE):
         test_root = project_root / "src" / "test" / "java"
         if test_root.exists():
