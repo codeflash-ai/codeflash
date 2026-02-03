@@ -164,6 +164,8 @@ cython_debug/
 .aider*
 /js/common/node_modules/
 *.xml
+# Allow pom.xml in test fixtures for Maven project detection
+!tests/test_languages/fixtures/**/pom.xml
 *.pem
 
 # Ruff cache
