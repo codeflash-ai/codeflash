@@ -793,13 +793,24 @@ def _add_global_declarations_for_language(
         # Insert each new declaration after its dependencies
         result = original_source
         for decl in new_declarations:
-            result = _insert_declaration_after_dependencies(
+            # Use a fast insertion helper that returns the new source plus metadata
+            new_result, insertion_line, inserted_lines = _insert_declaration_after_dependencies_fast(
                 result, decl, existing_decl_end_lines, analyzer, module_abspath
             )
+            result = new_result
             # Update the map with the newly inserted declaration for subsequent insertions
-            # Re-parse to get accurate line numbers after insertion
-            updated_declarations = analyzer.find_module_level_declarations(result)
-            existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
+            # Adjust existing declaration end lines by shifting those that come after the insertion
+            if inserted_lines:
+                # shift any existing declaration whose end_line is after the insertion point
+                for name in list(existing_decl_end_lines.keys()):
+                    end_line = existing_decl_end_lines[name]
+                    if end_line > insertion_line:
+                        existing_decl_end_lines[name] = end_line + inserted_lines
+                # set the inserted declaration's end line (1-indexed)
+                existing_decl_end_lines[decl.name] = insertion_line + inserted_lines
+            else:
+                existing_decl_end_lines[decl.name] = insertion_line
+
 
         return result
 
@@ -1096,3 +1107,82 @@ def function_to_optimize_original_worktree_fqn(
         + "."
         + function_to_optimize.qualified_name
     )
+
+
+
+def _insert_declaration_after_dependencies_fast(
+    source: str,
+    declaration,
+    existing_decl_end_lines: dict[str, int],
+    analyzer: TreeSitterAnalyzer,
+    module_abspath: Path,
+) -> tuple[str, int, int]:
+    """Faster insertion helper that returns (new_source, insertion_line, inserted_lines).
+
+    This mirrors the original insertion behavior but also returns metadata so callers can
+    update internal state without re-parsing the source after each insertion.
+    """
+    # Find identifiers referenced in this declaration
+    referenced_names = analyzer.find_referenced_identifiers(declaration.source_code)
+
+    # Find the latest end line among all referenced declarations
+    insertion_line = _find_insertion_line_for_declaration(source, referenced_names, existing_decl_end_lines, analyzer)
+
+    lines = source.splitlines(keepends=True)
+
+    # Ensure proper spacing
+    decl_code = declaration.source_code
+    if not decl_code.endswith("\n"):
+        decl_code += "\n"
+
+    # Add blank line before if inserting after content
+    if insertion_line > 0 and lines[insertion_line - 1].strip():
+        decl_code = "\n" + decl_code
+
+    before = lines[:insertion_line]
+    after = lines[insertion_line:]
+
+    new_source = "".join([*before, decl_code, *after])
+
+    inserted_lines = len(decl_code.splitlines(keepends=True))
+
+    return new_source, insertion_line, inserted_lines
+
+
+def _insert_declaration_after_dependencies_fast(
+    source: str,
+    declaration,
+    existing_decl_end_lines: dict[str, int],
+    analyzer: TreeSitterAnalyzer,
+    module_abspath: Path,
+) -> tuple[str, int, int]:
+    """Faster insertion helper that returns (new_source, insertion_line, inserted_lines).
+
+    This mirrors the original insertion behavior but also returns metadata so callers can
+    update internal state without re-parsing the source after each insertion.
+    """
+    # Find identifiers referenced in this declaration
+    referenced_names = analyzer.find_referenced_identifiers(declaration.source_code)
+
+    # Find the latest end line among all referenced declarations
+    insertion_line = _find_insertion_line_for_declaration(source, referenced_names, existing_decl_end_lines, analyzer)
+
+    lines = source.splitlines(keepends=True)
+
+    # Ensure proper spacing
+    decl_code = declaration.source_code
+    if not decl_code.endswith("\n"):
+        decl_code += "\n"
+
+    # Add blank line before if inserting after content
+    if insertion_line > 0 and lines[insertion_line - 1].strip():
+        decl_code = "\n" + decl_code
+
+    before = lines[:insertion_line]
+    after = lines[insertion_line:]
+
+    new_source = "".join([*before, decl_code, *after])
+
+    inserted_lines = len(decl_code.splitlines(keepends=True))
+
+    return new_source, insertion_line, inserted_lines
