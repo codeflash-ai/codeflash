@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from tree_sitter import Language, Parser
@@ -685,6 +686,7 @@ class JavaAnalyzer:
         return None
 
 
+@lru_cache(maxsize=1)
 def get_java_analyzer() -> JavaAnalyzer:
     """Get a JavaAnalyzer instance.
 
