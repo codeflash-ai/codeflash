@@ -358,11 +358,13 @@ def _handle_show_config() -> None:
     detected = detect_project(project_root)
 
     # Check if config exists or is auto-detected
-    config_exists = has_existing_config(project_root)
+    config_exists, config_file = has_existing_config(project_root)
     status = "Saved config" if config_exists else "Auto-detected (not saved)"
 
     console.print()
     console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
+    if config_exists and config_file:
+        console.print(f"[dim]Config file: {project_root / config_file}[/dim]")
     console.print()
 
     table = Table(show_header=True, header_style="bold cyan")
