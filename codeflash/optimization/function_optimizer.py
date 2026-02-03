@@ -695,7 +695,7 @@ class FunctionOptimizer:
         # Build paths with package structure
         # For multi-module projects, use module-aware test root based on source file location
         from codeflash.languages.java.build_tools import find_test_root
-        test_dir = find_test_root(self.function_to_optimize.project_root, self.function_to_optimize.file_path)
+        test_dir = find_test_root(self.test_cfg.project_root_path, self.function_to_optimize.file_path)
         if test_dir is None:
             # Fall back to configured test root if detection fails
             test_dir = self.test_cfg.tests_root
