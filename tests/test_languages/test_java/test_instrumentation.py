@@ -133,7 +133,8 @@ public class CalculatorTest {
         assert "import java.sql.Connection;" in result
         assert "import java.sql.DriverManager;" in result
         assert "import java.sql.PreparedStatement;" in result
-        assert "import java.sql.Statement;" in result
+        # Note: java.sql.Statement is used fully qualified to avoid conflicts with other Statement classes
+        assert "java.sql.Statement" in result
         assert "class CalculatorTest__perfinstrumented" in result
         assert "CODEFLASH_OUTPUT_FILE" in result
         assert "CREATE TABLE IF NOT EXISTS test_results" in result

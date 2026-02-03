@@ -8,7 +8,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
+// Note: We use java.sql.Statement fully qualified in code to avoid conflicts
+// with other Statement classes (e.g., com.aerospike.client.query.Statement)
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -350,7 +351,7 @@ public class CodeflashHelper {
                     "verification_type TEXT" +
                     ")";
 
-            try (Statement stmt = dbConnection.createStatement()) {
+            try (java.sql.Statement stmt = dbConnection.createStatement()) {
                 stmt.execute(createTableSql);
             }
 

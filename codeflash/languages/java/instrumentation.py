@@ -204,13 +204,15 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
     """
     # Add necessary imports at the top of the file
+    # Note: We don't import java.sql.Statement because it can conflict with
+    # other Statement classes (e.g., com.aerospike.client.query.Statement).
+    # Instead, we use the fully qualified name java.sql.Statement in the code.
+    # Note: We don't use Gson because it may not be available as a dependency.
+    # Instead, we use String.valueOf() for serialization.
     import_statements = [
         "import java.sql.Connection;",
         "import java.sql.DriverManager;",
         "import java.sql.PreparedStatement;",
-        "import java.sql.Statement;",
-        "import com.google.gson.Gson;",
-        "import com.google.gson.GsonBuilder;",
     ]
 
     # Find position to insert imports (after package, before class)
@@ -358,9 +360,10 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
 
             # Build the serialized return value expression
             # If we captured any calls, serialize the last one; otherwise serialize null
+            # Note: We use String.valueOf() instead of Gson to avoid external dependencies
             if call_counter > 0:
                 result_var = f"_cf_result{iter_id}_{call_counter}"
-                serialize_expr = f"new GsonBuilder().serializeNulls().create().toJson({result_var})"
+                serialize_expr = f"String.valueOf({result_var})"
             else:
                 serialize_expr = '"null"'
 
@@ -401,7 +404,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                 f"{indent}        try {{",
                 f'{indent}            Class.forName("org.sqlite.JDBC");',
                 f'{indent}            try (Connection _cf_conn{iter_id} = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile{iter_id})) {{',
-                f"{indent}                try (Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
+                f"{indent}                try (java.sql.Statement _cf_stmt{iter_id} = _cf_conn{iter_id}.createStatement()) {{",
                 f'{indent}                    _cf_stmt{iter_id}.execute("CREATE TABLE IF NOT EXISTS test_results (" +',
                 f'{indent}                        "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +',
                 f'{indent}                        "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +',
