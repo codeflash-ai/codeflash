@@ -2016,6 +2016,84 @@ export class DataProcessor<T> {
 
 
 
+class TestNewVariableFromOptimizedCode:
+    """Tests for handling new variables introduced in optimized code."""
+
+    def test_new_bound_method_variable_added_after_referenced_constant(self, ts_support, temp_project):
+        """Test that a new variable binding a method is added after the constant it references.
+
+        When optimized code introduces a new module-level variable (like `_has`) that
+        references an existing constant (like `CODEFLASH_EMPLOYEE_GITHUB_IDS`), the
+        replacement should:
+        1. Add the new variable after the constant it references
+        2. Replace the function with the optimized version
+        """
+        from codeflash.models.models import CodeStringsMarkdown, CodeString
+
+        original_source = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return CODEFLASH_EMPLOYEE_GITHUB_IDS.has(userId);
+}
+'''
+        file_path = temp_project / "auth.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Optimized code introduces a bound method variable for performance
+        optimized_code = '''const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code,
+                    file_path=Path("auth.ts"),
+                    language="typescript"
+                )
+            ],
+            language="typescript"
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["isCodeflashEmployee"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        assert replaced
+        result = file_path.read_text()
+
+        # Expected result for strict equality check
+        expected_result = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+        assert result == expected_result, (
+            f"Result does not match expected output.\n"
+            f"Expected:\n{expected_result}\n\n"
+            f"Got:\n{result}"
+        )
+
+
 class TestImportedTypeNotDuplicated:
     """Tests to ensure imported types are not duplicated during code replacement.
 
