@@ -381,9 +381,14 @@ def ensure_vitest_imports(code: str, test_framework: str) -> str:
     insert_index = 0
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped and not stripped.startswith("//") and not stripped.startswith("/*") and not stripped.startswith("*"):
+        if (
+            stripped
+            and not stripped.startswith("//")
+            and not stripped.startswith("/*")
+            and not stripped.startswith("*")
+        ):
             # Check if this line is an import/require - insert after imports
-            if stripped.startswith("import ") or stripped.startswith("const ") or stripped.startswith("let "):
+            if stripped.startswith(("import ", "const ", "let ")):
                 continue
             insert_index = i
             break
