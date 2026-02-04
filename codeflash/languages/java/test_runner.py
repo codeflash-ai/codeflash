@@ -71,14 +71,25 @@ def _validate_test_filter(test_filter: str) -> str:
         ValueError: If the test filter contains invalid characters.
 
     """
-    # Split by comma for multiple test patterns
-    patterns = [p.strip() for p in test_filter.split(",")]
+    # Fast-path: single name without commas or wildcards (very common case)
+    # Strip surrounding whitespace but preserve original return value
+    stripped = test_filter.strip()
+    if "," not in test_filter and "*" not in test_filter:
+        if not _VALID_JAVA_CLASS_NAME.match(stripped):
+            raise ValueError(
+                f"Invalid test class name or pattern: '{stripped}'. "
+                f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
+            )
+        return test_filter
 
-    for pattern in patterns:
+    # Split by comma for multiple test patterns; iterate to avoid building a list
+    for raw in test_filter.split(","):
+        pattern = raw.strip()
+        # Remove wildcards for validation (they're allowed in test filters)
         # Remove wildcards for validation (they're allowed in test filters)
         name_to_validate = pattern.replace("*", "A")  # Replace * with a valid char
 
-        if not _validate_java_class_name(name_to_validate):
+        if not _VALID_JAVA_CLASS_NAME.match(name_to_validate):
             raise ValueError(
                 f"Invalid test class name or pattern: '{pattern}'. "
                 f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
