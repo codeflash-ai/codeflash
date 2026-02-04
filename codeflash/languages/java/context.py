@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_BODY_TYPES: dict[str, str] = {"class": "class_body", "interface": "interface_body", "enum": "enum_body"}
+
 logger = logging.getLogger(__name__)
 
 
@@ -339,17 +341,22 @@ def _extract_type_declaration(type_node: Node, source_bytes: bytes, type_kind: s
     parts: list[str] = []
 
     # Determine which body node type to look for
-    body_types = {"class": "class_body", "interface": "interface_body", "enum": "enum_body"}
-    body_type = body_types.get(type_kind, "class_body")
+    body_type = _BODY_TYPES.get(type_kind, "class_body")
+
+    # Collect slices as bytes and decode once at the end to reduce repeated decodes.
+    bytes_parts: list[bytes] = []
+
 
     for child in type_node.children:
         if child.type == body_type:
             # Stop before the body
             break
-        part_text = source_bytes[child.start_byte : child.end_byte].decode("utf8")
-        parts.append(part_text)
+        # Slice bytes directly; decode will be done once after joining
+        bytes_parts.append(source_bytes[child.start_byte : child.end_byte])
 
-    return " ".join(parts).strip()
+    # Join with a single space (matching original " ".join(parts)) and decode once.
+    # b" ".join([]) => b"" so decode -> "" which matches original behavior.
+    return b" ".join(bytes_parts).decode("utf8").strip()
 
 
 # Keep old function name for backwards compatibility
