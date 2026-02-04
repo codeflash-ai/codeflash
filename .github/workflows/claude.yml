@@ -54,7 +54,7 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
             EVENT: ${{ github.event.action }}
 
-            ## STEP 1: Run pre-commit checks and fix issues
+            ## STEP 1: Run prek checks and fix issues
 
             First, run `uv run prek run --from-ref origin/main` to check for linting/formatting issues on files changed in this PR.
 
@@ -130,7 +130,7 @@ jobs:
             ```
             ## PR Review Summary
 
-            ### Pre-commit Checks
+            ### Prek Checks
             [status and any fixes made]
 
             ### Code Review
