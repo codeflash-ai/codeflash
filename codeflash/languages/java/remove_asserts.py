@@ -26,6 +26,12 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_FLUENT_ASSERTION_PATTERN = re.compile(r"(\s*)((?:Assertions?\.)?assertThat)\s*\(", re.MULTILINE)
+
+_NEW_CLASS_PATTERN = re.compile(r"new\s+[a-zA-Z_]\w*\s*$")
+
+_IDENT_PATTERN = re.compile(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$")
+
 logger = logging.getLogger(__name__)
 
 
@@ -184,6 +190,9 @@ class JavaAssertTransformer:
         self.qualified_name = qualified_name or function_name
         self.invocation_counter = 0
         self._detected_framework: str | None = None
+
+        # Pre-compile the method pattern for this specific function name
+        self._method_pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
 
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
@@ -362,9 +371,7 @@ class JavaAssertTransformer:
 
         # Pattern for fluent assertions: assertThat(...).<chain>
         # Handles both org.assertj and com.google.common.truth
-        pattern = re.compile(r"(\s*)((?:Assertions?\.)?assertThat)\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(source):
+        for match in _FLUENT_ASSERTION_PATTERN.finditer(source):
             leading_ws = match.group(1)
             start_pos = match.start()
             paren_start = match.end() - 1
@@ -510,9 +517,7 @@ class JavaAssertTransformer:
         # - method(args) (no receiver)
         #
         # Strategy: Find the function name, then look backwards for the receiver
-        pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
-
-        for match in pattern.finditer(content):
+        for match in self._method_pattern.finditer(content):
             method_name = match.group(1)
             method_start = match.start()
 
@@ -549,7 +554,7 @@ class JavaAssertTransformer:
                         open_paren_pos = i + 1
                         # Look for "new ClassName" before the opening paren
                         before_paren = stripped_before_dot[:open_paren_pos].rstrip()
-                        new_match = re.search(r"new\s+[a-zA-Z_]\w*\s*$", before_paren)
+                        new_match = _NEW_CLASS_PATTERN.search(before_paren)
                         if new_match:
                             receiver_start = new_match.start()
                         else:
@@ -558,7 +563,7 @@ class JavaAssertTransformer:
                             receiver_start = open_paren_pos
                 else:
                     # Simple identifier: obj.method() or Class.method() or pkg.Class.method()
-                    ident_match = re.search(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$", stripped_before_dot)
+                    ident_match = _IDENT_PATTERN.search(stripped_before_dot)
                     if ident_match:
                         receiver_start = ident_match.start()
 
@@ -637,22 +642,24 @@ class JavaAssertTransformer:
         in_string = False
         string_char = None
         in_char = False
+        code_len = len(code)
 
-        while pos < len(code) and depth > 0:
+        while pos < code_len and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             # Handle character literals
-            if char == "'" and not in_string and prev_char != "\\":
-                in_char = not in_char
+            if char == "'" and not in_string:
+                if pos > 0 and code[pos - 1] != "\\":
+                    in_char = not in_char
             # Handle string literals (double quotes)
-            elif char == '"' and not in_char and prev_char != "\\":
-                if not in_string:
-                    in_string = True
-                    string_char = char
-                elif char == string_char:
-                    in_string = False
-                    string_char = None
+            elif char == '"' and not in_char:
+                if pos > 0 and code[pos - 1] != "\\":
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
             elif not in_string and not in_char:
                 if char == "(":
                     depth += 1
