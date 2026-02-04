@@ -24,8 +24,8 @@ uv run mypy codeflash/           # Type check
 uv run ruff check codeflash/     # Lint
 uv run ruff format codeflash/    # Format
 
-# Pre-commit (run before committing)
-uv run pre-commit run --all-files
+# Linting (run before committing)
+uv run prek run --from-ref origin/main
 
 # Running the CLI
 uv run codeflash --help
@@ -69,7 +69,7 @@ codeflash/
 
 - **Line length**: 120 characters
 - **Python**: 3.9+ syntax
-- **Tooling**: Ruff for linting/formatting, mypy strict mode, pre-commit hooks
+- **Tooling**: Ruff for linting/formatting, mypy strict mode, prek for pre-commit checks
 - **Comments**: Minimal - only explain "why", not "what"
 - **Docstrings**: Do not add unless explicitly requested
 - **Naming**: NEVER use leading underscores (`_function_name`) - Python has no true private functions, use public names
