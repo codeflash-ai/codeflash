@@ -267,11 +267,7 @@ def run_vitest_behavioral_tests(
         # Pre-creating an empty directory may cause vitest to delete it
         logger.debug(f"Coverage will be written to: {coverage_dir}")
 
-        vitest_cmd.extend([
-            "--coverage",
-            "--coverage.reporter=json",
-            f"--coverage.reportsDirectory={coverage_dir}",
-        ])
+        vitest_cmd.extend(["--coverage", "--coverage.reporter=json", f"--coverage.reportsDirectory={coverage_dir}"])
         # Note: Removed --coverage.enabled=true (redundant) and --coverage.all false
         # The version mismatch between vitest and @vitest/coverage-v8 can cause
         # issues with coverage flag parsing. Let vitest use default settings.
@@ -339,8 +335,7 @@ def run_vitest_behavioral_tests(
         logger.debug(f"Vitest JUnit XML created: {result_file_path} ({file_size} bytes)")
         if file_size < 200:  # Suspiciously small - likely empty or just headers
             logger.warning(
-                f"Vitest JUnit XML is very small ({file_size} bytes). "
-                f"Content: {result_file_path.read_text()[:500]}"
+                f"Vitest JUnit XML is very small ({file_size} bytes). Content: {result_file_path.read_text()[:500]}"
             )
     else:
         logger.warning(

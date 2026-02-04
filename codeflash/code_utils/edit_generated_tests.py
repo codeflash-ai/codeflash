@@ -376,9 +376,7 @@ def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str
     # we only inject test globals for esm modules
     # Use vitest imports for vitest projects, jest imports for jest projects
     if test_framework == "vitest":
-        global_import = (
-            "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
-        )
+        global_import = "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
     else:
         # Default to jest imports for jest and other frameworks
         global_import = (
