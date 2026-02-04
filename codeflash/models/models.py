@@ -23,7 +23,7 @@ from collections.abc import Collection
 from enum import Enum, IntEnum
 from pathlib import Path
 from re import Pattern
-from typing import NamedTuple, Optional, cast
+from typing import Any, NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
@@ -172,7 +172,7 @@ class BestOptimization(BaseModel):
     winning_behavior_test_results: TestResults
     winning_benchmarking_test_results: TestResults
     winning_replay_benchmarking_test_results: Optional[TestResults] = None
-    line_profiler_test_results: dict
+    line_profiler_test_results: dict[Any, Any]
     async_throughput: Optional[int] = None
     concurrency_metrics: Optional[ConcurrencyMetrics] = None
 
@@ -209,7 +209,7 @@ class BenchmarkDetail:
             f"Benchmark speedup for {self.benchmark_name}::{self.test_function}: {self.speedup_percent:.2f}%\n"
         )
 
-    def to_dict(self) -> dict[str, any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark_name": self.benchmark_name,
             "test_function": self.test_function,
@@ -232,7 +232,7 @@ class ProcessedBenchmarkInfo:
             result += detail.to_string() + "\n"
         return result
 
-    def to_dict(self) -> dict[str, list[dict[str, any]]]:
+    def to_dict(self) -> dict[str, list[dict[str, Any]]]:
         return {"benchmark_details": [detail.to_dict() for detail in self.benchmark_details]}
 
 
@@ -280,7 +280,7 @@ markdown_pattern_python_only = re.compile(r"```python:([^\n]+)\n(.*?)\n```", re.
 class CodeStringsMarkdown(BaseModel):
     code_strings: list[CodeString] = []
     language: str = "python"  # Language for markdown code block tags
-    _cache: dict = PrivateAttr(default_factory=dict)
+    _cache: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     @property
     def flat(self) -> str:
@@ -416,7 +416,7 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_behavior_file_path: Path
-    benchmarking_file_path: Path = None
+    benchmarking_file_path: Optional[Path] = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
