@@ -496,7 +496,7 @@ def replace_function_definitions_for_language(
 
     """
     from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+    from codeflash.languages.base import Language
 
     original_source_code: str = module_abspath.read_text(encoding="utf8")
     code_to_apply = get_optimized_code_for_module(module_abspath.relative_to(project_root_path), optimized_code)
@@ -523,25 +523,15 @@ def replace_function_definitions_for_language(
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
-        parents = tuple(ParentInfo(name=p.name, type=p.type) for p in function_to_optimize.parents)
-        func_info = FunctionInfo(
-            name=function_to_optimize.function_name,
-            file_path=module_abspath,
-            start_line=function_to_optimize.starting_line,
-            end_line=function_to_optimize.ending_line,
-            parents=parents,
-            is_async=function_to_optimize.is_async,
-            language=language,
-        )
         # Extract just the target function from the optimized code
         optimized_func = _extract_function_from_code(
             lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
         )
         if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, func_info, optimized_func)
+            new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
         else:
             # Fallback: use the entire optimized code (for simple single-function files)
-            new_code = lang_support.replace_function(original_source_code, func_info, code_to_apply)
+            new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
     else:
         # For helper files or when we don't have precise line info:
         # Find each function by name in both original and optimized code
@@ -559,7 +549,7 @@ def replace_function_definitions_for_language(
             # Find the function in current code
             func = None
             for f in current_functions:
-                if func_name in (f.qualified_name, f.name):
+                if func_name in (f.qualified_name, f.function_name):
                     func = f
                     break
 
@@ -567,7 +557,9 @@ def replace_function_definitions_for_language(
                 continue
 
             # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(lang_support, code_to_apply, func.name, module_abspath)
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, func.function_name, module_abspath
+            )
             if optimized_func:
                 new_code = lang_support.replace_function(new_code, func, optimized_func)
                 modified = True
@@ -606,13 +598,13 @@ def _extract_function_from_code(
         # file_path is needed for JS/TS to determine correct analyzer (TypeScript vs JavaScript)
         functions = lang_support.discover_functions_from_source(source_code, file_path)
         for func in functions:
-            if func.name == function_name:
+            if func.function_name == function_name:
                 # Extract the function's source using line numbers
                 # Use doc_start_line if available to include JSDoc/docstring
                 lines = source_code.splitlines(keepends=True)
-                effective_start = func.doc_start_line or func.start_line
-                if effective_start and func.end_line and effective_start <= len(lines):
-                    func_lines = lines[effective_start - 1 : func.end_line]
+                effective_start = func.doc_start_line or func.starting_line
+                if effective_start and func.ending_line and effective_start <= len(lines):
+                    func_lines = lines[effective_start - 1 : func.ending_line]
                     return "".join(func_lines)
     except Exception as e:
         logger.debug(f"Error extracting function {function_name}: {e}")
@@ -628,6 +620,10 @@ def _add_global_declarations_for_language(
     Finds module-level declarations (const, let, var, class, type, interface, enum)
     in the optimized code that don't exist in the original source and adds them.
 
+    New declarations are inserted after any existing declarations they depend on.
+    For example, if optimized code has `const _has = FOO.bar.bind(FOO)`, and `FOO`
+    is already declared in the original source, `_has` will be inserted after `FOO`.
+
     Args:
         optimized_code: The optimized code that may contain new declarations.
         original_source: The original source code.
@@ -635,12 +631,11 @@ def _add_global_declarations_for_language(
         language: The language of the code.
 
     Returns:
-        Original source with new declarations added after imports.
+        Original source with new declarations added in dependency order.
 
     """
     from codeflash.languages.base import Language
 
-    # Only process JavaScript/TypeScript
     if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
         return original_source
 
@@ -649,84 +644,164 @@ def _add_global_declarations_for_language(
 
         analyzer = get_analyzer_for_file(module_abspath)
 
-        # Find declarations in both original and optimized code
         original_declarations = analyzer.find_module_level_declarations(original_source)
         optimized_declarations = analyzer.find_module_level_declarations(optimized_code)
 
         if not optimized_declarations:
             return original_source
 
-        # Get names of existing declarations
-        existing_names = {decl.name for decl in original_declarations}
-
-        # Also exclude names that are already imported (to avoid duplicating imported types)
-        original_imports = analyzer.find_imports(original_source)
-        for imp in original_imports:
-            # Add default import name
-            if imp.default_import:
-                existing_names.add(imp.default_import)
-            # Add named imports (use alias if present, otherwise use original name)
-            for name, alias in imp.named_imports:
-                existing_names.add(alias if alias else name)
-            # Add namespace import
-            if imp.namespace_import:
-                existing_names.add(imp.namespace_import)
-
-        # Find new declarations (names that don't exist in original)
-        new_declarations = []
-        seen_sources = set()  # Track to avoid duplicates from destructuring
-        for decl in optimized_declarations:
-            if decl.name not in existing_names and decl.source_code not in seen_sources:
-                new_declarations.append(decl)
-                seen_sources.add(decl.source_code)
+        existing_names = _get_existing_names(original_declarations, analyzer, original_source)
+        new_declarations = _filter_new_declarations(optimized_declarations, existing_names)
 
         if not new_declarations:
             return original_source
 
-        # Sort by line number to maintain order
-        new_declarations.sort(key=lambda d: d.start_line)
+        # Build a map of existing declaration names to their end lines (1-indexed)
+        existing_decl_end_lines = {decl.name: decl.end_line for decl in original_declarations}
 
-        # Find insertion point (after imports)
-        lines = original_source.splitlines(keepends=True)
-        insertion_line = _find_insertion_line_after_imports_js(lines, analyzer, original_source)
+        # Insert each new declaration after its dependencies
+        result = original_source
+        for decl in new_declarations:
+            result = _insert_declaration_after_dependencies(
+                result, decl, existing_decl_end_lines, analyzer, module_abspath
+            )
+            # Update the map with the newly inserted declaration for subsequent insertions
+            # Re-parse to get accurate line numbers after insertion
+            updated_declarations = analyzer.find_module_level_declarations(result)
+            existing_decl_end_lines = {d.name: d.end_line for d in updated_declarations}
 
-        # Build new declarations string
-        new_decl_code = "\n".join(decl.source_code for decl in new_declarations)
-        new_decl_code = new_decl_code + "\n\n"
-
-        # Insert declarations
-        before = lines[:insertion_line]
-        after = lines[insertion_line:]
-        result_lines = [*before, new_decl_code, *after]
-
-        return "".join(result_lines)
+        return result
 
     except Exception as e:
         logger.debug(f"Error adding global declarations: {e}")
         return original_source
 
 
-def _find_insertion_line_after_imports_js(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
-    """Find the line index where new declarations should be inserted (after imports).
+def _get_existing_names(original_declarations: list, analyzer: TreeSitterAnalyzer, original_source: str) -> set[str]:
+    """Get all names that already exist in the original source (declarations + imports)."""
+    existing_names = {decl.name for decl in original_declarations}
+
+    original_imports = analyzer.find_imports(original_source)
+    for imp in original_imports:
+        if imp.default_import:
+            existing_names.add(imp.default_import)
+        for name, alias in imp.named_imports:
+            existing_names.add(alias if alias else name)
+        if imp.namespace_import:
+            existing_names.add(imp.namespace_import)
+
+    return existing_names
+
+
+def _filter_new_declarations(optimized_declarations: list, existing_names: set[str]) -> list:
+    """Filter declarations to only those that don't exist in the original source."""
+    new_declarations = []
+    seen_sources: set[str] = set()
+
+    # Sort by line number to maintain order from optimized code
+    sorted_declarations = sorted(optimized_declarations, key=lambda d: d.start_line)
+
+    for decl in sorted_declarations:
+        if decl.name not in existing_names and decl.source_code not in seen_sources:
+            new_declarations.append(decl)
+            seen_sources.add(decl.source_code)
+
+    return new_declarations
+
+
+def _insert_declaration_after_dependencies(
+    source: str,
+    declaration,
+    existing_decl_end_lines: dict[str, int],
+    analyzer: TreeSitterAnalyzer,
+    module_abspath: Path,
+) -> str:
+    """Insert a declaration after the last existing declaration it depends on.
+
+    Args:
+        source: Current source code.
+        declaration: The declaration to insert.
+        existing_decl_end_lines: Map of existing declaration names to their end lines.
+        analyzer: TreeSitter analyzer.
+        module_abspath: Path to the module file.
+
+    Returns:
+        Source code with the declaration inserted at the correct position.
+
+    """
+    # Find identifiers referenced in this declaration
+    referenced_names = analyzer.find_referenced_identifiers(declaration.source_code)
+
+    # Find the latest end line among all referenced declarations
+    insertion_line = _find_insertion_line_for_declaration(source, referenced_names, existing_decl_end_lines, analyzer)
+
+    lines = source.splitlines(keepends=True)
+
+    # Ensure proper spacing
+    decl_code = declaration.source_code
+    if not decl_code.endswith("\n"):
+        decl_code += "\n"
+
+    # Add blank line before if inserting after content
+    if insertion_line > 0 and lines[insertion_line - 1].strip():
+        decl_code = "\n" + decl_code
+
+    before = lines[:insertion_line]
+    after = lines[insertion_line:]
+
+    return "".join([*before, decl_code, *after])
+
+
+def _find_insertion_line_for_declaration(
+    source: str, referenced_names: set[str], existing_decl_end_lines: dict[str, int], analyzer: TreeSitterAnalyzer
+) -> int:
+    """Find the line where a declaration should be inserted based on its dependencies.
+
+    Args:
+        source: Source code.
+        referenced_names: Names referenced by the declaration.
+        existing_decl_end_lines: Map of declaration names to their end lines (1-indexed).
+        analyzer: TreeSitter analyzer.
+
+    Returns:
+        Line index (0-based) where the declaration should be inserted.
+
+    """
+    # Find the maximum end line among referenced declarations
+    max_dependency_line = 0
+    for name in referenced_names:
+        if name in existing_decl_end_lines:
+            max_dependency_line = max(max_dependency_line, existing_decl_end_lines[name])
+
+    if max_dependency_line > 0:
+        # Insert after the last dependency (end_line is 1-indexed, we need 0-indexed)
+        return max_dependency_line
+
+    # No dependencies found - insert after imports
+    lines = source.splitlines(keepends=True)
+    return _find_line_after_imports(lines, analyzer, source)
+
+
+def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, source: str) -> int:
+    """Find the line index after all imports.
 
     Args:
         lines: Source lines.
-        analyzer: TreeSitter analyzer for the file.
+        analyzer: TreeSitter analyzer.
         source: Full source code.
 
     Returns:
-        Line index (0-based) for insertion.
+        Line index (0-based) for insertion after imports.
 
     """
     try:
         imports = analyzer.find_imports(source)
         if imports:
-            # Find the last import's end line
             return max(imp.end_line for imp in imports)
     except Exception as exc:
-        logger.debug(f"Exception occurred in _find_insertion_line_after_imports_js: {exc}")
+        logger.debug(f"Exception in _find_line_after_imports: {exc}")
 
-    # Default: insert at beginning (after any shebang/directive comments)
+    # Default: insert at beginning (after shebang/directive comments)
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped and not stripped.startswith("//") and not stripped.startswith("#!"):

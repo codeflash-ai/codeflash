@@ -21,6 +21,8 @@ from typing import Any
 
 import tomlkit
 
+_BUILD_DIRS = frozenset({"build", "dist", "out", ".next", ".nuxt"})
+
 
 @dataclass
 class DetectedProject:
@@ -310,14 +312,21 @@ def _detect_js_module_root(project_root: Path) -> tuple[Path, str]:
     """Detect JavaScript/TypeScript module root.
 
     Priority:
-    1. package.json "exports" field
-    2. package.json "module" field (ESM)
-    3. package.json "main" field (CJS)
-    4. src/ directory
-    5. lib/ directory
-    6. Project root
+    1. src/, lib/, source/ directories (common source directories)
+    2. package.json "exports" field (if not in build output directory)
+    3. package.json "module" field (ESM, if not in build output directory)
+    4. package.json "main" field (CJS, if not in build output directory)
+    5. Project root
+
+    Build output directories (build/, dist/, out/) are skipped since they contain
+    compiled code, not source files.
 
     """
+    # Check for common source directories first - these are always preferred
+    for src_dir in ["src", "lib", "source"]:
+        if (project_root / src_dir).is_dir():
+            return project_root / src_dir, f"{src_dir}/ directory"
+
     package_json_path = project_root / "package.json"
     package_data: dict[str, Any] = {}
 
@@ -334,30 +343,50 @@ def _detect_js_module_root(project_root: Path) -> tuple[Path, str]:
         entry_path = _extract_entry_path(exports)
         if entry_path:
             parent = Path(entry_path).parent
-            if parent != Path() and parent.as_posix() != "." and (project_root / parent).is_dir():
+            if (
+                parent != Path()
+                and parent.as_posix() != "."
+                and (project_root / parent).is_dir()
+                and not is_build_output_dir(parent)
+            ):
                 return project_root / parent, f'{parent.as_posix()}/ (from package.json "exports")'
 
     # Check module field (ESM)
     module_field = package_data.get("module")
     if module_field and isinstance(module_field, str):
         parent = Path(module_field).parent
-        if parent != Path() and parent.as_posix() != "." and (project_root / parent).is_dir():
+        if (
+            parent != Path()
+            and parent.as_posix() != "."
+            and (project_root / parent).is_dir()
+            and not is_build_output_dir(parent)
+        ):
             return project_root / parent, f'{parent.as_posix()}/ (from package.json "module")'
 
     # Check main field (CJS)
     main_field = package_data.get("main")
     if main_field and isinstance(main_field, str):
         parent = Path(main_field).parent
-        if parent != Path() and parent.as_posix() != "." and (project_root / parent).is_dir():
+        if (
+            parent != Path()
+            and parent.as_posix() != "."
+            and (project_root / parent).is_dir()
+            and not is_build_output_dir(parent)
+        ):
             return project_root / parent, f'{parent.as_posix()}/ (from package.json "main")'
-
-    # Check for common source directories
-    for src_dir in ["src", "lib", "source"]:
-        if (project_root / src_dir).is_dir():
-            return project_root / src_dir, f"{src_dir}/ directory"
 
     # Default to project root
     return project_root, "project root"
+
+
+def is_build_output_dir(path: Path) -> bool:
+    """Check if a path is within a common build output directory.
+
+    Build output directories contain compiled code and should be skipped
+    in favor of source directories.
+
+    """
+    return not _BUILD_DIRS.isdisjoint(path.parts)
 
 
 def _extract_entry_path(exports: Any) -> str | None:

@@ -296,6 +296,33 @@ def _find_node_project_root(file_path: Path) -> Path | None:
     return None
 
 
+def _find_monorepo_root(start_path: Path) -> Path | None:
+    """Find the monorepo workspace root by looking for workspace markers.
+
+    Traverses up from the given path to find a directory containing
+    monorepo workspace markers like yarn.lock, pnpm-workspace.yaml, etc.
+
+    Args:
+        start_path: A path within the monorepo.
+
+    Returns:
+        The monorepo root directory, or None if not found.
+
+    """
+    monorepo_markers = ["yarn.lock", "pnpm-workspace.yaml", "lerna.json", "package-lock.json"]
+    current = start_path if start_path.is_dir() else start_path.parent
+
+    while current != current.parent:
+        # Check for monorepo markers
+        if any((current / marker).exists() for marker in monorepo_markers):
+            # Verify it has node_modules (it's the workspace root)
+            if (current / "node_modules").exists():
+                return current
+        current = current.parent
+
+    return None
+
+
 def _find_jest_config(project_root: Path) -> Path | None:
     """Find Jest configuration file in the project.
 
@@ -311,13 +338,7 @@ def _find_jest_config(project_root: Path) -> Path | None:
 
     """
     # Common Jest config file names, in order of preference
-    config_names = [
-        "jest.config.ts",
-        "jest.config.js",
-        "jest.config.mjs",
-        "jest.config.cjs",
-        "jest.config.json",
-    ]
+    config_names = ["jest.config.ts", "jest.config.js", "jest.config.mjs", "jest.config.cjs", "jest.config.json"]
 
     # First check the project root itself
     for config_name in config_names:
@@ -474,14 +495,7 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
     install_cmd = get_package_install_command(project_root, "codeflash", dev=True)
     try:
-        result = subprocess.run(
-            install_cmd,
-            check=False,
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        result = subprocess.run(install_cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=120)
         if result.returncode == 0:
             logger.debug(f"Installed codeflash using {install_cmd[0]}")
             return
@@ -810,6 +824,12 @@ def run_jest_benchmarking_tests(
     jest_env["JEST_JUNIT_SUITE_NAME"] = "{filepath}"
     jest_env["JEST_JUNIT_ADD_FILE_ATTRIBUTE"] = "true"
     jest_env["JEST_JUNIT_INCLUDE_CONSOLE_OUTPUT"] = "true"
+
+    # Pass monorepo root to loop-runner for jest-runner resolution
+    monorepo_root = _find_monorepo_root(effective_cwd)
+    if monorepo_root:
+        jest_env["CODEFLASH_MONOREPO_ROOT"] = str(monorepo_root)
+        logger.debug(f"Detected monorepo root: {monorepo_root}")
     codeflash_sqlite_file = get_run_tmp_file(Path("test_return_values_0.sqlite"))
     jest_env["CODEFLASH_OUTPUT_FILE"] = str(codeflash_sqlite_file)
     jest_env["CODEFLASH_TEST_ITERATION"] = "0"

@@ -11,6 +11,8 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from codeflash.languages.current import is_typescript
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -44,9 +46,10 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
     """Detect the module system used by a JavaScript/TypeScript project.
 
     Detection strategy:
-    1. Check package.json for "type" field
-    2. If file_path provided, check file extension (.mjs = ESM, .cjs = CommonJS)
-    3. Analyze import statements in the file
+    1. Check file extension for explicit module type (.mjs, .cjs, .ts, .tsx, .mts)
+       - TypeScript files always use ESM syntax regardless of package.json
+    2. Check package.json for explicit "type" field (only if explicitly set)
+    3. Analyze import/export statements in the file content
     4. Default to CommonJS if uncertain
 
     Args:
@@ -57,13 +60,29 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
         ModuleSystem constant (COMMONJS, ES_MODULE, or UNKNOWN).
 
     """
-    # Strategy 1: Check package.json
+    # Strategy 1: Check file extension first for explicit module type indicators
+    # TypeScript files always use ESM syntax (import/export)
+    if file_path:
+        suffix = file_path.suffix.lower()
+        if suffix == ".mjs":
+            logger.debug("Detected ES Module from .mjs extension")
+            return ModuleSystem.ES_MODULE
+        if suffix == ".cjs":
+            logger.debug("Detected CommonJS from .cjs extension")
+            return ModuleSystem.COMMONJS
+        if suffix in (".ts", ".tsx", ".mts"):
+            # TypeScript always uses ESM syntax (import/export)
+            # even if package.json doesn't have "type": "module"
+            logger.debug("Detected ES Module from TypeScript file extension")
+            return ModuleSystem.ES_MODULE
+
+    # Strategy 2: Check package.json for explicit type field
     package_json = project_root / "package.json"
     if package_json.exists():
         try:
             with package_json.open("r") as f:
                 pkg = json.load(f)
-                pkg_type = pkg.get("type", "commonjs")
+                pkg_type = pkg.get("type")  # Don't default - only use if explicitly set
 
                 if pkg_type == "module":
                     logger.debug("Detected ES Module from package.json type field")
@@ -71,44 +90,35 @@ def detect_module_system(project_root: Path, file_path: Path | None = None) -> s
                 if pkg_type == "commonjs":
                     logger.debug("Detected CommonJS from package.json type field")
                     return ModuleSystem.COMMONJS
+                # If type is not explicitly set, continue to file content analysis
 
         except Exception as e:
             logger.warning("Failed to parse package.json: %s", e)
 
-    # Strategy 2: Check file extension
-    if file_path:
-        suffix = file_path.suffix
-        if suffix == ".mjs":
-            logger.debug("Detected ES Module from .mjs extension")
-            return ModuleSystem.ES_MODULE
-        if suffix == ".cjs":
-            logger.debug("Detected CommonJS from .cjs extension")
-            return ModuleSystem.COMMONJS
+    # Strategy 3: Analyze file content for import/export patterns
+    if file_path and file_path.exists():
+        try:
+            content = file_path.read_text()
 
-        # Strategy 3: Analyze file content
-        if file_path.exists():
-            try:
-                content = file_path.read_text()
+            # Look for ES module syntax
+            has_import = "import " in content and "from " in content
+            has_export = "export " in content or "export default" in content or "export {" in content
 
-                # Look for ES module syntax
-                has_import = "import " in content and "from " in content
-                has_export = "export " in content or "export default" in content or "export {" in content
+            # Look for CommonJS syntax
+            has_require = "require(" in content
+            has_module_exports = "module.exports" in content or "exports." in content
 
-                # Look for CommonJS syntax
-                has_require = "require(" in content
-                has_module_exports = "module.exports" in content or "exports." in content
+            # Determine based on what we found
+            if (has_import or has_export) and not (has_require or has_module_exports):
+                logger.debug("Detected ES Module from import/export statements")
+                return ModuleSystem.ES_MODULE
 
-                # Determine based on what we found
-                if (has_import or has_export) and not (has_require or has_module_exports):
-                    logger.debug("Detected ES Module from import/export statements")
-                    return ModuleSystem.ES_MODULE
+            if (has_require or has_module_exports) and not (has_import or has_export):
+                logger.debug("Detected CommonJS from require/module.exports")
+                return ModuleSystem.COMMONJS
 
-                if (has_require or has_module_exports) and not (has_import or has_export):
-                    logger.debug("Detected CommonJS from require/module.exports")
-                    return ModuleSystem.COMMONJS
-
-            except Exception as e:
-                logger.warning("Failed to analyze file %s: %s", file_path, e)
+        except Exception as e:
+            logger.warning("Failed to analyze file %s: %s", file_path, e)
 
     # Default to CommonJS (more common and backward compatible)
     logger.debug("Defaulting to CommonJS")
@@ -199,11 +209,42 @@ def add_js_extension(module_path: str) -> str:
     return module_path
 
 
+def _convert_destructuring_to_imports(names_str: str) -> str:
+    """Convert destructuring aliases to import aliases.
+
+    Converts:
+        a, b             -> a, b
+        a: aliasA        -> a as aliasA
+        a, b: aliasB     -> a, b as aliasB
+
+    Args:
+        names_str: The destructuring pattern string (e.g., "a, b: aliasB")
+
+    Returns:
+        Import names string with aliases using 'as' syntax
+
+    """
+    # Split by commas and process each name
+    parts = []
+    for name in names_str.split(","):
+        name = name.strip()
+        if ":" in name:
+            # Convert destructuring alias to import alias
+            # "a: aliasA" -> "a as aliasA"
+            original, alias = name.split(":", 1)
+            parts.append(f"{original.strip()} as {alias.strip()}")
+        else:
+            parts.append(name)
+    return ", ".join(parts)
+
+
 # Replace destructured requires with named imports
 def replace_destructured(match: re.Match) -> str:
     names = match.group(2).strip()
     module_path = add_js_extension(match.group(3))
-    return f"import {{ {names} }} from '{module_path}';"
+    # Convert destructuring aliases (a: b) to import aliases (a as b)
+    converted_names = _convert_destructuring_to_imports(names)
+    return f"import {{ {converted_names} }} from '{module_path}';"
 
 
 # Replace property access requires with named imports with alias
@@ -234,12 +275,14 @@ def convert_commonjs_to_esm(code: str) -> str:
     """Convert CommonJS require statements to ES Module imports.
 
     Converts:
-        const { foo, bar } = require('./module');  ->  import { foo, bar } from './module';
-        const foo = require('./module');           ->  import foo from './module';
-        const foo = require('./module').default;   ->  import foo from './module';
-        const foo = require('./module').bar;       ->  import { bar as foo } from './module';
+        const { foo, bar } = require('./module');       ->  import { foo, bar } from './module';
+        const { foo: alias } = require('./module');     ->  import { foo as alias } from './module';
+        const foo = require('./module');                ->  import foo from './module';
+        const foo = require('./module').default;        ->  import foo from './module';
+        const foo = require('./module').bar;            ->  import { bar as foo } from './module';
 
     Special handling:
+        - Destructuring aliases (a: b) are converted to import aliases (a as b)
         - Local codeflash helper (./codeflash-jest-helper) is converted to npm package codeflash
           because the local helper uses CommonJS exports which don't work in ESM projects
 
@@ -299,34 +342,155 @@ def convert_esm_to_commonjs(code: str) -> str:
     return default_import.sub(replace_default, code)
 
 
-def ensure_module_system_compatibility(code: str, target_module_system: str) -> str:
+def uses_ts_jest(project_root: Path) -> bool:
+    """Check if the project uses ts-jest for TypeScript transformation.
+
+    ts-jest handles module interoperability internally, allowing mixed
+    CommonJS/ESM imports without explicit conversion.
+
+    Args:
+        project_root: The project root directory.
+
+    Returns:
+        True if ts-jest is being used, False otherwise.
+
+    """
+    # Check for ts-jest in devDependencies or dependencies
+    package_json = project_root / "package.json"
+    if package_json.exists():
+        try:
+            with package_json.open("r") as f:
+                pkg = json.load(f)
+                dev_deps = pkg.get("devDependencies", {})
+                deps = pkg.get("dependencies", {})
+                if "ts-jest" in dev_deps or "ts-jest" in deps:
+                    return True
+        except Exception as e:
+            logger.debug(f"Failed to read package.json for ts-jest detection: {e}")  # noqa: G004
+
+    # Also check for jest.config with ts-jest preset
+    for config_file in ["jest.config.js", "jest.config.cjs", "jest.config.ts", "jest.config.mjs"]:
+        config_path = project_root / config_file
+        if config_path.exists():
+            try:
+                content = config_path.read_text()
+                if "ts-jest" in content:
+                    return True
+            except Exception as e:
+                logger.debug(f"Failed to read {config_file}: {e}")  # noqa: G004
+
+    return False
+
+
+def ensure_module_system_compatibility(code: str, target_module_system: str, project_root: Path | None = None) -> str:
     """Ensure code uses the correct module system syntax.
 
-    Detects the current module system in the code and converts if needed.
-    Handles mixed-style code (e.g., ESM imports with CommonJS require for npm packages).
+    If the project uses ts-jest, no conversion is performed because ts-jest
+    handles module interoperability internally. Otherwise, converts between
+    CommonJS and ES Modules as needed.
 
     Args:
         code: JavaScript code to check and potentially convert.
         target_module_system: Target ModuleSystem (COMMONJS or ES_MODULE).
+        project_root: Project root directory for ts-jest detection.
 
     Returns:
-        Code with correct module system syntax.
+        Converted code, or unchanged if ts-jest handles interop.
 
     """
+    # If ts-jest is installed, skip conversion - it handles interop natively
+    if is_typescript() and project_root and uses_ts_jest(project_root):
+        logger.debug(
+            f"Skipping module system conversion (target was {target_module_system}). "  # noqa: G004
+            "ts-jest handles interop natively."
+        )
+        return code
+
     # Detect current module system in code
     has_require = "require(" in code
+    has_module_exports = "module.exports" in code or "exports." in code
     has_import = "import " in code and "from " in code
+    has_export = "export " in code
 
-    if target_module_system == ModuleSystem.ES_MODULE:
-        # Convert any require() statements to imports for ESM projects
-        # This handles mixed code (ESM imports + CommonJS requires for npm packages)
-        if has_require:
-            logger.debug("Converting CommonJS requires to ESM imports")
-            return convert_commonjs_to_esm(code)
-    elif target_module_system == ModuleSystem.COMMONJS:
-        # Convert any import statements to requires for CommonJS projects
-        if has_import:
-            logger.debug("Converting ESM imports to CommonJS requires")
-            return convert_esm_to_commonjs(code)
+    is_commonjs = has_require or has_module_exports
+    is_esm = has_import or has_export
 
+    # Convert if needed
+    if target_module_system == ModuleSystem.ES_MODULE and is_commonjs and not is_esm:
+        logger.debug("Converting CommonJS to ES Module syntax")
+        return convert_commonjs_to_esm(code)
+
+    if target_module_system == ModuleSystem.COMMONJS and is_esm and not is_commonjs:
+        logger.debug("Converting ES Module to CommonJS syntax")
+        return convert_esm_to_commonjs(code)
+
+    logger.debug("No module system conversion needed")
     return code
+
+
+def ensure_vitest_imports(code: str, test_framework: str) -> str:
+    """Ensure vitest test globals are imported when using vitest framework.
+
+    Vitest by default does not enable globals (describe, test, expect, etc.),
+    so they must be explicitly imported. This function adds the import if missing.
+
+    Args:
+        code: JavaScript/TypeScript test code.
+        test_framework: The test framework being used (vitest, jest, mocha).
+
+    Returns:
+        Code with vitest imports added if needed.
+
+    """
+    if test_framework != "vitest":
+        return code
+
+    # Check if vitest imports already exist
+    if "from 'vitest'" in code or 'from "vitest"' in code:
+        return code
+
+    # Check if the code uses test functions that need to be imported
+    test_globals = ["describe", "test", "it", "expect", "vi", "beforeEach", "afterEach", "beforeAll", "afterAll"]
+
+    # Combine detection and collection into a single pass
+    used_globals = [g for g in test_globals if f"{g}(" in code or f"{g} (" in code]
+    if not used_globals:
+        return code
+
+    # Build the import statement
+    import_statement = f"import {{ {', '.join(used_globals)} }} from 'vitest';\n"
+
+    # Find the first line that isn't a comment or empty
+    lines = code.split("\n")
+    insert_index = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if (
+            stripped
+            and not stripped.startswith("//")
+            and not stripped.startswith("/*")
+            and not stripped.startswith("*")
+        ):
+            # Check if this line is an import/require - insert after imports
+            if stripped.startswith(("import ", "const ", "let ")):
+                continue
+            insert_index = i
+            break
+        insert_index = i + 1
+
+    # Find the last import line to insert after it
+    last_import_index = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("import ") and "from " in stripped:
+            last_import_index = i
+
+    if last_import_index >= 0:
+        # Insert after the last import
+        lines.insert(last_import_index + 1, import_statement.rstrip())
+    else:
+        # Insert at the beginning (after any leading comments)
+        lines.insert(insert_index, import_statement.rstrip())
+
+    logger.debug("Added vitest imports: %s", used_globals)
+    return "\n".join(lines)

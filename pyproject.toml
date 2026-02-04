@@ -78,8 +78,9 @@ dev = [
     "types-greenlet>=3.1.0.20241221,<4",
     "types-pexpect>=4.9.0.20241208,<5",
     "types-unidiff>=0.7.0.20240505,<0.8",
-    "uv>=0.6.2",
-    "pre-commit>=4.2.0,<5",
+    "prek>=0.2.25",
+    "ty>=0.0.14",
+    "uv>=0.9.29",
 ]
 tests = [
     "black>=25.9.0",
@@ -271,6 +272,7 @@ ignore = [
     "ANN401",  # typing.Any disallowed
     "ARG001",  # Unused function argument (common in abstract/interface methods)
     "TRY300",  # Consider moving to else block
+    "FURB110", # if-exp-instead-of-or-operator - we prefer explicit if-else over "or"
     "TRY401",  # Redundant exception in logging.exception
     "PLR0911", # Too many return statements
     "PLW0603", # Global statement

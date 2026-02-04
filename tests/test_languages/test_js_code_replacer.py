@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.code_replacer import replace_function_definitions_for_language
+from codeflash.languages.base import Language
+from codeflash.languages.current import set_current_language
 from codeflash.languages.javascript.module_system import (
     ModuleSystem,
     convert_commonjs_to_esm,
@@ -300,12 +302,144 @@ export function calculate(x, y) {
         assert "return add(x, y);" in result
 
 
-class TestModuleSystemCompatibility:
-    """Tests for module system compatibility."""
+class TestTsJestSkipsConversion:
+    """Tests verifying that module system conversion is skipped when ts-jest is installed.
 
-    def test_convert_mixed_code_to_esm(self):
-        """Test converting mixed CJS/ESM code to pure ESM - exact output."""
-        code = """\
+    When ts-jest is installed, it handles module interoperability internally,
+    so we skip conversion to avoid breaking valid imports.
+    """
+    def __init__(self):
+        set_current_language(Language.TYPESCRIPT)
+
+    def test_commonjs_not_converted_when_ts_jest_installed(self, tmp_path):
+        """Test that CommonJS is NOT converted to ESM when ts-jest is installed."""
+        # Create a project with ts-jest
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"ts-jest": "^29.0.0"}}')
+
+        commonjs_test = """\
+const Logger = require('../utils/logger');
+const { helper } = require('../utils/helpers');
+
+describe('Logger', () => {
+    test('should work', () => {
+        const logger = new Logger();
+        expect(logger).toBeDefined();
+    });
+});
+"""
+        # With ts-jest, no conversion should happen
+        result = ensure_module_system_compatibility(commonjs_test, ModuleSystem.ES_MODULE, tmp_path)
+
+        assert result == commonjs_test, (
+            f"CommonJS should NOT be converted when ts-jest is installed.\n"
+            f"Expected (unchanged):\n{commonjs_test}\n\nGot:\n{result}"
+        )
+
+    def test_esm_not_converted_when_ts_jest_installed(self, tmp_path):
+        """Test that ESM is NOT converted to CommonJS when ts-jest is installed."""
+        # Create a project with ts-jest
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"ts-jest": "^29.0.0"}}')
+
+        esm_test = """\
+import Logger from '../utils/logger';
+import { helper } from '../utils/helpers';
+
+describe('Logger', () => {
+    test('should work', () => {
+        const logger = new Logger();
+        expect(logger).toBeDefined();
+    });
+});
+"""
+        # With ts-jest, no conversion should happen
+        result = ensure_module_system_compatibility(esm_test, ModuleSystem.COMMONJS, tmp_path)
+
+        assert result == esm_test, (
+            f"ESM should NOT be converted when ts-jest is installed.\n"
+            f"Expected (unchanged):\n{esm_test}\n\nGot:\n{result}"
+        )
+
+    def test_ts_jest_detected_in_jest_config(self, tmp_path):
+        """Test that ts-jest is detected from jest.config.js content."""
+        # Create a project with ts-jest in jest.config.js (not package.json)
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {}}')
+        jest_config = tmp_path / "jest.config.js"
+        jest_config.write_text("module.exports = { preset: 'ts-jest' };")
+
+        commonjs_test = "const x = require('./module');"
+
+        result = ensure_module_system_compatibility(commonjs_test, ModuleSystem.ES_MODULE, tmp_path)
+
+        assert result == commonjs_test, "Should skip conversion when ts-jest is in jest.config.js"
+
+
+class TestModuleSystemConversion:
+    """Tests for module system conversion when ts-jest is NOT installed.
+
+    Without ts-jest, we convert between CommonJS and ESM as needed.
+    """
+
+    def test_commonjs_converted_to_esm_without_ts_jest(self, tmp_path):
+        """Test that CommonJS is converted to ESM when ts-jest is NOT installed."""
+        # Create a project WITHOUT ts-jest
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
+
+        commonjs_code = """\
+const { helper } = require('./helpers');
+const logger = require('./logger');
+
+function process() {
+    return helper();
+}
+"""
+        result = ensure_module_system_compatibility(commonjs_code, ModuleSystem.ES_MODULE, tmp_path)
+
+        # Should be converted to ESM
+        assert "import { helper } from './helpers';" in result
+        assert "import logger from './logger';" in result
+        assert "require(" not in result
+
+    def test_esm_converted_to_commonjs_without_ts_jest(self, tmp_path):
+        """Test that ESM is converted to CommonJS when ts-jest is NOT installed."""
+        # Create a project WITHOUT ts-jest
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
+
+        esm_code = """\
+import { helper } from './helpers';
+import logger from './logger';
+
+function process() {
+    return helper();
+}
+"""
+        result = ensure_module_system_compatibility(esm_code, ModuleSystem.COMMONJS, tmp_path)
+
+        # Should be converted to CommonJS
+        assert "const { helper } = require('./helpers');" in result
+        assert "const logger = require('./logger');" in result
+        assert "import " not in result
+
+    def test_no_conversion_when_project_root_is_none(self):
+        """Test that conversion happens when project_root is None (can't detect ts-jest)."""
+        commonjs_code = "const x = require('./module');"
+
+        # Without project_root, we can't detect ts-jest, so conversion should happen
+        result = ensure_module_system_compatibility(commonjs_code, ModuleSystem.ES_MODULE, None)
+
+        # Should be converted to ESM
+        assert "import x from './module';" in result
+
+    def test_mixed_code_not_converted(self, tmp_path):
+        """Test that mixed CJS/ESM code is NOT converted (already has both)."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
+
+        mixed_code = """\
 import { existing } from './module.js';
 const { helper } = require('./helpers');
 
@@ -313,32 +447,16 @@ function process() {
     return existing() + helper();
 }
 """
-        result = ensure_module_system_compatibility(code, ModuleSystem.ES_MODULE)
+        # Mixed code has both import and require, so no conversion
+        result = ensure_module_system_compatibility(mixed_code, ModuleSystem.ES_MODULE, tmp_path)
 
-        # Should convert require to import
-        assert "import { helper } from './helpers';" in result
-        assert "require" not in result, f"require should be converted to import. Got:\n{result}"
+        assert result == mixed_code, "Mixed code should not be converted"
 
-    def test_convert_mixed_code_to_commonjs(self):
-        """Test converting mixed ESM/CJS code to pure CommonJS - exact output."""
-        code = """\
-const { existing } = require('./module');
-import { helper } from './helpers.js';
-
-function process() {
-    return existing() + helper();
-}
-"""
-        result = ensure_module_system_compatibility(code, ModuleSystem.COMMONJS)
-
-        # Should convert import to require
-        assert "const { helper } = require('./helpers');" in result
-        assert "import " not in result.split("\n")[0] or "import " not in result, (
-            f"import should be converted to require. Got:\n{result}"
-        )
-
-    def test_pure_esm_unchanged(self):
+    def test_pure_esm_unchanged_for_esm_target(self, tmp_path):
         """Test that pure ESM code is unchanged when targeting ESM."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
+
         code = """\
 import { add } from './math.js';
 
@@ -346,11 +464,14 @@ export function sum(a, b) {
     return add(a, b);
 }
 """
-        result = ensure_module_system_compatibility(code, ModuleSystem.ES_MODULE)
-        assert result == code, f"Pure ESM code should be unchanged.\nExpected:\n{code}\n\nGot:\n{result}"
+        result = ensure_module_system_compatibility(code, ModuleSystem.ES_MODULE, tmp_path)
+        assert result == code, "Pure ESM code should be unchanged for ESM target"
 
-    def test_pure_commonjs_unchanged(self):
+    def test_pure_commonjs_unchanged_for_commonjs_target(self, tmp_path):
         """Test that pure CommonJS code is unchanged when targeting CommonJS."""
+        package_json = tmp_path / "package.json"
+        package_json.write_text('{"devDependencies": {"jest": "^29.0.0"}}')
+
         code = """\
 const { add } = require('./math');
 
@@ -360,8 +481,8 @@ function sum(a, b) {
 
 module.exports = { sum };
 """
-        result = ensure_module_system_compatibility(code, ModuleSystem.COMMONJS)
-        assert result == code, f"Pure CommonJS code should be unchanged.\nExpected:\n{code}\n\nGot:\n{result}"
+        result = ensure_module_system_compatibility(code, ModuleSystem.COMMONJS, tmp_path)
+        assert result == code, "Pure CommonJS code should be unchanged for CommonJS target"
 
 
 class TestImportStatementGeneration:
@@ -711,7 +832,7 @@ module.exports = { targetFunction, otherFunction };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        target_func = next(f for f in functions if f.name == "targetFunction")
+        target_func = next(f for f in functions if f.function_name == "targetFunction")
 
         optimized_code = """\
 function targetFunction(x) {
@@ -763,7 +884,7 @@ class Calculator {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        add_method = next(f for f in functions if f.name == "add")
+        add_method = next(f for f in functions if f.function_name == "add")
 
         # Optimized version provided in class context
         optimized_code = """\
@@ -826,7 +947,7 @@ class DataProcessor {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_method = next(f for f in functions if f.name == "process")
+        process_method = next(f for f in functions if f.function_name == "process")
 
         optimized_code = """\
 class DataProcessor {
@@ -948,7 +1069,7 @@ class Cache {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class Cache {
@@ -1050,7 +1171,7 @@ class ApiClient {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        get_method = next(f for f in functions if f.name == "get")
+        get_method = next(f for f in functions if f.function_name == "get")
 
         optimized_code = """\
 class ApiClient {
@@ -1181,7 +1302,7 @@ class Container<T> {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        get_all_method = next(f for f in functions if f.name == "getAll")
+        get_all_method = next(f for f in functions if f.function_name == "getAll")
 
         optimized_code = """\
 class Container<T> {
@@ -1234,7 +1355,7 @@ function createUser(name: string, email: string): User {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = ts_support.discover_functions(file_path)
-        func = next(f for f in functions if f.name == "createUser")
+        func = next(f for f in functions if f.function_name == "createUser")
 
         optimized_code = """\
 function createUser(name: string, email: string): User {
@@ -1289,7 +1410,7 @@ function processItems(items) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        process_func = next(f for f in functions if f.name == "processItems")
+        process_func = next(f for f in functions if f.function_name == "processItems")
 
         optimized_code = """\
 function processItems(items) {
@@ -1336,7 +1457,7 @@ class MathUtils {
 
         # First replacement: sum method
         functions = js_support.discover_functions(file_path)
-        sum_method = next(f for f in functions if f.name == "sum")
+        sum_method = next(f for f in functions if f.function_name == "sum")
 
         optimized_sum = """\
 class MathUtils {
@@ -1554,7 +1675,7 @@ module.exports = { main, helper };
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 function main(data) {
@@ -1597,7 +1718,7 @@ export function main(data) {
         file_path.write_text(original_source, encoding="utf-8")
 
         functions = js_support.discover_functions(file_path)
-        main_func = next(f for f in functions if f.name == "main")
+        main_func = next(f for f in functions if f.function_name == "main")
 
         optimized_code = """\
 export function main(data) {
@@ -1756,7 +1877,7 @@ export class DataProcessor<T> {
     # find function
     target_func_info = None
     for func in functions:
-        if func.name == target_func and func.parents[0].name == parent_class:
+        if func.function_name == target_func and func.parents[0].name == parent_class:
             target_func_info = func
             break
     assert target_func_info is not None
@@ -1893,6 +2014,84 @@ export class DataProcessor<T> {
 }
 """
 
+
+
+class TestNewVariableFromOptimizedCode:
+    """Tests for handling new variables introduced in optimized code."""
+
+    def test_new_bound_method_variable_added_after_referenced_constant(self, ts_support, temp_project):
+        """Test that a new variable binding a method is added after the constant it references.
+
+        When optimized code introduces a new module-level variable (like `_has`) that
+        references an existing constant (like `CODEFLASH_EMPLOYEE_GITHUB_IDS`), the
+        replacement should:
+        1. Add the new variable after the constant it references
+        2. Replace the function with the optimized version
+        """
+        from codeflash.models.models import CodeStringsMarkdown, CodeString
+
+        original_source = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return CODEFLASH_EMPLOYEE_GITHUB_IDS.has(userId);
+}
+'''
+        file_path = temp_project / "auth.ts"
+        file_path.write_text(original_source, encoding="utf-8")
+
+        # Optimized code introduces a bound method variable for performance
+        optimized_code = '''const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+
+        code_markdown = CodeStringsMarkdown(
+            code_strings=[
+                CodeString(
+                    code=optimized_code,
+                    file_path=Path("auth.ts"),
+                    language="typescript"
+                )
+            ],
+            language="typescript"
+        )
+
+        replaced = replace_function_definitions_for_language(
+            ["isCodeflashEmployee"],
+            code_markdown,
+            file_path,
+            temp_project,
+        )
+
+        assert replaced
+        result = file_path.read_text()
+
+        # Expected result for strict equality check
+        expected_result = '''\
+const CODEFLASH_EMPLOYEE_GITHUB_IDS = new Set([
+  "1234",
+]);
+
+const _has: (id: string) => boolean = CODEFLASH_EMPLOYEE_GITHUB_IDS.has.bind(
+  CODEFLASH_EMPLOYEE_GITHUB_IDS
+);
+
+export function isCodeflashEmployee(userId: string): boolean {
+  return _has(userId);
+}
+'''
+        assert result == expected_result, (
+            f"Result does not match expected output.\n"
+            f"Expected:\n{expected_result}\n\n"
+            f"Got:\n{result}"
+        )
 
 
 class TestImportedTypeNotDuplicated:

@@ -353,8 +353,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 1, f"JavaScript found {len(js_funcs)}, expected 1"
 
         # Both should find 'add'
-        assert py_funcs[0].name == "add"
-        assert js_funcs[0].name == "add"
+        assert py_funcs[0].function_name == "add"
+        assert js_funcs[0].function_name == "add"
 
         # Both should have correct language
         assert py_funcs[0].language == Language.PYTHON
@@ -373,8 +373,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 3, f"JavaScript found {len(js_funcs)}, expected 3"
 
         # Both should find the same function names
-        py_names = {f.name for f in py_funcs}
-        js_names = {f.name for f in js_funcs}
+        py_names = {f.function_name for f in py_funcs}
+        js_names = {f.function_name for f in js_funcs}
 
         assert py_names == {"add", "subtract", "multiply"}
         assert js_names == {"add", "subtract", "multiply"}
@@ -392,8 +392,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 1, f"JavaScript found {len(js_funcs)}, expected 1"
 
         # The function with return should be found
-        assert py_funcs[0].name == "with_return"
-        assert js_funcs[0].name == "withReturn"
+        assert py_funcs[0].function_name == "with_return"
+        assert js_funcs[0].function_name == "withReturn"
 
     def test_class_methods_discovery(self, python_support, js_support):
         """Both should discover class methods with proper metadata."""
@@ -409,12 +409,12 @@ class TestDiscoverFunctionsParity:
 
         # All should be marked as methods
         for func in py_funcs:
-            assert func.is_method is True, f"Python {func.name} should be a method"
-            assert func.class_name == "Calculator", f"Python {func.name} should belong to Calculator"
+            assert func.is_method is True, f"Python {func.function_name} should be a method"
+            assert func.class_name == "Calculator", f"Python {func.function_name} should belong to Calculator"
 
         for func in js_funcs:
-            assert func.is_method is True, f"JavaScript {func.name} should be a method"
-            assert func.class_name == "Calculator", f"JavaScript {func.name} should belong to Calculator"
+            assert func.is_method is True, f"JavaScript {func.function_name} should be a method"
+            assert func.class_name == "Calculator", f"JavaScript {func.function_name} should belong to Calculator"
 
     def test_async_functions_discovery(self, python_support, js_support):
         """Both should correctly identify async functions."""
@@ -429,10 +429,10 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 2, f"JavaScript found {len(js_funcs)}, expected 2"
 
         # Check async flags
-        py_async = next(f for f in py_funcs if "fetch" in f.name.lower())
-        py_sync = next(f for f in py_funcs if "sync" in f.name.lower())
-        js_async = next(f for f in js_funcs if "fetch" in f.name.lower())
-        js_sync = next(f for f in js_funcs if "sync" in f.name.lower())
+        py_async = next(f for f in py_funcs if "fetch" in f.function_name.lower())
+        py_sync = next(f for f in py_funcs if "sync" in f.function_name.lower())
+        js_async = next(f for f in js_funcs if "fetch" in f.function_name.lower())
+        js_sync = next(f for f in js_funcs if "sync" in f.function_name.lower())
 
         assert py_async.is_async is True, "Python async function should have is_async=True"
         assert py_sync.is_async is False, "Python sync function should have is_async=False"
@@ -452,15 +452,15 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 2, f"JavaScript found {len(js_funcs)}, expected 2"
 
         # Check names
-        py_names = {f.name for f in py_funcs}
-        js_names = {f.name for f in js_funcs}
+        py_names = {f.function_name for f in py_funcs}
+        js_names = {f.function_name for f in js_funcs}
 
         assert py_names == {"outer", "inner"}, f"Python found {py_names}"
         assert js_names == {"outer", "inner"}, f"JavaScript found {js_names}"
 
         # Check parent info for inner function
-        py_inner = next(f for f in py_funcs if f.name == "inner")
-        js_inner = next(f for f in js_funcs if f.name == "inner")
+        py_inner = next(f for f in py_funcs if f.function_name == "inner")
+        js_inner = next(f for f in js_funcs if f.function_name == "inner")
 
         assert len(py_inner.parents) >= 1, "Python inner should have parent info"
         assert py_inner.parents[0].name == "outer", "Python inner's parent should be outer"
@@ -482,8 +482,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 1, f"JavaScript found {len(js_funcs)}, expected 1"
 
         # Both should find 'helper' belonging to 'Utils'
-        assert py_funcs[0].name == "helper"
-        assert js_funcs[0].name == "helper"
+        assert py_funcs[0].function_name == "helper"
+        assert js_funcs[0].function_name == "helper"
         assert py_funcs[0].class_name == "Utils"
         assert js_funcs[0].class_name == "Utils"
 
@@ -532,8 +532,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 1, f"JavaScript found {len(js_funcs)}, expected 1"
 
         # Should be the sync function
-        assert "sync" in py_funcs[0].name.lower()
-        assert "sync" in js_funcs[0].name.lower()
+        assert "sync" in py_funcs[0].function_name.lower()
+        assert "sync" in js_funcs[0].function_name.lower()
 
     def test_filter_exclude_methods(self, python_support, js_support):
         """Both should support filtering out class methods."""
@@ -550,8 +550,8 @@ class TestDiscoverFunctionsParity:
         assert len(js_funcs) == 1, f"JavaScript found {len(js_funcs)}, expected 1"
 
         # Should be the standalone function
-        assert py_funcs[0].name == "standalone"
-        assert js_funcs[0].name == "standalone"
+        assert py_funcs[0].function_name == "standalone"
+        assert js_funcs[0].function_name == "standalone"
 
     def test_nonexistent_file_returns_empty(self, python_support, js_support):
         """Both should return empty list for nonexistent files."""
@@ -570,14 +570,14 @@ class TestDiscoverFunctionsParity:
         js_funcs = js_support.discover_functions(js_file)
 
         # Both should have start_line and end_line
-        assert py_funcs[0].start_line is not None
-        assert py_funcs[0].end_line is not None
-        assert js_funcs[0].start_line is not None
-        assert js_funcs[0].end_line is not None
+        assert py_funcs[0].starting_line is not None
+        assert py_funcs[0].ending_line is not None
+        assert js_funcs[0].starting_line is not None
+        assert js_funcs[0].ending_line is not None
 
         # Start should be before or equal to end
-        assert py_funcs[0].start_line <= py_funcs[0].end_line
-        assert js_funcs[0].start_line <= js_funcs[0].end_line
+        assert py_funcs[0].starting_line <= py_funcs[0].ending_line
+        assert js_funcs[0].starting_line <= js_funcs[0].ending_line
 
 
 # ============================================================================
@@ -604,8 +604,8 @@ function multiply(a, b) {
     return a * b;
 }
 """
-        py_func = FunctionInfo(name="add", file_path=Path("/test.py"), start_line=1, end_line=2)
-        js_func = FunctionInfo(name="add", file_path=Path("/test.js"), start_line=1, end_line=3)
+        py_func = FunctionInfo(function_name="add", file_path=Path("/test.py"), starting_line=1, ending_line=2)
+        js_func = FunctionInfo(function_name="add", file_path=Path("/test.js"), starting_line=1, ending_line=3)
 
         py_new = """def add(a, b):
     return (a + b) | 0
@@ -651,8 +651,8 @@ function other() {
 
 // Footer
 """
-        py_func = FunctionInfo(name="target", file_path=Path("/test.py"), start_line=4, end_line=5)
-        js_func = FunctionInfo(name="target", file_path=Path("/test.js"), start_line=4, end_line=6)
+        py_func = FunctionInfo(function_name="target", file_path=Path("/test.py"), starting_line=4, ending_line=5)
+        js_func = FunctionInfo(function_name="target", file_path=Path("/test.js"), starting_line=4, ending_line=6)
 
         py_new = """def target():
     return 42
@@ -693,18 +693,18 @@ function other() {
 }
 """
         py_func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.py"),
-            start_line=2,
-            end_line=3,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=2,
+            ending_line=3,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
         js_func = FunctionInfo(
-            name="add",
+            function_name="add",
             file_path=Path("/test.js"),
-            start_line=2,
-            end_line=4,
-            parents=(ParentInfo(name="Calculator", type="ClassDef"),),
+            starting_line=2,
+            ending_line=4,
+            parents=[ParentInfo(name="Calculator", type="ClassDef")],
         )
 
         # New code without indentation
@@ -872,8 +872,8 @@ class TestExtractCodeContextParity:
             ".js",
         )
 
-        py_func = FunctionInfo(name="add", file_path=py_file, start_line=1, end_line=2)
-        js_func = FunctionInfo(name="add", file_path=js_file, start_line=1, end_line=3)
+        py_func = FunctionInfo(function_name="add", file_path=py_file, starting_line=1, ending_line=2)
+        js_func = FunctionInfo(function_name="add", file_path=js_file, starting_line=1, ending_line=3)
 
         py_context = python_support.extract_code_context(py_func, py_file.parent, py_file.parent)
         js_context = js_support.extract_code_context(js_func, js_file.parent, js_file.parent)
@@ -922,8 +922,8 @@ class TestIntegrationParity:
 
         assert len(py_funcs) == 1
         assert len(js_funcs) == 1
-        assert py_funcs[0].name == "fibonacci"
-        assert js_funcs[0].name == "fibonacci"
+        assert py_funcs[0].function_name == "fibonacci"
+        assert js_funcs[0].function_name == "fibonacci"
 
         # Replace
         py_optimized = """def fibonacci(n):
@@ -974,20 +974,20 @@ class TestFeatureGaps:
 
         for py_func in py_funcs:
             # Check all expected fields are populated
-            assert py_func.name is not None, "Python: name should be populated"
+            assert py_func.function_name is not None, "Python: name should be populated"
             assert py_func.file_path is not None, "Python: file_path should be populated"
-            assert py_func.start_line is not None, "Python: start_line should be populated"
-            assert py_func.end_line is not None, "Python: end_line should be populated"
+            assert py_func.starting_line is not None, "Python: start_line should be populated"
+            assert py_func.ending_line is not None, "Python: end_line should be populated"
             assert py_func.language is not None, "Python: language should be populated"
             # is_method and class_name should be set for class methods
             assert py_func.is_method is not None, "Python: is_method should be populated"
 
         for js_func in js_funcs:
             # JavaScript should populate the same fields
-            assert js_func.name is not None, "JavaScript: name should be populated"
+            assert js_func.function_name is not None, "JavaScript: name should be populated"
             assert js_func.file_path is not None, "JavaScript: file_path should be populated"
-            assert js_func.start_line is not None, "JavaScript: start_line should be populated"
-            assert js_func.end_line is not None, "JavaScript: end_line should be populated"
+            assert js_func.starting_line is not None, "JavaScript: start_line should be populated"
+            assert js_func.ending_line is not None, "JavaScript: end_line should be populated"
             assert js_func.language is not None, "JavaScript: language should be populated"
             assert js_func.is_method is not None, "JavaScript: is_method should be populated"
 
@@ -1006,7 +1006,7 @@ const identity = x => x;
         funcs = js_support.discover_functions(js_file)
 
         # Should find all arrow functions
-        names = {f.name for f in funcs}
+        names = {f.function_name for f in funcs}
         assert "add" in names, "Should find arrow function 'add'"
         assert "multiply" in names, "Should find concise arrow function 'multiply'"
         # identity might or might not be found depending on implicit return handling
@@ -1057,7 +1057,7 @@ def multi_decorated():
         funcs = python_support.discover_functions(py_file)
 
         # Should find all functions regardless of decorators
-        names = {f.name for f in funcs}
+        names = {f.function_name for f in funcs}
         assert "decorated" in names
         assert "decorated_with_args" in names
         assert "multi_decorated" in names
@@ -1077,7 +1077,7 @@ const namedExpr = function myFunc(x) {
         funcs = js_support.discover_functions(js_file)
 
         # Should find function expressions
-        names = {f.name for f in funcs}
+        names = {f.function_name for f in funcs}
         assert "add" in names, "Should find anonymous function expression assigned to 'add'"
 
 
@@ -1144,5 +1144,5 @@ function greeting() {
 
         assert len(py_funcs) == 1
         assert len(js_funcs) == 1
-        assert py_funcs[0].name == "greeting"
-        assert js_funcs[0].name == "greeting"
+        assert py_funcs[0].function_name == "greeting"
+        assert js_funcs[0].function_name == "greeting"

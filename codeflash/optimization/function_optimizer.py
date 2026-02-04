@@ -77,7 +77,7 @@ from codeflash.context.unused_definition_remover import detect_unused_helper_fun
 from codeflash.discovery.functions_to_optimize import was_function_previously_optimized
 from codeflash.either import Failure, Success, is_successful
 from codeflash.languages import is_python
-from codeflash.languages.base import FunctionInfo, Language
+from codeflash.languages.base import Language
 from codeflash.languages.current import current_language_support, is_typescript
 from codeflash.languages.javascript.module_system import detect_module_system
 from codeflash.lsp.helpers import is_LSP_enabled, report_to_markdown_table, tree_to_markdown
@@ -496,6 +496,16 @@ class FunctionOptimizer:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
+
+        # Early check: if --no-gen-tests is set, verify there are existing tests for this function
+        if self.args.no_gen_tests:
+            func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
+            if not self.function_to_tests.get(func_qualname):
+                return Failure(
+                    f"No existing tests found for '{self.function_to_optimize.function_name}'. "
+                    f"Cannot optimize without tests when --no-gen-tests is set."
+                )
+
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context()
@@ -566,7 +576,7 @@ class FunctionOptimizer:
 
         # Normalize codeflash imports in JS/TS tests to use npm package
         if not is_python():
-            module_system = detect_module_system(self.project_root)
+            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
                 generated_tests = inject_test_globals(generated_tests)
             if is_typescript():
@@ -2172,10 +2182,10 @@ class FunctionOptimizer:
             else self.function_trace_id,
             "coverage_message": coverage_message,
             "replay_tests": replay_tests,
-            #"concolic_tests": concolic_tests,
+            # "concolic_tests": concolic_tests,
             "language": self.function_to_optimize.language,
-            #"original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
-            #"optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
+            # "original_line_profiler": original_code_baseline.line_profile_results.get("str_out", ""),
+            # "optimized_line_profiler": best_optimization.line_profiler_test_results.get("str_out", ""),
         }
 
         raise_pr = not self.args.no_pr
@@ -2842,18 +2852,8 @@ class FunctionOptimizer:
                 # NOTE: currently this handles single file only, add support to multi file instrumentation (or should it be kept for the main file only)
                 original_source = Path(self.function_to_optimize.file_path).read_text()
                 # Instrument source code
-                func_info = FunctionInfo(
-                    name=self.function_to_optimize.function_name,
-                    file_path=self.function_to_optimize.file_path,
-                    start_line=self.function_to_optimize.starting_line,
-                    end_line=self.function_to_optimize.ending_line,
-                    start_col=self.function_to_optimize.starting_col,
-                    end_col=self.function_to_optimize.ending_col,
-                    is_async=self.function_to_optimize.is_async,
-                    language=self.language_support.language,
-                )
                 success = self.language_support.instrument_source_for_line_profiler(
-                    func_info=func_info, line_profiler_output_file=line_profiler_output_path
+                    func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
                 )
                 if not success:
                     return {"timings": {}, "unit": 0, "str_out": ""}

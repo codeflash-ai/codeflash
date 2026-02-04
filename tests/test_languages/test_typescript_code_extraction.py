@@ -128,7 +128,7 @@ function add(a: number, b: number): number {
 
             functions = ts_support.discover_functions(file_path)
             assert len(functions) == 1
-            assert functions[0].name == "add"
+            assert functions[0].function_name == "add"
 
             # Extract code context
             code_context = ts_support.extract_code_context(
@@ -166,7 +166,7 @@ async function execMongoEval(queryExpression, appsmithMongoURI) {
 
             functions = ts_support.discover_functions(file_path)
             assert len(functions) == 1
-            assert functions[0].name == "execMongoEval"
+            assert functions[0].function_name == "execMongoEval"
 
             # Extract code context
             code_context = ts_support.extract_code_context(
@@ -217,7 +217,7 @@ async function figureOutContentsPath(root: string): Promise<string> {
 
             functions = ts_support.discover_functions(file_path)
             assert len(functions) == 1
-            assert functions[0].name == "figureOutContentsPath"
+            assert functions[0].function_name == "figureOutContentsPath"
 
             # Extract code context
             code_context = ts_support.extract_code_context(

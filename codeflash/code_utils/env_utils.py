@@ -13,7 +13,6 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
-from codeflash.languages.base import Language
 from codeflash.languages.registry import get_language_support_by_common_formatters
 from codeflash.lsp.helpers import is_LSP_enabled
 
@@ -44,9 +43,9 @@ def check_formatter_installed(
         logger.debug(f"Could not determine language for formatter: {formatter_cmds}")
         return True
 
-    if lang_support.language == Language.PYTHON:
+    if str(lang_support.language) == "python":
         tmp_code = """print("hello world")"""
-    elif lang_support.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+    elif str(lang_support.language) in ("javascript", "typescript"):
         tmp_code = "console.log('hello world');"
     else:
         return True

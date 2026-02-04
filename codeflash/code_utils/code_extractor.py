@@ -1429,7 +1429,9 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
     numerical_names: set[str] = set()
     modules_used: set[str] = set()
 
-    for node in ast.walk(tree):
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
         if isinstance(node, ast.Import):
             for alias in node.names:
                 # import numpy or import numpy as np
@@ -1451,6 +1453,8 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
                         name = alias.asname if alias.asname else alias.name
                         numerical_names.add(name)
                 modules_used.add(module_root)
+        else:
+            stack.extend(ast.iter_child_nodes(node))
 
     return numerical_names, modules_used
 
@@ -1577,9 +1581,11 @@ def get_opt_review_metrics(
 
     Returns:
         Markdown-formatted string with code blocks showing calling functions.
+
     """
-    from codeflash.languages.base import FunctionInfo, ParentInfo, ReferenceInfo
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.registry import get_language_support
+    from codeflash.models.models import FunctionParent
 
     start_time = time.perf_counter()
 
@@ -1596,19 +1602,19 @@ def get_opt_review_metrics(
         else:
             function_name, class_name = qualified_name_split[1], qualified_name_split[0]
 
-        # Create a FunctionInfo for the function
+        # Create a FunctionToOptimize for the function
         # We don't have full line info here, so we'll use defaults
-        parents = ()
+        parents: list[FunctionParent] = []
         if class_name:
-            parents = (ParentInfo(name=class_name, type="ClassDef"),)
+            parents = [FunctionParent(name=class_name, type="ClassDef")]
 
-        func_info = FunctionInfo(
-            name=function_name,
+        func_info = FunctionToOptimize(
+            function_name=function_name,
             file_path=file_path,
-            start_line=1,
-            end_line=1,
             parents=parents,
-            language=language,
+            starting_line=1,
+            ending_line=1,
+            language=str(language),
         )
 
         # Find references using language support
@@ -1618,9 +1624,7 @@ def get_opt_review_metrics(
             return ""
 
         # Format references as markdown code blocks
-        calling_fns_details = _format_references_as_markdown(
-            references, file_path, project_root, language
-        )
+        calling_fns_details = _format_references_as_markdown(references, file_path, project_root, language)
 
     except Exception as e:
         logger.debug(f"Error getting function references: {e}")
@@ -1631,9 +1635,7 @@ def get_opt_review_metrics(
     return calling_fns_details
 
 
-def _format_references_as_markdown(
-    references: list, file_path: Path, project_root: Path, language: Language
-) -> str:
+def _format_references_as_markdown(references: list, file_path: Path, project_root: Path, language: Language) -> str:
     """Format references as markdown code blocks with calling function code.
 
     Args:
@@ -1644,6 +1646,7 @@ def _format_references_as_markdown(
 
     Returns:
         Markdown-formatted string.
+
     """
     # Group references by file
     refs_by_file: dict[Path, list] = {}
@@ -1710,7 +1713,7 @@ def _format_references_as_markdown(
                 context_len += len(context_code)
 
         if caller_contexts:
-            fn_call_context += f"```{lang_hint}:{path_relative}\n"
+            fn_call_context += f"```{lang_hint}:{path_relative.as_posix()}\n"
             fn_call_context += "\n".join(caller_contexts)
             fn_call_context += "\n```\n"
 
@@ -1728,11 +1731,11 @@ def _extract_calling_function(source_code: str, function_name: str, ref_line: in
 
     Returns:
         Source code of the function, or None if not found.
+
     """
     if language == Language.PYTHON:
         return _extract_calling_function_python(source_code, function_name, ref_line)
-    else:
-        return _extract_calling_function_js(source_code, function_name, ref_line)
+    return _extract_calling_function_js(source_code, function_name, ref_line)
 
 
 def _extract_calling_function_python(source_code: str, function_name: str, ref_line: int) -> str | None:
@@ -1766,6 +1769,7 @@ def _extract_calling_function_js(source_code: str, function_name: str, ref_line:
 
     Returns:
         Source code of the function, or None if not found.
+
     """
     try:
         from codeflash.languages.treesitter_utils import TreeSitterAnalyzer, TreeSitterLanguage

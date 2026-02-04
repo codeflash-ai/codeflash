@@ -29,7 +29,6 @@ from codeflash.code_utils.code_utils import (
 )
 from codeflash.code_utils.compat import SAFE_SYS_EXECUTABLE, codeflash_cache_db
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
-from codeflash.languages import is_javascript, is_python
 from codeflash.models.models import CodePosition, FunctionCalledInTest, TestsInFile, TestType
 
 if TYPE_CHECKING:
@@ -589,7 +588,7 @@ def discover_tests_for_language(
 
     """
     from codeflash.languages import get_language_support
-    from codeflash.languages.base import FunctionInfo, Language, ParentInfo
+    from codeflash.languages.base import Language
 
     try:
         lang_support = get_language_support(Language(language))
@@ -597,34 +596,20 @@ def discover_tests_for_language(
         logger.warning(f"Unsupported language {language}, returning empty test map")
         return {}, 0, 0
 
-    # Convert FunctionToOptimize to FunctionInfo for the language support API
-    # Also build a mapping from simple qualified_name to full qualified_name_with_modules
-    function_infos: list[FunctionInfo] = []
+    # Collect all functions and build a mapping from simple qualified_name to full qualified_name_with_modules
+    all_functions: list[FunctionToOptimize] = []
     simple_to_full_name: dict[str, str] = {}
     if file_to_funcs_to_optimize:
         for funcs in file_to_funcs_to_optimize.values():
             for func in funcs:
-                parents = tuple(ParentInfo(p.name, p.type) for p in func.parents)
-                func_info = FunctionInfo(
-                    name=func.function_name,
-                    file_path=func.file_path,
-                    start_line=func.starting_line or 0,
-                    end_line=func.ending_line or 0,
-                    start_col=func.starting_col,
-                    end_col=func.ending_col,
-                    is_async=func.is_async,
-                    is_method=bool(func.parents and any(p.type == "ClassDef" for p in func.parents)),
-                    parents=parents,
-                    language=Language(language),
-                )
-                function_infos.append(func_info)
+                all_functions.append(func)
                 # Map simple qualified_name to full qualified_name_with_modules_from_root
-                simple_to_full_name[func_info.qualified_name] = func.qualified_name_with_modules_from_root(
+                simple_to_full_name[func.qualified_name] = func.qualified_name_with_modules_from_root(
                     cfg.project_root_path
                 )
 
     # Use language support to discover tests
-    test_map = lang_support.discover_tests(cfg.tests_root, function_infos)
+    test_map = lang_support.discover_tests(cfg.tests_root, all_functions)
 
     # Convert TestInfo back to FunctionCalledInTest format
     # Use the full qualified name (with modules) as the key for consistency with Python
@@ -656,6 +641,8 @@ def discover_unit_tests(
     discover_only_these_tests: list[Path] | None = None,
     file_to_funcs_to_optimize: dict[Path, list[FunctionToOptimize]] | None = None,
 ) -> tuple[dict[str, set[FunctionCalledInTest]], int, int]:
+    from codeflash.languages import is_javascript, is_python
+
     # Detect language from functions being optimized
     language = _detect_language_from_functions(file_to_funcs_to_optimize)
 
@@ -669,7 +656,7 @@ def discover_unit_tests(
 
     # Existing Python logic
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
-    strategy = framework_strategies.get(cfg.test_framework, None)
+    strategy = framework_strategies.get(cfg.test_framework)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)
