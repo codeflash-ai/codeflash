@@ -185,6 +185,22 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+
+        # Precompile regexes to avoid repeated compilation overhead
+        all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
+        # Keep exact same capture groups as original pattern
+        self._assertion_pattern = re.compile(rf"(\s*)((?:Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE)
+
+        # Pattern to find function name occurrences (exact name, followed by paren)
+        self._func_pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+
+        # Patterns used in _extract_target_calls, precompiled for reuse
+        self._new_constructor_re = re.compile(r"new\s+[a-zA-Z_]\w*\s*$")
+        self._ident_re = re.compile(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$")
+
+        # Pattern for lambda extraction
+        self._lambda_re = re.compile(r"\(\s*\)\s*->\s*")
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -295,13 +311,9 @@ class JavaAssertTransformer:
         """Find JUnit 4/5 and TestNG style assertions."""
         assertions: list[AssertionMatch] = []
 
-        # Pattern for JUnit assertions: (Assert.|Assertions.)?assertXxx(...)
-        # This handles both static imports and qualified calls:
-        # - assertEquals (static import)
-        # - Assert.assertEquals (JUnit 4)
-        # - Assertions.assertEquals (JUnit 5)
-        all_assertions = "|".join(JUNIT5_ALL_ASSERTIONS)
-        pattern = re.compile(rf"(\s*)((?:Assert(?:ions)?\.)?({all_assertions}))\s*\(", re.MULTILINE)
+        # Use precompiled assertion pattern
+        pattern = self._assertion_pattern
+
 
         for match in pattern.finditer(source):
             leading_ws = match.group(1)
@@ -502,15 +514,10 @@ class JavaAssertTransformer:
         """Extract calls to the target function from assertion arguments."""
         target_calls: list[TargetCall] = []
 
-        # Pattern to match method calls with various receiver styles:
-        # - obj.method(args)
-        # - ClassName.staticMethod(args)
-        # - new ClassName().method(args)
-        # - new ClassName(args).method(args)
-        # - method(args) (no receiver)
-        #
-        # Strategy: Find the function name, then look backwards for the receiver
-        pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+        # Use precompiled function pattern
+        pattern = self._func_pattern
+        content_len = len(content)
+
 
         for match in pattern.finditer(content):
             method_name = match.group(1)
@@ -524,41 +531,44 @@ class JavaAssertTransformer:
 
             # Look backwards from the method name to find the receiver
             receiver_start = method_start
+            i = method_start - 1
+            # Skip trailing whitespace before method
+            while i >= 0 and content[i].isspace():
+                i -= 1
 
-            # Check if there's a dot before the method name (indicating a receiver)
-            before_method = content[:method_start]
-            stripped_before = before_method.rstrip()
-            if stripped_before.endswith("."):
-                dot_pos = len(stripped_before) - 1
-                before_dot = content[:dot_pos]
-
-                # Check for new ClassName() or new ClassName(args)
-                stripped_before_dot = before_dot.rstrip()
-                if stripped_before_dot.endswith(")"):
-                    # Find matching opening paren for constructor args
-                    close_paren_pos = len(stripped_before_dot) - 1
+            if i >= 0 and content[i] == ".":
+                dot_pos = i
+                # We will examine content[:dot_pos] where dot_pos is index of '.'
+                before_dot_end = dot_pos - 1
+                # If before_dot_end char is ')', find matching '(' backward
+                if before_dot_end >= 0 and content[before_dot_end] == ")":
+                    # Find matching opening paren
                     paren_depth = 1
-                    i = close_paren_pos - 1
-                    while i >= 0 and paren_depth > 0:
-                        if stripped_before_dot[i] == ")":
+                    j = before_dot_end - 1
+                    while j >= 0 and paren_depth > 0:
+                        ch = content[j]
+                        if ch == ")":
                             paren_depth += 1
-                        elif stripped_before_dot[i] == "(":
+                        elif ch == "(":
                             paren_depth -= 1
-                        i -= 1
+                        j -= 1
                     if paren_depth == 0:
-                        open_paren_pos = i + 1
-                        # Look for "new ClassName" before the opening paren
-                        before_paren = stripped_before_dot[:open_paren_pos].rstrip()
-                        new_match = re.search(r"new\s+[a-zA-Z_]\w*\s*$", before_paren)
-                        if new_match:
-                            receiver_start = new_match.start()
+                        open_paren_pos = j + 1
+                        before_paren = content[:open_paren_pos].rstrip()
+                        # Use precompiled new-constructor regex on the trimmed slice
+                        if self._new_constructor_re.search(before_paren):
+                            # Find the start index of the match within before_paren
+                            new_match = self._new_constructor_re.search(before_paren)
+                            if new_match:
+                                receiver_start = new_match.start()
                         else:
                             # Could be chained call like something().method()
                             # For now, just use the part from open paren
                             receiver_start = open_paren_pos
                 else:
-                    # Simple identifier: obj.method() or Class.method() or pkg.Class.method()
-                    ident_match = re.search(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$", stripped_before_dot)
+                    # Simple identifier or qualified identifier before the dot
+                    before_dot = content[:dot_pos]
+                    ident_match = self._ident_re.search(before_dot)
                     if ident_match:
                         receiver_start = ident_match.start()
 
@@ -587,7 +597,7 @@ class JavaAssertTransformer:
         For assertThrows(Exception.class, () -> { code(); }), we want 'code();'.
         """
         # Look for lambda: () -> expr or () -> { block }
-        lambda_match = re.search(r"\(\s*\)\s*->\s*", content)
+        lambda_match = self._lambda_re.search(content)
         if not lambda_match:
             return None
 
@@ -596,10 +606,15 @@ class JavaAssertTransformer:
 
         if remaining.startswith("{"):
             # Block lambda: () -> { code }
-            _, block_end = self._find_balanced_braces(content, body_start + content[body_start:].index("{"))
+            # Find index of first '{' in the remaining slice relative to content
+            rel_index = content[body_start:].find("{")
+            if rel_index == -1:
+                return None
+            abs_brace_pos = body_start + rel_index
+            _, block_end = self._find_balanced_braces(content, abs_brace_pos)
             if block_end != -1:
                 # Extract content inside braces
-                brace_content = content[body_start + content[body_start:].index("{") + 1 : block_end - 1]
+                brace_content = content[abs_brace_pos + 1 : block_end - 1]
                 return brace_content.strip()
         else:
             # Expression lambda: () -> expr
@@ -638,9 +653,14 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
-            char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
+        code_local = code
+        len_code = len(code_local)
+        # Use prev_char to avoid repeated indexing
+        prev_char = code_local[open_paren_pos] if open_paren_pos >= 0 else ""
+        while pos < len_code and depth > 0:
+            char = code_local[pos]
+
+            # Handle character literals
 
             # Handle character literals
             if char == "'" and not in_string and prev_char != "\\":
@@ -659,12 +679,14 @@ class JavaAssertTransformer:
                 elif char == ")":
                     depth -= 1
 
+
+            prev_char = char
             pos += 1
 
         if depth != 0:
             return None, -1
 
-        return code[open_paren_pos + 1 : pos - 1], pos
+        return code_local[open_paren_pos + 1 : pos - 1], pos
 
     def _find_balanced_braces(self, code: str, open_brace_pos: int) -> tuple[str | None, int]:
         """Find content within balanced braces."""
