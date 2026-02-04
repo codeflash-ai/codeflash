@@ -122,8 +122,16 @@ def _get_module_from_test_path(test_path: Path, project_root: Path, module_names
 
     """
     try:
-        rel_path = test_path.relative_to(project_root)
-        first_component = rel_path.parts[0] if rel_path.parts else None
+        # Use parts-based prefix check to avoid the overhead of Path.relative_to.
+        test_parts = test_path.parts
+        root_parts = project_root.parts
+
+        # If project_root is not a prefix of test_path, mimic relative_to raising ValueError.
+        if len(test_parts) < len(root_parts) or test_parts[: len(root_parts)] != root_parts:
+            raise ValueError
+
+        rel_path = test_parts[len(root_parts) :]
+        first_component = rel_path[0] if rel_path else None
         if first_component and first_component in module_names:
             return first_component
     except ValueError:
