@@ -44,6 +44,19 @@ def generate_tests(
         project_module_system = detect_module_system(test_cfg.tests_project_rootdir, source_file)
         logger.debug(f"Detected module system: {project_module_system}")
 
+        # For JavaScript, calculate the correct import path from the actual test location
+        # (test_path) to the source file, not from tests_root
+        import os
+
+        source_file_abs = source_file.resolve().with_suffix("")
+        test_dir_abs = test_path.resolve().parent
+        # Compute relative path from test directory to source file
+        rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs))
+        module_path = Path(rel_import_path)
+        logger.debug(
+            f"[IMPORT FIX] test_path={test_path}, source={source_file_abs}, rel_import={rel_import_path}"
+        )
+
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
         function_to_optimize=function_to_optimize,
