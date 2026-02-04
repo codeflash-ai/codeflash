@@ -361,21 +361,29 @@ def normalize_codeflash_imports(source: str) -> str:
     return _CODEFLASH_IMPORT_PATTERN.sub(r"import \1 from 'codeflash'", source)
 
 
-def inject_test_globals(generated_tests: GeneratedTestsList) -> GeneratedTestsList:
+def inject_test_globals(generated_tests: GeneratedTestsList, test_framework: str = "jest") -> GeneratedTestsList:
     # TODO: inside the prompt tell the llm if it should import jest functions or it's already injected in the global window
     """Inject test globals into all generated tests.
 
     Args:
         generated_tests: List of generated tests.
+        test_framework: The test framework being used ("jest", "vitest", or "mocha").
 
     Returns:
         Generated tests with test globals injected.
 
     """
     # we only inject test globals for esm modules
-    global_import = (
-        "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
-    )
+    # Use vitest imports for vitest projects, jest imports for jest projects
+    if test_framework == "vitest":
+        global_import = (
+            "import { vi, describe, it, expect, beforeEach, afterEach, beforeAll, test } from 'vitest'\n"
+        )
+    else:
+        # Default to jest imports for jest and other frameworks
+        global_import = (
+            "import { jest, describe, it, expect, beforeEach, afterEach, beforeAll, test } from '@jest/globals'\n"
+        )
 
     for test in generated_tests.generated_tests:
         test.generated_original_test_source = global_import + test.generated_original_test_source

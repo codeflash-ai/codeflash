@@ -578,7 +578,7 @@ class FunctionOptimizer:
         if not is_python():
             module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
-                generated_tests = inject_test_globals(generated_tests)
+                generated_tests = inject_test_globals(generated_tests, self.test_cfg.test_framework)
             if is_typescript():
                 # disable ts check for typescript tests
                 generated_tests = disable_ts_check(generated_tests)
@@ -1906,14 +1906,22 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
-            not coverage_critic(original_code_baseline.coverage_results)
-            or not quantity_of_tests_critic(original_code_baseline)
-        ):
-            if self.args.override_fixtures:
-                restore_conftest(original_conftest_content)
-            cleanup_paths(paths_to_cleanup)
-            return Failure("The threshold for test confidence was not met.")
+        if isinstance(original_code_baseline, OriginalCodeBaseline):
+            # Always check test quantity
+            if not quantity_of_tests_critic(original_code_baseline):
+                if self.args.override_fixtures:
+                    restore_conftest(original_conftest_content)
+                cleanup_paths(paths_to_cleanup)
+                return Failure("The threshold for test confidence was not met (insufficient tests).")
+
+            # Coverage check is only enforced for Python where we have coverage infrastructure
+            # JavaScript/TypeScript doesn't have coverage tooling integrated yet
+            # ToDO: Add coverage tooling & work here
+            if is_python() and not coverage_critic(original_code_baseline.coverage_results):
+                if self.args.override_fixtures:
+                    restore_conftest(original_conftest_content)
+                cleanup_paths(paths_to_cleanup)
+                return Failure("The threshold for test confidence was not met (insufficient coverage).")
 
         return Success(
             (

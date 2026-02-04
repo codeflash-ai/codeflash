@@ -127,6 +127,7 @@ def parse_jest_test_xml(
     # This handles cases where instrumented files are in temp directories
     instrumented_path_lookup: dict[str, tuple[Path, TestType]] = {}
     for test_file in test_files.test_files:
+        # Add behavior instrumented file paths
         if test_file.instrumented_behavior_file_path:
             # Store both the absolute path and resolved path as keys
             abs_path = str(test_file.instrumented_behavior_file_path.resolve())
@@ -137,18 +138,35 @@ def parse_jest_test_xml(
                 test_file.test_type,
             )
             logger.debug(f"Jest XML lookup: registered {abs_path}")
+        # Also add benchmarking file paths (perf-only instrumented tests)
+        if test_file.benchmarking_file_path:
+            bench_abs_path = str(test_file.benchmarking_file_path.resolve())
+            instrumented_path_lookup[bench_abs_path] = (test_file.benchmarking_file_path, test_file.test_type)
+            instrumented_path_lookup[str(test_file.benchmarking_file_path)] = (
+                test_file.benchmarking_file_path,
+                test_file.test_type,
+            )
+            logger.debug(f"Jest XML lookup: registered benchmark {bench_abs_path}")
 
     # Also build a filename-only lookup for fallback matching
     # This handles cases where JUnit XML has relative paths that don't match absolute paths
     # e.g., JUnit has "test/utils__perfinstrumented.test.ts" but lookup has absolute paths
     filename_lookup: dict[str, tuple[Path, TestType]] = {}
     for test_file in test_files.test_files:
+        # Add instrumented_behavior_file_path (behavior tests)
         if test_file.instrumented_behavior_file_path:
             filename = test_file.instrumented_behavior_file_path.name
             # Only add if not already present (avoid overwrites in case of duplicate filenames)
             if filename not in filename_lookup:
                 filename_lookup[filename] = (test_file.instrumented_behavior_file_path, test_file.test_type)
                 logger.debug(f"Jest XML filename lookup: registered {filename}")
+        # Also add benchmarking_file_path (perf-only tests) - these have different filenames
+        # e.g., utils__perfonlyinstrumented.test.ts vs utils__perfinstrumented.test.ts
+        if test_file.benchmarking_file_path:
+            bench_filename = test_file.benchmarking_file_path.name
+            if bench_filename not in filename_lookup:
+                filename_lookup[bench_filename] = (test_file.benchmarking_file_path, test_file.test_type)
+                logger.debug(f"Jest XML filename lookup: registered benchmark file {bench_filename}")
 
     # Fallback: if JUnit XML doesn't have system-out, use subprocess stdout directly
     global_stdout = ""
@@ -311,7 +329,18 @@ def parse_jest_test_xml(
                         matching_ends_direct.append(end_match)
 
             if not matching_starts and not matching_ends_direct:
-                # No timing markers found - add basic result
+                # No timing markers found - use JUnit XML time attribute as fallback
+                # The time attribute is in seconds (e.g., "0.00077875"), convert to nanoseconds
+                runtime = None
+                try:
+                    time_attr = testcase._elem.attrib.get("time")  # noqa: SLF001
+                    if time_attr:
+                        time_seconds = float(time_attr)
+                        runtime = int(time_seconds * 1_000_000_000)  # Convert seconds to nanoseconds
+                        logger.debug(f"Jest XML: using time attribute for {test_name}: {time_seconds}s = {runtime}ns")
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Jest XML: could not parse time attribute: {e}")
+
                 test_results.add(
                     FunctionTestInvocation(
                         loop_index=1,
@@ -323,7 +352,7 @@ def parse_jest_test_xml(
                             iteration_id="",
                         ),
                         file_name=test_file_path,
-                        runtime=None,
+                        runtime=runtime,
                         test_framework=test_config.test_framework,
                         did_pass=result,
                         test_type=test_type,

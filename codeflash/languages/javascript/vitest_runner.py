@@ -23,8 +23,13 @@ if TYPE_CHECKING:
 def _find_vitest_project_root(file_path: Path) -> Path | None:
     """Find the Vitest project root by looking for vitest/vite config or package.json.
 
-    Traverses up from the given file path to find the nearest directory
-    containing vitest.config.js/ts, vite.config.js/ts, or package.json.
+    Traverses up from the given file path to find the directory containing
+    vitest.config.js/ts or vite.config.js/ts. Falls back to package.json only
+    if no vitest/vite config is found in any parent directory.
+
+    In monorepos, package.json may exist at multiple levels (e.g., packages/lib/package.json),
+    but the vitest config with setupFiles is typically at the monorepo root.
+    We need to prioritize finding the actual vitest config to ensure paths resolve correctly.
 
     Args:
         file_path: A file path within the Vitest project.
@@ -34,8 +39,10 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
 
     """
     current = file_path.parent if file_path.is_file() else file_path
+    package_json_dir = None  # Track first package.json found (fallback)
+
     while current != current.parent:  # Stop at filesystem root
-        # Check for Vitest-specific config files first
+        # Check for Vitest-specific config files first - these should take priority
         if (
             (current / "vitest.config.js").exists()
             or (current / "vitest.config.ts").exists()
@@ -45,11 +52,15 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
             or (current / "vite.config.ts").exists()
             or (current / "vite.config.mjs").exists()
             or (current / "vite.config.mts").exists()
-            or (current / "package.json").exists()
         ):
             return current
+        # Remember first package.json as fallback, but keep looking for vitest config
+        if package_json_dir is None and (current / "package.json").exists():
+            package_json_dir = current
         current = current.parent
-    return None
+
+    # No vitest config found, fall back to package.json directory if found
+    return package_json_dir
 
 
 def _is_vitest_coverage_available(project_root: Path) -> bool:
@@ -98,7 +109,10 @@ def _ensure_runtime_files(project_root: Path) -> None:
 
 
 def _build_vitest_behavioral_command(
-    test_files: list[Path], timeout: int | None = None, output_file: Path | None = None
+    test_files: list[Path],
+    timeout: int | None = None,
+    output_file: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Build Vitest command for behavioral tests.
 
@@ -106,6 +120,7 @@ def _build_vitest_behavioral_command(
         test_files: List of test files to run.
         timeout: Optional timeout in seconds.
         output_file: Optional path for JUnit XML output.
+        project_root: Project root directory for --root flag.
 
     Returns:
         Command list for subprocess execution.
@@ -119,6 +134,11 @@ def _build_vitest_behavioral_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for deterministic timing
     ]
+
+    # Explicitly set the project root to ensure vitest uses the correct config
+    # This is critical for monorepos where vitest might auto-detect the wrong root
+    if project_root:
+        cmd.append(f"--root={project_root}")
 
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
@@ -135,7 +155,10 @@ def _build_vitest_behavioral_command(
 
 
 def _build_vitest_benchmarking_command(
-    test_files: list[Path], timeout: int | None = None, output_file: Path | None = None
+    test_files: list[Path],
+    timeout: int | None = None,
+    output_file: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Build Vitest command for benchmarking tests.
 
@@ -143,6 +166,7 @@ def _build_vitest_benchmarking_command(
         test_files: List of test files to run.
         timeout: Optional timeout in seconds.
         output_file: Optional path for JUnit XML output.
+        project_root: Project root directory for --root flag.
 
     Returns:
         Command list for subprocess execution.
@@ -156,6 +180,10 @@ def _build_vitest_benchmarking_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent benchmarking
     ]
+
+    # Explicitly set the project root to ensure vitest uses the correct config
+    if project_root:
+        cmd.append(f"--root={project_root}")
 
     if output_file:
         # Use dot notation for junit reporter output file when multiple reporters are used
@@ -220,7 +248,9 @@ def run_vitest_behavioral_tests(
         logger.debug("Vitest coverage package not installed, running without coverage")
 
     # Build Vitest command
-    vitest_cmd = _build_vitest_behavioral_command(test_files=test_files, timeout=timeout, output_file=result_file_path)
+    vitest_cmd = _build_vitest_behavioral_command(
+        test_files=test_files, timeout=timeout, output_file=result_file_path, project_root=effective_cwd
+    )
 
     # Add coverage flags only if coverage is available
     if coverage_available:
@@ -350,7 +380,7 @@ def run_vitest_benchmarking_tests(
 
     # Build Vitest command for performance tests
     vitest_cmd = _build_vitest_benchmarking_command(
-        test_files=test_files, timeout=timeout, output_file=result_file_path
+        test_files=test_files, timeout=timeout, output_file=result_file_path, project_root=effective_cwd
     )
 
     # Base environment setup
@@ -460,6 +490,10 @@ def run_vitest_line_profile_tests(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent line profiling
     ]
+
+    # Explicitly set the project root to ensure vitest uses the correct config
+    if effective_cwd:
+        vitest_cmd.append(f"--root={effective_cwd}")
 
     # Use dot notation for junit reporter output file when multiple reporters are used
     vitest_cmd.append(f"--outputFile.junit={result_file_path}")
