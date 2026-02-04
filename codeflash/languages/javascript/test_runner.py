@@ -804,9 +804,10 @@ def run_jest_benchmarking_tests(
         "jest",
         "--reporters=default",
         "--reporters=jest-junit",
-        "--runInBand",  # Ensure serial execution even though runner enforces it
+        "--runInBand",  # Ensure serial execution
         "--forceExit",
-        "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
+        # Temporarily disabled: custom loop runner not yet implemented
+        # "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
