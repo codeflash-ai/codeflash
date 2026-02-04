@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
-import logging
 import os
 import queue
 import random
@@ -23,7 +22,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_opt_review_metrics, is_numerical_code
 from codeflash.code_utils.code_replacer import (
@@ -146,9 +145,70 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+def log_code_after_replacement(file_path: Path, candidate_index: int) -> None:
+    """Log the full file content after code replacement in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    try:
+        code = file_path.read_text(encoding="utf-8")
+        lang_map = {".java": "java", ".py": "python", ".js": "javascript", ".ts": "typescript"}
+        language = lang_map.get(file_path.suffix.lower(), "text")
+
+        console.print(
+            Panel(
+                Syntax(code, language, line_numbers=True, theme="monokai", word_wrap=True),
+                title=f"[bold blue]Code After Replacement (Candidate {candidate_index})[/] [dim]({file_path.name})[/]",
+                border_style="blue",
+            )
+        )
+    except Exception as e:
+        logger.debug(f"Failed to log code after replacement: {e}")
+
+
+def log_instrumented_test(test_source: str, test_name: str, test_type: str, language: str) -> None:
+    """Log instrumented test code in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    display_source = test_source
+    if len(test_source) > 15000:
+        display_source = test_source[:15000] + "\n\n... [truncated] ..."
+
+    console.print(
+        Panel(
+            Syntax(display_source, language, line_numbers=True, theme="monokai", word_wrap=True),
+            title=f"[bold magenta]Instrumented Test: {test_name}[/] [dim]({test_type})[/]",
+            border_style="magenta",
+        )
+    )
+
+
+def log_test_run_output(stdout: str, stderr: str, test_type: str, returncode: int = 0) -> None:
+    """Log test run stdout/stderr in verbose mode."""
+    if not DEBUG_MODE:
+        return
+
+    max_len = 10000
+
+    if stdout and stdout.strip():
+        display_stdout = stdout[:max_len] + ("...[truncated]" if len(stdout) > max_len else "")
+        console.print(
+            Panel(
+                display_stdout,
+                title=f"[bold green]{test_type} - stdout[/] [dim](exit: {returncode})[/]",
+                border_style="green" if returncode == 0 else "red",
+            )
+        )
+
+    if stderr and stderr.strip():
+        display_stderr = stderr[:max_len] + ("...[truncated]" if len(stderr) > max_len else "")
+        console.print(Panel(display_stderr, title=f"[bold yellow]{test_type} - stderr[/]", border_style="yellow"))
+
+
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
     """Log optimization context details when in verbose mode using Rich formatting."""
-    if logger.getEffectiveLevel() > logging.DEBUG:
+    if not DEBUG_MODE:
         return
 
     console.rule()
@@ -594,17 +654,31 @@ class FunctionOptimizer:
                 generated_test.instrumented_perf_test_source = modified_perf_source
                 used_behavior_paths.add(behavior_path)
 
-            logger.debug(
-                f"[PIPELINE] Test {i + 1}: behavior_path={behavior_path}, perf_path={perf_path}"
-            )
+            logger.debug(f"[PIPELINE] Test {i + 1}: behavior_path={behavior_path}, perf_path={perf_path}")
 
             with behavior_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_behavior_test_source)
             logger.debug(f"[PIPELINE] Wrote behavioral test to {behavior_path}")
 
+            # Verbose: Log instrumented behavior test
+            log_instrumented_test(
+                generated_test.instrumented_behavior_test_source,
+                behavior_path.name,
+                "Behavioral Test",
+                language=self.function_to_optimize.language,
+            )
+
             with perf_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
             logger.debug(f"[PIPELINE] Wrote perf test to {perf_path}")
+
+            # Verbose: Log instrumented performance test
+            log_instrumented_test(
+                generated_test.instrumented_perf_test_source,
+                perf_path.name,
+                "Performance Test",
+                language=self.function_to_optimize.language,
+            )
 
             # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
             test_file_obj = TestFile(
@@ -675,22 +749,24 @@ class FunctionOptimizer:
         parts = tests_root.parts
 
         # Look for standard Java package prefixes that indicate the start of package structure
-        standard_package_prefixes = ('com', 'org', 'net', 'io', 'edu', 'gov')
+        standard_package_prefixes = ("com", "org", "net", "io", "edu", "gov")
 
         for i, part in enumerate(parts):
             if part in standard_package_prefixes:
                 # Found start of package path, return everything before it
                 if i > 0:
                     java_sources_root = Path(*parts[:i])
-                    logger.debug(f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})")
+                    logger.debug(
+                        f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
+                    )
                     return java_sources_root
 
         # If no standard package prefix found, check if there's a 'java' directory
         # (standard Maven structure: src/test/java)
         for i, part in enumerate(parts):
-            if part == 'java' and i > 0:
+            if part == "java" and i > 0:
                 # Return up to and including 'java'
-                java_sources_root = Path(*parts[:i + 1])
+                java_sources_root = Path(*parts[: i + 1])
                 logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
                 return java_sources_root
 
@@ -721,16 +797,16 @@ class FunctionOptimizer:
         import re
 
         # Extract package from behavior source
-        package_match = re.search(r'^\s*package\s+([\w.]+)\s*;', behavior_source, re.MULTILINE)
+        package_match = re.search(r"^\s*package\s+([\w.]+)\s*;", behavior_source, re.MULTILINE)
         package_name = package_match.group(1) if package_match else ""
 
         # Extract class name from behavior source
         # Use more specific pattern to avoid matching words like "command" or text in comments
-        class_match = re.search(r'^(?:public\s+)?class\s+(\w+)', behavior_source, re.MULTILINE)
+        class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", behavior_source, re.MULTILINE)
         behavior_class = class_match.group(1) if class_match else "GeneratedTest"
 
         # Extract class name from perf source
-        perf_class_match = re.search(r'^(?:public\s+)?class\s+(\w+)', perf_source, re.MULTILINE)
+        perf_class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", perf_source, re.MULTILINE)
         perf_class = perf_class_match.group(1) if perf_class_match else "GeneratedPerfTest"
 
         # Build paths with package structure
@@ -767,22 +843,20 @@ class FunctionOptimizer:
                     perf_path = new_perf_path
                     # Rename class in source code - replace the class declaration
                     modified_behavior_source = re.sub(
-                        rf'^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)',
-                        rf'\g<1>{new_behavior_class}\g<2>',
+                        rf"^((?:public\s+)?class\s+){re.escape(behavior_class)}(\b)",
+                        rf"\g<1>{new_behavior_class}\g<2>",
                         behavior_source,
                         count=1,
                         flags=re.MULTILINE,
                     )
                     modified_perf_source = re.sub(
-                        rf'^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)',
-                        rf'\g<1>{new_perf_class}\g<2>',
+                        rf"^((?:public\s+)?class\s+){re.escape(perf_class)}(\b)",
+                        rf"\g<1>{new_perf_class}\g<2>",
                         perf_source,
                         count=1,
                         flags=re.MULTILINE,
                     )
-                    logger.debug(
-                        f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}"
-                    )
+                    logger.debug(f"[JAVA] Renamed duplicate test class from {behavior_class} to {new_behavior_class}")
                     break
                 index += 1
 
@@ -1199,6 +1273,9 @@ class FunctionOptimizer:
                 logger.info("No functions were replaced in the optimized code. Skipping optimization candidate.")
                 console.rule()
                 return None
+
+            # Verbose: Log code after replacement
+            log_code_after_replacement(self.function_to_optimize.file_path, candidate_index)
         except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
             logger.error(e)
             self.write_code_and_helpers(
@@ -1764,6 +1841,14 @@ class FunctionOptimizer:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_behavior_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
+
+                    # Verbose: Log instrumented existing behavior test
+                    log_instrumented_test(
+                        injected_behavior_test,
+                        new_behavioral_test_path.name,
+                        "Existing Behavioral Test",
+                        language=self.function_to_optimize.language,
+                    )
                 else:
                     msg = "injected_behavior_test is None"
                     raise ValueError(msg)
@@ -1772,6 +1857,14 @@ class FunctionOptimizer:
                     with new_perf_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_perf_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
+
+                    # Verbose: Log instrumented existing performance test
+                    log_instrumented_test(
+                        injected_perf_test,
+                        new_perf_test_path.name,
+                        "Existing Performance Test",
+                        language=self.function_to_optimize.language,
+                    )
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
@@ -2239,7 +2332,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
+        existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
@@ -2880,6 +2973,11 @@ class FunctionOptimizer:
             else:
                 msg = f"Unexpected testing type: {testing_type}"
                 raise ValueError(msg)
+
+            # Verbose: Log test run output
+            log_test_run_output(
+                run_result.stdout, run_result.stderr, f"Test Run ({testing_type.name})", run_result.returncode
+            )
         except subprocess.TimeoutExpired:
             logger.exception(
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"

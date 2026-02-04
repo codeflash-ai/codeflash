@@ -512,8 +512,10 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                         # Check if the file name matches the module path
                         file_stem = test_file.instrumented_behavior_file_path.stem
                         # The instrumented file has __perfinstrumented suffix
-                        original_class = file_stem.replace("__perfinstrumented", "").replace("__perfonlyinstrumented", "")
-                        if original_class == test_module_path or file_stem == test_module_path:
+                        original_class = file_stem.replace("__perfinstrumented", "").replace(
+                            "__perfonlyinstrumented", ""
+                        )
+                        if test_module_path in (original_class, file_stem):
                             test_file_path = test_file.instrumented_behavior_file_path
                             break
                     # Check original file path
@@ -551,7 +553,9 @@ def parse_sqlite_test_results(sqlite_file_path: Path, test_files: TestFiles, tes
                 # Default to GENERATED_REGRESSION for Jest/Java tests when test type can't be determined
                 if test_type is None and (is_jest or is_java_test):
                     test_type = TestType.GENERATED_REGRESSION
-                    logger.debug(f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})")
+                    logger.debug(
+                        f"[PARSE-DEBUG]   defaulting to GENERATED_REGRESSION ({'Jest' if is_jest else 'Java'})"
+                    )
                 elif test_type is None:
                     # Skip results where test type cannot be determined
                     logger.debug(f"Skipping result for {test_function_name}: could not determine test type")
