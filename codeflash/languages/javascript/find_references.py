@@ -98,6 +98,10 @@ class ReferenceFinder:
         self.exclude_patterns = exclude_patterns or ["node_modules", "dist", "build", ".git", "coverage", "__pycache__"]
         self._file_cache: dict[Path, str] = {}
 
+        # Per-parse caches to avoid repeated slice+decode work. Cleared per file parse.
+        self._node_text_cache: dict[int, str] = {}
+        self._node_bytes_cache: dict[int, bytes] = {}
+
     def find_references(
         self, function_to_optimize: FunctionToOptimize, include_definition: bool = False, max_files: int = 1000
     ) -> list[Reference]:
@@ -356,11 +360,18 @@ class ReferenceFinder:
         """
         references: list[Reference] = []
         source_bytes = source_code.encode("utf8")
+        # Clear per-parse caches to avoid cross-file contamination
+        self._node_text_cache.clear()
+        self._node_bytes_cache.clear()
+
         tree = analyzer.parse(source_bytes)
         lines = source_code.splitlines()
 
         # The name to search for (either imported name or original)
         search_name = import_name or function_name
+
+        # Handle namespace imports (e.g., "utils.helper")
+        search_bytes = search_name.encode("utf8")
 
         # Handle namespace imports (e.g., "utils.helper")
         if "." in search_name:
@@ -369,7 +380,7 @@ class ReferenceFinder:
         else:
             # Find direct calls and other reference types
             self._find_identifier_references(
-                tree.root_node, source_bytes, lines, file_path, search_name, function_name, references, None
+                tree.root_node, source_bytes, lines, file_path, search_name, search_bytes, function_name, references, None
             )
 
         return references
@@ -403,27 +414,29 @@ class ReferenceFinder:
         if node.type in ("function_declaration", "method_definition"):
             name_node = node.child_by_field_name("name")
             if name_node:
-                new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                new_current_function = self._get_node_text(name_node, source_bytes)
         elif node.type == "variable_declarator":
             # Arrow function or function expression assigned to variable
             name_node = node.child_by_field_name("name")
             value_node = node.child_by_field_name("value")
             if name_node and value_node and value_node.type in ("arrow_function", "function_expression"):
-                new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                new_current_function = self._get_node_text(name_node, source_bytes)
+
+        # Check for call expressions
 
         # Check for call expressions
         if node.type == "call_expression":
             func_node = node.child_by_field_name("function")
             if func_node and func_node.type == "identifier":
-                name = source_bytes[func_node.start_byte : func_node.end_byte].decode("utf8")
-                if name == search_name:
+                # Compare bytes to avoid decode unless necessary
+                if self._get_node_bytes(func_node, source_bytes) == search_bytes:
                     ref = self._create_reference(file_path, func_node, lines, "call", search_name, current_function)
                     references.append(ref)
 
         # Check for identifiers used as callbacks or passed as arguments
         elif node.type == "identifier":
-            name = source_bytes[node.start_byte : node.end_byte].decode("utf8")
-            if name == search_name:
+            # Compare bytes to avoid decode unless matching
+            if self._get_node_bytes(node, source_bytes) == search_bytes:
                 parent = node.parent
                 # Determine reference type based on context
                 ref_type = self._determine_reference_type(node, parent, source_bytes)
@@ -434,7 +447,7 @@ class ReferenceFinder:
         # Recurse into children
         for child in node.children:
             self._find_identifier_references(
-                child, source_bytes, lines, file_path, search_name, original_name, references, new_current_function
+                child, source_bytes, lines, file_path, search_name, search_bytes, original_name, references, new_current_function
             )
 
     def _find_member_calls(
@@ -466,7 +479,9 @@ class ReferenceFinder:
         if node.type in ("function_declaration", "method_definition"):
             name_node = node.child_by_field_name("name")
             if name_node:
-                new_current_function = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf8")
+                new_current_function = self._get_node_text(name_node, source_bytes)
+
+        # Check for call expressions with member access
 
         # Check for call expressions with member access
         if node.type == "call_expression":
@@ -476,10 +491,11 @@ class ReferenceFinder:
                 prop_node = func_node.child_by_field_name("property")
 
                 if obj_node and prop_node:
-                    obj_name = source_bytes[obj_node.start_byte : obj_node.end_byte].decode("utf8")
-                    prop_name = source_bytes[prop_node.start_byte : prop_node.end_byte].decode("utf8")
+                    # Use cached bytes comparisons where possible
+                    obj_name_bytes = self._get_node_bytes(obj_node, source_bytes)
+                    prop_name_bytes = self._get_node_bytes(prop_node, source_bytes)
 
-                    if obj_name == namespace and prop_name == member:
+                    if obj_name_bytes == namespace.encode("utf8") and prop_name_bytes == member.encode("utf8"):
                         ref = self._create_reference(
                             file_path, func_node, lines, "call", f"{namespace}.{member}", current_function
                         )
@@ -491,10 +507,10 @@ class ReferenceFinder:
             prop_node = node.child_by_field_name("property")
 
             if obj_node and prop_node:
-                obj_name = source_bytes[obj_node.start_byte : obj_node.end_byte].decode("utf8")
-                prop_name = source_bytes[prop_node.start_byte : prop_node.end_byte].decode("utf8")
+                obj_name_bytes = self._get_node_bytes(obj_node, source_bytes)
+                prop_name_bytes = self._get_node_bytes(prop_node, source_bytes)
 
-                if obj_name == namespace and prop_name == member:
+                if obj_name_bytes == namespace.encode("utf8") and prop_name_bytes == member.encode("utf8"):
                     parent = node.parent
                     if parent and parent.type != "call_expression":
                         ref_type = self._determine_reference_type(node, parent, source_bytes)
@@ -803,6 +819,24 @@ class ReferenceFinder:
         except Exception as e:
             logger.debug("Could not read file %s: %s", file_path, e)
             return None
+
+    def _get_node_bytes(self, node: Node, source_bytes: bytes) -> bytes:
+        """Return the raw bytes for the node, caching to avoid repeated slicing."""
+        nid = node.id
+        b = self._node_bytes_cache.get(nid)
+        if b is None:
+            b = source_bytes[node.start_byte : node.end_byte]
+            self._node_bytes_cache[nid] = b
+        return b
+
+    def _get_node_text(self, node: Node, source_bytes: bytes) -> str:
+        """Return the decoded text for the node, caching to avoid repeated decoding."""
+        nid = node.id
+        s = self._node_text_cache.get(nid)
+        if s is None:
+            s = source_bytes[node.start_byte : node.end_byte].decode("utf8")
+            self._node_text_cache[nid] = s
+        return s
 
 
 def find_references(
