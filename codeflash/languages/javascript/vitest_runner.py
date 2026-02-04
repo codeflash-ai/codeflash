@@ -121,7 +121,9 @@ def _build_vitest_behavioral_command(
     ]
 
     if output_file:
-        cmd.append(f"--outputFile={output_file}")
+        # Use dot notation for junit reporter output file when multiple reporters are used
+        # Format: --outputFile.junit=/path/to/file.xml
+        cmd.append(f"--outputFile.junit={output_file}")
 
     if timeout:
         cmd.append(f"--test-timeout={timeout * 1000}")  # Vitest uses milliseconds
@@ -156,7 +158,8 @@ def _build_vitest_benchmarking_command(
     ]
 
     if output_file:
-        cmd.append(f"--outputFile={output_file}")
+        # Use dot notation for junit reporter output file when multiple reporters are used
+        cmd.append(f"--outputFile.junit={output_file}")
 
     if timeout:
         cmd.append(f"--test-timeout={timeout * 1000}")
@@ -258,6 +261,13 @@ def run_vitest_behavioral_tests(
                 args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
             )
         logger.debug(f"Vitest result: returncode={result.returncode}")
+        # Log detailed output if tests fail or no XML output
+        if result.returncode != 0:
+            logger.warning(
+                f"Vitest failed with returncode={result.returncode}.\n"
+                f"Command: {' '.join(vitest_cmd)}\n"
+                f"Stdout: {result.stdout[:2000] if result.stdout else '(empty)'}"
+            )
     except subprocess.TimeoutExpired:
         logger.warning(f"Vitest tests timed out after {subprocess_timeout}s")
         result = subprocess.CompletedProcess(
@@ -271,6 +281,21 @@ def run_vitest_behavioral_tests(
     finally:
         wall_clock_ns = time.perf_counter_ns() - start_time_ns
         logger.debug(f"Vitest behavioral tests completed in {wall_clock_ns / 1e9:.2f}s")
+
+    # Check if JUnit XML was created and has content
+    if result_file_path.exists():
+        file_size = result_file_path.stat().st_size
+        logger.debug(f"Vitest JUnit XML created: {result_file_path} ({file_size} bytes)")
+        if file_size < 200:  # Suspiciously small - likely empty or just headers
+            logger.warning(
+                f"Vitest JUnit XML is very small ({file_size} bytes). "
+                f"Content: {result_file_path.read_text()[:500]}"
+            )
+    else:
+        logger.warning(
+            f"Vitest JUnit XML not created at {result_file_path}. "
+            f"Vitest stdout: {result.stdout[:1000] if result.stdout else '(empty)'}"
+        )
 
     return result_file_path, result, coverage_json_path, None
 
@@ -436,7 +461,8 @@ def run_vitest_line_profile_tests(
         "--no-file-parallelism",  # Serial execution for consistent line profiling
     ]
 
-    vitest_cmd.append(f"--outputFile={result_file_path}")
+    # Use dot notation for junit reporter output file when multiple reporters are used
+    vitest_cmd.append(f"--outputFile.junit={result_file_path}")
 
     if timeout:
         vitest_cmd.append(f"--test-timeout={timeout * 1000}")
