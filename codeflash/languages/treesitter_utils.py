@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from tree_sitter import Language, Parser
@@ -1579,7 +1580,24 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
 
     """
     suffix = file_path.suffix.lower()
+    return _analyzer_for_suffix(suffix)
 
+
+
+@lru_cache(maxsize=16)
+def _analyzer_for_suffix(suffix: str) -> TreeSitterAnalyzer:
+    """Return a cached TreeSitterAnalyzer for a lowercase suffix."""
+    if suffix in (".ts",):  # noqa: FURB171
+        return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+    if suffix in (".tsx",):  # noqa: FURB171
+        return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
+    # Default to JavaScript for .js, .jsx, .mjs, .cjs
+    return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+
+
+@lru_cache(maxsize=16)
+def _analyzer_for_suffix(suffix: str) -> TreeSitterAnalyzer:
+    """Return a cached TreeSitterAnalyzer for a lowercase suffix."""
     if suffix in (".ts",):  # noqa: FURB171
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
     if suffix in (".tsx",):  # noqa: FURB171
