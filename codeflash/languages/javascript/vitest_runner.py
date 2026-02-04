@@ -288,8 +288,7 @@ def run_vitest_behavioral_tests(
         logger.debug(f"Vitest JUnit XML created: {result_file_path} ({file_size} bytes)")
         if file_size < 200:  # Suspiciously small - likely empty or just headers
             logger.warning(
-                f"Vitest JUnit XML is very small ({file_size} bytes). "
-                f"Content: {result_file_path.read_text()[:500]}"
+                f"Vitest JUnit XML is very small ({file_size} bytes). Content: {result_file_path.read_text()[:500]}"
             )
     else:
         logger.warning(

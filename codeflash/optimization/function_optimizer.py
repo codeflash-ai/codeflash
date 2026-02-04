@@ -315,7 +315,7 @@ class CandidateProcessor:
                 self.future_all_code_repair,
                 "Repairing {0} candidates",
                 "Added {0} candidates from repair, total candidates now: {1}",
-                lambda: self.future_all_code_repair.clear(),
+                lambda: self.future_all_code_repair.clear(),  # noqa: PLW0108
             )
         if self.line_profiler_done and not self.refinement_done:
             return self._process_candidates(
@@ -330,7 +330,7 @@ class CandidateProcessor:
                 self.future_adaptive_optimizations,
                 "Applying adaptive optimizations to {0} candidates",
                 "Added {0} candidates from adaptive optimization, total candidates now: {1}",
-                lambda: self.future_adaptive_optimizations.clear(),
+                lambda: self.future_adaptive_optimizations.clear(),  # noqa: PLW0108
             )
         return None  # All done
 
@@ -2093,7 +2093,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(
+        existing_tests, replay_tests, concolic_tests = existing_tests_source_for(  # noqa: RUF059
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
