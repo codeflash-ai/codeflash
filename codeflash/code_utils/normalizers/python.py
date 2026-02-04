@@ -56,14 +56,14 @@ class VariableNormalizer(ast.NodeTransformer):
     def visit_Import(self, node: ast.Import) -> ast.Import:
         """Track imported names."""
         for alias in node.names:
-            name = alias.asname or alias.name
+            name = alias.asname if alias.asname else alias.name
             self.imports.add(name.split(".")[0])
         return node
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
         """Track imported names from modules."""
         for alias in node.names:
-            name = alias.asname or alias.name
+            name = alias.asname if alias.asname else alias.name
             self.imports.add(name)
         return node
 

@@ -292,7 +292,7 @@ def parse_package_json_config(package_json_path: Path) -> tuple[dict[str, Any], 
         config["formatter_cmds"] = codeflash_config["formatterCmds"]
     else:
         detected_formatter = detect_formatter(project_root, package_data)
-        config["formatter_cmds"] = detected_formatter or []
+        config["formatter_cmds"] = detected_formatter if detected_formatter else []
 
     # Parse optional config values from codeflash section
     if codeflash_config.get("benchmarksRoot"):

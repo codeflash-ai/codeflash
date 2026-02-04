@@ -41,7 +41,7 @@ class JitDecoratorDetector(ast.NodeVisitor):
         """Track regular imports like 'import numba' or 'import numba as nb'."""
         for alias in node.names:
             # alias.name is the module name, alias.asname is the alias (or None)
-            local_name = alias.asname or alias.name
+            local_name = alias.asname if alias.asname else alias.name
             # For module imports, we store (module_name, None) to indicate it's a module import
             self.import_aliases[local_name] = (alias.name, None)
         self.generic_visit(node)
@@ -53,7 +53,7 @@ class JitDecoratorDetector(ast.NodeVisitor):
             return
 
         for alias in node.names:
-            local_name = alias.asname or alias.name
+            local_name = alias.asname if alias.asname else alias.name
             # For from imports, we store (module_name, imported_name)
             self.import_aliases[local_name] = (node.module, alias.name)
         self.generic_visit(node)

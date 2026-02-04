@@ -202,7 +202,7 @@ def run_vitest_behavioral_tests(
         project_root = _find_vitest_project_root(test_files[0])
 
     # Use the project root, or fall back to provided cwd
-    effective_cwd = project_root or cwd
+    effective_cwd = project_root if project_root else cwd
     logger.debug(f"Vitest working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
@@ -317,7 +317,7 @@ def run_vitest_benchmarking_tests(
     if project_root is None and test_files:
         project_root = _find_vitest_project_root(test_files[0])
 
-    effective_cwd = project_root or cwd
+    effective_cwd = project_root if project_root else cwd
     logger.debug(f"Vitest benchmarking working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
@@ -420,7 +420,7 @@ def run_vitest_line_profile_tests(
     if project_root is None and test_files:
         project_root = _find_vitest_project_root(test_files[0])
 
-    effective_cwd = project_root or cwd
+    effective_cwd = project_root if project_root else cwd
     logger.debug(f"Vitest line profiling working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed

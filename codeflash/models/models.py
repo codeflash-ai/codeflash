@@ -784,7 +784,7 @@ class InvocationId:
             test_class_name=test_class_name,
             test_function_name=test_function_name,
             function_getting_tested=components[2],
-            iteration_id=iteration_id or components[3],
+            iteration_id=iteration_id if iteration_id else components[3],
         )
 
 

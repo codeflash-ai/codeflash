@@ -899,7 +899,7 @@ class TreeSitterAnalyzer:
             # Check named exports
             for name, alias in export.exported_names:
                 if name == function_name:
-                    return (True, alias or name)
+                    return (True, alias if alias else name)
 
         # For class methods, check if the containing class is exported
         if class_name:
@@ -911,7 +911,7 @@ class TreeSitterAnalyzer:
                 # Check if class is in named exports
                 for name, alias in export.exported_names:
                     if name == class_name:
-                        return (True, alias or name)
+                        return (True, alias if alias else name)
 
         return (False, None)
 
@@ -1580,9 +1580,9 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     """
     suffix = file_path.suffix.lower()
 
-    if suffix == ".ts":
+    if suffix in (".ts",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
-    if suffix == ".tsx":
+    if suffix in (".tsx",):
         return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
     return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)

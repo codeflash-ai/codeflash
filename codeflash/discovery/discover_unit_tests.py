@@ -244,7 +244,7 @@ class ImportAnalyzer(ast.NodeVisitor):
             return
 
         for alias in node.names:
-            module_name = alias.asname or alias.name
+            module_name = alias.asname if alias.asname else alias.name
             self.imported_modules.add(module_name)
 
             # Check for dynamic import modules
@@ -305,7 +305,7 @@ class ImportAnalyzer(ast.NodeVisitor):
                 self.wildcard_modules.add(mod)
                 continue
 
-            imported_name = alias.asname or aname
+            imported_name = alias.asname if alias.asname else aname
             self.imported_modules.add(imported_name)
 
             if alias.asname:
