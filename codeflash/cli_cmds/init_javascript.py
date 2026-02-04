@@ -146,6 +146,32 @@ def determine_js_package_manager(project_root: Path) -> JsPackageManager:
     return JsPackageManager.UNKNOWN
 
 
+def find_node_modules_with_package(project_root: Path, package_name: str) -> Path | None:
+    """Find node_modules directory containing a specific package.
+
+    Searches from project_root up to filesystem root for node_modules containing
+    the specified package. This supports monorepo setups where dependencies are
+    hoisted to the workspace root.
+
+    Args:
+        project_root: Starting directory for the search.
+        package_name: Name of the package to look for (e.g., "jest", "vitest").
+
+    Returns:
+        Path to the node_modules directory containing the package, or None if not found.
+
+    """
+    current_dir = project_root.resolve()
+    while current_dir != current_dir.parent:
+        node_modules = current_dir / "node_modules"
+        if node_modules.exists():
+            package_path = node_modules / package_name
+            if package_path.exists():
+                return node_modules
+        current_dir = current_dir.parent
+    return None
+
+
 def get_package_install_command(project_root: Path, package: str, dev: bool = True) -> list[str]:
     """Get the correct install command for the project's package manager.
 
