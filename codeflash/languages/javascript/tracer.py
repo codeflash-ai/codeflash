@@ -80,7 +80,8 @@ class JavaScriptTracer:
         if json_file.exists():
             try:
                 with json_file.open("r") as f:
-                    return json.load(f)
+                    data: list[dict[str, Any]] = json.load(f)
+                    return data
             except Exception as e:
                 logger.exception("Failed to parse trace JSON: %s", e)
                 return []

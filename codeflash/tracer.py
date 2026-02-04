@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
-def detect_language_from_config(config: dict) -> str:
+def detect_language_from_config(config: dict[str, Any]) -> str:
     """Detect the project language from config or file extensions.
 
     Args:
@@ -44,7 +44,8 @@ def detect_language_from_config(config: dict) -> str:
     """
     # Check explicit language in config
     if "language" in config:
-        return config["language"].lower()
+        language: str = config["language"].lower()
+        return language
 
     # Check module root for file types
     module_root = Path(config.get("module_root", "."))
@@ -138,6 +139,8 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
     # Route to appropriate tracer based on language
     if language in ("javascript", "typescript"):
+        if outfile is None:
+            outfile = Path("codeflash.trace.sqlite")
         return run_javascript_tracer_main(parsed_args, config, project_root, outfile, unknown_args)
 
     if len(unknown_args) > 0:
@@ -152,16 +155,17 @@ def main(args: Namespace | None = None) -> ArgumentParser:
             "module": parsed_args.module,
         }
         try:
-            pytest_splits = []
-            test_paths = []
-            replay_test_paths = []
+            pytest_splits: list[list[str]] = []
+            test_paths: list[str] = []
+            replay_test_paths: list[str] = []
             if parsed_args.module and unknown_args[0] == "pytest":
-                pytest_splits, test_paths = pytest_split(unknown_args[1:], limit=parsed_args.limit)
-                if pytest_splits is None or test_paths is None:
+                split_result = pytest_split(unknown_args[1:], limit=parsed_args.limit)
+                if split_result[0] is None or split_result[1] is None:
                     console.print(f"❌ Could not find test files in the specified paths: {unknown_args[1:]}")
                     console.print(f"Current working directory: {Path.cwd()}")
                     console.print("Please ensure the test directory exists and contains test files.")
                     sys.exit(1)
+                pytest_splits, test_paths = split_result
 
             if len(pytest_splits) > 1:
                 processes = []
@@ -303,7 +307,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
 
 
 def run_javascript_tracer_main(
-    parsed_args: Namespace, config: dict, project_root: Path, outfile: Path, unknown_args: list[str]
+    parsed_args: Namespace, config: dict[str, Any], project_root: Path, outfile: Path, unknown_args: list[str]
 ) -> ArgumentParser:
     """Run the JavaScript tracer.
 

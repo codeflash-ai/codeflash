@@ -99,7 +99,7 @@ def run_javascript_tracer(args: Namespace, config: dict[str, Any], project_root:
         - error: Error message (if failed)
 
     """
-    result = {"success": False, "trace_file": None, "replay_test_file": None, "error": None}
+    result: dict[str, Any] = {"success": False, "trace_file": None, "replay_test_file": None, "error": None}
 
     # Find Node.js
     node_path = find_node_executable()
@@ -260,7 +260,8 @@ def detect_test_framework(project_root: Path, config: dict[str, Any]) -> str:
     """
     # Check config first
     if "test_framework" in config:
-        return config["test_framework"]
+        framework: str = config["test_framework"]
+        return framework
 
     # Check for vitest config files
     vitest_configs = ["vitest.config.js", "vitest.config.ts", "vitest.config.mjs"]
