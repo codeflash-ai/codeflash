@@ -144,61 +144,63 @@ def _insert_class_members(
     class_indent = _get_indentation(lines[class_line]) if class_line < len(lines) else ""
     member_indent = class_indent + "    "
 
-    result = source
+    result_bytes = source_bytes
+
+    # Compute original body insertion points once
+    body_start = body_node.start_byte
+    body_end = body_node.end_byte
+
+    # We'll keep track of a byte-offset delta as we modify the bytes so subsequent
+    # insertions can use adjusted positions without reparsing.
+    delta = 0
+
+    # Insert fields at the beginning of the class body (after opening brace)
 
     # Insert fields at the beginning of the class body (after opening brace)
     if fields:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
+        insert_point = body_start + 1 + delta  # After opening brace
 
-        if body_node:
-            result_bytes = result.encode("utf8")
-            insert_point = body_node.start_byte + 1  # After opening brace
+        # Build field text using list to avoid repeated string concatenation
+        field_parts: list[str] = []
+        field_parts.append("\n")
+        for field in fields:
+            field_lines = field.strip().splitlines(keepends=True)
+            indented_field = _apply_indentation(field_lines, member_indent)
+            field_parts.append(indented_field)
+            if not indented_field.endswith("\n"):
+                field_parts.append("\n")
+        field_text = "".join(field_parts)
+        field_bytes = field_text.encode("utf8")
 
-            # Format fields
-            field_text = "\n"
-            for field in fields:
-                field_lines = field.strip().splitlines(keepends=True)
-                indented_field = _apply_indentation(field_lines, member_indent)
-                field_text += indented_field
-                if not indented_field.endswith("\n"):
-                    field_text += "\n"
+        before = result_bytes[:insert_point]
+        after = result_bytes[insert_point:]
+        result_bytes = before + field_bytes + after
 
-            before = result_bytes[:insert_point]
-            after = result_bytes[insert_point:]
-            result = (before + field_text.encode("utf8") + after).decode("utf8")
+        delta += len(field_bytes)  # Adjust for next insertion(s)
+
+    # Insert methods at the end of the class body (before closing brace)
 
     # Insert methods at the end of the class body (before closing brace)
     if methods:
-        # Re-parse to get current positions
-        classes = analyzer.find_classes(result)
-        for cls in classes:
-            if cls.name == class_name:
-                body_node = cls.node.child_by_field_name("body")
-                break
+        insert_point = body_end - 1 + delta  # Before closing brace, adjust by delta
 
-        if body_node:
-            result_bytes = result.encode("utf8")
-            insert_point = body_node.end_byte - 1  # Before closing brace
+        # Build method text efficiently
+        method_parts: list[str] = []
+        method_parts.append("\n")
+        for method in methods:
+            method_lines = method.strip().splitlines(keepends=True)
+            indented_method = _apply_indentation(method_lines, member_indent)
+            method_parts.append(indented_method)
+            if not indented_method.endswith("\n"):
+                method_parts.append("\n")
+        method_text = "".join(method_parts)
+        method_bytes = method_text.encode("utf8")
 
-            # Format methods
-            method_text = "\n"
-            for method in methods:
-                method_lines = method.strip().splitlines(keepends=True)
-                indented_method = _apply_indentation(method_lines, member_indent)
-                method_text += indented_method
-                if not indented_method.endswith("\n"):
-                    method_text += "\n"
+        before = result_bytes[:insert_point]
+        after = result_bytes[insert_point:]
+        result_bytes = before + method_bytes + after
 
-            before = result_bytes[:insert_point]
-            after = result_bytes[insert_point:]
-            result = (before + method_text.encode("utf8") + after).decode("utf8")
-
-    return result
+    return result_bytes.decode("utf8")
 
 
 def replace_function(
