@@ -854,32 +854,46 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
                 needed_names.add(decorator.func.value.id)
 
     # Get type annotation names from class body (for dataclass fields)
-    for item in ast.walk(class_node):
+    # Instead of ast.walk which visits all nodes, directly iterate class body
+    for item in class_node.body:
         if isinstance(item, ast.AnnAssign) and item.annotation:
             collect_names_from_annotation(item.annotation, needed_names)
-        # Also check for field() calls which are common in dataclasses
-        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
-            needed_names.add(item.func.id)
+            # Also check for field() calls which are common in dataclasses
+            if isinstance(item.value, ast.Call) and isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
+        elif isinstance(item, ast.Assign):
+            # Check assignments for field() calls
+            if isinstance(item.value, ast.Call) and isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
+
+    # Find imports that provide these names
 
     # Find imports that provide these names
     import_lines: list[str] = []
     source_lines = module_source.split("\n")
     added_imports: set[int] = set()  # Track line numbers to avoid duplicates
 
+    remaining_names = needed_names.copy()
+
     for node in module_tree.body:
+        if not remaining_names:
+            break
+            
         if isinstance(node, ast.Import):
             for alias in node.names:
                 name = alias.asname or alias.name.split(".")[0]
-                if name in needed_names and node.lineno not in added_imports:
+                if name in remaining_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
                     added_imports.add(node.lineno)
+                    remaining_names.discard(name)
                     break
         elif isinstance(node, ast.ImportFrom):
             for alias in node.names:
                 name = alias.asname or alias.name
-                if name in needed_names and node.lineno not in added_imports:
+                if name in remaining_names and node.lineno not in added_imports:
                     import_lines.append(source_lines[node.lineno - 1])
                     added_imports.add(node.lineno)
+                    remaining_names.discard(name)
                     break
 
     return "\n".join(import_lines)
