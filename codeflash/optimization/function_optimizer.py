@@ -496,6 +496,16 @@ class FunctionOptimizer:
         should_run_experiment = self.experiment_id is not None
         logger.info(f"!lsp|Function Trace ID: {self.function_trace_id}")
         ph("cli-optimize-function-start", {"function_trace_id": self.function_trace_id})
+
+        # Early check: if --no-gen-tests is set, verify there are existing tests for this function
+        if self.args.no_gen_tests:
+            func_qualname = self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root)
+            if not self.function_to_tests.get(func_qualname):
+                return Failure(
+                    f"No existing tests found for '{self.function_to_optimize.function_name}'. "
+                    f"Cannot optimize without tests when --no-gen-tests is set."
+                )
+
         self.cleanup_leftover_test_return_values()
         file_name_from_test_module_name.cache_clear()
         ctx_result = self.get_code_optimization_context()

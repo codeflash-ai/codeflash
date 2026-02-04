@@ -656,7 +656,7 @@ def discover_unit_tests(
 
     # Existing Python logic
     framework_strategies: dict[str, Callable] = {"pytest": discover_tests_pytest, "unittest": discover_tests_unittest}
-    strategy = framework_strategies.get(cfg.test_framework, None)
+    strategy = framework_strategies.get(cfg.test_framework)
     if not strategy:
         error_message = f"Unsupported test framework: {cfg.test_framework}"
         raise ValueError(error_message)

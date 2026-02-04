@@ -651,15 +651,18 @@ class ReferenceFinder:
 
         """
         references: list[Reference] = []
+        export_name = exported.export_name or exported.function_name
+
+        # Skip expensive parsing if export name not in source
+        if export_name not in source_code:
+            return references
+
         exports = analyzer.find_exports(source_code)
         lines = source_code.splitlines()
 
         for exp in exports:
             if not exp.is_reexport:
                 continue
-
-            # Check if this re-exports our function
-            export_name = exported.export_name or exported.function_name
             for name, alias in exp.exported_names:
                 if name == export_name:
                     # This is a re-export of our function
