@@ -52,10 +52,13 @@ def generate_tests(
         test_dir_abs = test_path.resolve().parent
         # Compute relative path from test directory to source file
         rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs))
+        old_module_path = str(module_path)
         module_path = Path(rel_import_path)
-        logger.debug(
-            f"[IMPORT FIX] test_path={test_path}, source={source_file_abs}, rel_import={rel_import_path}"
+        logger.warning(
+            f"[IMPORT FIX] Changed module_path from '{old_module_path}' to '{rel_import_path}'"
         )
+        logger.warning(f"[IMPORT FIX] test_path={test_path}")
+        logger.warning(f"[IMPORT FIX] source_file_abs={source_file_abs}")
 
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
