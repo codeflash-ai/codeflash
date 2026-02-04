@@ -47,4 +47,5 @@ jobs:
           uv run pytest tests/test_languages/test_vitest_e2e.py -v
           uv run pytest tests/test_languages/test_javascript_e2e.py -v
           uv run pytest tests/test_languages/test_javascript_support.py -v
+          uv run pytest tests/test_languages/test_javascript_tracer.py -v
           uv run pytest tests/code_utils/test_config_js.py -v

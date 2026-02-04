@@ -1585,8 +1585,9 @@ class JavaScriptSupport:
     ) -> str:
         """Add behavior instrumentation to capture inputs/outputs.
 
-        For JavaScript, this wraps functions to capture their arguments
-        and return values.
+        For JavaScript, instrumentation is handled at runtime by the Babel tracer plugin
+        (babel-tracer-plugin.js) via trace-runner.js. This method returns the source
+        unchanged since no source-level transformation is needed.
 
         Args:
             source: Source code to instrument.
@@ -1594,21 +1595,11 @@ class JavaScriptSupport:
             output_file: Optional output file for traces.
 
         Returns:
-            Instrumented source code.
+            Source code unchanged (Babel handles instrumentation at runtime).
 
         """
-        if not functions:
-            return source
-
-        from codeflash.languages.javascript.tracer import JavaScriptTracer
-
-        # Use first function's file path if output_file not specified
-        if output_file is None:
-            file_path = functions[0].file_path
-            output_file = file_path.parent / ".codeflash" / "traces.db"
-
-        tracer = JavaScriptTracer(output_file)
-        return tracer.instrument_source(source, functions[0].file_path, list(functions))
+        # JavaScript tracing is done at runtime via Babel plugin, not source transformation
+        return source
 
     def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
         """Add timing instrumentation to test code.

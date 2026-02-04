@@ -89,7 +89,12 @@ function add(a, b) {
 
 
 class TestJavaScriptTracer:
-    """Tests for JavaScript function tracing instrumentation."""
+    """Tests for JavaScript function tracing.
+
+    Note: JavaScript tracing now uses Babel for runtime instrumentation (via trace-runner.js).
+    Source-level transformation is no longer used. See test_javascript_tracer.py for
+    comprehensive tracer tests.
+    """
 
     def test_tracer_initialization(self):
         """Test tracer can be initialized."""
@@ -97,48 +102,6 @@ class TestJavaScriptTracer:
         tracer = JavaScriptTracer(output_db)
 
         assert tracer.output_db == output_db
-        assert tracer.tracer_var == "__codeflash_tracer__"
-
-    def test_tracer_generates_init_code(self):
-        """Test tracer generates initialization code."""
-        output_db = Path("/tmp/test_traces.db")
-        tracer = JavaScriptTracer(output_db)
-
-        init_code = tracer._generate_tracer_init()
-
-        assert tracer.tracer_var in init_code
-        assert "serialize" in init_code
-        assert "wrap" in init_code
-        assert output_db.as_posix() in init_code
-
-    def test_tracer_instruments_simple_function(self):
-        """Test tracer can instrument a simple function."""
-        source = """
-function multiply(x, y) {
-    return x * y;
-}
-"""
-
-        with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
-            f.write(source)
-            f.flush()
-            file_path = Path(f.name)
-
-        func_info = FunctionInfo(
-            function_name="multiply", file_path=file_path, starting_line=2, ending_line=4, language="javascript"
-        )
-
-        output_db = Path("/tmp/test_traces.db")
-        tracer = JavaScriptTracer(output_db)
-
-        instrumented = tracer.instrument_source(source, file_path, [func_info])
-
-        # Check that tracer initialization is added
-        assert tracer.tracer_var in instrumented
-        assert "wrap" in instrumented
-
-        # Clean up
-        file_path.unlink()
 
     def test_tracer_parse_results_empty(self):
         """Test parsing results when file doesn't exist."""
@@ -152,7 +115,11 @@ class TestJavaScriptSupportInstrumentation:
     """Integration tests for JavaScript support instrumentation methods."""
 
     def test_javascript_support_instrument_for_behavior(self):
-        """Test JavaScriptSupport.instrument_for_behavior method."""
+        """Test JavaScriptSupport.instrument_for_behavior method.
+
+        Note: JavaScript tracing now uses Babel for runtime instrumentation,
+        so instrument_for_behavior returns source unchanged.
+        """
         from codeflash.languages import get_language_support
 
         js_support = get_language_support(Language.JAVASCRIPT)
@@ -175,8 +142,8 @@ function greet(name) {
         output_file = file_path.parent / ".codeflash" / "traces.db"
         instrumented = js_support.instrument_for_behavior(source, [func_info], output_file=output_file)
 
-        assert "__codeflash_tracer__" in instrumented
-        assert "wrap" in instrumented
+        # JavaScript tracing uses Babel runtime instrumentation, so source is returned unchanged
+        assert instrumented == source
 
         # Clean up
         file_path.unlink()
