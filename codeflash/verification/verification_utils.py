@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import ast
+import logging
 from pathlib import Path
 from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
 from codeflash.languages import current_language_support, is_java, is_javascript
-from codeflash.lsp.lsp_logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 def get_test_file_path(
