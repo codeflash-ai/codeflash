@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
     from codeflash.languages.java.parser import JavaAnalyzer
 
+_TEST_NAME_SUFFIXES = ("Test.java", "Tests.java")
+
+_TEST_DIRS = frozenset(("test", "tests", "src/test"))
+
 logger = logging.getLogger(__name__)
 
 
@@ -356,14 +360,19 @@ def is_test_file(file_path: Path) -> bool:
     name = file_path.name
 
     # Check naming patterns
-    if name.endswith(("Test.java", "Tests.java")):
+    if name.endswith(_TEST_NAME_SUFFIXES):
         return True
     if name.startswith("Test") and name.endswith(".java"):
         return True
 
     # Check if it's in a test directory
     path_parts = file_path.parts
-    return any(part in ("test", "tests", "src/test") for part in path_parts)
+    # Use an explicit loop to avoid creating a generator and reduce overhead.
+    dirs = _TEST_DIRS
+    for part in path_parts:
+        if part in dirs:
+            return True
+    return False
 
 
 def get_test_methods_for_class(
