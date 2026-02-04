@@ -149,7 +149,9 @@ class TestConfig:
                 pom_path = current / "pom.xml"
                 if pom_path.exists():
                     parent_config = detect_java_project(current)
-                    if parent_config and (parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng):
+                    if parent_config and (
+                        parent_config.has_junit4 or parent_config.has_junit5 or parent_config.has_testng
+                    ):
                         return parent_config.test_framework
                 current = current.parent
 

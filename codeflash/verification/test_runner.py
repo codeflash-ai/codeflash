@@ -132,11 +132,25 @@ def run_behavioral_tests(
     # Check if there's a language support for this test framework that implements run_behavioral_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_behavioral_tests"):
+        # Java tests need longer timeout due to Maven startup overhead
+        # Use Java-specific timeout if no explicit timeout provided
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
+        effective_timeout = pytest_timeout
+        if test_framework == "junit5" and pytest_timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
+            if effective_timeout != pytest_timeout:
+                logger.debug(
+                    f"Increased Java test timeout from {pytest_timeout}s to {effective_timeout}s "
+                    "to account for Maven startup overhead"
+                )
+
         return language_support.run_behavioral_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
             enable_coverage=enable_coverage,
             candidate_index=candidate_index,
@@ -331,11 +345,25 @@ def run_benchmarking_tests(
     # Check if there's a language support for this test framework that implements run_benchmarking_tests
     language_support = get_language_support_by_framework(test_framework)
     if language_support is not None and hasattr(language_support, "run_benchmarking_tests"):
+        # Java tests need longer timeout due to Maven startup overhead
+        # Use Java-specific timeout if no explicit timeout provided
+        from codeflash.code_utils.config_consts import JAVA_TESTCASE_TIMEOUT
+
+        effective_timeout = pytest_timeout
+        if test_framework == "junit5" and pytest_timeout is not None:
+            # For Java, use a minimum timeout to account for Maven overhead
+            effective_timeout = max(pytest_timeout, JAVA_TESTCASE_TIMEOUT)
+            if effective_timeout != pytest_timeout:
+                logger.debug(
+                    f"Increased Java test timeout from {pytest_timeout}s to {effective_timeout}s "
+                    "to account for Maven startup overhead"
+                )
+
         return language_support.run_benchmarking_tests(
             test_paths=test_paths,
             test_env=test_env,
             cwd=cwd,
-            timeout=pytest_timeout,
+            timeout=effective_timeout,
             project_root=js_project_root,
             min_loops=pytest_min_loops,
             max_loops=pytest_max_loops,

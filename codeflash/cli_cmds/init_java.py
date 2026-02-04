@@ -165,9 +165,7 @@ def init_java_project() -> None:
 
     lang_panel = Panel(
         Text(
-            "Java project detected!\n\nI'll help you set up Codeflash for your project.",
-            style="cyan",
-            justify="center",
+            "Java project detected!\n\nI'll help you set up Codeflash for your project.", style="cyan", justify="center"
         ),
         title="Java Setup",
         border_style="bright_red",
@@ -205,7 +203,9 @@ def init_java_project() -> None:
     completion_message = "Codeflash is now set up for your Java project!\n\nYou can now run any of these commands:"
 
     if did_add_new_key:
-        completion_message += "\n\nDon't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+        completion_message += (
+            "\n\nDon't forget to restart your shell to load the CODEFLASH_API_KEY environment variable!"
+        )
         if os.name == "nt":
             reload_cmd = f". {get_shell_rc_path()}" if is_powershell() else f"call {get_shell_rc_path()}"
         else:
@@ -234,9 +234,7 @@ def should_modify_java_config() -> tuple[bool, dict[str, Any] | None]:
     codeflash_config_path = project_root / "codeflash.toml"
     if codeflash_config_path.exists():
         return Confirm.ask(
-            "A Codeflash config already exists. Do you want to re-configure it?",
-            default=False,
-            show_default=True,
+            "A Codeflash config already exists. Do you want to re-configure it?", default=False, show_default=True
         ), None
 
     return True, None
@@ -285,14 +283,10 @@ def collect_java_setup_info() -> JavaSetupInfo:
 
     if Confirm.ask("Would you like to change any of these settings?", default=False):
         # Source root override
-        module_root_override = _prompt_directory_override(
-            "source", detected_source_root, curdir
-        )
+        module_root_override = _prompt_directory_override("source", detected_source_root, curdir)
 
         # Test root override
-        test_root_override = _prompt_directory_override(
-            "test", detected_test_root, curdir
-        )
+        test_root_override = _prompt_directory_override("test", detected_test_root, curdir)
 
         # Formatter override
         formatter_questions = [
@@ -300,7 +294,7 @@ def collect_java_setup_info() -> JavaSetupInfo:
                 "formatter",
                 message="Which code formatter do you use?",
                 choices=[
-                    (f"keep detected (google-java-format)", "keep"),
+                    ("keep detected (google-java-format)", "keep"),
                     ("google-java-format", "google-java-format"),
                     ("spotless", "spotless"),
                     ("other", "other"),
@@ -345,7 +339,7 @@ def _prompt_directory_override(dir_type: str, detected: str, curdir: Path) -> st
     subdirs = [d.name for d in curdir.iterdir() if d.is_dir() and not d.name.startswith(".")]
     subdirs = [d for d in subdirs if d not in ("target", "build", ".git", ".idea", detected)]
 
-    options = [keep_detected_option] + subdirs[:5] + [custom_dir_option]
+    options = [keep_detected_option, *subdirs[:5], custom_dir_option]
 
     questions = [
         inquirer.List(
@@ -364,10 +358,9 @@ def _prompt_directory_override(dir_type: str, detected: str, curdir: Path) -> st
     answer = answers[f"{dir_type}_root"]
     if answer == keep_detected_option:
         return None
-    elif answer == custom_dir_option:
+    if answer == custom_dir_option:
         return _prompt_custom_directory(dir_type)
-    else:
-        return answer
+    return answer
 
 
 def _prompt_custom_directory(dir_type: str) -> str:
@@ -441,7 +434,7 @@ def get_java_formatter_cmd(formatter: str, build_tool: JavaBuildTool) -> list[st
     if formatter == "spotless":
         if build_tool == JavaBuildTool.MAVEN:
             return ["mvn spotless:apply -DspotlessFiles=$file"]
-        elif build_tool == JavaBuildTool.GRADLE:
+        if build_tool == JavaBuildTool.GRADLE:
             return ["./gradlew spotlessApply"]
         return ["spotless $file"]
     if formatter == "other":

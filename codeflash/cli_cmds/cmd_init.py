@@ -27,6 +27,9 @@ from codeflash.cli_cmds.cli_common import apologize_and_exit
 from codeflash.cli_cmds.console import console, logger
 from codeflash.cli_cmds.extension import install_vscode_extension
 
+# Import Java init module
+from codeflash.cli_cmds.init_java import init_java_project
+
 # Import JS/TS init module
 from codeflash.cli_cmds.init_javascript import (
     ProjectLanguage,
@@ -35,9 +38,6 @@ from codeflash.cli_cmds.init_javascript import (
     get_js_dependency_installation_commands,
     init_js_project,
 )
-
-# Import Java init module
-from codeflash.cli_cmds.init_java import init_java_project
 from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.config_parser import parse_config_file
@@ -1674,9 +1674,7 @@ def _customize_java_workflow_content(optimize_yml_content: str, git_root: Path, 
 
     # Install dependencies
     install_deps_cmd = get_java_dependency_installation_commands(build_tool)
-    optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
-
-    return optimize_yml_content
+    return optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps_cmd)
 
 
 def get_formatter_cmds(formatter: str) -> list[str]:

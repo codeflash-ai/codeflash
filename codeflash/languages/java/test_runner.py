@@ -79,10 +79,11 @@ def _validate_test_filter(test_filter: str) -> str:
         name_to_validate = pattern.replace("*", "A")  # Replace * with a valid char
 
         if not _validate_java_class_name(name_to_validate):
-            raise ValueError(
+            msg = (
                 f"Invalid test class name or pattern: '{pattern}'. "
                 f"Test names must follow Java identifier rules (letters, digits, underscores, dots, dollar signs)."
             )
+            raise ValueError(msg)
 
     return test_filter
 
@@ -387,10 +388,7 @@ def run_behavioral_tests(
 
 
 def _compile_tests(
-    project_root: Path,
-    env: dict[str, str],
-    test_module: str | None = None,
-    timeout: int = 120,
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 120
 ) -> subprocess.CompletedProcess:
     """Compile test code using Maven (without running tests).
 
@@ -407,12 +405,7 @@ def _compile_tests(
     mvn = find_maven_executable()
     if not mvn:
         logger.error("Maven not found")
-        return subprocess.CompletedProcess(
-            args=["mvn"],
-            returncode=-1,
-            stdout="",
-            stderr="Maven not found",
-        )
+        return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
     cmd = [mvn, "test-compile", "-e"]  # Show errors but not verbose output
 
@@ -423,37 +416,20 @@ def _compile_tests(
 
     try:
         return subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
         )
     except subprocess.TimeoutExpired:
-        logger.error("Maven compilation timed out after %d seconds", timeout)
+        logger.exception("Maven compilation timed out after %d seconds", timeout)
         return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-2,
-            stdout="",
-            stderr=f"Compilation timed out after {timeout} seconds",
+            args=cmd, returncode=-2, stdout="", stderr=f"Compilation timed out after {timeout} seconds"
         )
     except Exception as e:
         logger.exception("Maven compilation failed: %s", e)
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-1,
-            stdout="",
-            stderr=str(e),
-        )
+        return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
 
 
 def _get_test_classpath(
-    project_root: Path,
-    env: dict[str, str],
-    test_module: str | None = None,
-    timeout: int = 60,
+    project_root: Path, env: dict[str, str], test_module: str | None = None, timeout: int = 60
 ) -> str | None:
     """Get the test classpath from Maven.
 
@@ -474,13 +450,7 @@ def _get_test_classpath(
     # Create temp file for classpath output
     cp_file = project_root / ".codeflash_classpath.txt"
 
-    cmd = [
-        mvn,
-        "dependency:build-classpath",
-        "-DincludeScope=test",
-        f"-Dmdep.outputFile={cp_file}",
-        "-q",
-    ]
+    cmd = [mvn, "dependency:build-classpath", "-DincludeScope=test", f"-Dmdep.outputFile={cp_file}", "-q"]
 
     if test_module:
         cmd.extend(["-pl", test_module])
@@ -489,13 +459,7 @@ def _get_test_classpath(
 
     try:
         result = subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
         )
 
         if result.returncode != 0:
@@ -527,7 +491,7 @@ def _get_test_classpath(
         return os.pathsep.join(cp_parts)
 
     except subprocess.TimeoutExpired:
-        logger.error("Getting classpath timed out")
+        logger.exception("Getting classpath timed out")
         return None
     except Exception as e:
         logger.exception("Failed to get classpath: %s", e)
@@ -602,30 +566,16 @@ def _run_tests_direct(
 
     try:
         return subprocess.run(
-            cmd,
-            check=False,
-            cwd=working_dir,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, check=False, cwd=working_dir, env=env, capture_output=True, text=True, timeout=timeout
         )
     except subprocess.TimeoutExpired:
-        logger.error("Direct test execution timed out after %d seconds", timeout)
+        logger.exception("Direct test execution timed out after %d seconds", timeout)
         return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-2,
-            stdout="",
-            stderr=f"Test execution timed out after {timeout} seconds",
+            args=cmd, returncode=-2, stdout="", stderr=f"Test execution timed out after {timeout} seconds"
         )
     except Exception as e:
         logger.exception("Direct test execution failed: %s", e)
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-1,
-            stdout="",
-            stderr=str(e),
-        )
+        return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
 
 
 def _get_test_class_names(test_paths: Any, mode: str = "performance") -> list[str]:
@@ -680,10 +630,7 @@ def _get_empty_result(maven_root: Path, test_module: str | None) -> tuple[Path, 
     result_xml_path = _get_combined_junit_xml(surefire_dir, -1)
 
     empty_result = subprocess.CompletedProcess(
-        args=["java", "-cp", "...", "ConsoleLauncher"],
-        returncode=-1,
-        stdout="",
-        stderr="No test classes found",
+        args=["java", "-cp", "...", "ConsoleLauncher"], returncode=-1, stdout="", stderr="No test classes found"
     )
     return result_xml_path, empty_result
 
@@ -742,12 +689,7 @@ def _run_benchmarking_tests_maven(
         run_env["CODEFLASH_INNER_ITERATIONS"] = str(inner_iterations)
 
         result = _run_maven_tests(
-            maven_root,
-            test_paths,
-            run_env,
-            timeout=per_loop_timeout,
-            mode="performance",
-            test_module=test_module,
+            maven_root, test_paths, run_env, timeout=per_loop_timeout, mode="performance", test_module=test_module
         )
 
         last_result = result
@@ -760,17 +702,14 @@ def _run_benchmarking_tests_maven(
 
         elapsed = time.time() - total_start_time
         if loop_idx >= min_loops and elapsed >= target_duration_seconds:
-            logger.debug(
-                "Stopping Maven benchmark after %d loops (%.2fs elapsed)",
-                loop_idx,
-                elapsed,
-            )
+            logger.debug("Stopping Maven benchmark after %d loops (%.2fs elapsed)", loop_idx, elapsed)
             break
 
         # Check if we have timing markers even if some tests failed
         # We should continue looping if we're getting valid timing data
         if result.returncode != 0:
             import re
+
             timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
             has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
             if not has_timing_markers:
@@ -885,8 +824,15 @@ def run_benchmarking_tests(
         # Fall back to Maven-based execution
         logger.warning("Falling back to Maven-based test execution")
         return _run_benchmarking_tests_maven(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     logger.debug("Compilation completed in %.2fs", compile_time)
@@ -898,8 +844,15 @@ def run_benchmarking_tests(
     if not classpath:
         logger.warning("Failed to get classpath, falling back to Maven-based execution")
         return _run_benchmarking_tests_maven(
-            test_paths, test_env, cwd, timeout, project_root,
-            min_loops, max_loops, target_duration_seconds, inner_iterations
+            test_paths,
+            test_env,
+            cwd,
+            timeout,
+            project_root,
+            min_loops,
+            max_loops,
+            target_duration_seconds,
+            inner_iterations,
         )
 
     # Step 3: Run tests multiple times directly via JVM
@@ -937,12 +890,7 @@ def run_benchmarking_tests(
         # Run tests directly with XML report generation
         loop_start = time.time()
         result = _run_tests_direct(
-            classpath,
-            test_classes,
-            run_env,
-            working_dir,
-            timeout=per_loop_timeout,
-            reports_dir=reports_dir,
+            classpath, test_classes, run_env, working_dir, timeout=per_loop_timeout, reports_dir=reports_dir
         )
         loop_time = time.time() - loop_start
 
@@ -959,12 +907,7 @@ def run_benchmarking_tests(
 
         # Check if JUnit Console Launcher is not available (JUnit 4 projects)
         # Fall back to Maven-based execution in this case
-        if (
-            loop_idx == 1
-            and result.returncode != 0
-            and result.stderr
-            and "ConsoleLauncher" in result.stderr
-        ):
+        if loop_idx == 1 and result.returncode != 0 and result.stderr and "ConsoleLauncher" in result.stderr:
             logger.debug("JUnit Console Launcher not available, falling back to Maven-based execution")
             return _run_benchmarking_tests_maven(
                 test_paths,
@@ -993,6 +936,7 @@ def run_benchmarking_tests(
         # Check if tests failed - continue looping if we have timing markers
         if result.returncode != 0:
             import re
+
             timing_pattern = re.compile(r"!######[^:]*:[^:]*:[^:]*:[^:]*:[^:]+:[^:]+######!")
             has_timing_markers = bool(timing_pattern.search(result.stdout or ""))
             if not has_timing_markers:
@@ -1319,12 +1263,7 @@ def _run_maven_tests_impl(
     mvn = find_maven_executable()
     if not mvn:
         logger.error("Maven not found")
-        return subprocess.CompletedProcess(
-            args=["mvn"],
-            returncode=-1,
-            stdout="",
-            stderr="Maven not found",
-        )
+        return subprocess.CompletedProcess(args=["mvn"], returncode=-1, stdout="", stderr="Maven not found")
 
     # Build test filter
     test_filter = _build_test_filter(test_paths, mode=mode)
@@ -1354,33 +1293,18 @@ def _run_maven_tests_impl(
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
     try:
-        result = subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+        return subprocess.run(
+            cmd, check=False, cwd=project_root, env=env, capture_output=True, text=True, timeout=timeout
         )
-        return result
 
     except subprocess.TimeoutExpired:
-        logger.error("Maven test execution timed out after %d seconds", timeout)
+        logger.exception("Maven test execution timed out after %d seconds", timeout)
         return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-2,
-            stdout="",
-            stderr=f"Test execution timed out after {timeout} seconds",
+            args=cmd, returncode=-2, stdout="", stderr=f"Test execution timed out after {timeout} seconds"
         )
     except Exception as e:
         logger.exception("Maven test execution failed: %s", e)
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-1,
-            stdout="",
-            stderr=str(e),
-        )
+        return subprocess.CompletedProcess(args=cmd, returncode=-1, stdout="", stderr=str(e))
 
 
 def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
@@ -1440,7 +1364,7 @@ def _path_to_class_name(path: Path) -> str | None:
         Fully qualified class name, or None if unable to determine.
 
     """
-    if not path.suffix == ".java":
+    if path.suffix != ".java":
         return None
 
     # Try to extract package from path
@@ -1463,7 +1387,7 @@ def _path_to_class_name(path: Path) -> str | None:
                 break
 
     if java_idx is not None:
-        class_parts = parts[java_idx + 1:]
+        class_parts = parts[java_idx + 1 :]
         # Remove .java extension from last part
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
@@ -1472,12 +1396,7 @@ def _path_to_class_name(path: Path) -> str | None:
     return path.stem
 
 
-def run_tests(
-    test_files: list[Path],
-    cwd: Path,
-    env: dict[str, str],
-    timeout: int,
-) -> tuple[list[TestResult], Path]:
+def run_tests(test_files: list[Path], cwd: Path, env: dict[str, str], timeout: int) -> tuple[list[TestResult], Path]:
     """Run tests and return results.
 
     Args:
@@ -1610,10 +1529,7 @@ def _parse_surefire_xml(xml_file: Path) -> list[TestResult]:
     return results
 
 
-def get_test_run_command(
-    project_root: Path,
-    test_classes: list[str] | None = None,
-) -> list[str]:
+def get_test_run_command(project_root: Path, test_classes: list[str] | None = None) -> list[str]:
     """Get the command to run Java tests.
 
     Args:
@@ -1633,10 +1549,8 @@ def get_test_run_command(
         validated_classes = []
         for test_class in test_classes:
             if not _validate_java_class_name(test_class):
-                raise ValueError(
-                    f"Invalid test class name: '{test_class}'. "
-                    f"Test names must follow Java identifier rules."
-                )
+                msg = f"Invalid test class name: '{test_class}'. Test names must follow Java identifier rules."
+                raise ValueError(msg)
             validated_classes.append(test_class)
 
         cmd.append(f"-Dtest={','.join(validated_classes)}")

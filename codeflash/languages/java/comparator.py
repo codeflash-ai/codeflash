@@ -47,7 +47,16 @@ def _find_comparator_jar(project_root: Path | None = None) -> Path | None:
                 return jar_path
 
         # Check local Maven repository
-        m2_jar = Path.home() / ".m2" / "repository" / "com" / "codeflash" / "codeflash-runtime" / "1.0.0" / "codeflash-runtime-1.0.0.jar"
+        m2_jar = (
+            Path.home()
+            / ".m2"
+            / "repository"
+            / "com"
+            / "codeflash"
+            / "codeflash-runtime"
+            / "1.0.0"
+            / "codeflash-runtime-1.0.0.jar"
+        )
         if m2_jar.exists():
             return m2_jar
 
@@ -113,8 +122,7 @@ def compare_test_results(
     jar_path = comparator_jar or _find_comparator_jar(project_root)
     if not jar_path or not jar_path.exists():
         logger.error(
-            "codeflash-runtime JAR not found. "
-            "Please ensure the codeflash-runtime is installed in your project."
+            "codeflash-runtime JAR not found. Please ensure the codeflash-runtime is installed in your project."
         )
         return False, []
 
@@ -155,10 +163,10 @@ def compare_test_results(
 
             comparison = json.loads(result.stdout)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Java comparator output: {e}")
-            logger.error(f"stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+            logger.exception(f"Failed to parse Java comparator output: {e}")
+            logger.exception(f"stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
             if result.stderr:
-                logger.error(f"stderr: {result.stderr[:500]}")
+                logger.exception(f"stderr: {result.stderr[:500]}")
             return False, []
 
         # Check for errors in the JSON response
@@ -178,9 +186,7 @@ def compare_test_results(
         for diff in comparison.get("diffs", []):
             scope_str = diff.get("scope", "return_value")
             scope = TestDiffScope.RETURN_VALUE
-            if scope_str == "exception":
-                scope = TestDiffScope.DID_PASS
-            elif scope_str == "missing":
+            if scope_str in {"exception", "missing"}:
                 scope = TestDiffScope.DID_PASS
 
             # Build test identifier
@@ -220,20 +226,17 @@ def compare_test_results(
         return equivalent, test_diffs
 
     except subprocess.TimeoutExpired:
-        logger.error("Java comparator timed out")
+        logger.exception("Java comparator timed out")
         return False, []
     except FileNotFoundError:
-        logger.error("Java not found. Please install Java to compare test results.")
+        logger.exception("Java not found. Please install Java to compare test results.")
         return False, []
     except Exception as e:
-        logger.error(f"Error running Java comparator: {e}")
+        logger.exception(f"Error running Java comparator: {e}")
         return False, []
 
 
-def compare_invocations_directly(
-    original_results: dict,
-    candidate_results: dict,
-) -> tuple[bool, list]:
+def compare_invocations_directly(original_results: dict, candidate_results: dict) -> tuple[bool, list]:
     """Compare test invocations directly from Python dictionaries.
 
     This is a fallback when the Java comparator is not available.

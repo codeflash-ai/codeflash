@@ -13,7 +13,10 @@ import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +81,7 @@ def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     root = ET.fromstring(content)
 
     # Create ElementTree from root
-    tree = ET.ElementTree(root)
-
-    return tree
+    return ET.ElementTree(root)
 
 
 class BuildTool(Enum):
@@ -462,13 +463,7 @@ def run_maven_tests(
 
     try:
         result = subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            env=run_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
         )
 
         # Parse test results from Surefire reports
@@ -488,7 +483,7 @@ def run_maven_tests(
         )
 
     except subprocess.TimeoutExpired:
-        logger.error("Maven test execution timed out after %d seconds", timeout)
+        logger.exception("Maven test execution timed out after %d seconds", timeout)
         return MavenTestResult(
             success=False,
             tests_run=0,
@@ -568,10 +563,7 @@ def _parse_surefire_reports(surefire_dir: Path) -> tuple[int, int, int, int]:
 
 
 def compile_maven_project(
-    project_root: Path,
-    include_tests: bool = True,
-    env: dict[str, str] | None = None,
-    timeout: int = 300,
+    project_root: Path, include_tests: bool = True, env: dict[str, str] | None = None, timeout: int = 300
 ) -> tuple[bool, str, str]:
     """Compile a Maven project.
 
@@ -605,13 +597,7 @@ def compile_maven_project(
 
     try:
         result = subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            env=run_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            cmd, check=False, cwd=project_root, env=run_env, capture_output=True, text=True, timeout=timeout
         )
 
         return result.returncode == 0, result.stdout, result.stderr
@@ -1002,14 +988,7 @@ def install_codeflash_runtime(project_root: Path, runtime_jar_path: Path) -> boo
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            check=False,
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        result = subprocess.run(cmd, check=False, cwd=project_root, capture_output=True, text=True, timeout=60)
 
         if result.returncode == 0:
             logger.info("Successfully installed codeflash-runtime to local Maven repository")
@@ -1085,7 +1064,7 @@ def add_codeflash_dependency_to_pom(pom_path: Path) -> bool:
         return True
 
     except ET.ParseError as e:
-        logger.error("Failed to parse pom.xml: %s", e)
+        logger.exception("Failed to parse pom.xml: %s", e)
         return False
     except Exception as e:
         logger.exception("Failed to add dependency to pom.xml: %s", e)
@@ -1236,7 +1215,7 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
 
         if build_start != -1 and build_end != -1:
             # Found main build section, find plugins within it
-            build_section = content[build_start:build_end + len("</build>")]
+            build_section = content[build_start : build_end + len("</build>")]
             plugins_start_in_build = build_section.find("<plugins>")
             plugins_end_in_build = build_section.rfind("</plugins>")
 

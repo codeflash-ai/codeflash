@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+from codeflash.context.code_context_extractor import get_code_optimization_context_for_language
+from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.javascript.support import JavaScriptSupport, TypeScriptSupport
 
@@ -1693,6 +1695,240 @@ const FIELD_KEYS = {
     AGE: 'user_age'
 };"""
         assert context.read_only_context == expected_read_only
+
+    def test_with_tricky_helpers(self, ts_support, temp_project):
+        """Test function returning object with computed property names."""
+        code = """import { WebClient, ChatPostMessageArguments } from "@slack/web-api"
+
+// Dependencies interface for easier testing
+export interface SendSlackMessageDependencies {
+  WebClient: typeof WebClient
+  getSlackToken: () => string | undefined
+  getSlackChannelId: () => string | undefined
+  console: typeof console
+}
+
+// Default dependencies
+let dependencies: SendSlackMessageDependencies = {
+  WebClient,
+  getSlackToken: () => process.env.SLACK_TOKEN,
+  getSlackChannelId: () => process.env.SLACK_CHANNEL_ID,
+  console,
+}
+
+// For testing - allow dependency injection
+export function setSendSlackMessageDependencies(deps: Partial<SendSlackMessageDependencies>) {
+  dependencies = { ...dependencies, ...deps }
+}
+
+export function resetSendSlackMessageDependencies() {
+  dependencies = {
+    WebClient,
+    getSlackToken: () => process.env.SLACK_TOKEN,
+    getSlackChannelId: () => process.env.SLACK_CHANNEL_ID,
+    console,
+  }
+}
+
+// Initialize web client
+let web: WebClient | null = null
+
+export function initializeWebClient() {
+  const SLACK_TOKEN = dependencies.getSlackToken()
+  const SLACK_CHANNEL_ID = dependencies.getSlackChannelId()
+
+  if (!SLACK_TOKEN) {
+    throw new Error("Missing SLACK_TOKEN")
+  }
+
+  if (!SLACK_CHANNEL_ID) {
+    throw new Error("Missing SLACK_CHANNEL_ID")
+  }
+
+  if (!web) {
+    web = new dependencies.WebClient(SLACK_TOKEN, {})
+  }
+
+  return web
+}
+
+// For testing - allow resetting the web client
+export function resetWebClient() {
+  web = null
+}
+
+/**
+ * Send a message to Slack
+ *
+ * @param {string|object} message - Text message or Block Kit message object
+ * @param {string|null} channel - Channel ID, defaults to SLACK_CHANNEL_ID
+ * @param {boolean} returnData - Whether to return the full Slack API response
+ * @returns {Promise<boolean|object>} - True or API response
+ */
+export const sendSlackMessage = async (
+  message: any,
+  channel: string | null = null,
+  returnData: boolean = false,
+): Promise<boolean | object> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const webClient = initializeWebClient()
+      const SLACK_CHANNEL_ID = dependencies.getSlackChannelId()
+      const channelId = channel || SLACK_CHANNEL_ID
+
+      // Configure the message payload depending on the input type
+      let payload: ChatPostMessageArguments
+
+      if (typeof message === "string") {
+        payload = {
+          channel: channelId,
+          text: message,
+        }
+      } else if (message && typeof message === "object") {
+        if (message.blocks) {
+          payload = {
+            channel: channelId,
+            text: message.text || "Notification from CodeFlash",
+            blocks: message.blocks,
+          }
+        } else {
+          dependencies.console.warn("Object passed to sendSlackMessage without blocks property")
+          payload = {
+            channel: channelId,
+            text: JSON.stringify(message),
+          }
+        }
+      } else {
+        dependencies.console.error("Invalid message type", typeof message)
+        payload = {
+          channel: channelId,
+          text: "Invalid message",
+        }
+      }
+
+      // console.log("Sending payload to Slack:", JSON.stringify(payload, null, 2));
+
+      const resp = await webClient.chat.postMessage(payload)
+      return resolve(returnData ? resp : true)
+    } catch (error) {
+      dependencies.console.error("Error sending Slack message:", error)
+      return resolve(returnData ? { error } : true)
+    }
+  })
+}
+"""
+        file_path = temp_project / "slack_util.ts"
+        file_path.write_text(code, encoding="utf-8")
+        target_func = "sendSlackMessage"
+
+        functions = ts_support.discover_functions(file_path)
+        func_info = next(f for f in functions if f.function_name == target_func)
+        fto = FunctionToOptimize(
+            function_name=target_func,
+            file_path=file_path,
+            parents=func_info.parents,
+            starting_line=func_info.starting_line,
+            ending_line=func_info.ending_line,
+            starting_col=func_info.starting_col,
+            ending_col=func_info.ending_col,
+            is_async=func_info.is_async,
+            language="typescript",
+        )
+
+        ctx = get_code_optimization_context_for_language(
+            fto, temp_project
+        )
+
+        # The read_writable_code should contain the target function AND helper functions
+        expected_read_writable = """```typescript:slack_util.ts
+import { WebClient, ChatPostMessageArguments } from "@slack/web-api"
+
+export const sendSlackMessage = async (
+  message: any,
+  channel: string | null = null,
+  returnData: boolean = false,
+): Promise<boolean | object> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const webClient = initializeWebClient()
+      const SLACK_CHANNEL_ID = dependencies.getSlackChannelId()
+      const channelId = channel || SLACK_CHANNEL_ID
+
+      // Configure the message payload depending on the input type
+      let payload: ChatPostMessageArguments
+
+      if (typeof message === "string") {
+        payload = {
+          channel: channelId,
+          text: message,
+        }
+      } else if (message && typeof message === "object") {
+        if (message.blocks) {
+          payload = {
+            channel: channelId,
+            text: message.text || "Notification from CodeFlash",
+            blocks: message.blocks,
+          }
+        } else {
+          dependencies.console.warn("Object passed to sendSlackMessage without blocks property")
+          payload = {
+            channel: channelId,
+            text: JSON.stringify(message),
+          }
+        }
+      } else {
+        dependencies.console.error("Invalid message type", typeof message)
+        payload = {
+          channel: channelId,
+          text: "Invalid message",
+        }
+      }
+
+      // console.log("Sending payload to Slack:", JSON.stringify(payload, null, 2));
+
+      const resp = await webClient.chat.postMessage(payload)
+      return resolve(returnData ? resp : true)
+    } catch (error) {
+      dependencies.console.error("Error sending Slack message:", error)
+      return resolve(returnData ? { error } : true)
+    }
+  })
+}
+
+
+export function initializeWebClient() {
+  const SLACK_TOKEN = dependencies.getSlackToken()
+  const SLACK_CHANNEL_ID = dependencies.getSlackChannelId()
+
+  if (!SLACK_TOKEN) {
+    throw new Error("Missing SLACK_TOKEN")
+  }
+
+  if (!SLACK_CHANNEL_ID) {
+    throw new Error("Missing SLACK_CHANNEL_ID")
+  }
+
+  if (!web) {
+    web = new dependencies.WebClient(SLACK_TOKEN, {})
+  }
+
+  return web
+}
+```"""
+
+        # The read_only_context should contain global variables (dependencies object, web client)
+        # but NOT have invalid floating object properties
+        expected_read_only = """let dependencies: SendSlackMessageDependencies = {
+  WebClient,
+  getSlackToken: () => process.env.SLACK_TOKEN,
+  getSlackChannelId: () => process.env.SLACK_CHANNEL_ID,
+  console,
+}
+let web: WebClient | null = null"""
+
+        assert ctx.read_writable_code.markdown == expected_read_writable
+        assert ctx.read_only_context_code == expected_read_only
+
 
 
 class TestContextProperties:

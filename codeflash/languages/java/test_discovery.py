@@ -7,27 +7,26 @@ specific functions, mapping source functions to their tests.
 from __future__ import annotations
 
 import logging
-import re
 from collections import defaultdict
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import TestInfo
 from codeflash.languages.java.config import detect_java_project
 from codeflash.languages.java.discovery import discover_test_methods
-from codeflash.languages.java.parser import JavaAnalyzer, get_java_analyzer
+from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
 def discover_tests(
-    test_root: Path,
-    source_functions: Sequence[FunctionToOptimize],
-    analyzer: JavaAnalyzer | None = None,
+    test_root: Path, source_functions: Sequence[FunctionToOptimize], analyzer: JavaAnalyzer | None = None
 ) -> dict[str, list[TestInfo]]:
     """Map source functions to their tests via static analysis.
 
@@ -56,9 +55,7 @@ def discover_tests(
 
     # Find all test files (various naming conventions)
     test_files = (
-        list(test_root.rglob("*Test.java"))
-        + list(test_root.rglob("*Tests.java"))
-        + list(test_root.rglob("Test*.java"))
+        list(test_root.rglob("*Test.java")) + list(test_root.rglob("*Tests.java")) + list(test_root.rglob("Test*.java"))
     )
 
     # Result map
@@ -71,16 +68,12 @@ def discover_tests(
 
             for test_method in test_methods:
                 # Find which source functions this test might exercise
-                matched_functions = _match_test_to_functions(
-                    test_method, source, function_map, analyzer
-                )
+                matched_functions = _match_test_to_functions(test_method, source, function_map, analyzer)
 
                 for func_name in matched_functions:
                     result[func_name].append(
                         TestInfo(
-                            test_name=test_method.function_name,
-                            test_file=test_file,
-                            test_class=test_method.class_name,
+                            test_name=test_method.function_name, test_file=test_file, test_class=test_method.class_name
                         )
                     )
 
@@ -114,7 +107,7 @@ def _match_test_to_functions(
     # e.g., testAdd -> add, testCalculatorAdd -> Calculator.add
     test_name_lower = test_method.function_name.lower()
 
-    for func_name, func_info in function_map.items():
+    for func_info in function_map.values():
         if func_info.function_name.lower() in test_name_lower:
             matched.append(func_info.qualified_name)
 
@@ -125,11 +118,7 @@ def _match_test_to_functions(
 
     # Find method calls within the test method's line range
     method_calls = _find_method_calls_in_range(
-        tree.root_node,
-        source_bytes,
-        test_method.starting_line,
-        test_method.ending_line,
-        analyzer,
+        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer
     )
 
     for call_name in method_calls:
@@ -151,7 +140,7 @@ def _match_test_to_functions(
             source_class_name = source_class_name[4:]
 
         # Look for functions in the matching class
-        for func_name, func_info in function_map.items():
+        for func_info in function_map.values():
             if func_info.class_name == source_class_name:
                 if func_info.qualified_name not in matched:
                     matched.append(func_info.qualified_name)
@@ -161,7 +150,7 @@ def _match_test_to_functions(
     # This handles cases like TestQueryBlob importing Buffer and calling Buffer methods
     imported_classes = _extract_imports(tree.root_node, source_bytes, analyzer)
 
-    for func_name, func_info in function_map.items():
+    for func_info in function_map.values():
         if func_info.qualified_name in matched:
             continue
 
@@ -172,11 +161,7 @@ def _match_test_to_functions(
     return matched
 
 
-def _extract_imports(
-    node,
-    source_bytes: bytes,
-    analyzer: JavaAnalyzer,
-) -> set[str]:
+def _extract_imports(node, source_bytes: bytes, analyzer: JavaAnalyzer) -> set[str]:
     """Extract imported class names from a Java file.
 
     Args:
@@ -224,7 +209,7 @@ def _extract_imports(
 
             # Regular import: extract class name from scoped_identifier
             for child in n.children:
-                if child.type == "scoped_identifier" or child.type == "identifier":
+                if child.type in {"scoped_identifier", "identifier"}:
                     import_path = analyzer.get_node_text(child, source_bytes)
                     # Extract just the class name (last part)
                     # e.g., "com.example.Buffer" -> "Buffer"
@@ -244,11 +229,7 @@ def _extract_imports(
 
 
 def _find_method_calls_in_range(
-    node,
-    source_bytes: bytes,
-    start_line: int,
-    end_line: int,
-    analyzer: JavaAnalyzer,
+    node, source_bytes: bytes, start_line: int, end_line: int, analyzer: JavaAnalyzer
 ) -> list[str]:
     """Find method calls within a line range.
 
@@ -278,17 +259,13 @@ def _find_method_calls_in_range(
             calls.append(analyzer.get_node_text(name_node, source_bytes))
 
     for child in node.children:
-        calls.extend(
-            _find_method_calls_in_range(child, source_bytes, start_line, end_line, analyzer)
-        )
+        calls.extend(_find_method_calls_in_range(child, source_bytes, start_line, end_line, analyzer))
 
     return calls
 
 
 def find_tests_for_function(
-    function: FunctionToOptimize,
-    test_root: Path,
-    analyzer: JavaAnalyzer | None = None,
+    function: FunctionToOptimize, test_root: Path, analyzer: JavaAnalyzer | None = None
 ) -> list[TestInfo]:
     """Find tests that exercise a specific function.
 
@@ -305,10 +282,7 @@ def find_tests_for_function(
     return result.get(function.qualified_name, [])
 
 
-def get_test_class_for_source_class(
-    source_class_name: str,
-    test_root: Path,
-) -> Path | None:
+def get_test_class_for_source_class(source_class_name: str, test_root: Path) -> Path | None:
     """Find the test class file for a source class.
 
     Args:
@@ -320,11 +294,7 @@ def get_test_class_for_source_class(
 
     """
     # Try common naming patterns
-    patterns = [
-        f"{source_class_name}Test.java",
-        f"Test{source_class_name}.java",
-        f"{source_class_name}Tests.java",
-    ]
+    patterns = [f"{source_class_name}Test.java", f"Test{source_class_name}.java", f"{source_class_name}Tests.java"]
 
     for pattern in patterns:
         matches = list(test_root.rglob(pattern))
@@ -334,10 +304,7 @@ def get_test_class_for_source_class(
     return None
 
 
-def discover_all_tests(
-    test_root: Path,
-    analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionToOptimize]:
+def discover_all_tests(test_root: Path, analyzer: JavaAnalyzer | None = None) -> list[FunctionToOptimize]:
     """Discover all test methods in a test directory.
 
     Args:
@@ -353,9 +320,7 @@ def discover_all_tests(
 
     # Find all test files (various naming conventions)
     test_files = (
-        list(test_root.rglob("*Test.java"))
-        + list(test_root.rglob("*Tests.java"))
-        + list(test_root.rglob("Test*.java"))
+        list(test_root.rglob("*Test.java")) + list(test_root.rglob("*Tests.java")) + list(test_root.rglob("Test*.java"))
     )
 
     for test_file in test_files:
@@ -391,24 +356,18 @@ def is_test_file(file_path: Path) -> bool:
     name = file_path.name
 
     # Check naming patterns
-    if name.endswith("Test.java") or name.endswith("Tests.java"):
+    if name.endswith(("Test.java", "Tests.java")):
         return True
     if name.startswith("Test") and name.endswith(".java"):
         return True
 
     # Check if it's in a test directory
     path_parts = file_path.parts
-    for part in path_parts:
-        if part in ("test", "tests", "src/test"):
-            return True
-
-    return False
+    return any(part in ("test", "tests", "src/test") for part in path_parts)
 
 
 def get_test_methods_for_class(
-    test_file: Path,
-    test_class_name: str | None = None,
-    analyzer: JavaAnalyzer | None = None,
+    test_file: Path, test_class_name: str | None = None, analyzer: JavaAnalyzer | None = None
 ) -> list[FunctionToOptimize]:
     """Get all test methods in a specific test class.
 
@@ -430,8 +389,7 @@ def get_test_methods_for_class(
 
 
 def build_test_mapping_for_project(
-    project_root: Path,
-    analyzer: JavaAnalyzer | None = None,
+    project_root: Path, analyzer: JavaAnalyzer | None = None
 ) -> dict[str, list[TestInfo]]:
     """Build a complete test mapping for a project.
 

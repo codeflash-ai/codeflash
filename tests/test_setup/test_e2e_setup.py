@@ -857,6 +857,48 @@ class TestE2ECLIFlags:
         # Should complete without error
         _handle_show_config()
 
+    def test_show_config_displays_config_path_when_saved(self, project_with_existing_config, monkeypatch):
+        """Should display config file path when saved config exists."""
+        monkeypatch.chdir(project_with_existing_config)
+
+        # Track what gets printed
+        printed_messages = []
+
+        def mock_print(msg="", *args, **kwargs):
+            printed_messages.append(str(msg))
+
+        from codeflash.cli_cmds import console
+        monkeypatch.setattr(console.console, "print", mock_print)
+
+        from codeflash.cli_cmds.cli import _handle_show_config
+        _handle_show_config()
+
+        # Verify config path is displayed
+        all_output = "\n".join(printed_messages)
+        assert "pyproject.toml" in all_output
+        assert "Config file:" in all_output
+
+    def test_show_config_no_path_when_auto_detected(self, python_src_layout, monkeypatch):
+        """Should not display config file path when config is auto-detected."""
+        monkeypatch.chdir(python_src_layout)
+
+        # Track what gets printed
+        printed_messages = []
+
+        def mock_print(msg="", *args, **kwargs):
+            printed_messages.append(str(msg))
+
+        from codeflash.cli_cmds import console
+        monkeypatch.setattr(console.console, "print", mock_print)
+
+        from codeflash.cli_cmds.cli import _handle_show_config
+        _handle_show_config()
+
+        # Verify no config path line is displayed
+        all_output = "\n".join(printed_messages)
+        assert "Config file:" not in all_output
+        assert "Auto-detected" in all_output
+
     def test_reset_config_removes_from_pyproject(self, project_with_existing_config, monkeypatch):
         """Should remove codeflash config from pyproject.toml."""
         monkeypatch.chdir(project_with_existing_config)

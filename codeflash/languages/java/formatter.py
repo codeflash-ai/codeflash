@@ -6,16 +6,13 @@ google-java-format or other available formatters.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +26,7 @@ class JavaFormatter:
     # Version of google-java-format to use
     GOOGLE_JAVA_FORMAT_VERSION = "1.19.2"
 
-    def __init__(self, project_root: Path | None = None):
+    def __init__(self, project_root: Path | None = None) -> None:
         """Initialize the Java formatter.
 
         Args:
@@ -107,21 +104,13 @@ class JavaFormatter:
 
         try:
             # Write source to temp file
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".java", delete=False, encoding="utf-8"
-            ) as tmp:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".java", delete=False, encoding="utf-8") as tmp:
                 tmp.write(source)
                 tmp_path = tmp.name
 
             try:
                 result = subprocess.run(
-                    [
-                        self._java_executable,
-                        "-jar",
-                        str(jar_path),
-                        "--replace",
-                        tmp_path,
-                    ],
+                    [self._java_executable, "-jar", str(jar_path), "--replace", tmp_path],
                     check=False,
                     capture_output=True,
                     text=True,
@@ -133,16 +122,12 @@ class JavaFormatter:
                     with open(tmp_path, encoding="utf-8") as f:
                         return f.read()
                 else:
-                    logger.debug(
-                        "google-java-format failed: %s", result.stderr or result.stdout
-                    )
+                    logger.debug("google-java-format failed: %s", result.stderr or result.stdout)
 
             finally:
                 # Clean up temp file
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
 
         except subprocess.TimeoutExpired:
             logger.warning("google-java-format timed out")
@@ -169,9 +154,7 @@ class JavaFormatter:
             if self.project_root
             else None,
             # In user's home directory
-            Path.home()
-            / ".codeflash"
-            / f"google-java-format-{self.GOOGLE_JAVA_FORMAT_VERSION}-all-deps.jar",
+            Path.home() / ".codeflash" / f"google-java-format-{self.GOOGLE_JAVA_FORMAT_VERSION}-all-deps.jar",
             # In system temp
             Path(tempfile.gettempdir())
             / "codeflash"
@@ -186,8 +169,7 @@ class JavaFormatter:
         # Don't auto-download to avoid surprises
         # Users can manually download the JAR
         logger.debug(
-            "google-java-format JAR not found. "
-            "Download from https://github.com/google/google-java-format/releases"
+            "google-java-format JAR not found. Download from https://github.com/google/google-java-format/releases"
         )
         return None
 
@@ -239,7 +221,7 @@ class JavaFormatter:
             logger.info("Downloaded google-java-format to %s", jar_path)
             return jar_path
         except Exception as e:
-            logger.error("Failed to download google-java-format: %s", e)
+            logger.exception("Failed to download google-java-format: %s", e)
             return None
 
 
