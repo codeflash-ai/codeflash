@@ -12,11 +12,16 @@ from codeflash.code_utils.code_utils import get_run_tmp_file, module_name_from_f
 from codeflash.code_utils.formatter import sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.models.models import FunctionParent, TestingMode, VerificationType
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from codeflash.models.models import CodePosition
+
+_LOAD_CTX = ast.Load()
+
+_STORE_CTX = ast.Store()
 
 
 @dataclass(frozen=True)
@@ -985,103 +990,20 @@ def _create_device_sync_statements(
 
     # PyTorch synchronization using pre-computed conditions
     if "torch" in used_frameworks:
-        torch_alias = used_frameworks["torch"]
-        # if _codeflash_should_sync_cuda:
-        #     torch.cuda.synchronize()
-        # elif _codeflash_should_sync_mps:
-        #     torch.mps.synchronize()
-        cuda_sync = ast.If(
-            test=ast.Name(id="_codeflash_should_sync_cuda", ctx=ast.Load()),
-            body=[
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Attribute(
-                                value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="cuda", ctx=ast.Load()
-                            ),
-                            attr="synchronize",
-                            ctx=ast.Load(),
-                        ),
-                        args=[],
-                        keywords=[],
-                    )
-                )
-            ],
-            orelse=[
-                ast.If(
-                    test=ast.Name(id="_codeflash_should_sync_mps", ctx=ast.Load()),
-                    body=[
-                        ast.Expr(
-                            value=ast.Call(
-                                func=ast.Attribute(
-                                    value=ast.Attribute(
-                                        value=ast.Name(id=torch_alias, ctx=ast.Load()), attr="mps", ctx=ast.Load()
-                                    ),
-                                    attr="synchronize",
-                                    ctx=ast.Load(),
-                                ),
-                                args=[],
-                                keywords=[],
-                            )
-                        )
-                    ],
-                    orelse=[],
-                )
-            ],
-        )
-        sync_statements.append(cuda_sync)
+        sync_statements.append(_create_torch_sync_ast(used_frameworks["torch"]))
+
+    # JAX synchronization (only after function call, using block_until_ready on return value)
 
     # JAX synchronization (only after function call, using block_until_ready on return value)
     if "jax" in used_frameworks and for_return_value:
-        jax_alias = used_frameworks["jax"]
-        # if _codeflash_should_sync_jax:
-        #     jax.block_until_ready(return_value)
-        jax_sync = ast.If(
-            test=ast.Name(id="_codeflash_should_sync_jax", ctx=ast.Load()),
-            body=[
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Name(id=jax_alias, ctx=ast.Load()), attr="block_until_ready", ctx=ast.Load()
-                        ),
-                        args=[ast.Name(id="return_value", ctx=ast.Load())],
-                        keywords=[],
-                    )
-                )
-            ],
-            orelse=[],
-        )
-        sync_statements.append(jax_sync)
+        sync_statements.append(_create_jax_sync_ast(used_frameworks["jax"]))
+
+    # TensorFlow synchronization using pre-computed condition
 
     # TensorFlow synchronization using pre-computed condition
     if "tensorflow" in used_frameworks:
-        tf_alias = used_frameworks["tensorflow"]
-        # if _codeflash_should_sync_tf:
-        #     tf.test.experimental.sync_devices()
-        tf_sync = ast.If(
-            test=ast.Name(id="_codeflash_should_sync_tf", ctx=ast.Load()),
-            body=[
-                ast.Expr(
-                    value=ast.Call(
-                        func=ast.Attribute(
-                            value=ast.Attribute(
-                                value=ast.Attribute(
-                                    value=ast.Name(id=tf_alias, ctx=ast.Load()), attr="test", ctx=ast.Load()
-                                ),
-                                attr="experimental",
-                                ctx=ast.Load(),
-                            ),
-                            attr="sync_devices",
-                            ctx=ast.Load(),
-                        ),
-                        args=[],
-                        keywords=[],
-                    )
-                )
-            ],
-            orelse=[],
-        )
-        sync_statements.append(tf_sync)
+        sync_statements.append(_create_tf_sync_ast(used_frameworks["tensorflow"]))
+
 
     return sync_statements
 
@@ -1257,9 +1179,9 @@ def _create_cpu_timing_try_body(used_frameworks: dict[str, str] | None) -> list[
         *_create_device_sync_statements(used_frameworks, for_return_value=False),
         # counter = time.perf_counter_ns()
         ast.Assign(
-            targets=[ast.Name(id="counter", ctx=ast.Store())],
+            targets=[ast.Name(id="counter", ctx=_STORE_CTX)],
             value=ast.Call(
-                func=ast.Attribute(value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()),
+                func=ast.Attribute(value=ast.Name(id="time", ctx=_LOAD_CTX), attr="perf_counter_ns", ctx=_LOAD_CTX),
                 args=[],
                 keywords=[],
             ),
@@ -1267,11 +1189,11 @@ def _create_cpu_timing_try_body(used_frameworks: dict[str, str] | None) -> list[
         ),
         # return_value = codeflash_wrapped(*args, **kwargs)
         ast.Assign(
-            targets=[ast.Name(id="return_value", ctx=ast.Store())],
+            targets=[ast.Name(id="return_value", ctx=_STORE_CTX)],
             value=ast.Call(
-                func=ast.Name(id="codeflash_wrapped", ctx=ast.Load()),
-                args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
-                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
+                func=ast.Name(id="codeflash_wrapped", ctx=_LOAD_CTX),
+                args=[ast.Starred(value=ast.Name(id="args", ctx=_LOAD_CTX), ctx=_LOAD_CTX)],
+                keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=_LOAD_CTX))],
             ),
             lineno=1,
         ),
@@ -1279,17 +1201,17 @@ def _create_cpu_timing_try_body(used_frameworks: dict[str, str] | None) -> list[
         *_create_device_sync_statements(used_frameworks, for_return_value=True),
         # codeflash_duration = time.perf_counter_ns() - counter
         ast.Assign(
-            targets=[ast.Name(id="codeflash_duration", ctx=ast.Store())],
+            targets=[ast.Name(id="codeflash_duration", ctx=_STORE_CTX)],
             value=ast.BinOp(
                 left=ast.Call(
                     func=ast.Attribute(
-                        value=ast.Name(id="time", ctx=ast.Load()), attr="perf_counter_ns", ctx=ast.Load()
+                        value=ast.Name(id="time", ctx=_LOAD_CTX), attr="perf_counter_ns", ctx=_LOAD_CTX
                     ),
                     args=[],
                     keywords=[],
                 ),
                 op=ast.Sub(),
-                right=ast.Name(id="counter", ctx=ast.Load()),
+                right=ast.Name(id="counter", ctx=_LOAD_CTX),
             ),
             lineno=1,
         ),
@@ -1910,3 +1832,184 @@ def add_async_decorator_to_function(
 def create_instrumented_source_module_path(source_path: Path, temp_dir: Path) -> Path:
     instrumented_filename = f"instrumented_{source_path.name}"
     return temp_dir / instrumented_filename
+
+
+@lru_cache(maxsize=32)
+def _create_torch_sync_ast(torch_alias: str) -> ast.If:
+    """Create cached PyTorch synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_cuda", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Name(id=torch_alias, ctx=_LOAD_CTX), attr="cuda", ctx=_LOAD_CTX
+                        ),
+                        attr="synchronize",
+                        ctx=_LOAD_CTX,
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[
+            ast.If(
+                test=ast.Name(id="_codeflash_should_sync_mps", ctx=_LOAD_CTX),
+                body=[
+                    ast.Expr(
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=_LOAD_CTX), attr="mps", ctx=_LOAD_CTX
+                                ),
+                                attr="synchronize",
+                                ctx=_LOAD_CTX,
+                            ),
+                            args=[],
+                            keywords=[],
+                        )
+                    )
+                ],
+                orelse=[],
+            )
+        ],
+    )
+
+
+@lru_cache(maxsize=32)
+def _create_jax_sync_ast(jax_alias: str) -> ast.If:
+    """Create cached JAX synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_jax", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=jax_alias, ctx=_LOAD_CTX), attr="block_until_ready", ctx=_LOAD_CTX
+                    ),
+                    args=[ast.Name(id="return_value", ctx=_LOAD_CTX)],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[],
+    )
+
+
+@lru_cache(maxsize=32)
+def _create_tf_sync_ast(tf_alias: str) -> ast.If:
+    """Create cached TensorFlow synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_tf", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=tf_alias, ctx=_LOAD_CTX), attr="test", ctx=_LOAD_CTX
+                            ),
+                            attr="experimental",
+                            ctx=_LOAD_CTX,
+                        ),
+                        attr="sync_devices",
+                        ctx=_LOAD_CTX,
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[],
+    )
+
+@lru_cache(maxsize=32)
+def _create_torch_sync_ast(torch_alias: str) -> ast.If:
+    """Create cached PyTorch synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_cuda", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Name(id=torch_alias, ctx=_LOAD_CTX), attr="cuda", ctx=_LOAD_CTX
+                        ),
+                        attr="synchronize",
+                        ctx=_LOAD_CTX,
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[
+            ast.If(
+                test=ast.Name(id="_codeflash_should_sync_mps", ctx=_LOAD_CTX),
+                body=[
+                    ast.Expr(
+                        value=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Attribute(
+                                    value=ast.Name(id=torch_alias, ctx=_LOAD_CTX), attr="mps", ctx=_LOAD_CTX
+                                ),
+                                attr="synchronize",
+                                ctx=_LOAD_CTX,
+                            ),
+                            args=[],
+                            keywords=[],
+                        )
+                    )
+                ],
+                orelse=[],
+            )
+        ],
+    )
+
+@lru_cache(maxsize=32)
+def _create_jax_sync_ast(jax_alias: str) -> ast.If:
+    """Create cached JAX synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_jax", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=jax_alias, ctx=_LOAD_CTX), attr="block_until_ready", ctx=_LOAD_CTX
+                    ),
+                    args=[ast.Name(id="return_value", ctx=_LOAD_CTX)],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[],
+    )
+
+@lru_cache(maxsize=32)
+def _create_tf_sync_ast(tf_alias: str) -> ast.If:
+    """Create cached TensorFlow synchronization AST structure."""
+    return ast.If(
+        test=ast.Name(id="_codeflash_should_sync_tf", ctx=_LOAD_CTX),
+        body=[
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id=tf_alias, ctx=_LOAD_CTX), attr="test", ctx=_LOAD_CTX
+                            ),
+                            attr="experimental",
+                            ctx=_LOAD_CTX,
+                        ),
+                        attr="sync_devices",
+                        ctx=_LOAD_CTX,
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            )
+        ],
+        orelse=[],
+    )
