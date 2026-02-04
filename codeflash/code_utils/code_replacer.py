@@ -962,8 +962,12 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
                         break
 
             if module_optimized_code is None:
-                # Also try matching if there's only one code file
-                if len(file_to_code_context) == 1:
+                # Also try matching if there's only one code file, but ONLY for non-Python
+                # languages where path matching is less strict. For Python, we require
+                # exact path matching to avoid applying code meant for one file to another.
+                # This prevents bugs like PR #1309 where a function was duplicated because
+                # optimized code for formatter.py was incorrectly applied to support.py.
+                if len(file_to_code_context) == 1 and not is_python():
                     only_key = next(iter(file_to_code_context.keys()))
                     module_optimized_code = file_to_code_context[only_key]
                     logger.debug(f"Using only code block {only_key} for {relative_path}")

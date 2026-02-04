@@ -55,6 +55,7 @@ from codeflash.languages.java.instrumentation import (
     instrument_existing_test,
     instrument_for_behavior,
     instrument_for_benchmarking,
+    instrument_generated_java_test,
     remove_instrumentation,
 )
 from codeflash.languages.java.parser import (
@@ -64,6 +65,11 @@ from codeflash.languages.java.parser import (
     JavaImportInfo,
     JavaMethodNode,
     get_java_analyzer,
+)
+from codeflash.languages.java.remove_asserts import (
+    JavaAssertTransformer,
+    remove_assertions_from_test,
+    transform_java_assertions,
 )
 from codeflash.languages.java.replacement import (
     add_runtime_comments,
@@ -99,6 +105,8 @@ __all__ = [
     "BuildTool",
     # Parser
     "JavaAnalyzer",
+    # Assertion removal
+    "JavaAssertTransformer",
     "JavaClassNode",
     "JavaFieldInfo",
     # Formatter
@@ -166,11 +174,13 @@ __all__ = [
     "instrument_existing_test",
     "instrument_for_behavior",
     "instrument_for_benchmarking",
+    "instrument_generated_java_test",
     "is_java_project",
     "is_test_file",
     "normalize_java_code",
     "parse_surefire_results",
     "parse_test_results",
+    "remove_assertions_from_test",
     "remove_instrumentation",
     "remove_method",
     "remove_test_functions",
@@ -181,4 +191,5 @@ __all__ = [
     "run_benchmarking_tests",
     "run_maven_tests",
     "run_tests",
+    "transform_java_assertions",
 ]

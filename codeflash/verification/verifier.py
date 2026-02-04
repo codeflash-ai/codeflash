@@ -97,7 +97,7 @@ def generate_tests(
                 test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
             )
 
-            logger.debug(f"Instrumented JS/TS tests locally for {func_name}")
+            logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
         elif is_java():
             from codeflash.languages.java.instrumentation import instrument_generated_java_test
 

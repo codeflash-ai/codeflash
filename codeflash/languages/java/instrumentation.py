@@ -308,6 +308,16 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             call_counter = 0
             wrapped_body_lines = []
 
+            # Use regex to find method calls with the target function
+            # Pattern matches: receiver.funcName(args) where receiver can be:
+            # - identifier (counter, calc, etc.)
+            # - new ClassName()
+            # - new ClassName(args)
+            # - this
+            method_call_pattern = re.compile(
+                rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
+            )
+
             for body_line in body_lines:
                 # Check if this line contains a call to the target function
                 if func_name in body_line and "(" in body_line:
@@ -629,6 +639,11 @@ def instrument_generated_java_test(
 ) -> str:
     """Instrument a generated Java test for behavior or performance testing.
 
+    For generated tests (AI-generated), this function:
+    1. Removes assertions and captures function return values (for regression testing)
+    2. Renames the class to include mode suffix
+    3. Adds timing instrumentation for performance mode
+
     Args:
         test_code: The generated test source code.
         function_name: Name of the function being tested.
@@ -639,6 +654,13 @@ def instrument_generated_java_test(
         Instrumented test source code.
 
     """
+    from codeflash.languages.java.remove_asserts import transform_java_assertions
+
+    # For behavior mode, remove assertions and capture function return values
+    # This converts the generated test into a regression test that captures outputs
+    if mode == "behavior":
+        test_code = transform_java_assertions(test_code, function_name, qualified_name)
+
     # Extract class name from the test code
     # Use pattern that starts at beginning of line to avoid matching words in comments
     class_match = re.search(r"^(?:public\s+)?class\s+(\w+)", test_code, re.MULTILINE)
