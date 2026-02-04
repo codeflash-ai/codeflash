@@ -245,3 +245,217 @@ Done."""
 
         assert len(matches) == 1
         assert matches[0][1] == "handles_n=0_correctly"
+
+
+class TestFilenameBasedLookupFallback:
+    """Tests for filename-based lookup fallback in Jest/Vitest XML parsing.
+
+    When JUnit XML has relative paths that can't be resolved to absolute paths
+    (because they're relative to Jest's CWD, not the parse-time CWD), the parser
+    should fall back to matching by filename only.
+    """
+
+    def test_filename_lookup_matches_relative_path(self) -> None:
+        """Should match test file by filename when classname has unresolvable relative path."""
+        from unittest.mock import MagicMock
+
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles, TestType
+
+        # Create a temporary XML file with a relative path that won't resolve
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="test/utils__perfinstrumented.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="test/utils__perfinstrumented.test.ts" name="test deepCopy" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
+
+        # Create a mock test file with an absolute instrumented path
+        # The filename should match even though the full path differs
+        with tempfile.TemporaryDirectory() as tmpdir:
+            instrumented_path = Path(tmpdir) / "utils__perfinstrumented.test.ts"
+            instrumented_path.touch()
+
+            test_file = TestFile(
+                original_file_path=Path(tmpdir) / "utils.test.ts",
+                test_type=TestType.GENERATED_REGRESSION,
+                instrumented_behavior_file_path=instrumented_path,
+            )
+            test_files = TestFiles(test_files=[test_file])
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = Path(tmpdir)
+            test_config.test_framework = "jest"
+
+            # Parse the XML - should use filename fallback
+            results = parse_jest_test_xml(
+                junit_file,
+                test_files,
+                test_config,
+                parse_func=None,  # Will use default
+                resolve_test_file_from_class_path=lambda x, y: None,  # Force fallback
+            )
+
+            # Should have found 1 test result via filename matching
+            assert len(results.test_results) == 1
+            assert results.test_results[0].file_name == instrumented_path
+            assert results.test_results[0].test_type == TestType.GENERATED_REGRESSION
+
+    def test_filename_lookup_with_duplicate_filenames_uses_first(self) -> None:
+        """When multiple test files have same filename, use the first one registered."""
+        from unittest.mock import MagicMock
+
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles, TestType
+
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="test/same_name.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="test/same_name.test.ts" name="test1" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create two test files with the same filename in different directories
+            dir1 = Path(tmpdir) / "pkg1"
+            dir2 = Path(tmpdir) / "pkg2"
+            dir1.mkdir()
+            dir2.mkdir()
+
+            path1 = dir1 / "same_name.test.ts"
+            path2 = dir2 / "same_name.test.ts"
+            path1.touch()
+            path2.touch()
+
+            test_file1 = TestFile(
+                original_file_path=path1,
+                test_type=TestType.GENERATED_REGRESSION,
+                instrumented_behavior_file_path=path1,
+            )
+            test_file2 = TestFile(
+                original_file_path=path2,
+                test_type=TestType.REPLAY_TEST,  # Different type
+                instrumented_behavior_file_path=path2,
+            )
+            # First file should win in filename lookup
+            test_files = TestFiles(test_files=[test_file1, test_file2])
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = Path(tmpdir)
+            test_config.test_framework = "jest"
+
+            results = parse_jest_test_xml(
+                junit_file,
+                test_files,
+                test_config,
+                parse_func=None,
+                resolve_test_file_from_class_path=lambda x, y: None,
+            )
+
+            assert len(results.test_results) == 1
+            # Should use first registered file
+            assert results.test_results[0].file_name == path1
+            assert results.test_results[0].test_type == TestType.GENERATED_REGRESSION
+
+    def test_filename_lookup_extracts_filename_from_nested_path(self) -> None:
+        """Should extract filename correctly from deeply nested relative paths."""
+        from unittest.mock import MagicMock
+
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles, TestType
+
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="packages/shared/lib/test/deep/nested/utils__perfinstrumented.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="packages/shared/lib/test/deep/nested/utils__perfinstrumented.test.ts" name="test1" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            instrumented_path = Path(tmpdir) / "utils__perfinstrumented.test.ts"
+            instrumented_path.touch()
+
+            test_file = TestFile(
+                original_file_path=Path(tmpdir) / "utils.test.ts",
+                test_type=TestType.GENERATED_REGRESSION,
+                instrumented_behavior_file_path=instrumented_path,
+            )
+            test_files = TestFiles(test_files=[test_file])
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = Path(tmpdir)
+            test_config.test_framework = "jest"
+
+            results = parse_jest_test_xml(
+                junit_file,
+                test_files,
+                test_config,
+                parse_func=None,
+                resolve_test_file_from_class_path=lambda x, y: None,
+            )
+
+            # Should match despite deeply nested path in XML
+            assert len(results.test_results) == 1
+            assert results.test_results[0].file_name == instrumented_path
+
+    def test_no_match_when_filename_not_in_lookup(self) -> None:
+        """Should skip test case when filename doesn't match any registered test file."""
+        from unittest.mock import MagicMock
+
+        from codeflash.languages.javascript.parse import parse_jest_test_xml
+        from codeflash.models.models import TestFile, TestFiles, TestType
+
+        # XML with a filename that doesn't match any registered test file
+        xml_content = """<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="0.1">
+    <testsuite name="test/unknown_file.test.ts" tests="1" failures="0" time="0.01">
+        <testcase classname="test/unknown_file.test.ts" name="test1" time="0.001"></testcase>
+    </testsuite>
+</testsuites>"""
+
+        with tempfile.NamedTemporaryFile(suffix=".xml", mode="w", delete=False) as f:
+            f.write(xml_content)
+            f.flush()
+            junit_file = Path(f.name)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Register a test file with a DIFFERENT filename
+            instrumented_path = Path(tmpdir) / "different_file.test.ts"
+            instrumented_path.touch()
+
+            test_file = TestFile(
+                original_file_path=Path(tmpdir) / "different.test.ts",
+                test_type=TestType.GENERATED_REGRESSION,
+                instrumented_behavior_file_path=instrumented_path,
+            )
+            test_files = TestFiles(test_files=[test_file])
+
+            test_config = MagicMock()
+            test_config.tests_project_rootdir = Path(tmpdir)
+            test_config.test_framework = "jest"
+
+            results = parse_jest_test_xml(
+                junit_file,
+                test_files,
+                test_config,
+                parse_func=None,
+                resolve_test_file_from_class_path=lambda x, y: None,
+            )
+
+            # Should have no results since filename doesn't match
+            assert len(results.test_results) == 0
