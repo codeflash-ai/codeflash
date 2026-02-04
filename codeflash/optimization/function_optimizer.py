@@ -1859,6 +1859,14 @@ class FunctionOptimizer:
                     with new_behavioral_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_behavior_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented behavior test to {new_behavioral_test_path}")
+
+                    # Verbose: Log instrumented existing behavior test
+                    log_instrumented_test(
+                        injected_behavior_test,
+                        new_behavioral_test_path.name,
+                        "Existing Behavioral Test",
+                        language=self.function_to_optimize.language,
+                    )
                 else:
                     msg = "injected_behavior_test is None"
                     raise ValueError(msg)
@@ -1867,6 +1875,14 @@ class FunctionOptimizer:
                     with new_perf_test_path.open("w", encoding="utf8") as _f:
                         _f.write(injected_perf_test)
                     logger.debug(f"[PIPELINE] Wrote instrumented perf test to {new_perf_test_path}")
+
+                    # Verbose: Log instrumented existing performance test
+                    log_instrumented_test(
+                        injected_perf_test,
+                        new_perf_test_path.name,
+                        "Existing Performance Test",
+                        language=self.function_to_optimize.language,
+                    )
 
                 unique_instrumented_test_files.add(new_behavioral_test_path)
                 unique_instrumented_test_files.add(new_perf_test_path)
