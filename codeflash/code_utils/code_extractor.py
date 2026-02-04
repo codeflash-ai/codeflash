@@ -1429,7 +1429,9 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
     numerical_names: set[str] = set()
     modules_used: set[str] = set()
 
-    for node in ast.walk(tree):
+    stack: list[ast.AST] = [tree]
+    while stack:
+        node = stack.pop()
         if isinstance(node, ast.Import):
             for alias in node.names:
                 # import numpy or import numpy as np
@@ -1451,6 +1453,8 @@ def _collect_numerical_imports(tree: ast.Module) -> tuple[set[str], set[str]]:
                         name = alias.asname or alias.name
                         numerical_names.add(name)
                 modules_used.add(module_root)
+        else:
+            stack.extend(ast.iter_child_nodes(node))
 
     return numerical_names, modules_used
 
