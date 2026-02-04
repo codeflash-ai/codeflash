@@ -828,24 +828,35 @@ def filter_functions(
 
     # Test file patterns for when tests_root overlaps with source
     test_file_name_patterns = (".test.", ".spec.", "_test.", "_spec.")
-    test_dir_patterns = (os.sep + "test" + os.sep, os.sep + "tests" + os.sep, os.sep + "__tests__" + os.sep)
+    test_dir_patterns = (
+        os.sep + "test" + os.sep,
+        os.sep + "tests" + os.sep,
+        os.sep + "__tests__" + os.sep,
+        os.sep + "testfixtures" + os.sep,
+    )
 
     def is_test_file(file_path_normalized: str) -> bool:
         """Check if a file is a test file based on patterns."""
-        if tests_root_overlaps_source:
-            # Use file pattern matching when tests_root overlaps with source
-            file_lower = file_path_normalized.lower()
-            # Check filename patterns (e.g., .test.ts, .spec.ts)
-            if any(pattern in file_lower for pattern in test_file_name_patterns):
+        # First check if file is directly under tests_root
+        if file_path_normalized.startswith(tests_root_str + os.sep):
+            return True
+
+        # Check for test-related patterns in filename and directories
+        # This catches edge cases like src/main/test/, src/testFixtures/, etc.
+        file_lower = file_path_normalized.lower()
+
+        # Check filename patterns (e.g., .test.ts, .spec.ts, _test.py)
+        if any(pattern in file_lower for pattern in test_file_name_patterns):
+            return True
+
+        # Check directory patterns, but only within the project root
+        # to avoid false positives from parent directories (e.g., project at /home/user/tests/myproject)
+        if project_root_str and file_lower.startswith(project_root_str.lower()):
+            relative_path = file_lower[len(project_root_str) :]
+            if any(pattern in relative_path for pattern in test_dir_patterns):
                 return True
-            # Check directory patterns, but only within the project root
-            # to avoid false positives from parent directories
-            relative_path = file_lower
-            if project_root_str and file_lower.startswith(project_root_str.lower()):
-                relative_path = file_lower[len(project_root_str) :]
-            return any(pattern in relative_path for pattern in test_dir_patterns)
-        # Use directory-based filtering when tests are in a separate directory
-        return file_path_normalized.startswith(tests_root_str + os.sep)
+
+        return False
 
     # We desperately need Python 3.10+ only support to make this code readable with structural pattern matching
     for file_path_path, functions in modified_functions.items():
