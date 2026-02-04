@@ -239,13 +239,21 @@ class ProcessedBenchmarkInfo:
 class CodeString(BaseModel):
     code: str
     file_path: Optional[Path] = None
-    language: str = "python"  # Language for validation - only Python code is validated
+    language: str = "python"  # Language for validation
 
     @model_validator(mode="after")
     def validate_code_syntax(self) -> CodeString:
-        """Validate code syntax for Python only."""
+        """Validate code syntax for the specified language."""
         if self.language == "python":
             validate_python_code(self.code)
+        elif self.language in ("javascript", "typescript"):
+            # Validate JavaScript/TypeScript syntax using language support
+            from codeflash.languages.registry import get_language_support
+
+            lang_support = get_language_support(self.language)
+            if not lang_support.validate_syntax(self.code):
+                msg = f"Invalid {self.language.title()} code"
+                raise ValueError(msg)
         return self
 
 

@@ -1607,3 +1607,97 @@ module.exports = { MathUtils };
                 f"Replacement result does not match expected.\nExpected:\n{expected_result}\n\nGot:\n{result}"
             )
             assert js_support.validate_syntax(result) is True
+
+
+class TestTypeScriptSyntaxValidation:
+    """Tests for TypeScript-specific syntax validation.
+
+    These tests ensure that TypeScript code is validated with the TypeScript parser,
+    not the JavaScript parser. This is important because TypeScript has syntax that
+    is invalid in JavaScript (e.g., type assertions, type annotations).
+    """
+
+    def test_typescript_type_assertion_valid_in_ts(self):
+        """TypeScript type assertions should be valid in TypeScript."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        # Type assertions are TypeScript-specific
+        ts_code = """
+const value = 4.9 as unknown as number;
+const str = "hello" as string;
+"""
+        assert ts_support.validate_syntax(ts_code) is True
+
+    def test_typescript_type_assertion_invalid_in_js(self, js_support):
+        """TypeScript type assertions should be invalid in JavaScript."""
+        # This is the code pattern that caused the backend error
+        ts_code = """
+const value = 4.9 as unknown as number;
+"""
+        # JavaScript parser should reject TypeScript syntax
+        assert js_support.validate_syntax(ts_code) is False
+
+    def test_typescript_interface_valid_in_ts(self):
+        """TypeScript interfaces should be valid in TypeScript."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        ts_code = """
+interface User {
+    name: string;
+    age: number;
+}
+"""
+        assert ts_support.validate_syntax(ts_code) is True
+
+    def test_typescript_interface_invalid_in_js(self, js_support):
+        """TypeScript interfaces should be invalid in JavaScript."""
+        ts_code = """
+interface User {
+    name: string;
+    age: number;
+}
+"""
+        # JavaScript parser should reject TypeScript interface syntax
+        assert js_support.validate_syntax(ts_code) is False
+
+    def test_typescript_generic_function_valid_in_ts(self):
+        """TypeScript generics should be valid in TypeScript."""
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+
+        ts_code = """
+function identity<T>(arg: T): T {
+    return arg;
+}
+"""
+        assert ts_support.validate_syntax(ts_code) is True
+
+    def test_typescript_generic_function_invalid_in_js(self, js_support):
+        """TypeScript generics should be invalid in JavaScript."""
+        ts_code = """
+function identity<T>(arg: T): T {
+    return arg;
+}
+"""
+        assert js_support.validate_syntax(ts_code) is False
+
+    def test_language_property_is_typescript(self):
+        """TypeScriptSupport should report typescript as language."""
+        from codeflash.languages.base import Language
+        from codeflash.languages.javascript.support import TypeScriptSupport
+
+        ts_support = TypeScriptSupport()
+        assert ts_support.language == Language.TYPESCRIPT
+        assert str(ts_support.language) == "typescript"
+
+    def test_language_property_is_javascript(self, js_support):
+        """JavaScriptSupport should report javascript as language."""
+        from codeflash.languages.base import Language
+
+        assert js_support.language == Language.JAVASCRIPT
+        assert str(js_support.language) == "javascript"
