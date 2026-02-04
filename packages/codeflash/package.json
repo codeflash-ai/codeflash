@@ -6,7 +6,8 @@
   "types": "runtime/index.d.ts",
   "bin": {
     "codeflash": "./bin/codeflash.js",
-    "codeflash-setup": "./bin/codeflash-setup.js"
+    "codeflash-setup": "./bin/codeflash-setup.js",
+    "codeflash-trace": "./runtime/trace-runner.js"
   },
   "publishConfig": {
     "access": "public"
@@ -32,6 +33,18 @@
     "./loop-runner": {
       "require": "./runtime/loop-runner.js",
       "import": "./runtime/loop-runner.js"
+    },
+    "./tracer": {
+      "require": "./runtime/tracer.js",
+      "import": "./runtime/tracer.js"
+    },
+    "./replay": {
+      "require": "./runtime/replay.js",
+      "import": "./runtime/replay.js"
+    },
+    "./babel-tracer-plugin": {
+      "require": "./runtime/babel-tracer-plugin.js",
+      "import": "./runtime/babel-tracer-plugin.js"
     }
   },
   "scripts": {
@@ -88,5 +101,11 @@
   "dependencies": {
     "better-sqlite3": "^12.0.0",
     "@msgpack/msgpack": "^3.0.0"
+  },
+  "optionalDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/register": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0"
   }
 }
