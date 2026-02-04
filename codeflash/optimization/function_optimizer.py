@@ -127,6 +127,7 @@ from codeflash.verification.parse_test_output import (
 from codeflash.verification.test_runner import run_behavioral_tests, run_benchmarking_tests, run_line_profile_tests
 from codeflash.verification.verification_utils import get_test_file_path
 from codeflash.verification.verifier import generate_tests
+import logging
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -626,7 +627,7 @@ class FunctionOptimizer:
 
         # Normalize codeflash imports in JS/TS tests to use npm package
         if not is_python():
-            module_system = detect_module_system(self.project_root)
+            module_system = detect_module_system(self.project_root, self.function_to_optimize.file_path)
             if module_system == "esm":
                 generated_tests = inject_test_globals(generated_tests)
             if is_typescript():
@@ -751,27 +752,35 @@ class FunctionOptimizer:
         # Look for standard Java package prefixes that indicate the start of package structure
         standard_package_prefixes = ("com", "org", "net", "io", "edu", "gov")
 
+
+        # We perform a single pass to find either a standard package prefix (preferred)
+        # or the first occurrence of 'java' (Maven-style), returning as soon as
+        # a standard package prefix is found to preserve original behavior.
+        java_index: int = -1
         for i, part in enumerate(parts):
             if part in standard_package_prefixes:
                 # Found start of package path, return everything before it
                 if i > 0:
                     java_sources_root = Path(*parts[:i])
-                    logger.debug(
-                        f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
-                    )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})"
+                        )
                     return java_sources_root
+            # Record the first 'java' occurrence (if any) to use if no standard prefix is found
+            if java_index == -1 and part == "java" and i > 0:
+                java_index = i
 
-        # If no standard package prefix found, check if there's a 'java' directory
-        # (standard Maven structure: src/test/java)
-        for i, part in enumerate(parts):
-            if part == "java" and i > 0:
-                # Return up to and including 'java'
-                java_sources_root = Path(*parts[: i + 1])
+        # If no standard package prefix found, check if we saw a 'java' directory
+        if java_index != -1:
+            java_sources_root = Path(*parts[: java_index + 1])
+            if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
-                return java_sources_root
+            return java_sources_root
 
         # Default: return tests_root as-is (original behavior)
-        logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
         return tests_root
 
     def _fix_java_test_paths(
