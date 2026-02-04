@@ -247,6 +247,10 @@ def get_cross_platform_subprocess_run_args(
     capture_output: bool = True,
 ) -> dict[str, str]:
     run_args = {"cwd": cwd, "env": env, "text": text, "timeout": timeout, "check": check}
+    # When text=True, use errors='replace' to handle non-UTF-8 bytes gracefully
+    # instead of raising UnicodeDecodeError
+    if text:
+        run_args["errors"] = "replace"
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
         run_args["creationflags"] = creationflags

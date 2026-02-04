@@ -16,12 +16,7 @@ from typing import TYPE_CHECKING
 from junitparser.xunit2 import JUnitXml
 
 from codeflash.cli_cmds.console import logger
-from codeflash.models.models import (
-    FunctionTestInvocation,
-    InvocationId,
-    TestResults,
-    TestType,
-)
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
 
 if TYPE_CHECKING:
     import subprocess
