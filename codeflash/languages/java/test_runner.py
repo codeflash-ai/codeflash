@@ -1084,6 +1084,12 @@ def _run_maven_tests(
 
     # Build test filter
     test_filter = _build_test_filter(test_paths, mode=mode)
+    logger.debug(f"Built test filter for mode={mode}: '{test_filter}' (empty={not test_filter})")
+    logger.debug(f"test_paths type: {type(test_paths)}, has test_files: {hasattr(test_paths, 'test_files')}")
+    if hasattr(test_paths, "test_files"):
+        logger.debug(f"Number of test files: {len(test_paths.test_files)}")
+        for i, tf in enumerate(test_paths.test_files[:3]):  # Log first 3
+            logger.debug(f"  TestFile[{i}]: behavior={tf.instrumented_behavior_file_path}, bench={tf.benchmarking_file_path}")
 
     # Build Maven command
     # When coverage is enabled, use 'verify' phase to ensure JaCoCo report runs after tests
@@ -1106,6 +1112,9 @@ def _run_maven_tests(
         # Validate test filter to prevent command injection
         validated_filter = _validate_test_filter(test_filter)
         cmd.append(f"-Dtest={validated_filter}")
+        logger.debug(f"Added -Dtest={validated_filter} to Maven command")
+    else:
+        logger.warning(f"Test filter is EMPTY for mode={mode}! Maven will run ALL tests. This is likely a bug.")
 
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
@@ -1151,6 +1160,7 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
 
     """
     if not test_paths:
+        logger.debug("_build_test_filter: test_paths is empty/None")
         return ""
 
     # Handle different input types
@@ -1162,13 +1172,18 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                 class_name = _path_to_class_name(path)
                 if class_name:
                     filters.append(class_name)
+                else:
+                    logger.debug(f"_build_test_filter: Could not convert path to class name: {path}")
             elif isinstance(path, str):
                 filters.append(path)
-        return ",".join(filters) if filters else ""
+        result = ",".join(filters) if filters else ""
+        logger.debug(f"_build_test_filter (list/tuple): {len(filters)} filters -> '{result}'")
+        return result
 
     # Handle TestFiles object (has test_files attribute)
     if hasattr(test_paths, "test_files"):
         filters = []
+        skipped = 0
         for test_file in test_paths.test_files:
             # For performance mode, use benchmarking_file_path
             if mode == "performance":
@@ -1176,13 +1191,28 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     class_name = _path_to_class_name(test_file.benchmarking_file_path)
                     if class_name:
                         filters.append(class_name)
+                    else:
+                        logger.debug(f"_build_test_filter: Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}")
+                        skipped += 1
+                else:
+                    logger.debug(f"_build_test_filter: TestFile has no benchmarking_file_path (mode=performance)")
+                    skipped += 1
             # For behavior mode, use instrumented_behavior_file_path
             elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
                 class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
                 if class_name:
                     filters.append(class_name)
-        return ",".join(filters) if filters else ""
+                else:
+                    logger.debug(f"_build_test_filter: Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}")
+                    skipped += 1
+            else:
+                logger.debug(f"_build_test_filter: TestFile has no instrumented_behavior_file_path (mode=behavior)")
+                skipped += 1
+        result = ",".join(filters) if filters else ""
+        logger.debug(f"_build_test_filter (TestFiles): {len(filters)} filters, {skipped} skipped -> '{result}'")
+        return result
 
+    logger.debug(f"_build_test_filter: Unknown test_paths type: {type(test_paths)}")
     return ""
 
 
