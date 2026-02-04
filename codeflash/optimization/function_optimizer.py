@@ -146,6 +146,82 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
+def is_verbose_mode() -> bool:
+    """Check if verbose mode is enabled."""
+    return logger.getEffectiveLevel() <= logging.DEBUG
+
+
+def log_code_after_replacement(file_path: Path, candidate_index: int) -> None:
+    """Log the full file content after code replacement in verbose mode."""
+    if not is_verbose_mode():
+        return
+
+    try:
+        code = file_path.read_text(encoding="utf-8")
+        # Determine language from file extension
+        ext = file_path.suffix.lower()
+        lang_map = {".java": "java", ".py": "python", ".js": "javascript", ".ts": "typescript"}
+        language = lang_map.get(ext, "text")
+
+        console.print(
+            Panel(
+                Syntax(code, language, line_numbers=True, theme="monokai", word_wrap=True),
+                title=f"[bold blue]Code After Replacement (Candidate {candidate_index})[/] [dim]({file_path.name})[/]",
+                border_style="blue",
+            )
+        )
+    except Exception as e:
+        logger.debug(f"Failed to log code after replacement: {e}")
+
+
+def log_instrumented_test(test_source: str, test_name: str, test_type: str, language: str = "java") -> None:
+    """Log instrumented test code in verbose mode."""
+    if not is_verbose_mode():
+        return
+
+    # Truncate very long test files
+    display_source = test_source
+    if len(test_source) > 15000:
+        display_source = test_source[:15000] + "\n\n... [truncated] ..."
+
+    console.print(
+        Panel(
+            Syntax(display_source, language, line_numbers=True, theme="monokai", word_wrap=True),
+            title=f"[bold magenta]Instrumented Test: {test_name}[/] [dim]({test_type})[/]",
+            border_style="magenta",
+        )
+    )
+
+
+def log_test_run_output(stdout: str, stderr: str, test_type: str, returncode: int = 0) -> None:
+    """Log test run stdout/stderr in verbose mode."""
+    if not is_verbose_mode():
+        return
+
+    # Truncate very long outputs
+    max_len = 10000
+
+    if stdout and stdout.strip():
+        display_stdout = stdout[:max_len] + ("...[truncated]" if len(stdout) > max_len else "")
+        console.print(
+            Panel(
+                display_stdout,
+                title=f"[bold green]{test_type} - stdout[/] [dim](exit: {returncode})[/]",
+                border_style="green" if returncode == 0 else "red",
+            )
+        )
+
+    if stderr and stderr.strip():
+        display_stderr = stderr[:max_len] + ("...[truncated]" if len(stderr) > max_len else "")
+        console.print(
+            Panel(
+                display_stderr,
+                title=f"[bold yellow]{test_type} - stderr[/]",
+                border_style="yellow",
+            )
+        )
+
+
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
     """Log optimization context details when in verbose mode using Rich formatting."""
     if logger.getEffectiveLevel() > logging.DEBUG:
@@ -602,9 +678,25 @@ class FunctionOptimizer:
                 f.write(generated_test.instrumented_behavior_test_source)
             logger.debug(f"[PIPELINE] Wrote behavioral test to {behavior_path}")
 
+            # Verbose: Log instrumented behavior test
+            log_instrumented_test(
+                generated_test.instrumented_behavior_test_source,
+                behavior_path.name,
+                "Behavioral Test",
+                language=self.function_to_optimize.language,
+            )
+
             with perf_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
             logger.debug(f"[PIPELINE] Wrote perf test to {perf_path}")
+
+            # Verbose: Log instrumented performance test
+            log_instrumented_test(
+                generated_test.instrumented_perf_test_source,
+                perf_path.name,
+                "Performance Test",
+                language=self.function_to_optimize.language,
+            )
 
             # File paths are expected to be absolute - resolved at their source (CLI, TestConfig, etc.)
             test_file_obj = TestFile(
@@ -1199,6 +1291,9 @@ class FunctionOptimizer:
                 logger.info("No functions were replaced in the optimized code. Skipping optimization candidate.")
                 console.rule()
                 return None
+
+            # Verbose: Log code after replacement
+            log_code_after_replacement(self.function_to_optimize.file_path, candidate_index)
         except (ValueError, SyntaxError, cst.ParserSyntaxError, AttributeError) as e:
             logger.error(e)
             self.write_code_and_helpers(
@@ -2880,6 +2975,14 @@ class FunctionOptimizer:
             else:
                 msg = f"Unexpected testing type: {testing_type}"
                 raise ValueError(msg)
+
+            # Verbose: Log test run output
+            log_test_run_output(
+                run_result.stdout,
+                run_result.stderr,
+                f"Test Run ({testing_type.name})",
+                run_result.returncode,
+            )
         except subprocess.TimeoutExpired:
             logger.exception(
                 f"Error running tests in {', '.join(str(f) for f in test_files.test_files)}.\nTimeout Error"
