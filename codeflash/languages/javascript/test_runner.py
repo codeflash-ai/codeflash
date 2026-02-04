@@ -638,7 +638,9 @@ def run_jest_behavioral_tests(
             )
         logger.debug(f"Jest result: returncode={result.returncode}")
         logger.warning(f"[JEST DEBUG] returncode={result.returncode}")
-        logger.warning(f"[JEST DEBUG] Jest stdout (first 500 chars): {result.stdout[:500] if result.stdout else '(empty)'}")
+        logger.warning(
+            f"[JEST DEBUG] Jest stdout (first 500 chars): {result.stdout[:500] if result.stdout else '(empty)'}"
+        )
         # Log Jest output at WARNING level if tests fail and no XML output will be created
         # This helps debug issues like import errors that cause Jest to fail early
         if result.returncode != 0 and not result_file_path.exists():

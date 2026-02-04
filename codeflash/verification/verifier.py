@@ -57,9 +57,7 @@ def generate_tests(
             rel_import_path = f"./{rel_import_path}"
         # Keep as string since Path() normalizes away the ./ prefix
         module_path = rel_import_path
-        logger.warning(
-            f"[IMPORT FIX] test_path={test_path}, source={source_file_abs}, rel_import={rel_import_path}"
-        )
+        logger.warning(f"[IMPORT FIX] test_path={test_path}, source={source_file_abs}, rel_import={rel_import_path}")
 
     logger.warning(f"[IMPORT FIX] Passing module_path to AI service: '{module_path}'")
     response = aiservice_client.generate_regression_tests(
