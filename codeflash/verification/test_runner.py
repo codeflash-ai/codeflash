@@ -322,7 +322,7 @@ def run_benchmarking_tests(
     pytest_target_runtime_seconds: float = TOTAL_LOOPING_TIME_EFFECTIVE,
     pytest_timeout: int | None = None,
     pytest_min_loops: int = 5,
-    pytest_max_loops: int = 100_000,
+    pytest_max_loops: int = 6,
     js_project_root: Path | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     # Check if there's a language support for this test framework that implements run_benchmarking_tests

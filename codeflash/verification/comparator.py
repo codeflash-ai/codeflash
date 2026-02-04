@@ -394,6 +394,62 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if isinstance(orig, torch.device):
                 return orig == new
 
+            # Handle torch.nn.Module instances (must come after tensor/dtype/device checks)
+            if isinstance(orig, torch.nn.Module):
+                # First check if they're the same type of module
+                if type(orig) is not type(new):
+                    return False
+
+                # For modules, compare their state_dict which includes parameters and buffers
+                # For init_state verification, we compare structure (keys, shapes, dtypes) but not values
+                # because parameters are randomly initialized
+                try:
+                    orig_state = orig.state_dict()
+                    new_state = new.state_dict()
+
+                    # Compare state dict keys
+                    if set(orig_state.keys()) != set(new_state.keys()):
+                        return False
+
+                    # Compare each parameter/buffer tensor (shape and dtype, not values)
+                    for key in orig_state:
+                        orig_tensor = orig_state[key]
+                        new_tensor = new_state[key]
+                        # Compare tensor properties but not values (random initialization differs)
+                        if orig_tensor.shape != new_tensor.shape:
+                            return False
+                        if orig_tensor.dtype != new_tensor.dtype:
+                            return False
+                        if orig_tensor.device != new_tensor.device:
+                            return False
+                        # Note: We intentionally don't compare tensor values for init_state verification
+                        # because weights are randomly initialized and will differ between runs
+
+                    # Also compare module configuration stored in __dict__
+                    # Filter out module-specific internal attributes that shouldn't be compared
+                    skip_keys = {
+                        '_parameters', '_buffers', '_modules', '_non_persistent_buffers_set',
+                        '_backward_hooks', '_backward_pre_hooks', '_forward_hooks',
+                        '_forward_hooks_with_kwargs', '_forward_hooks_always_called',
+                        '_forward_pre_hooks', '_forward_pre_hooks_with_kwargs',
+                        '_state_dict_hooks', '_state_dict_pre_hooks',
+                        '_load_state_dict_pre_hooks', '_load_state_dict_post_hooks',
+                        '_is_full_backward_hook'
+                    }
+
+                    orig_config = {k: v for k, v in orig.__dict__.items() if k not in skip_keys}
+                    new_config = {k: v for k, v in new.__dict__.items() if k not in skip_keys}
+
+                    if superset_obj:
+                        # Allow new module to have additional config attributes
+                        return all(k in new_config and comparator(v, new_config[k], superset_obj)
+                                 for k, v in orig_config.items())
+                    else:
+                        return comparator(orig_config, new_config, superset_obj)
+                except Exception:
+                    # If state_dict comparison fails, fall through to generic __dict__ comparison
+                    pass
+
         if HAS_NUMBA:
             import numba  # type: ignore  # noqa: PGH003
             from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003

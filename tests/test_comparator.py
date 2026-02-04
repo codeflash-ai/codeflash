@@ -877,6 +877,123 @@ def test_torch_device():
     assert not comparator(l, n)
 
 
+def test_torch_nn_module():
+    """Test comparison of torch.nn.Module instances (for init_state_fto verification)."""
+    try:
+        import torch  # type: ignore
+        import torch.nn as nn  # type: ignore
+    except ImportError:
+        pytest.skip()
+
+    # Test Linear layers with same structure but different random weights
+    # For init_state verification, we compare structure (shape, dtype) not parameter values
+    linear1 = nn.Linear(64, 128, bias=True)
+    linear2 = nn.Linear(64, 128, bias=True)
+
+    # Even though weights are randomly initialized differently, they should compare as equal
+    assert comparator(linear1, linear2)
+
+    # Test different configurations should fail
+    linear3 = nn.Linear(64, 256, bias=True)  # Different out_features (different shape)
+    assert not comparator(linear1, linear3)
+
+    linear4 = nn.Linear(64, 128, bias=False)  # Different bias setting (different structure)
+    assert not comparator(linear1, linear4)
+
+    # Test ReLU (simple module without parameters)
+    relu1 = nn.ReLU()
+    relu2 = nn.ReLU()
+    assert comparator(relu1, relu2)
+
+    # Test Dropout
+    dropout1 = nn.Dropout(p=0.5)
+    dropout2 = nn.Dropout(p=0.5)
+    dropout3 = nn.Dropout(p=0.3)
+    assert comparator(dropout1, dropout2)
+    assert not comparator(dropout1, dropout3)
+
+    # Test complex nested modules (like in PerformerAttention)
+    class SimpleModule(nn.Module):
+        def __init__(self, in_features, out_features):
+            super().__init__()
+            self.linear = nn.Linear(in_features, out_features)
+            self.relu = nn.ReLU()
+            self.dropout = nn.Dropout(p=0.1)
+            self.custom_attr = "test"
+
+        def forward(self, x):
+            return self.dropout(self.relu(self.linear(x)))
+
+    module1 = SimpleModule(64, 128)
+    module2 = SimpleModule(64, 128)
+
+    # They should be equal since they have same structure (even with different random weights)
+    assert comparator(module1, module2)
+
+    # Test with different custom attributes (superset_obj=False)
+    module3 = SimpleModule(64, 128)
+    module3.extra_attr = "extra"
+    assert not comparator(module1, module3, superset_obj=False)
+
+    # Test with superset_obj=True (allows new attributes)
+    assert comparator(module1, module3, superset_obj=True)
+
+    # Test module instance states (simulating init_state_fto)
+    # This simulates what codeflash_capture does when capturing init state
+    instance_state1 = module1.__dict__.copy()
+    instance_state2 = module2.__dict__.copy()
+
+    # Filter out the internal hooks/state like in the actual verification
+    skip_keys = {
+        '_parameters', '_buffers', '_modules', '_non_persistent_buffers_set',
+        '_backward_hooks', '_backward_pre_hooks', '_forward_hooks',
+        '_forward_hooks_with_kwargs', '_forward_hooks_always_called',
+        '_forward_pre_hooks', '_forward_pre_hooks_with_kwargs',
+        '_state_dict_hooks', '_state_dict_pre_hooks',
+        '_load_state_dict_pre_hooks', '_load_state_dict_post_hooks',
+        '_is_full_backward_hook'
+    }
+
+    # The modules inside should compare correctly
+    assert comparator(instance_state1['_modules'], instance_state2['_modules'], superset_obj=True)
+
+    # Test the exact scenario from init_state_fto verification
+    # This simulates what happens in the log: comparing entire instance states wrapped in tuples
+    class PerformerAttentionLike(nn.Module):
+        """Simulates a complex module like PerformerAttention from the log."""
+
+        def __init__(self, in_channels, out_channels, heads):
+            super().__init__()
+            self.heads = heads
+            self.head_channels = out_channels // heads
+            self.kernel = nn.ReLU()
+            self.q = nn.Linear(in_channels, out_channels, bias=False)
+            self.k = nn.Linear(in_channels, out_channels, bias=False)
+            self.v = nn.Linear(in_channels, out_channels, bias=False)
+            self.attn_out = nn.Linear(out_channels, in_channels, bias=True)
+            self.dropout = nn.Dropout(p=0.0)
+
+        def forward(self, x):
+            pass
+
+    # Create two instances with same config but different random weights
+    module_a = PerformerAttentionLike(64, 256, 4)
+    module_b = PerformerAttentionLike(64, 256, 4)
+
+    # Simulate what codeflash_capture does: capture __dict__ as return value
+    return_value_a = (module_a.__dict__,)
+    return_value_b = (module_b.__dict__,)
+
+    # This is what equivalence.py does: compare with superset_obj=True for init_state_fto
+    # Should pass even though random weights differ, because we compare structure only
+    assert comparator(return_value_a, return_value_b, superset_obj=True)
+
+    # Test that different configurations fail
+    module_c = PerformerAttentionLike(64, 128, 4)  # Different out_channels
+    return_value_c = (module_c.__dict__,)
+    assert not comparator(return_value_a, return_value_c, superset_obj=True)
+
+
 def test_jax():
     try:
         import jax.numpy as jnp
