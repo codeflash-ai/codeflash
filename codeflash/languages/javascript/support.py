@@ -1903,9 +1903,7 @@ class JavaScriptSupport:
                 workspace_framework = workspace_root / "node_modules" / test_framework
                 if workspace_framework.exists():
                     framework_found = True
-                    logger.debug(
-                        "Found %s in workspace root node_modules at %s", test_framework, workspace_framework
-                    )
+                    logger.debug("Found %s in workspace root node_modules at %s", test_framework, workspace_framework)
 
         # Report errors if framework not found anywhere
         if not framework_found:
