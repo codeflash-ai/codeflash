@@ -783,6 +783,9 @@ def run_jest_benchmarking_tests(
 
     # Get performance test files
     test_files = [str(file.benchmarking_file_path) for file in test_paths.test_files if file.benchmarking_file_path]
+    logger.warning(f"[PERF DEBUG] run_jest_benchmarking_tests called with {len(test_files)} test files")
+    for i, tf in enumerate(test_files):
+        logger.warning(f"[PERF DEBUG] Test file {i}: {tf}, exists={Path(tf).exists()}")
 
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
@@ -790,7 +793,7 @@ def run_jest_benchmarking_tests(
         project_root = _find_node_project_root(first_test_file)
 
     effective_cwd = project_root if project_root else cwd
-    logger.debug(f"Jest benchmarking working directory: {effective_cwd}")
+    logger.warning(f"[PERF DEBUG] Jest benchmarking working directory: {effective_cwd}")
 
     # Ensure the codeflash npm package is installed
     _ensure_runtime_files(effective_cwd)
@@ -861,6 +864,7 @@ def run_jest_benchmarking_tests(
     total_timeout = max(120, (target_duration_ms // 1000) + 60, timeout or 120)
 
     logger.debug(f"Running Jest benchmarking tests with in-process loop runner: {' '.join(jest_cmd)}")
+    logger.warning(f"[PERF DEBUG] Jest benchmarking command: {' '.join(jest_cmd)}")
     logger.debug(
         f"Jest benchmarking config: min_loops={min_loops}, max_loops={max_loops}, "
         f"target_duration={target_duration_ms}ms, stability_check={stability_check}"
@@ -872,7 +876,11 @@ def run_jest_benchmarking_tests(
         run_args = get_cross_platform_subprocess_run_args(
             cwd=effective_cwd, env=jest_env, timeout=total_timeout, check=False, text=True, capture_output=True
         )
+        logger.warning(f"[PERF DEBUG] About to execute Jest command in {effective_cwd}")
         result = subprocess.run(jest_cmd, **run_args)  # noqa: PLW1510
+        logger.warning(f"[PERF DEBUG] Jest command completed with returncode={result.returncode}")
+        logger.warning(f"[PERF DEBUG] Jest stdout (first 500 chars): {(result.stdout or '')[:500]}")
+        logger.warning(f"[PERF DEBUG] Jest stderr (first 500 chars): {(result.stderr or '')[:500]}")
 
         # Combine stderr into stdout for timing markers
         stdout = result.stdout or ""

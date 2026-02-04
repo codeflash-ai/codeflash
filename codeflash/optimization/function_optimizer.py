@@ -595,6 +595,11 @@ class FunctionOptimizer:
                 f.write(generated_test.instrumented_behavior_test_source)
             logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
 
+            # Save perf test source for debugging
+            with open("/tmp/codeflash_perf_test_debug.test.ts", "w", encoding="utf-8") as debug_f:
+                debug_f.write(generated_test.instrumented_perf_test_source)
+            logger.warning(f"[PERF DEBUG] Saved perf test to /tmp/codeflash_perf_test_debug.test.ts for inspection")
+
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
             logger.debug(f"[PIPELINE] Wrote perf test to {generated_test.perf_file_path}")
