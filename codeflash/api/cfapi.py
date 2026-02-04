@@ -285,6 +285,7 @@ def create_staging(
     optimization_review: str = "",
     original_line_profiler: str | None = None,
     optimized_line_profiler: str | None = None,
+    **_kwargs: Any,  # ignores the language argument TODO Hesham: staging for all langs
 ) -> Response:
     """Create a staging pull request, targeting the specified branch. (usually 'staging').
 
