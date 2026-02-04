@@ -213,7 +213,7 @@ class ReferenceFinder:
 
                 if import_info:
                     context.visited_files.add(file_path)
-                    import_name, original_import = import_info
+                    import_name, _original_import = import_info
                     file_refs = self._find_references_in_file(
                         file_path, file_code, reexport_name, import_name, file_analyzer, include_self=True
                     )

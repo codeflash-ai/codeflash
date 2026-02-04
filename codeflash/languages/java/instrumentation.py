@@ -17,15 +17,15 @@ from __future__ import annotations
 import logging
 import re
 from functools import lru_cache
-from pathlib import Path
 from typing import TYPE_CHECKING
-
-from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.languages.java.parser import JavaAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
     from typing import Any
+
+    from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.java.parser import JavaAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ def _get_function_name(func: Any) -> str:
         return func.function_name
     if hasattr(func, "name"):
         return func.name
-    raise AttributeError(f"Cannot get function name from {type(func)}")
+    msg = f"Cannot get function name from {type(func)}"
+    raise AttributeError(msg)
 
 
 def _get_qualified_name(func: Any) -> str:
@@ -56,9 +57,7 @@ def _get_qualified_name(func: Any) -> str:
 
 
 def instrument_for_behavior(
-    source: str,
-    functions: Sequence[FunctionToOptimize],
-    analyzer: JavaAnalyzer | None = None,
+    source: str, functions: Sequence[FunctionToOptimize], analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add behavior instrumentation to capture inputs/outputs.
 
@@ -84,9 +83,7 @@ def instrument_for_behavior(
 
 
 def instrument_for_benchmarking(
-    test_source: str,
-    target_function: FunctionToOptimize,
-    analyzer: JavaAnalyzer | None = None,
+    test_source: str, target_function: FunctionToOptimize, analyzer: JavaAnalyzer | None = None
 ) -> str:
     """Add timing instrumentation to test code.
 
@@ -139,7 +136,7 @@ def instrument_existing_test(
     try:
         source = test_path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.error("Failed to read test file %s: %s", test_path, e)
+        logger.exception("Failed to read test file %s: %s", test_path, e)
         return False, f"Failed to read test file: {e}"
 
     func_name = _get_function_name(function_to_optimize)
@@ -169,19 +166,9 @@ def instrument_existing_test(
         )
     else:
         # Behavior mode: add timing instrumentation that also writes to SQLite
-        modified_source = _add_behavior_instrumentation(
-            modified_source,
-            original_class_name,
-            func_name,
-        )
+        modified_source = _add_behavior_instrumentation(modified_source, original_class_name, func_name)
 
-    logger.debug(
-        "Java %s testing for %s: renamed class %s -> %s",
-        mode,
-        func_name,
-        original_class_name,
-        new_class_name,
-    )
+    logger.debug("Java %s testing for %s: renamed class %s -> %s", mode, func_name, original_class_name, new_class_name)
 
     return True, modified_source
 
@@ -241,7 +228,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                         result.append(imp)
                 imports_added = True
                 continue
-            if stripped.startswith("public class") or stripped.startswith("class"):
+            if stripped.startswith(("public class", "class")):
                 # No imports found, add before class
                 for imp in import_statements:
                     result.append(imp)
@@ -257,7 +244,6 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
     result = []
     i = 0
     iteration_counter = 0
-
 
     # Pre-compile the regex pattern once
     method_call_pattern = _get_method_call_pattern(func_name)
@@ -305,10 +291,9 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
                 # Count braces more efficiently using string methods
-                open_count = body_line.count('{')
-                close_count = body_line.count('}')
+                open_count = body_line.count("{")
+                close_count = body_line.count("}")
                 brace_depth += open_count - close_count
-
 
                 if brace_depth > 0:
                     body_lines.append(body_line)
@@ -340,7 +325,7 @@ def _add_behavior_instrumentation(source: str, class_name: str, func_name: str) 
                             full_call = match.group(0)  # e.g., "new StringUtils().reverse(\"hello\")"
 
                             # Replace this occurrence with the variable
-                            new_line = new_line[:match.start()] + var_name + new_line[match.end():]
+                            new_line = new_line[: match.start()] + var_name + new_line[match.end() :]
 
                             # Insert capture line
                             capture_line = f"{line_indent_str}Object {var_name} = {full_call};"
@@ -567,10 +552,7 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
 
 def create_benchmark_test(
-    target_function: FunctionToOptimize,
-    test_setup_code: str,
-    invocation_code: str,
-    iterations: int = 1000,
+    target_function: FunctionToOptimize, test_setup_code: str, invocation_code: str, iterations: int = 1000
 ) -> str:
     """Create a benchmark test for a function.
 
@@ -588,7 +570,7 @@ def create_benchmark_test(
     method_id = _get_qualified_name(target_function)
     class_name = getattr(target_function, "class_name", None) or "Target"
 
-    benchmark_code = f"""
+    return f"""
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -622,7 +604,6 @@ public class {class_name}Benchmark {{
     }}
 }}
 """
-    return benchmark_code
 
 
 def remove_instrumentation(source: str) -> str:
@@ -675,9 +656,7 @@ def instrument_generated_java_test(
 
     # Rename the class in the source
     modified_code = re.sub(
-        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b",
-        rf"\1class {new_class_name}",
-        test_code,
+        rf"\b(public\s+)?class\s+{re.escape(original_class_name)}\b", rf"\1class {new_class_name}", test_code
     )
 
     # For performance mode, add timing instrumentation
@@ -710,7 +689,7 @@ def _add_import(source: str, import_statement: str) -> str:
     # Find the last import or package statement
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("import ") or stripped.startswith("package "):
+        if stripped.startswith(("import ", "package ")):
             insert_idx = i + 1
         elif stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
             # First non-import, non-comment line
@@ -722,13 +701,11 @@ def _add_import(source: str, import_statement: str) -> str:
     return "".join(lines)
 
 
-
 @lru_cache(maxsize=128)
 def _get_method_call_pattern(func_name: str):
     """Cache compiled regex patterns for method call matching."""
     return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
-        re.MULTILINE
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
     )
 
 
@@ -736,6 +713,5 @@ def _get_method_call_pattern(func_name: str):
 def _get_method_call_pattern(func_name: str):
     """Cache compiled regex patterns for method call matching."""
     return re.compile(
-        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)",
-        re.MULTILINE
+        rf"((?:new\s+\w+\s*\([^)]*\)|[a-zA-Z_]\w*))\s*\.\s*({re.escape(func_name)})\s*\(([^)]*)\)", re.MULTILINE
     )

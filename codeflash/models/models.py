@@ -325,9 +325,7 @@ class CodeStringsMarkdown(BaseModel):
         """
         if "file_to_path" in self._cache:
             return self._cache["file_to_path"]
-        result = {
-            str(code_string.file_path): code_string.code for code_string in self.code_strings
-        }
+        result = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
         self._cache["file_to_path"] = result
         return result
 

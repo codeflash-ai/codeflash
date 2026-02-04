@@ -106,10 +106,7 @@ def generate_tests(
 
             # Instrument for behavior verification (renames class)
             instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="behavior",
+                test_code=generated_test_source, function_name=func_name, qualified_name=qualified_name, mode="behavior"
             )
 
             # Instrument for performance measurement (adds timing markers)
