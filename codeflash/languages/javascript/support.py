@@ -693,9 +693,9 @@ class JavaScriptSupport:
 
         # Also find identifiers referenced in helper functions
         referenced_in_helpers: set[str] = set()
-        for helper in helpers:
-            helper_refs = analyzer.find_referenced_identifiers(helper.source_code)
-            referenced_in_helpers.update(helper_refs)
+        if helpers:
+            combined_helpers_source = "\n".join(h.source_code for h in helpers)
+            referenced_in_helpers = analyzer.find_referenced_identifiers(combined_helpers_source)
 
         # Combine all referenced identifiers
         all_references = referenced_in_target | referenced_in_helpers
