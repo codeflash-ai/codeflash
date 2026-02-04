@@ -1880,15 +1880,19 @@ class JavaScriptSupport:
             errors.append(f"Failed to check npm: {e}")
 
         # Check node_modules exists
-        node_modules = project_root / "node_modules"
-        if not node_modules.exists():
-            errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
-            )
+        # Check test framework is installed (with monorepo support)
+        from codeflash.cli_cmds.init_javascript import find_node_modules_with_package
+
+        node_modules = find_node_modules_with_package(project_root, test_framework)
+        if node_modules:
+            logger.debug("Found %s in node_modules at %s", test_framework, node_modules / test_framework)
         else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            local_node_modules = project_root / "node_modules"
+            if not local_node_modules.exists():
+                errors.append(
+                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                )
+            else:
                 errors.append(
                     f"{test_framework} is not installed. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
