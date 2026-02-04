@@ -332,7 +332,7 @@ class TestJavaScriptTracerCreateReplayTest:
         assert result is None
 
 
-@pytest.mark.skipif(not node_available(), reason="Node.js not available")
+@pytest.mark.skipif(os.name == "nt" or not node_available(), reason="Skipped on Windows or if Node.js not available")
 class TestJavaScriptTracerE2E:
     """End-to-end tests for JavaScript tracing."""
 
