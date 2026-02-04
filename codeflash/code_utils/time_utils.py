@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from functools import lru_cache
 
 import humanize
 
+_SPLIT_PATTERN = re.compile(r",|\s")
 
+
+@lru_cache(maxsize=512)
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
     units = "nanoseconds"
@@ -16,7 +20,7 @@ def humanize_runtime(time_in_ns: int) -> str:
         time_micro = float(time_in_ns) / 1000
         runtime_human = humanize.precisedelta(dt.timedelta(microseconds=time_micro), minimum_unit="microseconds")
 
-        units = re.split(r",|\s", runtime_human)[1]
+        units = _SPLIT_PATTERN.split(runtime_human)[1]
 
         if units in {"microseconds", "microsecond"}:
             runtime_human = f"{time_micro:.3g}"
