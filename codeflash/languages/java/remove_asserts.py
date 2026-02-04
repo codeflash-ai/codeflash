@@ -677,9 +677,12 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
+        code_len = len(code)
+        # Initialize prev_char to the character just before pos to match original behavior
+        prev_char = code[open_brace_pos] if open_brace_pos < code_len else ""
+
+        while pos < code_len and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             if char == "'" and not in_string and prev_char != "\\":
                 in_char = not in_char
@@ -697,6 +700,8 @@ class JavaAssertTransformer:
                     depth -= 1
 
             pos += 1
+
+            prev_char = char
 
         if depth != 0:
             return None, -1
