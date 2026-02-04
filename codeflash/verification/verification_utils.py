@@ -169,34 +169,24 @@ class TestConfig:
 
         Returns:
             Module name if detected, None otherwise.
+
         """
         if not is_java():
-            logger.debug(f"java_test_module: is_java() returned False")
             return None
 
         try:
-            # Convert to relative path from project root
             if self.tests_root.is_absolute():
-                try:
-                    rel_path = self.tests_root.relative_to(self.project_root_path)
-                except ValueError:
-                    # tests_root is outside project_root
-                    logger.debug(f"java_test_module: tests_root {self.tests_root} is outside project_root {self.project_root_path}")
-                    return None
+                rel_path = self.tests_root.relative_to(self.project_root_path)
             else:
                 rel_path = self.tests_root
 
             parts = rel_path.parts
-            logger.debug(f"java_test_module: rel_path={rel_path}, parts={parts}")
             # Check for module pattern: module/src/test/...
             if len(parts) >= 3 and parts[1] == "src" and parts[2] == "test":
                 module_name = parts[0]
                 logger.info(f"Detected Java test module from tests_root: {module_name}")
                 return module_name
-            else:
-                logger.debug(f"java_test_module: pattern doesn't match (need module/src/test/..., got {parts})")
-        except Exception as e:
-            logger.debug(f"java_test_module: exception {e}")
+        except (ValueError, Exception):
             pass
 
         return None

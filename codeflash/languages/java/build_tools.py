@@ -18,6 +18,45 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def get_gradle_settings_file(project_root: Path) -> Path | None:
+    """Find the Gradle settings file (settings.gradle or settings.gradle.kts).
+
+    Args:
+        project_root: Root directory of the Gradle project.
+
+    Returns:
+        Path to settings file if found, None otherwise.
+
+    """
+    settings_path = project_root / "settings.gradle"
+    if settings_path.exists():
+        return settings_path
+    settings_kts_path = project_root / "settings.gradle.kts"
+    if settings_kts_path.exists():
+        return settings_kts_path
+    return None
+
+
+def parse_gradle_modules(settings_file: Path) -> list[str]:
+    """Parse module names from a Gradle settings file.
+
+    Args:
+        settings_file: Path to settings.gradle or settings.gradle.kts.
+
+    Returns:
+        List of module names (without leading colons).
+
+    """
+    import re
+
+    try:
+        content = settings_file.read_text(encoding="utf-8")
+        modules = re.findall(r"include\s*[(\[]?\s*['\"]([^'\"]+)['\"]", content)
+        return [m.lstrip(":").replace(":", "/") for m in modules]
+    except Exception:
+        return []
+
+
 def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
     """Safely parse an XML file with protections against XXE attacks.
 
@@ -29,6 +68,7 @@ def _safe_parse_xml(file_path: Path) -> ET.ElementTree:
 
     Raises:
         ET.ParseError: If XML parsing fails.
+
     """
     # Read file content and parse as string to avoid file-based attacks
     # This prevents XXE attacks by not allowing external entity resolution
@@ -595,54 +635,37 @@ def _detect_module_from_test_classes(project_root: Path, test_patterns: list[str
         Module name if detected, None otherwise.
 
     """
-    # Check if this is a multi-module project
-    settings_path = project_root / "settings.gradle"
-    settings_kts_path = project_root / "settings.gradle.kts"
-    settings_file = settings_path if settings_path.exists() else (settings_kts_path if settings_kts_path.exists() else None)
-
+    settings_file = get_gradle_settings_file(project_root)
     if not settings_file:
         return None
 
-    try:
-        import re
-        content = settings_file.read_text(encoding="utf-8")
-        modules = re.findall(r"include\s*[(\[]?\s*['\"]([^'\"]+)['\"]", content)
-        module_names = [m.lstrip(':').replace(':', '/') for m in modules]
+    module_names = parse_gradle_modules(settings_file)
+    if not module_names:
+        return None
 
-        # Try to find test classes on disk to determine their module
-        for pattern in test_patterns:
-            # Convert package pattern to path (e.g., org.elasticsearch.Test -> org/elasticsearch/Test)
-            class_path = pattern.replace('.', '/')
+    # Try to find test classes on disk to determine their module
+    for pattern in test_patterns:
+        class_path = pattern.replace(".", "/")
 
-            # Search for this test class in module test directories
-            for module in module_names:
-                # Check both absolute and relative paths
-                test_file = project_root / module / "src" / "test" / "java" / f"{class_path}.java"
-
-                # Also check if pattern already contains module path
-                if class_path.startswith(module + '/'):
-                    logger.debug(f"Detected module '{module}' from test class path {pattern}")
-                    return module
-
-                if test_file.exists():
-                    logger.debug(f"Detected module '{module}' from test class file {test_file}")
-                    return module
-
-        # Fallback: glob search for any test file in module directories
         for module in module_names:
-            test_dir = project_root / module / "src" / "test" / "java"
-            if test_dir.exists():
-                # Check if any test files exist in this module
-                for pattern in test_patterns:
-                    # Extract just the class name
-                    class_name = pattern.split('.')[-1] if '.' in pattern else pattern
-                    test_files = list(test_dir.rglob(f"*{class_name}*.java"))
-                    if test_files:
-                        logger.debug(f"Detected module '{module}' from glob search, found {test_files[0]}")
-                        return module
+            # Check if pattern already contains module path
+            if class_path.startswith(module + "/"):
+                return module
 
-    except Exception as e:
-        logger.debug(f"Failed to detect module from test classes: {e}")
+            # Check if test file exists in module
+            test_file = project_root / module / "src" / "test" / "java" / f"{class_path}.java"
+            if test_file.exists():
+                return module
+
+    # Fallback: glob search for test files matching class name
+    for module in module_names:
+        test_dir = project_root / module / "src" / "test" / "java"
+        if not test_dir.exists():
+            continue
+        for pattern in test_patterns:
+            class_name = pattern.split(".")[-1] if "." in pattern else pattern
+            if list(test_dir.rglob(f"*{class_name}*.java")):
+                return module
 
     return None
 
@@ -1149,11 +1172,11 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
         # JaCoCo plugin XML to insert (indented for typical pom.xml format)
         # Note: For multi-module projects where tests are in a separate module,
         # we configure the report to look in multiple directories for classes
-        jacoco_plugin = """
+        jacoco_plugin = f"""
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>{version}</version>
+        <version>{JACOCO_PLUGIN_VERSION}</version>
         <executions>
           <execution>
             <id>prepare-agent</id>
@@ -1175,7 +1198,7 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
             </configuration>
           </execution>
         </executions>
-      </plugin>""".format(version=JACOCO_PLUGIN_VERSION)
+      </plugin>"""
 
         # Find the main <build> section (not inside <profiles>)
         # We need to find a <build> that appears after </profiles> or before <profiles>
@@ -1184,7 +1207,6 @@ def add_jacoco_plugin_to_pom(pom_path: Path) -> bool:
         profiles_end = content.find("</profiles>")
 
         # Find all <build> tags
-        import re
 
         # Find the main build section - it's the one NOT inside profiles
         # Strategy: Look for <build> that comes after </profiles> or before <profiles> (or no profiles)
@@ -1596,9 +1618,8 @@ def convert_jacoco_exec_to_xml(
         if result.returncode == 0:
             logger.info(f"Successfully converted .exec to XML: {xml_path}")
             return True
-        else:
-            logger.error(f"Failed to convert .exec to XML: {result.stderr}")
-            return False
+        logger.error(f"Failed to convert .exec to XML: {result.stderr}")
+        return False
 
     except subprocess.TimeoutExpired:
         logger.error("JaCoCo CLI conversion timed out")
