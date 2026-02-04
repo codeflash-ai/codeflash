@@ -272,6 +272,7 @@ ignore = [
     "ANN401",  # typing.Any disallowed
     "ARG001",  # Unused function argument (common in abstract/interface methods)
     "TRY300",  # Consider moving to else block
+    "FURB110", # if-exp-instead-of-or-operator - we prefer explicit if-else over "or"
     "TRY401",  # Redundant exception in logging.exception
     "PLR0911", # Too many return statements
     "PLW0603", # Global statement
