@@ -311,14 +311,12 @@ class CandidateProcessor:
                 lambda: setattr(self, "line_profiler_done", True),
             )
         if len(self.future_all_code_repair) > 0:
-            result = self._process_candidates(
+            return self._process_candidates(
                 self.future_all_code_repair,
                 "Repairing {0} candidates",
                 "Added {0} candidates from repair, total candidates now: {1}",
-                None,
+                self.future_all_code_repair.clear,
             )
-            self.future_all_code_repair.clear()
-            return result
         if self.line_profiler_done and not self.refinement_done:
             return self._process_candidates(
                 self.future_all_refinements,
@@ -328,14 +326,12 @@ class CandidateProcessor:
                 filter_candidates_func=self._filter_refined_candidates,
             )
         if len(self.future_adaptive_optimizations) > 0:
-            result = self._process_candidates(
+            return self._process_candidates(
                 self.future_adaptive_optimizations,
                 "Applying adaptive optimizations to {0} candidates",
                 "Added {0} candidates from adaptive optimization, total candidates now: {1}",
-                None,
+                self.future_adaptive_optimizations.clear,
             )
-            self.future_adaptive_optimizations.clear()
-            return result
         return None  # All done
 
     def _process_candidates(
@@ -600,11 +596,10 @@ class FunctionOptimizer:
             logger.debug(f"[PIPELINE] Wrote behavioral test to {generated_test.behavior_file_path}")
 
             # Save perf test source for debugging
-            from pathlib import Path
-
-            debug_path = Path("/tmp/codeflash_perf_test_debug.test.ts")  # noqa: S108
-            debug_path.write_text(generated_test.instrumented_perf_test_source, encoding="utf-8")
-            logger.warning("[PERF DEBUG] Saved perf test to /tmp/codeflash_perf_test_debug.test.ts for inspection")
+            debug_file_path = get_run_tmp_file(Path("perf_test_debug.test.ts"))
+            with debug_file_path.open("w", encoding="utf-8") as debug_f:
+                debug_f.write(generated_test.instrumented_perf_test_source)
+            logger.warning(f"[PERF DEBUG] Saved perf test to {debug_file_path} for inspection")
 
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)
@@ -2104,7 +2099,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-        existing_tests, replay_tests, _ = existing_tests_source_for(
+        existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
