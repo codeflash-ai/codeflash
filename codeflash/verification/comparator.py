@@ -25,6 +25,7 @@ HAS_JAX = find_spec("jax") is not None
 HAS_XARRAY = find_spec("xarray") is not None
 HAS_TENSORFLOW = find_spec("tensorflow") is not None
 HAS_NUMBA = find_spec("numba") is not None
+HAS_PYARROW = find_spec("pyarrow") is not None
 
 # Pattern to match pytest temp directories: /tmp/pytest-of-<user>/pytest-<N>/
 # These paths vary between test runs but are logically equivalent
@@ -341,6 +342,50 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if orig.get_shape() != new.get_shape():
                 return False
             return (orig != new).nnz == 0
+
+        if HAS_PYARROW:
+            import pyarrow as pa  # type: ignore  # noqa: PGH003
+
+            if isinstance(orig, pa.Table):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return orig.equals(new)
+
+            if isinstance(orig, pa.RecordBatch):
+                if orig.schema != new.schema:
+                    return False
+                if orig.num_rows != new.num_rows:
+                    return False
+                return orig.equals(new)
+
+            if isinstance(orig, pa.ChunkedArray):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return orig.equals(new)
+
+            if isinstance(orig, pa.Array):
+                if orig.type != new.type:
+                    return False
+                if len(orig) != len(new):
+                    return False
+                return orig.equals(new)
+
+            if isinstance(orig, pa.Scalar):
+                if orig.type != new.type:
+                    return False
+                # Handle null scalars
+                if not orig.is_valid and not new.is_valid:
+                    return True
+                if not orig.is_valid or not new.is_valid:
+                    return False
+                return orig.equals(new)
+
+            if isinstance(orig, (pa.Schema, pa.Field, pa.DataType)):
+                return orig.equals(new)
 
         if HAS_PANDAS:
             import pandas  # noqa: ICN001
