@@ -148,7 +148,7 @@ class Explanation:
             f"Optimized {self.function_name} in {self.file_path}\n"
             f"{self.perf_improvement_line}\n"
             + performance_description
-            + (benchmark_info or "")
+            + (benchmark_info if benchmark_info else "")
             + self.raw_explanation_message
             + " \n\n"
             + (

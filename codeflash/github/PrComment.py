@@ -41,7 +41,7 @@ class PrComment:
             "speedup_pct": self.speedup_pct,
             "loop_count": self.winning_benchmarking_test_results.number_of_loops(),
             "report_table": report_table,
-            "benchmark_details": self.benchmark_details or None,
+            "benchmark_details": self.benchmark_details if self.benchmark_details else None,
         }
 
         if self.original_async_throughput is not None and self.best_async_throughput is not None:

@@ -94,7 +94,7 @@ def get_test_info_from_stack(tests_root: str) -> tuple[str, str | None, str, str
                 test_module_name = os.environ.get("CODEFLASH_TEST_MODULE", "")
             if not test_class_name:
                 env_class = os.environ.get("CODEFLASH_TEST_CLASS")
-                test_class_name = env_class or None
+                test_class_name = env_class if env_class else None
 
     return test_module_name, test_class_name, test_name, line_id
 
