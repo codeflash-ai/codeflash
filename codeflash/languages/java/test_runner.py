@@ -1114,7 +1114,17 @@ def _run_maven_tests(
         cmd.append(f"-Dtest={validated_filter}")
         logger.debug(f"Added -Dtest={validated_filter} to Maven command")
     else:
-        logger.warning(f"Test filter is EMPTY for mode={mode}! Maven will run ALL tests. This is likely a bug.")
+        # CRITICAL: Empty test filter means Maven will run ALL tests
+        # This is almost always a bug - tests should be filtered to relevant ones
+        error_msg = (
+            f"Test filter is EMPTY for mode={mode}! "
+            f"Maven will run ALL tests instead of the specified tests. "
+            f"This indicates a problem with test file instrumentation or path resolution."
+        )
+        logger.error(error_msg)
+        # Raise exception to prevent running all tests unintentionally
+        # This helps catch bugs early rather than silently running wrong tests
+        raise ValueError(error_msg)
 
     logger.debug("Running Maven command: %s in %s", " ".join(cmd), project_root)
 
@@ -1184,6 +1194,8 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
     if hasattr(test_paths, "test_files"):
         filters = []
         skipped = 0
+        skipped_reasons = []
+
         for test_file in test_paths.test_files:
             # For performance mode, use benchmarking_file_path
             if mode == "performance":
@@ -1192,24 +1204,42 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     if class_name:
                         filters.append(class_name)
                     else:
-                        logger.debug(f"_build_test_filter: Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}")
+                        reason = f"Could not convert benchmarking path to class name: {test_file.benchmarking_file_path}"
+                        logger.debug(f"_build_test_filter: {reason}")
                         skipped += 1
+                        skipped_reasons.append(reason)
                 else:
-                    logger.debug(f"_build_test_filter: TestFile has no benchmarking_file_path (mode=performance)")
+                    reason = f"TestFile has no benchmarking_file_path (original: {test_file.original_file_path})"
+                    logger.warning(f"_build_test_filter: {reason}")
                     skipped += 1
+                    skipped_reasons.append(reason)
             # For behavior mode, use instrumented_behavior_file_path
             elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
                 class_name = _path_to_class_name(test_file.instrumented_behavior_file_path)
                 if class_name:
                     filters.append(class_name)
                 else:
-                    logger.debug(f"_build_test_filter: Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}")
+                    reason = f"Could not convert behavior path to class name: {test_file.instrumented_behavior_file_path}"
+                    logger.debug(f"_build_test_filter: {reason}")
                     skipped += 1
+                    skipped_reasons.append(reason)
             else:
-                logger.debug(f"_build_test_filter: TestFile has no instrumented_behavior_file_path (mode=behavior)")
+                reason = f"TestFile has no instrumented_behavior_file_path (original: {test_file.original_file_path})"
+                logger.warning(f"_build_test_filter: {reason}")
                 skipped += 1
+                skipped_reasons.append(reason)
+
         result = ",".join(filters) if filters else ""
         logger.debug(f"_build_test_filter (TestFiles): {len(filters)} filters, {skipped} skipped -> '{result}'")
+
+        # If all tests were skipped, log detailed information to help diagnose
+        if not filters and skipped > 0:
+            logger.error(
+                f"All {skipped} test files were skipped in _build_test_filter! "
+                f"Mode: {mode}. This will cause an empty test filter. "
+                f"Reasons: {skipped_reasons[:5]}"  # Show first 5 reasons
+            )
+
         return result
 
     logger.debug(f"_build_test_filter: Unknown test_paths type: {type(test_paths)}")

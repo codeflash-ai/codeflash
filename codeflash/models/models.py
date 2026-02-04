@@ -408,7 +408,7 @@ class GeneratedTestsList(BaseModel):
 
 class TestFile(BaseModel):
     instrumented_behavior_file_path: Path
-    benchmarking_file_path: Path = None
+    benchmarking_file_path: Optional[Path] = None
     original_file_path: Optional[Path] = None
     original_source: Optional[str] = None
     test_type: TestType
