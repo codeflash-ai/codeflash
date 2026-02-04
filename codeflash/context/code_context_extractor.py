@@ -786,7 +786,6 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
     imported_module_cache: dict[str, object] = {}
 
     for base_name, module_name in external_bases_set:
-
         try:
             module = imported_module_cache.get(module_name)
             if module is None:

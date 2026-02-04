@@ -14,6 +14,7 @@ class TestType(Enum):
             return ""
         return _TO_NAME_MAP[self]
 
+
 _TO_NAME_MAP: dict[TestType, str] = {
     TestType.EXISTING_UNIT_TEST: "⚙️ Existing Unit Tests",
     TestType.INSPIRED_REGRESSION: "🎨 Inspired Regression Tests",
