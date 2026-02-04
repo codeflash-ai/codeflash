@@ -756,7 +756,7 @@ def parse_jest_test_xml(
                 # Infer test type from filename pattern
                 filename = test_file_path.name
                 if "__perf_test_" in filename or "_perf_test_" in filename:
-                    test_type = TestType.GENERATED_PERFORMANCE
+                    test_type = TestType.GENERATED_REGRESSION  # Performance tests are still generated regression tests
                 elif "__unit_test_" in filename or "_unit_test_" in filename:
                     test_type = TestType.GENERATED_REGRESSION
                 else:
