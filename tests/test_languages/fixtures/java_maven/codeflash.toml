@@ -1,0 +1,5 @@
+# Codeflash configuration for Java project
+
+[tool.codeflash]
+module-root = "src/main/java"
+tests-root = "src/test/java"

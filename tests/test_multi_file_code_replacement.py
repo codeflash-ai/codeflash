@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown
+from codeflash.models.models import CodeOptimizationContext, CodeStringsMarkdown, FunctionParent
 from codeflash.optimization.function_optimizer import FunctionOptimizer
 from codeflash.verification.verification_utils import TestConfig
 
@@ -165,3 +165,82 @@ def _estimate_string_tokens(content: str | Sequence[UserContent]) -> int:
 
     assert new_code.rstrip() == original_main.rstrip()  # No Change
     assert new_helper_code.rstrip() == expected_helper.rstrip()
+
+
+def test_optimized_code_for_different_file_not_applied_to_current_file() -> None:
+    """Test that optimized code for one file is not incorrectly applied to a different file.
+
+    This reproduces the bug from PR #1309 where optimized code for `formatter.py`
+    was incorrectly applied to `support.py`, causing `normalize_java_code` to be
+    duplicated. The bug was in `get_optimized_code_for_module` which had a fallback
+    that applied a single code block to ANY file being processed.
+
+    The scenario:
+    1. `support.py` imports `normalize_java_code` from `formatter.py`
+    2. AI returns optimized code with a single code block for `formatter.py`
+    3. BUG: When processing `support.py`, the fallback applies `formatter.py`'s code
+    4. EXPECTED: No code should be applied to `support.py` since the paths don't match
+    """
+    from codeflash.code_utils.code_extractor import find_preexisting_objects
+    from codeflash.code_utils.code_replacer import replace_function_definitions_in_module
+    from codeflash.models.models import CodeStringsMarkdown
+
+    root_dir = Path(__file__).parent.parent.resolve()
+
+    # Create support.py - the file that imports the helper
+    support_file = (root_dir / "code_to_optimize/temp_pr1309_support.py").resolve()
+    original_support = '''from temp_pr1309_formatter import normalize_java_code
+
+
+class JavaSupport:
+    """Support class for Java operations."""
+
+    def normalize_code(self, source: str) -> str:
+        """Normalize code for deduplication."""
+        return normalize_java_code(source)
+'''
+    support_file.write_text(original_support, encoding="utf-8")
+
+    # AI returns optimized code for formatter.py ONLY (with explicit path)
+    # This simulates what happens when the AI optimizes the helper function
+    optimized_markdown = '''```python:code_to_optimize/temp_pr1309_formatter.py
+def normalize_java_code(source: str) -> str:
+    """Optimized version with fast-path."""
+    if not source:
+        return ""
+    return "\\n".join(line.strip() for line in source.splitlines() if line.strip())
+```
+'''
+
+    preexisting_objects = find_preexisting_objects(original_support)
+
+    # Process support.py with the optimized code that's meant for formatter.py
+    replace_function_definitions_in_module(
+        function_names=["JavaSupport.normalize_code"],
+        optimized_code=CodeStringsMarkdown.parse_markdown_code(optimized_markdown),
+        module_abspath=support_file,
+        preexisting_objects=preexisting_objects,
+        project_root_path=root_dir,
+    )
+
+    new_support_code = support_file.read_text(encoding="utf-8")
+
+    # Cleanup
+    support_file.unlink(missing_ok=True)
+
+    # CRITICAL: support.py should NOT have normalize_java_code defined!
+    # The optimized code was for formatter.py, not support.py.
+    def_count = new_support_code.count("def normalize_java_code")
+    assert def_count == 0, (
+        f"Bug: normalize_java_code was incorrectly added to support.py!\n"
+        f"Found {def_count} definition(s) when there should be 0.\n"
+        f"The optimized code was for formatter.py, not support.py.\n"
+        f"Resulting code:\n{new_support_code}"
+    )
+
+    # The file should remain unchanged since no code matched its path
+    assert new_support_code.strip() == original_support.strip(), (
+        f"support.py was modified when it shouldn't have been.\n"
+        f"Original:\n{original_support}\n"
+        f"New:\n{new_support_code}"
+    )

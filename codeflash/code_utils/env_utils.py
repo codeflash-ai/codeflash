@@ -13,7 +13,6 @@ from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import exit_with_message
 from codeflash.code_utils.formatter import format_code
 from codeflash.code_utils.shell_utils import read_api_key_from_shell_config, save_api_key_to_rc
-from codeflash.languages.registry import get_language_support_by_common_formatters
 from codeflash.lsp.helpers import is_LSP_enabled
 
 
@@ -37,6 +36,9 @@ def check_formatter_installed(
             f"Please install it or update 'formatter-cmds' in your codeflash configuration"
         )
         return False
+
+    # Import here to avoid circular import
+    from codeflash.languages.registry import get_language_support_by_common_formatters
 
     lang_support = get_language_support_by_common_formatters(formatter_cmds)
     if not lang_support:

@@ -536,10 +536,14 @@ def _detect_formatter(project_root: Path, language: str) -> tuple[list[str], str
 
     Python: ruff > black
     JavaScript: prettier > eslint --fix
+    Java: not supported yet (returns empty)
 
     """
     if language in ("javascript", "typescript"):
         return _detect_js_formatter(project_root)
+    if language == "java":
+        # Java formatter support not implemented yet
+        return [], "not supported for Java"
     return _detect_python_formatter(project_root)
 
 
@@ -693,19 +697,20 @@ def has_existing_config(project_root: Path) -> tuple[bool, str | None]:
 
     Returns:
         Tuple of (has_config, config_file_type).
-        config_file_type is "pyproject.toml", "package.json", or None.
+        config_file_type is "pyproject.toml", "codeflash.toml", "package.json", or None.
 
     """
-    # Check pyproject.toml
-    pyproject_path = project_root / "pyproject.toml"
-    if pyproject_path.exists():
-        try:
-            with pyproject_path.open("rb") as f:
-                data = tomlkit.parse(f.read())
-            if "tool" in data and "codeflash" in data["tool"]:
-                return True, "pyproject.toml"
-        except Exception:
-            pass
+    # Check TOML config files (pyproject.toml, codeflash.toml)
+    for toml_filename in ("pyproject.toml", "codeflash.toml"):
+        toml_path = project_root / toml_filename
+        if toml_path.exists():
+            try:
+                with toml_path.open("rb") as f:
+                    data = tomlkit.parse(f.read())
+                if "tool" in data and "codeflash" in data["tool"]:
+                    return True, toml_filename
+            except Exception:
+                pass
 
     # Check package.json
     package_json_path = project_root / "package.json"

@@ -4,6 +4,7 @@ import ast
 from collections import defaultdict
 from functools import lru_cache
 from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, TypeVar
 
 import libcst as cst
@@ -514,6 +515,7 @@ def replace_function_definitions_for_language(
         original_source=original_source_code,
         module_abspath=module_abspath,
         language=language,
+        target_function_names=function_names,
     )
 
     # If we have function_to_optimize with line info and this is the main file, use it for precise replacement
@@ -523,15 +525,21 @@ def replace_function_definitions_for_language(
         and function_to_optimize.ending_line
         and function_to_optimize.file_path == module_abspath
     ):
-        # Extract just the target function from the optimized code
-        optimized_func = _extract_function_from_code(
-            lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
-        )
-        if optimized_func:
-            new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
-        else:
-            # Fallback: use the entire optimized code (for simple single-function files)
+        # For Java, we need to pass the full optimized code so replace_function can
+        # extract and add any new class members (static fields, helper methods).
+        # For other languages, we extract just the target function.
+        if language == Language.JAVA:
             new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
+        else:
+            # Extract just the target function from the optimized code
+            optimized_func = _extract_function_from_code(
+                lang_support, code_to_apply, function_to_optimize.function_name, module_abspath
+            )
+            if optimized_func:
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, optimized_func)
+            else:
+                # Fallback: use the entire optimized code (for simple single-function files)
+                new_code = lang_support.replace_function(original_source_code, function_to_optimize, code_to_apply)
     else:
         # For helper files or when we don't have precise line info:
         # Find each function by name in both original and optimized code
@@ -556,13 +564,19 @@ def replace_function_definitions_for_language(
             if func is None:
                 continue
 
-            # Extract just this function from the optimized code
-            optimized_func = _extract_function_from_code(
-                lang_support, code_to_apply, func.function_name, module_abspath
-            )
-            if optimized_func:
-                new_code = lang_support.replace_function(new_code, func, optimized_func)
+            # For Java, pass the full optimized code to handle class member insertion.
+            # For other languages, extract just the target function.
+            if language == Language.JAVA:
+                new_code = lang_support.replace_function(new_code, func, code_to_apply)
                 modified = True
+            else:
+                # Extract just this function from the optimized code
+                optimized_func = _extract_function_from_code(
+                    lang_support, code_to_apply, func.function_name, module_abspath
+                )
+                if optimized_func:
+                    new_code = lang_support.replace_function(new_code, func, optimized_func)
+                    modified = True
 
         if not modified:
             logger.warning(f"Could not find function {function_names} in {module_abspath}")
@@ -612,13 +626,118 @@ def _extract_function_from_code(
     return None
 
 
+def _add_java_class_members(
+    optimized_code: str, original_source: str, target_function_names: list[str] | None = None
+) -> str:
+    """Add new Java class members (static fields and helper methods) from optimized code.
+
+    Parses both the optimized and original code to find:
+    - New static fields in the optimized code that don't exist in the original
+    - New helper methods in the optimized code that don't exist in the original
+
+    These are added to the original class at appropriate positions.
+    Target functions (being replaced) are NOT added as new helpers.
+
+    Args:
+        optimized_code: The optimized code that may contain new class members.
+        original_source: The original source code.
+        target_function_names: List of function names being optimized (to exclude from helpers).
+
+    Returns:
+        Original source with new class members added.
+
+    """
+    target_names = set(target_function_names or [])
+    try:
+        from codeflash.languages.java.parser import get_java_analyzer
+
+        analyzer = get_java_analyzer()
+
+        # Find classes in both sources
+        original_classes = analyzer.find_classes(original_source)
+        optimized_classes = analyzer.find_classes(optimized_code)
+
+        if not original_classes or not optimized_classes:
+            return original_source
+
+        # Match by class name (handle single class per file - most common case)
+        # Use the first class as the target
+        original_class = original_classes[0]
+        optimized_class = None
+        for cls in optimized_classes:
+            if cls.name == original_class.name:
+                optimized_class = cls
+                break
+
+        if not optimized_class:
+            # Try to use first class from optimized if names don't match
+            optimized_class = optimized_classes[0]
+
+        class_name = original_class.name
+
+        # Find existing fields and methods in original
+        existing_fields = analyzer.find_fields(original_source, class_name)
+        existing_methods = analyzer.find_methods(original_source)
+        existing_field_names = {f.name for f in existing_fields}
+        existing_method_names = {m.name for m in existing_methods if m.class_name == class_name}
+
+        # Find fields and methods in optimized code
+        optimized_fields = analyzer.find_fields(optimized_code, class_name)
+        optimized_methods = analyzer.find_methods(optimized_code)
+
+        # Find new fields (fields in optimized that don't exist in original)
+        new_fields = []
+        for field in optimized_fields:
+            if field.name not in existing_field_names:
+                if field.source_text:
+                    new_fields.append(field.source_text)
+
+        # Find new helper methods (methods in optimized that don't exist in original)
+        new_methods = []
+        for method in optimized_methods:
+            # Exclude target functions (they'll be replaced, not added as new helpers)
+            if (
+                method.class_name == class_name
+                and method.name not in existing_method_names
+                and method.name not in target_names
+            ):
+                # Extract method source including Javadoc
+                lines = optimized_code.splitlines(keepends=True)
+                start = (method.javadoc_start_line or method.start_line) - 1
+                end = method.end_line
+                method_source = "".join(lines[start:end])
+                new_methods.append(method_source)
+
+        if not new_fields and not new_methods:
+            return original_source
+
+        logger.debug(f"Adding {len(new_fields)} new fields and {len(new_methods)} helper methods to class {class_name}")
+
+        # Import the insertion function from replacement module
+        from codeflash.languages.java.replacement import _insert_class_members
+
+        return _insert_class_members(original_source, class_name, new_fields, new_methods, analyzer)
+
+    except Exception as e:
+        logger.debug(f"Error adding Java class members: {e}")
+        return original_source
+
+
 def _add_global_declarations_for_language(
-    optimized_code: str, original_source: str, module_abspath: Path, language: Language
+    optimized_code: str,
+    original_source: str,
+    module_abspath: Path,
+    language: Language,
+    target_function_names: list[str] | None = None,
 ) -> str:
     """Add new global declarations from optimized code to original source.
 
-    Finds module-level declarations (const, let, var, class, type, interface, enum)
+    For JavaScript/TypeScript: Finds module-level declarations (const, let, var, class, type, interface, enum)
     in the optimized code that don't exist in the original source and adds them.
+
+    For Java: Class members are NOT added here because replace_function() in
+    replacement.py handles them. Adding them here would shift line numbers and
+    break method matching for overloaded methods.
 
     New declarations are inserted after any existing declarations they depend on.
     For example, if optimized code has `const _has = FOO.bar.bind(FOO)`, and `FOO`
@@ -629,12 +748,18 @@ def _add_global_declarations_for_language(
         original_source: The original source code.
         module_abspath: Path to the module file (for parser selection).
         language: The language of the code.
+        target_function_names: List of function names being optimized (to exclude from Java helpers).
 
     Returns:
         Original source with new declarations added in dependency order.
 
     """
     from codeflash.languages.base import Language
+
+    # Java class members are handled by replace_function() in replacement.py
+    # Adding them here would shift line numbers and break overload matching
+    if language == Language.JAVA:
+        return original_source
 
     if language not in (Language.JAVASCRIPT, Language.TYPESCRIPT):
         return original_source
@@ -812,7 +937,8 @@ def _find_line_after_imports(lines: list[str], analyzer: TreeSitterAnalyzer, sou
 
 def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStringsMarkdown) -> str:
     file_to_code_context = optimized_code.file_to_path()
-    module_optimized_code = file_to_code_context.get(str(relative_path))
+    relative_path_str = str(relative_path)
+    module_optimized_code = file_to_code_context.get(relative_path_str)
     if module_optimized_code is None:
         # Fallback: if there's only one code block with None file path,
         # use it regardless of the expected path (the AI server doesn't always include file paths)
@@ -820,12 +946,40 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             module_optimized_code = file_to_code_context["None"]
             logger.debug(f"Using code block with None file_path for {relative_path}")
         else:
-            logger.warning(
-                f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
-                "re-check your 'markdown code structure'"
-                f"existing files are {file_to_code_context.keys()}"
-            )
-            module_optimized_code = ""
+            # Fallback: try to match by just the filename (for Java/JS where the AI
+            # might return just the class name like "Algorithms.java" instead of
+            # the full path like "src/main/java/com/example/Algorithms.java")
+            target_filename = relative_path.name
+            for file_path_str, code in file_to_code_context.items():
+                if file_path_str:
+                    # Extract filename without creating Path object repeatedly
+                    if file_path_str.endswith(target_filename) and (
+                        len(file_path_str) == len(target_filename)
+                        or file_path_str[-len(target_filename) - 1] in ("/", "\\")
+                    ):
+                        module_optimized_code = code
+                        logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
+                        break
+
+            if module_optimized_code is None:
+                # Also try matching if there's only one code file, but ONLY for non-Python
+                # languages where path matching is less strict. For Python, we require
+                # exact path matching to avoid applying code meant for one file to another.
+                # This prevents bugs like PR #1309 where a function was duplicated because
+                # optimized code for formatter.py was incorrectly applied to support.py.
+                if len(file_to_code_context) == 1 and not is_python():
+                    only_key = next(iter(file_to_code_context.keys()))
+                    module_optimized_code = file_to_code_context[only_key]
+                    logger.debug(f"Using only code block {only_key} for {relative_path}")
+                else:
+                    # Delay expensive string formatting until actually logging
+                    if logger.isEnabledFor(logger.level):
+                        logger.warning(
+                            f"Optimized code not found for {relative_path} In the context\n-------\n{optimized_code}\n-------\n"
+                            "re-check your 'markdown code structure'"
+                            f"existing files are {file_to_code_context.keys()}"
+                        )
+                    module_optimized_code = ""
     return module_optimized_code
 
 

@@ -35,6 +35,7 @@ class ProjectLanguage(Enum):
     PYTHON = auto()
     JAVASCRIPT = auto()
     TYPESCRIPT = auto()
+    JAVA = auto()
 
 
 class JsPackageManager(Enum):
@@ -90,6 +91,13 @@ def detect_project_language(project_root: Path | None = None) -> ProjectLanguage
     has_setup_py = (root / "setup.py").exists()
     has_package_json = (root / "package.json").exists()
     has_tsconfig = (root / "tsconfig.json").exists()
+    has_pom_xml = (root / "pom.xml").exists()
+    has_build_gradle = (root / "build.gradle").exists() or (root / "build.gradle.kts").exists()
+    has_java_src = (root / "src" / "main" / "java").is_dir()
+
+    # Java project (Maven or Gradle)
+    if has_pom_xml or has_build_gradle or has_java_src:
+        return ProjectLanguage.JAVA
 
     # TypeScript project (tsconfig.json is definitive)
     if has_tsconfig:
