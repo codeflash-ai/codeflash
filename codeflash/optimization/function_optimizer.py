@@ -2688,7 +2688,7 @@ class FunctionOptimizer:
         *,
         enable_coverage: bool = False,
         pytest_min_loops: int = 5,
-        pytest_max_loops: int = 250,
+        pytest_max_loops: int = 6,
         code_context: CodeOptimizationContext | None = None,
         line_profiler_output_file: Path | None = None,
     ) -> tuple[TestResults | dict, CoverageData | None]:
