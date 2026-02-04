@@ -7,6 +7,8 @@ across multiple languages using tree-sitter.
 from __future__ import annotations
 
 import logging
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -139,6 +141,9 @@ class TreeSitterAnalyzer:
             language = TreeSitterLanguage(language)
         self.language = language
         self._parser: Parser | None = None
+        self._exports_cache: OrderedDict[str, list[ExportInfo]] = OrderedDict()
+        self._cache_lock = threading.Lock()
+        self._cache_size = 64
 
     @property
     def parser(self) -> Parser:
@@ -676,13 +681,24 @@ class TreeSitterAnalyzer:
             List of ExportInfo objects describing exports.
 
         """
+        with self._cache_lock:
+            cached = self._exports_cache.get(source)
+            if cached is not None:
+                self._exports_cache.move_to_end(source)
+                return self._copy_exports(cached)
+
         source_bytes = source.encode("utf8")
         tree = self.parse(source_bytes)
         exports: list[ExportInfo] = []
 
         self._walk_tree_for_exports(tree.root_node, source_bytes, exports)
 
-        return exports
+        with self._cache_lock:
+            self._exports_cache[source] = exports
+            if len(self._exports_cache) > self._cache_size:
+                self._exports_cache.popitem(last=False)
+
+        return self._copy_exports(exports)
 
     def _walk_tree_for_exports(self, node: Node, source_bytes: bytes, exports: list[ExportInfo]) -> None:
         """Recursively walk the tree to find export statements."""
@@ -1566,6 +1582,19 @@ class TreeSitterAnalyzer:
                         is_exported=is_exported,
                     )
                 )
+
+    def _copy_exports(self, exports: list[ExportInfo]) -> list[ExportInfo]:
+        return [
+            ExportInfo(
+                exported_names=list(e.exported_names),
+                default_export=e.default_export,
+                is_reexport=e.is_reexport,
+                reexport_source=e.reexport_source,
+                start_line=e.start_line,
+                end_line=e.end_line,
+            )
+            for e in exports
+        ]
 
 
 def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
