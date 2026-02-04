@@ -85,7 +85,6 @@ jobs:
             - Only create NEW inline comments for HIGH-PRIORITY issues found in changed files.
             - Limit to 5-7 NEW comments maximum per review.
             - Use CLAUDE.md for project-specific guidance.
-            - Use `gh pr comment` for summary-level feedback.
             - Use `mcp__github_inline_comment__create_inline_comment` sparingly for critical code issues only.
 
             ## STEP 3: Coverage analysis
@@ -122,6 +121,33 @@ jobs:
             - New implementations/files: Must have ≥75% test coverage
             - Modified code: Changed lines should be exercised by existing or new tests
             - No coverage regressions: Overall coverage should not decrease
+
+            ## STEP 4: Post ONE consolidated summary comment
+
+            CRITICAL: You must post exactly ONE summary comment containing ALL results (pre-commit, review, coverage).
+            DO NOT post multiple separate comments. Use this format:
+
+            ```
+            ## PR Review Summary
+
+            ### Pre-commit Checks
+            [status and any fixes made]
+
+            ### Code Review
+            [critical issues found, if any]
+
+            ### Test Coverage
+            [coverage table and analysis]
+
+            ---
+            *Last updated: <timestamp>*
+            ```
+
+            To ensure only ONE comment exists:
+            1. Find existing claude[bot] comment: `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --jq '.[] | select(.user.login == "claude[bot]") | .id' | head -1`
+            2. If found, UPDATE it: `gh api --method PATCH repos/${{ github.repository }}/issues/comments/<ID> -f body="<content>"`
+            3. If not found, CREATE: `gh pr comment ${{ github.event.pull_request.number }} --body "<content>"`
+            4. Delete any OTHER claude[bot] comments to clean up duplicates: `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --jq '.[] | select(.user.login == "claude[bot]") | .id' | tail -n +2 | xargs -I {} gh api --method DELETE repos/${{ github.repository }}/issues/comments/{}`
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep"'
           additional_permissions: |
             actions: read
