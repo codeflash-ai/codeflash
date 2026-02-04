@@ -535,6 +535,10 @@ def run_jest_behavioral_tests(
 
     # Get test files to run
     test_files = [str(file.instrumented_behavior_file_path) for file in test_paths.test_files]
+    logger.debug(f"[JEST DEBUG] Number of test files to run: {len(test_files)}")
+    for i, tf in enumerate(test_files):
+        logger.debug(f"[JEST DEBUG] Test file {i}: {tf}")
+        logger.debug(f"[JEST DEBUG] File exists: {Path(tf).exists() if tf else False}")
 
     # Use provided project_root, or detect it as fallback
     if project_root is None and test_files:
@@ -611,6 +615,9 @@ def run_jest_behavioral_tests(
     _configure_esm_environment(jest_env, effective_cwd)
 
     logger.debug(f"Running Jest tests with command: {' '.join(jest_cmd)}")
+    logger.warning(f"[JEST DEBUG] Full command: {' '.join(jest_cmd)}")
+    logger.warning(f"[JEST DEBUG] Working directory: {effective_cwd}")
+    logger.warning(f"[JEST DEBUG] Test files count: {len(test_files)}")
 
     start_time_ns = time.perf_counter_ns()
     try:
@@ -630,6 +637,8 @@ def run_jest_behavioral_tests(
                 args=result.args, returncode=result.returncode, stdout=result.stdout + "\n" + result.stderr, stderr=""
             )
         logger.debug(f"Jest result: returncode={result.returncode}")
+        logger.warning(f"[JEST DEBUG] returncode={result.returncode}")
+        logger.warning(f"[JEST DEBUG] Jest stdout (first 500 chars): {result.stdout[:500] if result.stdout else '(empty)'}")
         # Log Jest output at WARNING level if tests fail and no XML output will be created
         # This helps debug issues like import errors that cause Jest to fail early
         if result.returncode != 0 and not result_file_path.exists():
