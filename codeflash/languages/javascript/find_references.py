@@ -652,7 +652,7 @@ class ReferenceFinder:
         """
         references: list[Reference] = []
         export_name = exported.export_name or exported.function_name
-        
+
         # Skip expensive parsing if export name not in source
         if export_name not in source_code:
             return references

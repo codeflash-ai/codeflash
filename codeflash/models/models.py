@@ -26,14 +26,11 @@ from re import Pattern
 from typing import NamedTuple, Optional, cast
 
 from jedi.api.classes import Name
-from pydantic import (BaseModel, ConfigDict, Field, PrivateAttr,
-                      ValidationError, model_validator)
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import console, logger
-from codeflash.code_utils.code_utils import (diff_length,
-                                             module_name_from_file_path,
-                                             validate_python_code)
+from codeflash.code_utils.code_utils import diff_length, module_name_from_file_path, validate_python_code
 from codeflash.code_utils.env_utils import is_end_to_end
 from codeflash.verification.comparator import comparator
 
