@@ -657,6 +657,47 @@ class FunctionOptimizer:
             )
         )
 
+    def _get_java_sources_root(self) -> Path:
+        """Get the Java sources root directory for test files.
+
+        For Java projects, tests_root might include the package path
+        (e.g., test/src/com/aerospike/test). We need to find the base directory
+        that should contain the package directories, not the tests_root itself.
+
+        This method looks for standard Java package prefixes (com, org, net, io, edu, gov)
+        in the tests_root path and returns everything before that prefix.
+
+        Returns:
+            Path to the Java sources root directory.
+
+        """
+        tests_root = self.test_cfg.tests_root
+        parts = tests_root.parts
+
+        # Look for standard Java package prefixes that indicate the start of package structure
+        standard_package_prefixes = ('com', 'org', 'net', 'io', 'edu', 'gov')
+
+        for i, part in enumerate(parts):
+            if part in standard_package_prefixes:
+                # Found start of package path, return everything before it
+                if i > 0:
+                    java_sources_root = Path(*parts[:i])
+                    logger.debug(f"[JAVA] Detected Java sources root: {java_sources_root} (from tests_root: {tests_root})")
+                    return java_sources_root
+
+        # If no standard package prefix found, check if there's a 'java' directory
+        # (standard Maven structure: src/test/java)
+        for i, part in enumerate(parts):
+            if part == 'java' and i > 0:
+                # Return up to and including 'java'
+                java_sources_root = Path(*parts[:i + 1])
+                logger.debug(f"[JAVA] Detected Maven-style Java sources root: {java_sources_root}")
+                return java_sources_root
+
+        # Default: return tests_root as-is (original behavior)
+        logger.debug(f"[JAVA] Using tests_root as Java sources root: {tests_root}")
+        return tests_root
+
     def _fix_java_test_paths(
         self, behavior_source: str, perf_source: str, used_paths: set[Path]
     ) -> tuple[Path, Path, str, str]:
