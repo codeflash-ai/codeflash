@@ -378,18 +378,4 @@ function main() {
     }
 }
 
-// Run if executed directly
-if (require.main === module) {
-    main();
-}
-
-// Export for programmatic use
-module.exports = {
-    parseArgs,
-    registerBabel,
-    runScript,
-    runJest,
-    runVitest,
-    runModule,
-    main,
-};
+main();
