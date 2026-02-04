@@ -22,6 +22,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
+from functools import lru_cache
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=1)
 def find_node_executable() -> Optional[Path]:
     """Find the Node.js executable.
 
@@ -49,6 +51,7 @@ def find_node_executable() -> Optional[Path]:
     return None
 
 
+@lru_cache(maxsize=1)
 def find_trace_runner() -> Optional[Path]:
     """Find the trace-runner.js script.
 
@@ -66,14 +69,18 @@ def find_trace_runner() -> Optional[Path]:
         return local_path
 
     # Check global npm packages
-    try:
-        result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
-        global_modules = Path(result.stdout.strip())
-        global_path = global_modules / "codeflash" / "runtime" / "trace-runner.js"
-        if global_path.exists():
-            return global_path
-    except Exception:
-        pass
+    # Avoid spawning npm if it's not installed
+    if shutil.which("npm"):
+        try:
+            result = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True, check=True)
+            global_modules = Path(result.stdout.strip())
+            global_path = global_modules / "codeflash" / "runtime" / "trace-runner.js"
+            if global_path.exists():
+                return global_path
+        except Exception:
+            pass
+
+    # Fall back to the bundled version in the Python package
 
     # Fall back to the bundled version in the Python package
     bundled_path = Path(__file__).parent.parent.parent.parent / "packages" / "codeflash" / "runtime" / "trace-runner.js"
