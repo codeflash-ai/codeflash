@@ -156,7 +156,18 @@ jobs:
             2. If found, UPDATE it: `gh api --method PATCH repos/${{ github.repository }}/issues/comments/<ID> -f body="<content>"`
             3. If not found, CREATE: `gh pr comment ${{ github.event.pull_request.number }} --body "<content>"`
             4. Delete any OTHER claude[bot] comments to clean up duplicates: `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --jq '.[] | select(.user.login == "claude[bot]") | .id' | tail -n +2 | xargs -I {} gh api --method DELETE repos/${{ github.repository }}/issues/comments/{}`
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit"'
+
+            ## STEP 5: Merge pending codeflash optimization PRs
+
+            Check for open optimization PRs from codeflash and merge if CI passes:
+
+            1. List open PRs from codeflash bot:
+               `gh pr list --author "codeflash-ai[bot]" --state open --json number,title,headRefName`
+
+            2. For each optimization PR:
+               - Check if CI is passing: `gh pr checks <number>`
+               - If all checks pass, merge it: `gh pr merge <number> --squash --delete-branch`
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(gh pr merge:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh api:*),Bash(uv run prek *),Bash(uv run mypy *),Bash(uv run coverage *),Bash(uv run pytest *),Bash(git status*),Bash(git add *),Bash(git commit *),Bash(git push*),Bash(git diff *),Bash(git checkout *),Read,Glob,Grep,Edit"'
           additional_permissions: |
             actions: read
         env:
