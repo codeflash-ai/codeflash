@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from pathlib import Path
 
+_NON_ALNUM_RE: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9]")
+
 logger = logging.getLogger(__name__)
 
 
@@ -299,7 +301,7 @@ describe('Replay: {test_name}', () => {{
     @staticmethod
     def _get_function_alias(module_path: str, function_name: str, class_name: Optional[str] = None) -> str:
         """Create a function alias for imports."""
-        module_alias = re.sub(r"[^a-zA-Z0-9]", "_", module_path).strip("_")
+        module_alias = _NON_ALNUM_RE.sub("_", module_path).strip("_")
 
         if class_name:
             return f"{module_alias}_{class_name}_{function_name}"
