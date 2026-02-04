@@ -31,7 +31,7 @@ class PrComment:
             if name:
                 report_table[name] = result
 
-        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {
+        result: dict[str, Union[str, int, dict[str, dict[str, int]], list[BenchmarkDetail], None]] = {  # type: ignore[no-redef]
             "optimization_explanation": self.optimization_explanation,
             "best_runtime": humanize_runtime(self.best_runtime),
             "original_runtime": humanize_runtime(self.original_runtime),
@@ -45,10 +45,10 @@ class PrComment:
         }
 
         if self.original_async_throughput is not None and self.best_async_throughput is not None:
-            result["original_async_throughput"] = str(self.original_async_throughput)
-            result["best_async_throughput"] = str(self.best_async_throughput)
+            result["original_async_throughput"] = str(self.original_async_throughput)  # type: ignore[assignment]
+            result["best_async_throughput"] = str(self.best_async_throughput)  # type: ignore[assignment]
 
-        return result
+        return result  # type: ignore[return-value]
 
 
 class FileDiffContent(BaseModel):
