@@ -1847,10 +1847,10 @@ class JavaScriptSupport:
         1. Node.js installation
         2. npm availability
         3. Test framework (jest/vitest) installation (with monorepo support)
-        4. node_modules existence
 
-        For monorepos, checks both local node_modules and workspace root node_modules
-        for hoisted dependencies.
+        Uses find_node_modules_with_package() from init_javascript to search up the
+        directory tree for node_modules containing the test framework. This supports
+        monorepo setups where dependencies are hoisted to the workspace root.
 
         Args:
             project_root: The project root directory.
@@ -1883,30 +1883,15 @@ class JavaScriptSupport:
             errors.append(f"Failed to check npm: {e}")
 
         # Check test framework is installed (with monorepo support)
-        # First try local node_modules, then check workspace root for hoisted dependencies
-        framework_found = False
+        # Uses find_node_modules_with_package which searches up the directory tree
+        from codeflash.cli_cmds.init_javascript import find_node_modules_with_package
 
-        # Check local node_modules
-        local_node_modules = project_root / "node_modules"
-        if local_node_modules.exists():
-            local_framework = local_node_modules / test_framework
-            if local_framework.exists():
-                framework_found = True
-                logger.debug("Found %s in local node_modules at %s", test_framework, local_framework)
-
-        # If not found locally, check for hoisted dependencies in monorepo workspace root
-        if not framework_found:
-            from codeflash.languages.javascript.test_runner import _find_monorepo_root
-
-            workspace_root = _find_monorepo_root(project_root)
-            if workspace_root:
-                workspace_framework = workspace_root / "node_modules" / test_framework
-                if workspace_framework.exists():
-                    framework_found = True
-                    logger.debug("Found %s in workspace root node_modules at %s", test_framework, workspace_framework)
-
-        # Report errors if framework not found anywhere
-        if not framework_found:
+        node_modules = find_node_modules_with_package(project_root, test_framework)
+        if node_modules:
+            logger.debug("Found %s in node_modules at %s", test_framework, node_modules / test_framework)
+        else:
+            # Check if local node_modules exists at all
+            local_node_modules = project_root / "node_modules"
             if not local_node_modules.exists():
                 errors.append(
                     f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
