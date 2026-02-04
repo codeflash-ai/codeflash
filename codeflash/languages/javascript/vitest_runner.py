@@ -66,17 +66,26 @@ def _find_vitest_project_root(file_path: Path) -> Path | None:
 def _is_vitest_coverage_available(project_root: Path) -> bool:
     """Check if Vitest coverage package is available.
 
+    In monorepos, dependencies may be hoisted to the root node_modules.
+    This function searches up the directory tree for the coverage package.
+
     Args:
-        project_root: The project root directory.
+        project_root: The project root directory (may be a package in a monorepo).
 
     Returns:
         True if @vitest/coverage-v8 or @vitest/coverage-istanbul is installed.
 
     """
-    node_modules = project_root / "node_modules"
-    return (node_modules / "@vitest" / "coverage-v8").exists() or (
-        node_modules / "@vitest" / "coverage-istanbul"
-    ).exists()
+    current = project_root
+    while current != current.parent:  # Stop at filesystem root
+        node_modules = current / "node_modules"
+        if node_modules.exists():
+            if (node_modules / "@vitest" / "coverage-v8").exists() or (
+                node_modules / "@vitest" / "coverage-istanbul"
+            ).exists():
+                return True
+        current = current.parent
+    return False
 
 
 def _ensure_runtime_files(project_root: Path) -> None:
@@ -254,7 +263,18 @@ def run_vitest_behavioral_tests(
 
     # Add coverage flags only if coverage is available
     if coverage_available:
-        vitest_cmd.extend(["--coverage", "--coverage.reporter=json", f"--coverage.reportsDirectory={coverage_dir}"])
+        # Don't pre-create the coverage directory - vitest should create it
+        # Pre-creating an empty directory may cause vitest to delete it
+        logger.debug(f"Coverage will be written to: {coverage_dir}")
+
+        vitest_cmd.extend([
+            "--coverage",
+            "--coverage.reporter=json",
+            f"--coverage.reportsDirectory={coverage_dir}",
+        ])
+        # Note: Removed --coverage.enabled=true (redundant) and --coverage.all false
+        # The version mismatch between vitest and @vitest/coverage-v8 can cause
+        # issues with coverage flag parsing. Let vitest use default settings.
 
     # Set up environment
     vitest_env = test_env.copy()
@@ -281,6 +301,7 @@ def run_vitest_behavioral_tests(
             cwd=effective_cwd, env=vitest_env, timeout=subprocess_timeout, check=False, text=True, capture_output=True
         )
         result = subprocess.run(vitest_cmd, **run_args)  # noqa: PLW1510
+
         # Combine stderr into stdout for timing markers
         if result.stderr and not result.stdout:
             result = subprocess.CompletedProcess(
@@ -326,6 +347,26 @@ def run_vitest_behavioral_tests(
             f"Vitest JUnit XML not created at {result_file_path}. "
             f"Vitest stdout: {result.stdout[:1000] if result.stdout else '(empty)'}"
         )
+
+    # Check if coverage file was created
+    if coverage_available and coverage_json_path:
+        if coverage_json_path.exists():
+            cov_size = coverage_json_path.stat().st_size
+            logger.debug(f"Vitest coverage JSON created: {coverage_json_path} ({cov_size} bytes)")
+        else:
+            # Check if the parent directory exists and list its contents
+            cov_parent = coverage_json_path.parent
+            if cov_parent.exists():
+                contents = list(cov_parent.iterdir())
+                logger.warning(
+                    f"Vitest coverage JSON not created at {coverage_json_path}. "
+                    f"Directory exists with contents: {[f.name for f in contents]}"
+                )
+            else:
+                logger.warning(
+                    f"Vitest coverage JSON not created at {coverage_json_path}. "
+                    f"Coverage directory does not exist: {cov_parent}"
+                )
 
     return result_file_path, result, coverage_json_path, None
 

@@ -1906,22 +1906,17 @@ class FunctionOptimizer:
             return Failure(baseline_result.failure())
 
         original_code_baseline, test_functions_to_remove = baseline_result.unwrap()
-        if isinstance(original_code_baseline, OriginalCodeBaseline):
-            # Always check test quantity
-            if not quantity_of_tests_critic(original_code_baseline):
-                if self.args.override_fixtures:
-                    restore_conftest(original_conftest_content)
-                cleanup_paths(paths_to_cleanup)
-                return Failure("The threshold for test confidence was not met (insufficient tests).")
-
-            # Coverage check is only enforced for Python where we have coverage infrastructure
-            # JavaScript/TypeScript doesn't have coverage tooling integrated yet
-            # ToDO: Add coverage tooling & work here
-            if is_python() and not coverage_critic(original_code_baseline.coverage_results):
-                if self.args.override_fixtures:
-                    restore_conftest(original_conftest_content)
-                cleanup_paths(paths_to_cleanup)
-                return Failure("The threshold for test confidence was not met (insufficient coverage).")
+        # Check test quantity for all languages
+        quantity_ok = quantity_of_tests_critic(original_code_baseline)
+        # ToDO: {Self} Only check coverage for Python - coverage infrastructure not yet reliable for JS/TS
+        coverage_ok = coverage_critic(original_code_baseline.coverage_results) if is_python() else True
+        if isinstance(original_code_baseline, OriginalCodeBaseline) and (
+            not coverage_ok or not quantity_ok
+        ):
+            if self.args.override_fixtures:
+                restore_conftest(original_conftest_content)
+            cleanup_paths(paths_to_cleanup)
+            return Failure("The threshold for test confidence was not met.")
 
         return Success(
             (
