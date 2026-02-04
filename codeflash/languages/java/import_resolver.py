@@ -67,6 +67,11 @@ class JavaImportResolver:
         self._source_roots: list[Path] = []
         self._test_roots: list[Path] = []
         self._package_to_path_cache: dict[str, Path | None] = {}
+        self._external_library_cache: dict[str, bool] = {}
+        try:
+            self._common_prefix_set: frozenset[str] = frozenset(self.COMMON_EXTERNAL_PREFIXES)
+        except AttributeError:
+            self._common_prefix_set = frozenset()
 
         # Discover source and test roots
         self._discover_roots()
@@ -150,9 +155,27 @@ class JavaImportResolver:
 
     def _is_external_library(self, import_path: str) -> bool:
         """Check if an import is from a known external library."""
-        for prefix in self.COMMON_EXTERNAL_PREFIXES:
-            if import_path.startswith(prefix + ".") or import_path == prefix:
+        result = self._external_library_cache.get(import_path)
+        if result is not None:
+            return result
+
+        if import_path in self._common_prefix_set:
+            self._external_library_cache[import_path] = True
+            return True
+
+        parts = import_path.split(".")
+        prefix = parts[0]
+        if prefix in self._common_prefix_set:
+            self._external_library_cache[import_path] = True
+            return True
+
+        for part in parts[1:]:
+            prefix = prefix + "." + part
+            if prefix in self._common_prefix_set:
+                self._external_library_cache[import_path] = True
                 return True
+
+        self._external_library_cache[import_path] = False
         return False
 
     def _resolve_to_file(self, import_path: str) -> Path | None:
