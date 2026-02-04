@@ -15,6 +15,7 @@ from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
 import enum
 import re
 import sys
@@ -876,15 +877,14 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(test_result.loop_index for test_result in self.test_results)
 
     def get_test_pass_fail_report_by_type(self) -> dict[TestType, dict[str, int]]:
-        report = {}
-        for test_type in TestType:
-            report[test_type] = {"passed": 0, "failed": 0}
+        report: dict[TestType, dict[str, int]] = {tt: {"passed": 0, "failed": 0} for tt in TestType}
         for test_result in self.test_results:
-            if test_result.loop_index == 1:
-                if test_result.did_pass:
-                    report[test_result.test_type]["passed"] += 1
-                else:
-                    report[test_result.test_type]["failed"] += 1
+            if test_result.loop_index != 1:
+                continue
+            if test_result.did_pass:
+                report[test_result.test_type]["passed"] += 1
+            else:
+                report[test_result.test_type]["failed"] += 1
         return report
 
     @staticmethod
