@@ -94,7 +94,7 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
     return _extract_exception_from_message(str(exc))
 
 
-def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
+def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
         # Handle exceptions specially - before type check to allow wrapper comparison
@@ -351,28 +351,28 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                     return False
                 if orig.num_rows != new.num_rows:
                     return False
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, pa.RecordBatch):
                 if orig.schema != new.schema:
                     return False
                 if orig.num_rows != new.num_rows:
                     return False
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, pa.ChunkedArray):
                 if orig.type != new.type:
                     return False
                 if len(orig) != len(new):
                     return False
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, pa.Array):
                 if orig.type != new.type:
                     return False
                 if len(orig) != len(new):
                     return False
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, pa.Scalar):
                 if orig.type != new.type:
@@ -382,10 +382,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                     return True
                 if not orig.is_valid or not new.is_valid:
                     return False
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, (pa.Schema, pa.Field, pa.DataType)):
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
         if HAS_PANDAS:
             import pandas  # noqa: ICN001
@@ -393,7 +393,7 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
             if isinstance(
                 orig, (pandas.DataFrame, pandas.Series, pandas.Index, pandas.Categorical, pandas.arrays.SparseArray)
             ):
-                return orig.equals(new)
+                return bool(orig.equals(new))
 
             if isinstance(orig, (pandas.CategoricalDtype, pandas.Interval, pandas.Period)):
                 return orig == new
@@ -440,10 +440,10 @@ def comparator(orig: Any, new: Any, superset_obj=False) -> bool:
                 return orig == new
 
         if HAS_NUMBA:
-            import numba  # type: ignore  # noqa: PGH003
-            from numba.core.dispatcher import Dispatcher  # type: ignore  # noqa: PGH003
-            from numba.typed import Dict as NumbaDict  # type: ignore  # noqa: PGH003
-            from numba.typed import List as NumbaList  # type: ignore  # noqa: PGH003
+            import numba  # noqa: PGH003
+            from numba.core.dispatcher import Dispatcher  # noqa: PGH003
+            from numba.typed import Dict as NumbaDict  # noqa: PGH003
+            from numba.typed import List as NumbaList  # noqa: PGH003
 
             # Handle numba typed List
             if isinstance(orig, NumbaList):
