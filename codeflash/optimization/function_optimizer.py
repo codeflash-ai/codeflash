@@ -23,7 +23,7 @@ from rich.tree import Tree
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
-from codeflash.cli_cmds.console import code_print, console, logger, lsp_log, progress_bar
+from codeflash.cli_cmds.console import DEBUG_MODE, code_print, console, logger, lsp_log, progress_bar
 from codeflash.code_utils import env_utils
 from codeflash.code_utils.code_extractor import get_opt_review_metrics, is_numerical_code
 from codeflash.code_utils.code_replacer import (
@@ -146,22 +146,15 @@ if TYPE_CHECKING:
     from codeflash.verification.verification_utils import TestConfig
 
 
-def is_verbose_mode() -> bool:
-    """Check if verbose mode is enabled."""
-    return logger.getEffectiveLevel() <= logging.DEBUG
-
-
 def log_code_after_replacement(file_path: Path, candidate_index: int) -> None:
     """Log the full file content after code replacement in verbose mode."""
-    if not is_verbose_mode():
+    if not DEBUG_MODE:
         return
 
     try:
         code = file_path.read_text(encoding="utf-8")
-        # Determine language from file extension
-        ext = file_path.suffix.lower()
         lang_map = {".java": "java", ".py": "python", ".js": "javascript", ".ts": "typescript"}
-        language = lang_map.get(ext, "text")
+        language = lang_map.get(file_path.suffix.lower(), "text")
 
         console.print(
             Panel(
@@ -174,12 +167,11 @@ def log_code_after_replacement(file_path: Path, candidate_index: int) -> None:
         logger.debug(f"Failed to log code after replacement: {e}")
 
 
-def log_instrumented_test(test_source: str, test_name: str, test_type: str, language: str = "java") -> None:
+def log_instrumented_test(test_source: str, test_name: str, test_type: str, language: str) -> None:
     """Log instrumented test code in verbose mode."""
-    if not is_verbose_mode():
+    if not DEBUG_MODE:
         return
 
-    # Truncate very long test files
     display_source = test_source
     if len(test_source) > 15000:
         display_source = test_source[:15000] + "\n\n... [truncated] ..."
@@ -195,10 +187,9 @@ def log_instrumented_test(test_source: str, test_name: str, test_type: str, lang
 
 def log_test_run_output(stdout: str, stderr: str, test_type: str, returncode: int = 0) -> None:
     """Log test run stdout/stderr in verbose mode."""
-    if not is_verbose_mode():
+    if not DEBUG_MODE:
         return
 
-    # Truncate very long outputs
     max_len = 10000
 
     if stdout and stdout.strip():
@@ -224,7 +215,7 @@ def log_test_run_output(stdout: str, stderr: str, test_type: str, returncode: in
 
 def log_optimization_context(function_name: str, code_context: CodeOptimizationContext) -> None:
     """Log optimization context details when in verbose mode using Rich formatting."""
-    if logger.getEffectiveLevel() > logging.DEBUG:
+    if not DEBUG_MODE:
         return
 
     console.rule()
