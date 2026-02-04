@@ -1196,9 +1196,11 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
         skipped = 0
         skipped_reasons = []
 
+        is_performance_mode = mode == "performance"
+
         for test_file in test_paths.test_files:
             # For performance mode, use benchmarking_file_path
-            if mode == "performance":
+            if is_performance_mode:
                 if hasattr(test_file, "benchmarking_file_path") and test_file.benchmarking_file_path:
                     class_name = _path_to_class_name(test_file.benchmarking_file_path)
                     if class_name:
@@ -1210,7 +1212,6 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                         skipped_reasons.append(reason)
                 else:
                     reason = f"TestFile has no benchmarking_file_path (original: {test_file.original_file_path})"
-                    logger.warning(f"_build_test_filter: {reason}")
                     skipped += 1
                     skipped_reasons.append(reason)
             # For behavior mode, use instrumented_behavior_file_path
@@ -1225,7 +1226,6 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
                     skipped_reasons.append(reason)
             else:
                 reason = f"TestFile has no instrumented_behavior_file_path (original: {test_file.original_file_path})"
-                logger.warning(f"_build_test_filter: {reason}")
                 skipped += 1
                 skipped_reasons.append(reason)
 
@@ -1234,6 +1234,11 @@ def _build_test_filter(test_paths: Any, mode: str = "behavior") -> str:
 
         # If all tests were skipped, log detailed information to help diagnose
         if not filters and skipped > 0:
+            # Log warnings for missing paths
+            for reason in skipped_reasons:
+                if "no benchmarking_file_path" in reason or "no instrumented_behavior_file_path" in reason:
+                    logger.warning(f"_build_test_filter: {reason}")
+            
             logger.error(
                 f"All {skipped} test files were skipped in _build_test_filter! "
                 f"Mode: {mode}. This will cause an empty test filter. "
@@ -1261,13 +1266,13 @@ def _path_to_class_name(path: Path) -> str | None:
 
     # Try to extract package from path
     # e.g., src/test/java/com/example/CalculatorTest.java -> com.example.CalculatorTest
-    parts = list(path.parts)
+    parts = path.parts
 
     # Look for standard Maven/Gradle source directories
     # Find 'java' that comes after 'main' or 'test'
     java_idx = None
-    for i, part in enumerate(parts):
-        if part == "java" and i > 0 and parts[i - 1] in ("main", "test"):
+    for i in range(1, len(parts)):
+        if parts[i] == "java" and parts[i - 1] in ("main", "test"):
             java_idx = i
             break
 
@@ -1279,7 +1284,7 @@ def _path_to_class_name(path: Path) -> str | None:
                 break
 
     if java_idx is not None:
-        class_parts = parts[java_idx + 1:]
+        class_parts = list(parts[java_idx + 1:])
         # Remove .java extension from last part
         class_parts[-1] = class_parts[-1].replace(".java", "")
         return ".".join(class_parts)
