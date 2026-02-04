@@ -868,12 +868,13 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
                 needed_names.add(decorator.func.value.id)
 
     # Get type annotation names from class body (for dataclass fields)
-    for item in ast.walk(class_node):
+    for item in class_node.body:
         if isinstance(item, ast.AnnAssign) and item.annotation:
             collect_names_from_annotation(item.annotation, needed_names)
         # Also check for field() calls which are common in dataclasses
-        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
-            needed_names.add(item.func.id)
+        elif isinstance(item, ast.Assign) and isinstance(item.value, ast.Call):
+            if isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
 
     # Find imports that provide these names
     import_lines: list[str] = []
