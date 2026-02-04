@@ -23,7 +23,11 @@ from codeflash.discovery.discover_unit_tests import discover_parameters_unittest
 from codeflash.languages import is_javascript
 
 # Import Jest-specific parsing from the JavaScript language module
-from codeflash.languages.javascript.parse import parse_jest_test_xml as _parse_jest_test_xml
+from codeflash.languages.javascript.parse import (
+    jest_end_pattern,
+    jest_start_pattern,
+    parse_jest_test_xml as _parse_jest_test_xml,
+)
 from codeflash.models.models import (
     ConcurrencyMetrics,
     FunctionTestInvocation,
