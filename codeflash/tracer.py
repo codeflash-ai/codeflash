@@ -18,7 +18,7 @@ import subprocess
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.cli_cmds.cli import project_root_from_module_root
 from codeflash.cli_cmds.console import console
