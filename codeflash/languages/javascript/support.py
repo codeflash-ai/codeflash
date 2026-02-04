@@ -1846,8 +1846,11 @@ class JavaScriptSupport:
         Checks for:
         1. Node.js installation
         2. npm availability
-        3. Test framework (jest/vitest) installation
-        4. node_modules existence
+        3. Test framework (jest/vitest) installation (with monorepo support)
+
+        Uses find_node_modules_with_package() from init_javascript to search up the
+        directory tree for node_modules containing the test framework. This supports
+        monorepo setups where dependencies are hoisted to the workspace root.
 
         Args:
             project_root: The project root directory.
@@ -1879,16 +1882,21 @@ class JavaScriptSupport:
         except Exception as e:
             errors.append(f"Failed to check npm: {e}")
 
-        # Check node_modules exists
-        node_modules = project_root / "node_modules"
-        if not node_modules.exists():
-            errors.append(
-                f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
-            )
+        # Check test framework is installed (with monorepo support)
+        # Uses find_node_modules_with_package which searches up the directory tree
+        from codeflash.cli_cmds.init_javascript import find_node_modules_with_package
+
+        node_modules = find_node_modules_with_package(project_root, test_framework)
+        if node_modules:
+            logger.debug("Found %s in node_modules at %s", test_framework, node_modules / test_framework)
         else:
-            # Check test framework is installed
-            framework_path = node_modules / test_framework
-            if not framework_path.exists():
+            # Check if local node_modules exists at all
+            local_node_modules = project_root / "node_modules"
+            if not local_node_modules.exists():
+                errors.append(
+                    f"node_modules not found in {project_root}. Please run 'npm install' to install dependencies."
+                )
+            else:
                 errors.append(
                     f"{test_framework} is not installed. "
                     f"Please run 'npm install --save-dev {test_framework}' to install it."
