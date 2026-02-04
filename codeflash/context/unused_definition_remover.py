@@ -638,7 +638,8 @@ def _analyze_imports_in_optimized_code(
             helpers_by_file_and_func[module_name].setdefault(func_name, []).append(helper)
             helpers_by_file[module_name].append(helper)
 
-    for node in ast.walk(optimized_ast):
+    # Filter nodes to only visit Import and ImportFrom nodes
+    for node in optimized_ast.body:
         if isinstance(node, ast.ImportFrom):
             # Handle "from module import function" statements
             module_name = node.module
