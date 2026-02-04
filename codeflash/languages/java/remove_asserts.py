@@ -185,6 +185,9 @@ class JavaAssertTransformer:
         self.invocation_counter = 0
         self._detected_framework: str | None = None
 
+        # Cache the compiled pattern for this instance to avoid repeated compilation.
+        self._method_pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+
     def transform(self, source: str) -> str:
         """Remove assertions from source code, preserving target function calls.
 
@@ -510,7 +513,10 @@ class JavaAssertTransformer:
         # - method(args) (no receiver)
         #
         # Strategy: Find the function name, then look backwards for the receiver
-        pattern = re.compile(rf"({re.escape(self.func_name)})\s*\(", re.MULTILINE)
+        pattern = self._method_pattern
+
+        n = len(content)
+
 
         for match in pattern.finditer(content):
             method_name = match.group(1)
@@ -526,41 +532,75 @@ class JavaAssertTransformer:
             receiver_start = method_start
 
             # Check if there's a dot before the method name (indicating a receiver)
-            before_method = content[:method_start]
-            stripped_before = before_method.rstrip()
-            if stripped_before.endswith("."):
-                dot_pos = len(stripped_before) - 1
-                before_dot = content[:dot_pos]
+            # We need to mimic before_method = content[:method_start]; stripped_before = before_method.rstrip()
+            i = method_start - 1
+            while i >= 0 and content[i].isspace():
+                i -= 1
+            if i >= 0 and content[i] == ".":
+                dot_pos = i
+                # Consider the substring before the dot, but we will operate on indices to avoid slicing.
+                # Move left from dot_pos - 1 to skip trailing spaces before the dot's left side.
+                j = dot_pos - 1
+                while j >= 0 and content[j].isspace():
+                    j -= 1
 
-                # Check for new ClassName() or new ClassName(args)
-                stripped_before_dot = before_dot.rstrip()
-                if stripped_before_dot.endswith(")"):
-                    # Find matching opening paren for constructor args
-                    close_paren_pos = len(stripped_before_dot) - 1
+                if j >= 0 and content[j] == ")":
+                    # Find matching opening paren for constructor args / nested call args
                     paren_depth = 1
-                    i = close_paren_pos - 1
-                    while i >= 0 and paren_depth > 0:
-                        if stripped_before_dot[i] == ")":
+                    k = j - 1
+                    while k >= 0 and paren_depth > 0:
+                        ch = content[k]
+                        if ch == ")":
                             paren_depth += 1
-                        elif stripped_before_dot[i] == "(":
+                        elif ch == "(":
                             paren_depth -= 1
-                        i -= 1
+                        k -= 1
                     if paren_depth == 0:
-                        open_paren_pos = i + 1
+                        open_paren_pos = k + 1
                         # Look for "new ClassName" before the opening paren
-                        before_paren = stripped_before_dot[:open_paren_pos].rstrip()
-                        new_match = re.search(r"new\s+[a-zA-Z_]\w*\s*$", before_paren)
-                        if new_match:
-                            receiver_start = new_match.start()
-                        else:
-                            # Could be chained call like something().method()
-                            # For now, just use the part from open paren
-                            receiver_start = open_paren_pos
+                        # Examine the text left of open_paren_pos to see if it ends with 'new <ident>'
+                        # Skip whitespace immediately before the paren
+                        t = open_paren_pos - 1
+                        while t >= 0 and content[t].isspace():
+                            t -= 1
+                        # Find end of identifier (t), then find its start
+                        id_end = t
+                        id_start = id_end
+                        while id_start >= 0 and (content[id_start].isalnum() or content[id_start] == "_"):
+                            id_start -= 1
+                        id_start += 1
+                        if id_start <= id_end:
+                            # Now find the word before the identifier, skipping spaces
+                            w = id_start - 1
+                            while w >= 0 and content[w].isspace():
+                                w -= 1
+                            # find start of the preceding word
+                            word_end = w
+                            word_start = word_end
+                            while word_start >= 0 and content[word_start].isalpha():
+                                word_start -= 1
+                            word_start += 1
+                            if word_start <= word_end and content[word_start:word_end + 1] == "new":
+                                receiver_start = word_start
+                            else:
+                                # Could be chained call like something().method()
+                                # For now, just use the part from open paren
+                                receiver_start = open_paren_pos
                 else:
                     # Simple identifier: obj.method() or Class.method() or pkg.Class.method()
-                    ident_match = re.search(r"[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*$", stripped_before_dot)
-                    if ident_match:
-                        receiver_start = ident_match.start()
+                    # We need to find an identifier chain ending at j.
+                    end_idx = j
+                    start_idx = end_idx
+                    # allowed chars: alnum, underscore, dot
+                    while start_idx >= 0 and (content[start_idx].isalnum() or content[start_idx] == "_" or content[start_idx] == "."):
+                        start_idx -= 1
+                    start_idx += 1
+                    # Validate that the first character of the chain (after possible package prefixes) is a letter or underscore
+                    if start_idx <= end_idx:
+                        first_char = content[start_idx]
+                        if first_char.isalpha() or first_char == "_":
+                            receiver_start = start_idx
+
 
             full_call = content[receiver_start:end_pos]
             receiver = (
@@ -638,9 +678,12 @@ class JavaAssertTransformer:
         string_char = None
         in_char = False
 
-        while pos < len(code) and depth > 0:
+        n = len(code)
+        # Use a rolling prev_char to avoid repeated code[pos-1] accesses
+        prev_char = code[open_paren_pos] if open_paren_pos < n else ""
+
+        while pos < n and depth > 0:
             char = code[pos]
-            prev_char = code[pos - 1] if pos > 0 else ""
 
             # Handle character literals
             if char == "'" and not in_string and prev_char != "\\":
@@ -659,6 +702,8 @@ class JavaAssertTransformer:
                 elif char == ")":
                     depth -= 1
 
+
+            prev_char = char
             pos += 1
 
         if depth != 0:
