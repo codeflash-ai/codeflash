@@ -59,9 +59,14 @@ def main() -> None:
         init_sentry(enabled=not args.disable_telemetry, exclude_errors=True)
         posthog_cf.initialize_posthog(enabled=not args.disable_telemetry)
 
-        from codeflash.optimization import optimizer
+        if getattr(args, "agentic", False):
+            from codeflash.optimization.agentic_optimizer import run_agentic_with_args
 
-        optimizer.run_with_args(args)
+            run_agentic_with_args(args)
+        else:
+            from codeflash.optimization import optimizer
+
+            optimizer.run_with_args(args)
 
 
 def _handle_config_loading(args: Namespace) -> Namespace | None:

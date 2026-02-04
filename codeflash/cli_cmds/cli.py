@@ -130,6 +130,11 @@ def parse_args() -> Namespace:
         "--reset-config", action="store_true", help="Remove codeflash configuration from project config file."
     )
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts (useful for CI/scripts).")
+    parser.add_argument(
+        "--agentic",
+        action="store_true",
+        help="Use the agentic multi-agent optimization pipeline instead of the default batch pipeline.",
+    )
 
     args, unknown_args = parser.parse_known_args()
     sys.argv[:] = [sys.argv[0], *unknown_args]
