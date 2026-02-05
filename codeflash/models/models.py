@@ -210,13 +210,7 @@ class BenchmarkDetail:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "benchmark_name": self.benchmark_name,
-            "test_function": self.test_function,
-            "original_timing": self.original_timing,
-            "expected_new_timing": self.expected_new_timing,
-            "speedup_percent": self.speedup_percent,
-        }
+        return self.__dict__.copy()
 
 
 @dataclass
