@@ -599,7 +599,6 @@ class FunctionOptimizer:
             debug_file_path = get_run_tmp_file(Path("perf_test_debug.test.ts"))
             with debug_file_path.open("w", encoding="utf-8") as debug_f:
                 debug_f.write(generated_test.instrumented_perf_test_source)
-            logger.warning(f"[PERF DEBUG] Saved perf test to {debug_file_path} for inspection")
 
             with generated_test.perf_file_path.open("w", encoding="utf8") as f:
                 f.write(generated_test.instrumented_perf_test_source)

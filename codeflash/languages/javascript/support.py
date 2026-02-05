@@ -107,7 +107,7 @@ class JavaScriptSupport:
                 # Skip non-exported functions (can't be imported in tests)
                 # Exception: nested functions and methods are allowed if their parent is exported
                 if not func.is_exported and not func.parent_function:
-                    logger.info(f"Skipping non-exported function: {func.name}")  # noqa: G004
+                    logger.debug(f"Skipping non-exported function: {func.name}")  # noqa: G004
                     continue
 
                 # Build parents list
