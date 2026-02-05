@@ -192,7 +192,7 @@ def _ensure_codeflash_vitest_config(project_root: Path) -> Path | None:
         logger.debug("Detected vitest workspace configuration - skipping custom config")
         return None
 
-    codeflash_config_path = project_root / "codeflash.vitest.config.js"
+    codeflash_config_path = project_root / "codeflash.vitest.config.mjs"
 
     # If already exists, use it
     if codeflash_config_path.exists():
@@ -281,7 +281,7 @@ def _build_vitest_behavioral_command(
 
     # For monorepos with restrictive vitest configs (e.g., include: test/**/*.test.ts),
     # we need to create a custom config that allows all test patterns.
-    # This is done by creating a codeflash.vitest.config.js file.
+    # This is done by creating a codeflash.vitest.config.mjs file.
     if project_root:
         codeflash_vitest_config = _ensure_codeflash_vitest_config(project_root)
         if codeflash_vitest_config:
