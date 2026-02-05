@@ -42,7 +42,6 @@ def generate_tests(
 
         source_file = Path(function_to_optimize.file_path)
         project_module_system = detect_module_system(test_cfg.tests_project_rootdir, source_file)
-        logger.warning(f"[IMPORT FIX] Detected module system: {project_module_system}")
 
         # For JavaScript, calculate the correct import path from the actual test location
         # (test_path) to the source file, not from tests_root
@@ -57,9 +56,7 @@ def generate_tests(
             rel_import_path = f"./{rel_import_path}"
         # Keep as string since Path() normalizes away the ./ prefix
         module_path = rel_import_path
-        logger.warning(f"[IMPORT FIX] test_path={test_path}, source={source_file_abs}, rel_import={rel_import_path}")
 
-    logger.warning(f"[IMPORT FIX] Passing module_path to AI service: '{module_path}'")
     response = aiservice_client.generate_regression_tests(
         source_code_being_tested=source_code_being_tested,
         function_to_optimize=function_to_optimize,

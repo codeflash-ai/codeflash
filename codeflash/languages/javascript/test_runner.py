@@ -808,8 +808,7 @@ def run_jest_benchmarking_tests(
         "--reporters=jest-junit",
         "--runInBand",  # Ensure serial execution
         "--forceExit",
-        # Temporarily disabled: custom loop runner not yet implemented
-        # "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
+        "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
     ]
 
     # Add Jest config if found - needed for TypeScript transformation
@@ -858,6 +857,12 @@ def run_jest_benchmarking_tests(
     jest_env["CODEFLASH_PERF_TARGET_DURATION_MS"] = str(target_duration_ms)
     jest_env["CODEFLASH_PERF_STABILITY_CHECK"] = "true" if stability_check else "false"
     jest_env["CODEFLASH_LOOP_INDEX"] = "1"  # Initial value for compatibility
+
+    # Enable console output for timing markers
+    # Some projects mock console.log in test setup (e.g., based on LOG_LEVEL or DEBUG)
+    # We need console.log to work for capturePerf timing markers
+    jest_env["LOG_LEVEL"] = "info"  # Disable console.log mocking in projects that check LOG_LEVEL
+    jest_env["DEBUG"] = "1"  # Disable console.log mocking in projects that check DEBUG
 
     # Configure ESM support if project uses ES Modules
     _configure_esm_environment(jest_env, effective_cwd)

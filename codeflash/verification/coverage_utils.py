@@ -58,7 +58,9 @@ class JestCoverageUtils:
         source_path_str = str(source_code_path.resolve())
 
         for file_path, file_data in coverage_data.items():
-            if file_path == source_path_str or file_path.endswith(source_code_path.name):
+            # Match exact path or path ending with full relative path from src/
+            # Avoid matching files with same name in different directories (e.g., db/utils.ts vs utils/utils.ts)
+            if file_path == source_path_str or file_path.endswith(str(source_code_path)):
                 file_coverage = file_data
                 break
 

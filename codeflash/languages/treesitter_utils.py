@@ -69,6 +69,7 @@ class FunctionNode:
     parent_function: str | None
     source_text: str
     doc_start_line: int | None = None  # Line where JSDoc comment starts (or None if no JSDoc)
+    is_exported: bool = False  # Whether the function is exported
 
 
 @dataclass
@@ -292,6 +293,7 @@ class TreeSitterAnalyzer:
         is_generator = False
         is_method = False
         is_arrow = node.type == "arrow_function"
+        is_exported = False
 
         # Check for async modifier
         for child in node.children:
@@ -302,6 +304,11 @@ class TreeSitterAnalyzer:
         # Check for generator
         if "generator" in node.type:
             is_generator = True
+
+        # Check if function is exported
+        # For function_declaration: check if parent is export_statement
+        # For arrow functions: check if parent variable_declarator's grandparent is export_statement
+        is_exported = self._is_node_exported(node)
 
         # Get function name based on node type
         if node.type in ("function_declaration", "generator_function_declaration"):
@@ -352,7 +359,53 @@ class TreeSitterAnalyzer:
             parent_function=current_function,
             source_text=source_text,
             doc_start_line=doc_start_line,
+            is_exported=is_exported,
         )
+
+    def _is_node_exported(self, node: Node) -> bool:
+        """Check if a function node is exported.
+
+        Handles various export patterns:
+        - export function foo() {}
+        - export const foo = () => {}
+        - export default function foo() {}
+        - Class methods in exported classes
+
+        Args:
+            node: The function node to check.
+
+        Returns:
+            True if the function is exported, False otherwise.
+
+        """
+        # Check direct parent for export_statement
+        if node.parent and node.parent.type == "export_statement":
+            return True
+
+        # For arrow functions and function expressions assigned to variables
+        # e.g., export const foo = () => {}
+        if node.type in ("arrow_function", "function_expression", "generator_function"):
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                grandparent = parent.parent
+                if grandparent and grandparent.type in ("lexical_declaration", "variable_declaration"):
+                    great_grandparent = grandparent.parent
+                    if great_grandparent and great_grandparent.type == "export_statement":
+                        return True
+
+        # For methods in exported classes
+        if node.type == "method_definition":
+            # Walk up to find class_declaration
+            current = node.parent
+            while current:
+                if current.type in ("class_declaration", "class"):
+                    # Check if this class is exported
+                    if current.parent and current.parent.type == "export_statement":
+                        return True
+                    break
+                current = current.parent
+
+        return False
 
     def _find_preceding_jsdoc(self, node: Node, source_bytes: bytes) -> int | None:
         """Find JSDoc comment immediately preceding a function node.
