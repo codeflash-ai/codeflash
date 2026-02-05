@@ -456,6 +456,16 @@ class TestFiles(BaseModel):
                 normalized_benchmark_path = self._normalize_path_for_comparison(test_file.benchmarking_file_path)
                 if normalized == normalized_benchmark_path:
                     return test_file.test_type
+
+        # Fallback: try filename-only matching for JavaScript/TypeScript
+        # Jest/Vitest JUnit XML may have relative paths that don't match absolute paths
+        file_name = file_path.name
+        for test_file in self.test_files:
+            if test_file.instrumented_behavior_file_path and test_file.instrumented_behavior_file_path.name == file_name:
+                return test_file.test_type
+            if test_file.benchmarking_file_path and test_file.benchmarking_file_path.name == file_name:
+                return test_file.test_type
+
         return None
 
     def get_test_type_by_original_file_path(self, file_path: Path) -> TestType | None:
