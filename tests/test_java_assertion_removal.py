@@ -959,3 +959,299 @@ void testFibonacci() {
 }"""
         result = transform_java_assertions(source, "fibonacci")
         assert result == expected
+
+
+class TestConcurrencyPatterns:
+    """Tests that assertion removal correctly handles Java concurrency constructs.
+
+    Validates that synchronized blocks, volatile field access, atomic operations,
+    concurrent collections, Thread.sleep, wait/notify, and synchronized method
+    modifiers are all preserved verbatim after assertion transformation.
+    """
+
+    def test_synchronized_method_assertion_removal(self):
+        """Assertion inside synchronized block is transformed; synchronized wrapper preserved."""
+        source = """\
+@Test
+void testSynchronizedAccess() {
+    synchronized (lock) {
+        assertEquals(42, counter.incrementAndGet());
+    }
+}"""
+        expected = """\
+@Test
+void testSynchronizedAccess() {
+    synchronized (lock) {
+        Object _cf_result1 = counter.incrementAndGet();
+    }
+}"""
+        result = transform_java_assertions(source, "incrementAndGet")
+        assert result == expected
+
+    def test_volatile_field_read_preserved(self):
+        """Assertion wrapping a volatile field reader is transformed; method call preserved."""
+        source = """\
+@Test
+void testVolatileRead() {
+    assertTrue(buffer.isReady());
+}"""
+        expected = """\
+@Test
+void testVolatileRead() {
+    Object _cf_result1 = buffer.isReady();
+}"""
+        result = transform_java_assertions(source, "isReady")
+        assert result == expected
+
+    def test_synchronized_block_with_multiple_assertions(self):
+        """Multiple assertions inside a synchronized block are all transformed."""
+        source = """\
+@Test
+void testSynchronizedBlock() {
+    synchronized (cache) {
+        assertEquals(1, cache.size());
+        assertNotNull(cache.get("key"));
+        assertTrue(cache.containsKey("key"));
+    }
+}"""
+        expected = """\
+@Test
+void testSynchronizedBlock() {
+    synchronized (cache) {
+        Object _cf_result1 = cache.size();
+        assertNotNull(cache.get("key"));
+        assertTrue(cache.containsKey("key"));
+    }
+}"""
+        result = transform_java_assertions(source, "size")
+        assert result == expected
+
+    def test_synchronized_block_multiple_assertions_same_target(self):
+        """Multiple assertions in synchronized block targeting the same function."""
+        source = """\
+@Test
+void testSynchronizedBlock() {
+    synchronized (cache) {
+        assertNotNull(cache.get("key1"));
+        assertNotNull(cache.get("key2"));
+    }
+}"""
+        expected = """\
+@Test
+void testSynchronizedBlock() {
+    synchronized (cache) {
+        Object _cf_result1 = cache.get("key1");
+        Object _cf_result2 = cache.get("key2");
+    }
+}"""
+        result = transform_java_assertions(source, "get")
+        assert result == expected
+
+    def test_atomic_operations_preserved(self):
+        """Atomic operations (incrementAndGet) are preserved as Object capture calls."""
+        source = """\
+@Test
+void testAtomicCounter() {
+    assertEquals(1, counter.incrementAndGet());
+    assertEquals(2, counter.incrementAndGet());
+}"""
+        expected = """\
+@Test
+void testAtomicCounter() {
+    Object _cf_result1 = counter.incrementAndGet();
+    Object _cf_result2 = counter.incrementAndGet();
+}"""
+        result = transform_java_assertions(source, "incrementAndGet")
+        assert result == expected
+
+    def test_concurrent_collection_assertion(self):
+        """ConcurrentHashMap putIfAbsent call is preserved in assertion transformation."""
+        source = """\
+@Test
+void testConcurrentMap() {
+    assertEquals("value", concurrentMap.putIfAbsent("key", "value"));
+}"""
+        expected = """\
+@Test
+void testConcurrentMap() {
+    Object _cf_result1 = concurrentMap.putIfAbsent("key", "value");
+}"""
+        result = transform_java_assertions(source, "putIfAbsent")
+        assert result == expected
+
+    def test_thread_sleep_with_assertion(self):
+        """Thread.sleep() before assertion is preserved verbatim."""
+        source = """\
+@Test
+void testWithThreadSleep() throws InterruptedException {
+    Thread.sleep(100);
+    assertEquals(42, processor.getResult());
+}"""
+        expected = """\
+@Test
+void testWithThreadSleep() throws InterruptedException {
+    Thread.sleep(100);
+    Object _cf_result1 = processor.getResult();
+}"""
+        result = transform_java_assertions(source, "getResult")
+        assert result == expected
+
+    def test_synchronized_method_signature_preserved(self):
+        """synchronized modifier on a test method is preserved after transformation."""
+        source = """\
+@Test
+synchronized void testSyncMethod() {
+    assertEquals(10, calculator.compute(5));
+}"""
+        expected = """\
+@Test
+synchronized void testSyncMethod() {
+    Object _cf_result1 = calculator.compute(5);
+}"""
+        result = transform_java_assertions(source, "compute")
+        assert result == expected
+
+    def test_wait_notify_pattern_preserved(self):
+        """wait/notify pattern around an assertion is preserved."""
+        source = """\
+@Test
+void testWaitNotify() {
+    synchronized (monitor) {
+        monitor.notify();
+    }
+    assertTrue(listener.wasNotified());
+}"""
+        expected = """\
+@Test
+void testWaitNotify() {
+    synchronized (monitor) {
+        monitor.notify();
+    }
+    Object _cf_result1 = listener.wasNotified();
+}"""
+        result = transform_java_assertions(source, "wasNotified")
+        assert result == expected
+
+    def test_reentrant_lock_pattern_preserved(self):
+        """ReentrantLock acquire/release around assertion is preserved."""
+        source = """\
+@Test
+void testReentrantLock() {
+    lock.lock();
+    try {
+        assertEquals(99, sharedResource.getValue());
+    } finally {
+        lock.unlock();
+    }
+}"""
+        expected = """\
+@Test
+void testReentrantLock() {
+    lock.lock();
+    try {
+        Object _cf_result1 = sharedResource.getValue();
+    } finally {
+        lock.unlock();
+    }
+}"""
+        result = transform_java_assertions(source, "getValue")
+        assert result == expected
+
+    def test_count_down_latch_pattern_preserved(self):
+        """CountDownLatch await/countDown around assertion is preserved."""
+        source = """\
+@Test
+void testCountDownLatch() throws InterruptedException {
+    latch.countDown();
+    latch.await();
+    assertEquals(42, collector.getTotal());
+}"""
+        expected = """\
+@Test
+void testCountDownLatch() throws InterruptedException {
+    latch.countDown();
+    latch.await();
+    Object _cf_result1 = collector.getTotal();
+}"""
+        result = transform_java_assertions(source, "getTotal")
+        assert result == expected
+
+    def test_token_bucket_synchronized_method(self):
+        """Real pattern: synchronized method call (like TokenBucket.allowRequest) inside assertion."""
+        source = """\
+@Test
+void testTokenBucketAllowRequest() {
+    TokenBucket bucket = new TokenBucket(10, 1);
+    assertTrue(bucket.allowRequest());
+    assertTrue(bucket.allowRequest());
+}"""
+        expected = """\
+@Test
+void testTokenBucketAllowRequest() {
+    TokenBucket bucket = new TokenBucket(10, 1);
+    Object _cf_result1 = bucket.allowRequest();
+    Object _cf_result2 = bucket.allowRequest();
+}"""
+        result = transform_java_assertions(source, "allowRequest")
+        assert result == expected
+
+    def test_circular_buffer_atomic_integer_pattern(self):
+        """Real pattern: CircularBuffer with AtomicInteger-backed isEmpty/isFull assertions."""
+        source = """\
+@Test
+void testCircularBufferOperations() {
+    CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
+    assertTrue(buffer.isEmpty());
+    buffer.put(1);
+    assertFalse(buffer.isEmpty());
+    assertTrue(buffer.put(2));
+}"""
+        expected = """\
+@Test
+void testCircularBufferOperations() {
+    CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
+    Object _cf_result1 = buffer.isEmpty();
+    buffer.put(1);
+    Object _cf_result2 = buffer.isEmpty();
+    Object _cf_result3 = buffer.put(2);
+}"""
+        result = transform_java_assertions(source, "isEmpty")
+        # isEmpty is target for assertTrue/assertFalse; but put is NOT the target
+        # so only isEmpty calls inside assertions are transformed
+        # Actually: assertTrue(buffer.put(2)) also contains a non-target call
+        # Let's verify what actually happens
+        # put is not "isEmpty", so assertTrue(buffer.put(2)) has no target call -> untouched
+        expected_corrected = """\
+@Test
+void testCircularBufferOperations() {
+    CircularBuffer<Integer> buffer = new CircularBuffer<>(3);
+    Object _cf_result1 = buffer.isEmpty();
+    buffer.put(1);
+    Object _cf_result2 = buffer.isEmpty();
+    assertTrue(buffer.put(2));
+}"""
+        result = transform_java_assertions(source, "isEmpty")
+        assert result == expected_corrected
+
+    def test_concurrent_assertion_with_assertj(self):
+        """AssertJ assertion on a synchronized method call is correctly transformed."""
+        source = """\
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Test
+void testSynchronizedMethodWithAssertJ() {
+    synchronized (lock) {
+        assertThat(counter.incrementAndGet()).isEqualTo(1);
+    }
+}"""
+        expected = """\
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Test
+void testSynchronizedMethodWithAssertJ() {
+    synchronized (lock) {
+        Object _cf_result1 = counter.incrementAndGet();
+    }
+}"""
+        result = transform_java_assertions(source, "incrementAndGet")
+        assert result == expected
