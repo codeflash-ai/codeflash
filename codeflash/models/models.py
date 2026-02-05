@@ -461,7 +461,10 @@ class TestFiles(BaseModel):
         # Jest/Vitest JUnit XML may have relative paths that don't match absolute paths
         file_name = file_path.name
         for test_file in self.test_files:
-            if test_file.instrumented_behavior_file_path and test_file.instrumented_behavior_file_path.name == file_name:
+            if (
+                test_file.instrumented_behavior_file_path
+                and test_file.instrumented_behavior_file_path.name == file_name
+            ):
                 return test_file.test_type
             if test_file.benchmarking_file_path and test_file.benchmarking_file_path.name == file_name:
                 return test_file.test_type

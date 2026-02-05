@@ -10,7 +10,11 @@ from codeflash.languages import current_language_support, is_javascript
 
 
 def get_test_file_path(
-    test_dir: Path, function_name: str, iteration: int = 0, test_type: str = "unit", source_file_path: Path | None = None
+    test_dir: Path,
+    function_name: str,
+    iteration: int = 0,
+    test_type: str = "unit",
+    source_file_path: Path | None = None,
 ) -> Path:
     assert test_type in {"unit", "inspired", "replay", "perf"}
     function_name = function_name.replace(".", "_")
@@ -67,7 +71,7 @@ def _find_js_package_test_dir(tests_root: Path, source_file_path: Path | None) -
         for parent in source_path.parents:
             # Stop if we've gone above or reached the tests_root level
             # For monorepos, tests_root might be /packages/ and we want to search within packages
-            if parent == tests_root or parent == tests_root.parent:
+            if parent in (tests_root, tests_root.parent):
                 break
 
             # Check if this looks like a package root
