@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * Placeholder for objects that could not be serialized.
  *
- * When KryoSerializer encounters an object that cannot be serialized
+ * When Serializer encounters an object that cannot be serialized
  * (e.g., Socket, Connection, Stream), it replaces it with a KryoPlaceholder
  * that stores metadata about the original object.
  *

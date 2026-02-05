@@ -117,11 +117,11 @@ class KryoPlaceholderTest {
             );
 
             // Serialize and deserialize the placeholder
-            byte[] serialized = KryoSerializer.serialize(original);
+            byte[] serialized = Serializer.serialize(original);
             assertNotNull(serialized);
             assertTrue(serialized.length > 0);
 
-            Object deserialized = KryoSerializer.deserialize(serialized);
+            Object deserialized = Serializer.deserialize(serialized);
             assertInstanceOf(KryoPlaceholder.class, deserialized);
 
             KryoPlaceholder restored = (KryoPlaceholder) deserialized;
