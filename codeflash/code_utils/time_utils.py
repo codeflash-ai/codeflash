@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
-import re
-
-import humanize
-
 
 def humanize_runtime(time_in_ns: int) -> str:
     runtime_human: str = str(time_in_ns)
@@ -14,7 +9,7 @@ def humanize_runtime(time_in_ns: int) -> str:
 
     if time_in_ns / 1000 >= 1:
         time_micro = float(time_in_ns) / 1000
-        
+
         # Direct unit determination and formatting without external library
         if time_micro < 1000:
             runtime_human = f"{time_micro:.3g}"
@@ -39,7 +34,7 @@ def humanize_runtime(time_in_ns: int) -> str:
             time_day = time_micro / 86400000000
             runtime_human = f"{time_day:.3g}"
             units = "days" if time_day >= 2 else "day"
-    
+
     runtime_human_parts = str(runtime_human).split(".")
     if len(runtime_human_parts[0]) == 1:
         if runtime_human_parts[0] == "1" and len(runtime_human_parts) > 1:
