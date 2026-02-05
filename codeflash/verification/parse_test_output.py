@@ -1243,8 +1243,14 @@ def parse_test_xml(
                         )
 
     if not test_results:
+        # Show actual test file paths being used (behavior or original), not just original_file_path
+        # For AI-generated tests, original_file_path is None, so show instrumented_behavior_file_path instead
+        test_paths_display = [
+            str(test_file.instrumented_behavior_file_path or test_file.original_file_path)
+            for test_file in test_files.test_files
+        ]
         logger.info(
-            f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping"
+            f"Tests {test_paths_display} failed to run, skipping"
         )
         if run_result is not None:
             stdout, stderr = "", ""
