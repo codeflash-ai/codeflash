@@ -1634,8 +1634,14 @@ def get_analyzer_for_file(file_path: Path) -> TreeSitterAnalyzer:
     suffix = file_path.suffix.lower()
 
     if suffix == ".ts":
-        return TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+        return _TYPESCRIPT_ANALYZER
     if suffix == ".tsx":
-        return TreeSitterAnalyzer(TreeSitterLanguage.TSX)
+        return _TSX_ANALYZER
     # Default to JavaScript for .js, .jsx, .mjs, .cjs
-    return TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
+    return _JAVASCRIPT_ANALYZER
+
+_TYPESCRIPT_ANALYZER = TreeSitterAnalyzer(TreeSitterLanguage.TYPESCRIPT)
+
+_TSX_ANALYZER = TreeSitterAnalyzer(TreeSitterLanguage.TSX)
+
+_JAVASCRIPT_ANALYZER = TreeSitterAnalyzer(TreeSitterLanguage.JAVASCRIPT)
