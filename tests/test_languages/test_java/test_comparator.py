@@ -553,3 +553,416 @@ class TestTestResultsTableSchema:
 
         assert equivalent is False
         assert len(diffs) >= 1  # Should detect missing invocation
+
+
+class TestComparatorEdgeCases:
+    """Tests for edge case data types in direct Python comparison path."""
+
+    def test_float_values_identical(self):
+        """Float return values that are string-identical should be equivalent."""
+        original = {
+            "1": {"result_json": "3.14159", "error_json": None},
+            "2": {"result_json": "2.71828", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "3.14159", "error_json": None},
+            "2": {"result_json": "2.71828", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_float_values_slightly_different(self):
+        """Slightly different float strings should be detected as different by Python comparison.
+
+        The Python direct comparison uses pure string equality, so even tiny
+        differences like "3.14159" vs "3.141590001" are detected. This is
+        expected behavior -- the Java Comparator uses EPSILON for tolerance,
+        but the Python fallback does not.
+        """
+        original = {
+            "1": {"result_json": "3.14159", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "3.141590001", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+
+    def test_nan_string_comparison(self):
+        """NaN as a string return value should be comparable."""
+        original = {
+            "1": {"result_json": "NaN", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "NaN", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_nan_vs_number(self):
+        """NaN vs a normal number should be detected as different."""
+        original = {
+            "1": {"result_json": "NaN", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "0.0", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_infinity_string_comparison(self):
+        """Infinity as a string return value should be comparable."""
+        original = {
+            "1": {"result_json": "Infinity", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "Infinity", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_negative_infinity(self):
+        """-Infinity as a string return value should be comparable."""
+        original = {
+            "1": {"result_json": "-Infinity", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "-Infinity", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_infinity_vs_negative_infinity(self):
+        """Infinity and -Infinity should be detected as different."""
+        original = {
+            "1": {"result_json": "Infinity", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "-Infinity", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_empty_collection_results(self):
+        """Empty array '[]' as return value should be comparable."""
+        original = {
+            "1": {"result_json": "[]", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "[]", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_empty_object_results(self):
+        """Empty object '{}' as return value should be comparable."""
+        original = {
+            "1": {"result_json": "{}", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "{}", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_large_number_comparison(self):
+        """Very large integers should compare correctly as strings."""
+        original = {
+            "1": {"result_json": "99999999999999999", "error_json": None},
+            "2": {"result_json": "123456789012345678901234567890", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "99999999999999999", "error_json": None},
+            "2": {"result_json": "123456789012345678901234567890", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_large_number_different(self):
+        """Large numbers that differ by 1 should be detected."""
+        original = {
+            "1": {"result_json": "99999999999999999", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "99999999999999998", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_null_vs_empty_string(self):
+        """'null' and '""' should NOT be equivalent."""
+        original = {
+            "1": {"result_json": "null", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": '""', "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.RETURN_VALUE
+
+    def test_boolean_string_comparison(self):
+        """Boolean strings 'true'/'false' should compare correctly."""
+        original = {
+            "1": {"result_json": "true", "error_json": None},
+            "2": {"result_json": "false", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "true", "error_json": None},
+            "2": {"result_json": "false", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+
+    def test_boolean_true_vs_false(self):
+        """'true' vs 'false' should be detected as different."""
+        original = {
+            "1": {"result_json": "true", "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "false", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+
+class TestComparatorErrorHandling:
+    """Tests for error handling in comparison paths."""
+
+    def test_compare_empty_databases_both_missing(self, tmp_path: Path):
+        """When both SQLite files don't exist, compare_test_results returns (False, [])."""
+        original_path = tmp_path / "nonexistent_original.db"
+        candidate_path = tmp_path / "nonexistent_candidate.db"
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        assert equivalent is False
+        assert len(diffs) == 0
+
+    def test_compare_schema_mismatch_db(self, tmp_path: Path):
+        """DB with wrong table name should be handled gracefully (not crash).
+
+        The Java Comparator expects a test_results table. A DB with a different
+        schema should result in a (False, []) or error response, not a crash.
+        """
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        # Create DBs with wrong table name
+        for db_path in [original_path, candidate_path]:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("CREATE TABLE wrong_table (id INTEGER PRIMARY KEY, data TEXT)")
+            cursor.execute("INSERT INTO wrong_table VALUES (1, 'test')")
+            conn.commit()
+            conn.close()
+
+        # This should not crash -- it either returns (False, []) because Java
+        # comparator reports error, or (True, []) if it sees empty test_results.
+        # The key assertion is that it doesn't raise an exception.
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+        assert isinstance(equivalent, bool)
+        assert isinstance(diffs, list)
+
+    def test_compare_with_none_return_values_direct(self):
+        """Rows where result_json is None should be handled in direct comparison."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_compare_one_none_one_value_direct(self):
+        """One None result vs a real value should detect the difference."""
+        original = {
+            "1": {"result_json": None, "error_json": None},
+        }
+        candidate = {
+            "1": {"result_json": "42", "error_json": None},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+
+    def test_compare_both_errors_identical(self):
+        """Identical errors in both original and candidate should be equivalent."""
+        original = {
+            "1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": '{"type": "IOException", "message": "file not found"}'},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_compare_different_error_types(self):
+        """Different error types should be detected."""
+        original = {
+            "1": {"result_json": None, "error_json": '{"type": "IOException"}'},
+        }
+        candidate = {
+            "1": {"result_json": None, "error_json": '{"type": "NullPointerException"}'},
+        }
+
+        equivalent, diffs = compare_invocations_directly(original, candidate)
+        assert equivalent is False
+        assert len(diffs) == 1
+        assert diffs[0].scope == TestDiffScope.DID_PASS
+
+
+@requires_java
+class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
+    """Tests for Java Comparator edge cases that require Java runtime.
+
+    Extends TestTestResultsTableSchema to reuse the create_test_results_db fixture.
+    """
+
+    def test_comparator_float_epsilon_tolerance(
+        self, tmp_path: Path, create_test_results_db
+    ):
+        """Values differing by less than EPSILON (1e-9) should be treated as equivalent.
+
+        The Java Comparator uses EPSILON=1e-9 for float comparison.
+        """
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        original_results = [
+            {
+                "test_class_name": "MathTest",
+                "function_getting_tested": "compute",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": "1.0000000001",
+            },
+        ]
+
+        candidate_results = [
+            {
+                "test_class_name": "MathTest",
+                "function_getting_tested": "compute",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": "1.0000000002",
+            },
+        ]
+
+        create_test_results_db(original_path, original_results)
+        create_test_results_db(candidate_path, candidate_results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        # The Java Comparator should treat these as equivalent (diff < EPSILON)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_comparator_nan_handling(
+        self, tmp_path: Path, create_test_results_db
+    ):
+        """Java Comparator should handle NaN return values."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        results = [
+            {
+                "test_class_name": "MathTest",
+                "function_getting_tested": "divide",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": "NaN",
+            },
+        ]
+
+        create_test_results_db(original_path, results)
+        create_test_results_db(candidate_path, results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        # NaN == NaN should be true in the comparator (special case)
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_comparator_empty_table(
+        self, tmp_path: Path, create_test_results_db
+    ):
+        """Empty test_results tables should result in equivalent=True."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        # Create databases with empty tables (no rows)
+        create_test_results_db(original_path, [])
+        create_test_results_db(candidate_path, [])
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        # No rows to compare, so they should be equivalent
+        assert equivalent is True
+        assert len(diffs) == 0
+
+    def test_comparator_infinity_handling(
+        self, tmp_path: Path, create_test_results_db
+    ):
+        """Java Comparator should handle Infinity return values correctly."""
+        original_path = tmp_path / "original.db"
+        candidate_path = tmp_path / "candidate.db"
+
+        results = [
+            {
+                "test_class_name": "MathTest",
+                "function_getting_tested": "overflow",
+                "loop_index": 1,
+                "iteration_id": "1_0",
+                "return_value": "Infinity",
+            },
+            {
+                "test_class_name": "MathTest",
+                "function_getting_tested": "underflow",
+                "loop_index": 1,
+                "iteration_id": "2_0",
+                "return_value": "-Infinity",
+            },
+        ]
+
+        create_test_results_db(original_path, results)
+        create_test_results_db(candidate_path, results)
+
+        equivalent, diffs = compare_test_results(original_path, candidate_path)
+
+        assert equivalent is True
+        assert len(diffs) == 0
