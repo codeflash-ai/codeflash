@@ -197,6 +197,21 @@ def parse_jest_test_xml(
             key = match.groups()[:5]
             end_matches_dict[key] = match
 
+        # Also collect timing markers from testcase-level system-out (Vitest puts output at testcase level)
+        for tc in suite:
+            tc_system_out = tc._elem.find("system-out")  # noqa: SLF001
+            if tc_system_out is not None and tc_system_out.text:
+                tc_stdout = tc_system_out.text.strip()
+                logger.debug(f"Vitest testcase system-out found: {len(tc_stdout)} chars, first 200: {tc_stdout[:200]}")
+                end_marker_count = 0
+                for match in jest_end_pattern.finditer(tc_stdout):
+                    key = match.groups()[:5]
+                    end_matches_dict[key] = match
+                    end_marker_count += 1
+                if end_marker_count > 0:
+                    logger.debug(f"Found {end_marker_count} END timing markers in testcase system-out")
+                start_matches.extend(jest_start_pattern.finditer(tc_stdout))
+
         for testcase in suite:
             testcase_count += 1
             test_class_path = testcase.classname  # For Jest, this is the file path

@@ -545,15 +545,24 @@ class FunctionOptimizer:
     ]:
         """Generate and instrument tests for the function."""
         n_tests = get_effort_value(EffortKeys.N_GENERATED_TESTS, self.effort)
+        source_file = Path(self.function_to_optimize.file_path)
         generated_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="unit"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="unit",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]
         generated_perf_test_paths = [
             get_test_file_path(
-                self.test_cfg.tests_root, self.function_to_optimize.function_name, test_index, test_type="perf"
+                self.test_cfg.tests_root,
+                self.function_to_optimize.function_name,
+                test_index,
+                test_type="perf",
+                source_file_path=source_file,
             )
             for test_index in range(n_tests)
         ]

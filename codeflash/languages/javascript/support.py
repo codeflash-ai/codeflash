@@ -2098,6 +2098,10 @@ class JavaScriptSupport:
             candidate_index=candidate_index,
         )
 
+    # JavaScript/TypeScript benchmarking uses high max_loops like Python (100,000)
+    # The actual loop count is limited by target_duration_seconds, not max_loops
+    JS_BENCHMARKING_MAX_LOOPS = 100_000
+
     def run_benchmarking_tests(
         self,
         test_paths: Any,
@@ -2131,6 +2135,9 @@ class JavaScriptSupport:
 
         framework = test_framework or get_js_test_framework_or_default()
 
+        # Use JS-specific high max_loops - actual loop count is limited by target_duration
+        effective_max_loops = self.JS_BENCHMARKING_MAX_LOOPS
+
         if framework == "vitest":
             from codeflash.languages.javascript.vitest_runner import run_vitest_benchmarking_tests
 
@@ -2141,7 +2148,7 @@ class JavaScriptSupport:
                 timeout=timeout,
                 project_root=project_root,
                 min_loops=min_loops,
-                max_loops=max_loops,
+                max_loops=effective_max_loops,
                 target_duration_ms=int(target_duration_seconds * 1000),
             )
 
@@ -2154,7 +2161,7 @@ class JavaScriptSupport:
             timeout=timeout,
             project_root=project_root,
             min_loops=min_loops,
-            max_loops=max_loops,
+            max_loops=effective_max_loops,
             target_duration_ms=int(target_duration_seconds * 1000),
         )
 
