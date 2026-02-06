@@ -309,8 +309,33 @@ def run_behavioral_tests(
     surefire_dir = target_dir / "surefire-reports"
     result_xml_path = _get_combined_junit_xml(surefire_dir, candidate_index)
 
-    # Return coverage_xml_path as the fourth element when coverage is enabled
-    return result_xml_path, result, sqlite_db_path, coverage_xml_path
+    # Debug: Log Maven result and coverage file status
+    if enable_coverage:
+        logger.info(f"Maven verify completed with return code: {result.returncode}")
+        if result.returncode != 0:
+            logger.warning(f"Maven verify had non-zero return code: {result.returncode}. Coverage data may be incomplete.")
+
+    # Log coverage file status after Maven verify
+    if enable_coverage and coverage_xml_path:
+        jacoco_exec_path = target_dir / "jacoco.exec"
+        logger.info(f"Coverage paths - target_dir: {target_dir}, coverage_xml_path: {coverage_xml_path}")
+        if jacoco_exec_path.exists():
+            logger.info(f"JaCoCo exec file exists: {jacoco_exec_path} ({jacoco_exec_path.stat().st_size} bytes)")
+        else:
+            logger.warning(f"JaCoCo exec file not found: {jacoco_exec_path} - JaCoCo agent may not have run")
+        if coverage_xml_path.exists():
+            file_size = coverage_xml_path.stat().st_size
+            logger.info(f"JaCoCo XML report exists: {coverage_xml_path} ({file_size} bytes)")
+            if file_size == 0:
+                logger.warning(f"JaCoCo XML report is empty - report generation may have failed")
+        else:
+            logger.warning(f"JaCoCo XML report not found: {coverage_xml_path} - verify phase may not have completed")
+
+    # Return tuple matching the expected signature:
+    # (result_xml_path, run_result, coverage_database_file, coverage_config_file)
+    # For Java: coverage_database_file is the jacoco.xml path, coverage_config_file is not used (None)
+    # The sqlite_db_path is used internally for behavior capture but doesn't need to be returned
+    return result_xml_path, result, coverage_xml_path, None
 
 
 def _compile_tests(
