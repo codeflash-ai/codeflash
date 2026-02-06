@@ -664,3 +664,196 @@ class TestInstrumentationFullStringEquality:
         expected = "        return codeflash.capture('Class.fibonacci', '1', this.fibonacci.bind(this), n - 1);"
         assert transformed == expected, f"Expected:\n{expected}\nGot:\n{transformed}"
         assert counter == 1
+
+
+class TestFixImportsInsideTestBlocks:
+    """Tests for fix_imports_inside_test_blocks function."""
+
+    def test_fix_named_import_inside_test_block(self):
+        """Test fixing named import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    const mock = jest.fn();
+    import { foo } from '../src/module';
+    expect(foo()).toBe(true);
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const { foo } = require('../src/module');" in fixed
+        assert "import { foo }" not in fixed
+
+    def test_fix_default_import_inside_test_block(self):
+        """Test fixing default import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    env.isTest.mockReturnValue(false);
+    import queuesModule from '../src/queue/queue';
+    expect(queuesModule).toBeDefined();
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const queuesModule = require('../src/queue/queue');" in fixed
+        assert "import queuesModule from" not in fixed
+
+    def test_fix_namespace_import_inside_test_block(self):
+        """Test fixing namespace import inside test function."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+test('should work', () => {
+    import * as utils from '../src/utils';
+    expect(utils.foo()).toBe(true);
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        assert "const utils = require('../src/utils');" in fixed
+        assert "import * as utils" not in fixed
+
+    def test_preserve_top_level_imports(self):
+        """Test that top-level imports are not modified."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        code = """
+import { jest, describe, test, expect } from '@jest/globals';
+import { foo } from '../src/module';
+
+describe('test suite', () => {
+    test('should work', () => {
+        expect(foo()).toBe(true);
+    });
+});
+"""
+        fixed = fix_imports_inside_test_blocks(code)
+
+        # Top-level imports should remain unchanged
+        assert "import { jest, describe, test, expect } from '@jest/globals';" in fixed
+        assert "import { foo } from '../src/module';" in fixed
+
+    def test_empty_code(self):
+        """Test handling empty code."""
+        from codeflash.languages.javascript.instrument import fix_imports_inside_test_blocks
+
+        assert fix_imports_inside_test_blocks("") == ""
+        assert fix_imports_inside_test_blocks("   ") == "   "
+
+
+class TestFixJestMockPaths:
+    """Tests for fix_jest_mock_paths function."""
+
+    def test_fix_mock_path_when_source_relative(self):
+        """Test fixing mock path that's relative to source file."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure
+            src_dir = Path(tmpdir) / "src" / "queue"
+            tests_dir = Path(tmpdir) / "tests"
+            env_file = Path(tmpdir) / "src" / "environment.ts"
+
+            src_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+            env_file.parent.mkdir(parents=True, exist_ok=True)
+            env_file.write_text("export const env = {};")
+
+            source_file = src_dir / "queue.ts"
+            source_file.write_text("import env from '../environment';")
+
+            test_file = tests_dir / "test_queue.test.ts"
+
+            # Test code with incorrect mock path (relative to source, not test)
+            test_code = """
+import { jest, describe, test, expect } from '@jest/globals';
+jest.mock('../environment');
+jest.mock('../redis/utils');
+
+describe('queue', () => {
+    test('works', () => {});
+});
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should fix the path to be relative to the test file
+            assert "jest.mock('../src/environment')" in fixed
+
+    def test_preserve_valid_mock_path(self):
+        """Test that valid mock paths are not modified."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure
+            src_dir = Path(tmpdir) / "src"
+            tests_dir = Path(tmpdir) / "tests"
+
+            src_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+
+            # Create the file being mocked at the correct location
+            mock_file = src_dir / "utils.ts"
+            mock_file.write_text("export const utils = {};")
+
+            source_file = src_dir / "main.ts"
+            source_file.write_text("")
+            test_file = tests_dir / "test_main.test.ts"
+
+            # Test code with correct mock path (valid from test location)
+            test_code = """
+jest.mock('../src/utils');
+
+describe('main', () => {
+    test('works', () => {});
+});
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should keep the path unchanged since it's valid
+            assert "jest.mock('../src/utils')" in fixed
+
+    def test_fix_doMock_path(self):
+        """Test fixing jest.doMock path."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create directory structure: src/queue/queue.ts imports ../environment (-> src/environment.ts)
+            src_dir = Path(tmpdir) / "src"
+            queue_dir = src_dir / "queue"
+            tests_dir = Path(tmpdir) / "tests"
+            env_file = src_dir / "environment.ts"
+
+            queue_dir.mkdir(parents=True)
+            tests_dir.mkdir(parents=True)
+            env_file.write_text("export const env = {};")
+
+            source_file = queue_dir / "queue.ts"
+            source_file.write_text("")
+            test_file = tests_dir / "test_queue.test.ts"
+
+            # From src/queue/queue.ts, ../environment resolves to src/environment.ts
+            # Test file is at tests/test_queue.test.ts
+            # So the correct mock path from test should be ../src/environment
+            test_code = """
+jest.doMock('../environment', () => ({ isTest: jest.fn() }));
+"""
+            fixed = fix_jest_mock_paths(test_code, test_file, source_file, tests_dir)
+
+            # Should fix the doMock path
+            assert "jest.doMock('../src/environment'" in fixed
+
+    def test_empty_code(self):
+        """Test handling empty code."""
+        from codeflash.languages.javascript.instrument import fix_jest_mock_paths
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tests_dir = Path(tmpdir) / "tests"
+            tests_dir.mkdir()
+            source_file = Path(tmpdir) / "src" / "main.ts"
+            test_file = tests_dir / "test.ts"
+
+            assert fix_jest_mock_paths("", test_file, source_file, tests_dir) == ""
+            assert fix_jest_mock_paths("   ", test_file, source_file, tests_dir) == "   "

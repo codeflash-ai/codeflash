@@ -3,7 +3,7 @@
  * Intentionally inefficient for optimization testing.
  */
 
-class FibonacciCalculator {
+export class FibonacciCalculator {
     constructor() {
         // No initialization needed
     }

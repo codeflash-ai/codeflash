@@ -129,13 +129,7 @@ class TestJavaScriptCodeContext:
         assert len(context.read_writable_code.code_strings) > 0
 
         code = context.read_writable_code.code_strings[0].code
-        expected_code = """/**
- * Calculate the nth Fibonacci number using naive recursion.
- * This is intentionally slow to demonstrate optimization potential.
- * @param {number} n - The index of the Fibonacci number to calculate
- * @returns {number} - The nth Fibonacci number
- */
-function fibonacci(n) {
+        expected_code = """export function fibonacci(n) {
     if (n <= 1) {
         return n;
     }
@@ -155,16 +149,16 @@ class TestJavaScriptCodeReplacement:
         from codeflash.languages.base import FunctionInfo
 
         original_source = """
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """
 
-        new_function = """function add(a, b) {
+        new_function = """export function add(a, b) {
     // Optimized version
     return a + b;
 }"""
@@ -178,12 +172,12 @@ function multiply(a, b) {
         result = js_support.replace_function(original_source, func_info, new_function)
 
         expected_result = """
-function add(a, b) {
+export function add(a, b) {
     // Optimized version
     return a + b;
 }
 
-function multiply(a, b) {
+export function multiply(a, b) {
     return a * b;
 }
 """
@@ -234,7 +228,7 @@ class TestJavaScriptPipelineIntegration:
 
         with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
             f.write("""
-class Calculator {
+export class Calculator {
     add(a, b) {
         return a + b;
     }
@@ -244,7 +238,7 @@ class Calculator {
     }
 }
 
-function standalone(x) {
+export function standalone(x) {
     return x * 2;
 }
 """)

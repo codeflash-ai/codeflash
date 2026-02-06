@@ -6,7 +6,7 @@
 const { add, multiply, factorial } = require('./math_utils');
 const { formatNumber, validateInput } = require('./helpers/format');
 
-class Calculator {
+export class Calculator {
     constructor(precision = 2) {
         this.precision = precision;
         this.history = [];

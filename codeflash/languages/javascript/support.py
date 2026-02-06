@@ -332,8 +332,14 @@ class JavaScriptSupport:
         else:
             target_code = ""
 
+        imports = analyzer.find_imports(source)
+
+        # Find helper functions called by target (needed before class wrapping to find same-class helpers)
+        helpers = self._find_helper_functions(function, source, analyzer, imports, module_root)
+
         # For class methods, wrap the method in its class definition
         # This is necessary because method definition syntax is only valid inside a class body
+        same_class_helper_names: set[str] = set()
         if function.is_method and function.parents:
             class_name = None
             for parent in function.parents:
@@ -342,17 +348,26 @@ class JavaScriptSupport:
                     break
 
             if class_name:
+                # Find same-class helper methods that need to be included inside the class wrapper
+                same_class_helpers = self._find_same_class_helpers(
+                    class_name, function.function_name, helpers, tree_functions, lines
+                )
+                same_class_helper_names = {h[0] for h in same_class_helpers}  # method names
+
                 # Find the class definition in the source to get proper indentation, JSDoc, constructor, and fields
                 class_info = self._find_class_definition(source, class_name, analyzer, function.function_name)
                 if class_info:
                     class_jsdoc, class_indent, constructor_code, fields_code = class_info
-                    # Build the class body with fields, constructor, and target method
+                    # Build the class body with fields, constructor, target method, and same-class helpers
                     class_body_parts = []
                     if fields_code:
                         class_body_parts.append(fields_code)
                     if constructor_code:
                         class_body_parts.append(constructor_code)
                     class_body_parts.append(target_code)
+                    # Add same-class helper methods inside the class body
+                    for _helper_name, helper_source in same_class_helpers:
+                        class_body_parts.append(helper_source)
                     class_body = "\n".join(class_body_parts)
 
                     # Wrap the method in a class definition with context
@@ -363,13 +378,16 @@ class JavaScriptSupport:
                     else:
                         target_code = f"{class_indent}class {class_name} {{\n{class_body}{class_indent}}}\n"
                 else:
-                    # Fallback: wrap with no indentation
-                    target_code = f"class {class_name} {{\n{target_code}}}\n"
+                    # Fallback: wrap with no indentation, including same-class helpers
+                    helper_code = "\n".join(h[1] for h in same_class_helpers)
+                    if helper_code:
+                        target_code = f"class {class_name} {{\n{target_code}\n{helper_code}}}\n"
+                    else:
+                        target_code = f"class {class_name} {{\n{target_code}}}\n"
 
-        imports = analyzer.find_imports(source)
-
-        # Find helper functions called by target
-        helpers = self._find_helper_functions(function, source, analyzer, imports, module_root)
+        # Filter out same-class helpers from the helpers list (they're already inside the class wrapper)
+        if same_class_helper_names:
+            helpers = [h for h in helpers if h.name not in same_class_helper_names]
 
         # Extract import statements as strings
         import_lines = []
@@ -551,6 +569,49 @@ class JavaScriptSupport:
         fields_code = "".join(field_parts)
 
         return (constructor_code, fields_code)
+
+    def _find_same_class_helpers(
+        self,
+        class_name: str,
+        target_method_name: str,
+        helpers: list[HelperFunction],
+        tree_functions: list,
+        lines: list[str],
+    ) -> list[tuple[str, str]]:
+        """Find helper methods that belong to the same class as the target method.
+
+        These helpers need to be included inside the class wrapper rather than
+        appended outside, because they may use class-specific syntax like 'private'.
+
+        Args:
+            class_name: Name of the class containing the target method.
+            target_method_name: Name of the target method (to exclude).
+            helpers: List of all helper functions found.
+            tree_functions: List of FunctionNode from tree-sitter analysis.
+            lines: Source code split into lines.
+
+        Returns:
+            List of (method_name, source_code) tuples for same-class helpers.
+
+        """
+        same_class_helpers: list[tuple[str, str]] = []
+
+        # Build a set of helper names for quick lookup
+        helper_names = {h.name for h in helpers}
+
+        # Names to exclude from same-class helpers (target method and constructor)
+        exclude_names = {target_method_name, "constructor"}
+
+        # Find methods in tree_functions that belong to the same class and are helpers
+        for func in tree_functions:
+            if func.class_name == class_name and func.name in helper_names and func.name not in exclude_names:
+                # Extract source including JSDoc if present
+                effective_start = func.doc_start_line or func.start_line
+                helper_lines = lines[effective_start - 1 : func.end_line]
+                helper_source = "".join(helper_lines)
+                same_class_helpers.append((func.name, helper_source))
+
+        return same_class_helpers
 
     def _find_helper_functions(
         self,

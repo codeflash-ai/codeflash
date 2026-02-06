@@ -8,7 +8,7 @@
  * @param numbers - Array of numbers to sum
  * @returns The sum of all numbers
  */
-function sumArray(numbers) {
+export function sumArray(numbers) {
     // Intentionally inefficient - using reduce with spread operator
     let result = 0;
     for (let i = 0; i < numbers.length; i++) {
@@ -22,7 +22,7 @@ function sumArray(numbers) {
  * @param numbers - Array of numbers
  * @returns The average value
  */
-function average(numbers) {
+export function average(numbers) {
     if (numbers.length === 0) return 0;
     return sumArray(numbers) / numbers.length;
 }
@@ -32,7 +32,7 @@ function average(numbers) {
  * @param numbers - Array of numbers
  * @returns The maximum value
  */
-function findMax(numbers) {
+export function findMax(numbers) {
     if (numbers.length === 0) return -Infinity;
 
     // Intentionally inefficient - sorting instead of linear scan
@@ -45,7 +45,7 @@ function findMax(numbers) {
  * @param numbers - Array of numbers
  * @returns The minimum value
  */
-function findMin(numbers) {
+export function findMin(numbers) {
     if (numbers.length === 0) return Infinity;
 
     // Intentionally inefficient - sorting instead of linear scan

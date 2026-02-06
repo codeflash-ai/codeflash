@@ -962,3 +962,173 @@ def instrument_generated_js_test(
         mode=mode,
         remove_assertions=True,
     )
+
+
+def fix_imports_inside_test_blocks(test_code: str) -> str:
+    """Fix import statements that appear inside test/it blocks.
+
+    JavaScript/TypeScript `import` statements must be at the top level of a module.
+    The AI sometimes generates imports inside test functions, which is invalid syntax.
+
+    This function detects such patterns and converts them to dynamic require() calls
+    which are valid inside functions.
+
+    Args:
+        test_code: The generated test code.
+
+    Returns:
+        Fixed test code with imports converted to require() inside functions.
+
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    # Pattern to match import statements inside functions
+    # This captures imports that appear after function/test block openings
+    # We look for lines that:
+    # 1. Start with whitespace (indicating they're inside a block)
+    # 2. Have an import statement
+
+    lines = test_code.split("\n")
+    result_lines = []
+    brace_depth = 0
+    in_test_block = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Track brace depth to know if we're inside a block
+        # Count braces, but ignore braces in strings (simplified check)
+        for char in stripped:
+            if char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth -= 1
+
+        # Check if we're entering a test/it/describe block
+        if re.match(r"^(test|it|describe|beforeEach|afterEach|beforeAll|afterAll)\s*\(", stripped):
+            in_test_block = True
+
+        # Check for import statement inside a block (brace_depth > 0 means we're inside a function/block)
+        if brace_depth > 0 and stripped.startswith("import "):
+            # Convert ESM import to require
+            # Pattern: import { name } from 'module' -> const { name } = require('module')
+            # Pattern: import name from 'module' -> const name = require('module')
+
+            named_import = re.match(r"import\s+\{([^}]+)\}\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+            default_import = re.match(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+            namespace_import = re.match(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"]", stripped)
+
+            leading_whitespace = line[: len(line) - len(line.lstrip())]
+
+            if named_import:
+                names = named_import.group(1)
+                module = named_import.group(2)
+                new_line = f"{leading_whitespace}const {{{names}}} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+            if default_import:
+                name = default_import.group(1)
+                module = default_import.group(2)
+                new_line = f"{leading_whitespace}const {name} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+            if namespace_import:
+                name = namespace_import.group(1)
+                module = namespace_import.group(2)
+                new_line = f"{leading_whitespace}const {name} = require('{module}');"
+                result_lines.append(new_line)
+                logger.debug(f"Fixed import inside block: {stripped} -> {new_line.strip()}")
+                continue
+
+        result_lines.append(line)
+
+    return "\n".join(result_lines)
+
+
+def fix_jest_mock_paths(test_code: str, test_file_path: Path, source_file_path: Path, tests_root: Path) -> str:
+    """Fix relative paths in jest.mock() calls to be correct from the test file's location.
+
+    The AI sometimes generates jest.mock() calls with paths relative to the source file
+    instead of the test file. For example:
+    - Source at `src/queue/queue.ts` imports `../environment` (-> src/environment)
+    - Test at `tests/test.test.ts` generates `jest.mock('../environment')` (-> ./environment, wrong!)
+    - Should generate `jest.mock('../src/environment')`
+
+    This function detects relative mock paths and adjusts them based on the test file's
+    location relative to the source file's directory.
+
+    Args:
+        test_code: The generated test code.
+        test_file_path: Path to the test file being generated.
+        source_file_path: Path to the source file being tested.
+        tests_root: Root directory of the tests.
+
+    Returns:
+        Fixed test code with corrected mock paths.
+
+    """
+    if not test_code or not test_code.strip():
+        return test_code
+
+    import os
+
+    # Get the directory containing the source file and the test file
+    source_dir = source_file_path.resolve().parent
+    test_dir = test_file_path.resolve().parent
+    project_root = tests_root.resolve().parent if tests_root.name == "tests" else tests_root.resolve()
+
+    # Pattern to match jest.mock() or jest.doMock() with relative paths
+    mock_pattern = re.compile(r"(jest\.(?:mock|doMock)\s*\(\s*['\"])(\.\./[^'\"]+|\.\/[^'\"]+)(['\"])")
+
+    def fix_mock_path(match: re.Match[str]) -> str:
+        original = match.group(0)
+        prefix = match.group(1)
+        rel_path = match.group(2)
+        suffix = match.group(3)
+
+        # Resolve the path as if it were relative to the source file's directory
+        # (which is how the AI often generates it)
+        source_relative_resolved = (source_dir / rel_path).resolve()
+
+        # Check if this resolved path exists or if adjusting it would make more sense
+        # Calculate what the correct relative path from the test file should be
+        try:
+            # First, try to find if the path makes sense from the test directory
+            test_relative_resolved = (test_dir / rel_path).resolve()
+
+            # If the path exists relative to test dir, keep it
+            if test_relative_resolved.exists() or (
+                test_relative_resolved.with_suffix(".ts").exists()
+                or test_relative_resolved.with_suffix(".js").exists()
+                or test_relative_resolved.with_suffix(".tsx").exists()
+                or test_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                return original  # Keep original, it's valid
+
+            # If path exists relative to source dir, recalculate from test dir
+            if source_relative_resolved.exists() or (
+                source_relative_resolved.with_suffix(".ts").exists()
+                or source_relative_resolved.with_suffix(".js").exists()
+                or source_relative_resolved.with_suffix(".tsx").exists()
+                or source_relative_resolved.with_suffix(".jsx").exists()
+            ):
+                # Calculate the correct relative path from test_dir to source_relative_resolved
+                new_rel_path = os.path.relpath(str(source_relative_resolved), str(test_dir))
+                # Ensure it starts with ./ or ../
+                if not new_rel_path.startswith("../") and not new_rel_path.startswith("./"):
+                    new_rel_path = f"./{new_rel_path}"
+                # Use forward slashes
+                new_rel_path = new_rel_path.replace("\\", "/")
+
+                logger.debug(f"Fixed jest.mock path: {rel_path} -> {new_rel_path}")
+                return f"{prefix}{new_rel_path}{suffix}"
+
+        except (ValueError, OSError):
+            pass  # Path resolution failed, keep original
+
+        return original  # Keep original if we can't fix it
+
+    return mock_pattern.sub(fix_mock_path, test_code)

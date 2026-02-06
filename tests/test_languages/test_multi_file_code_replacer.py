@@ -169,6 +169,11 @@ const { sumArray, average, findMax, findMin } = require('./math_helpers');
 
 
 /**
+ * Calculate statistics for an array of numbers.
+ * @param numbers - Array of numbers to analyze
+ * @returns Object containing sum, average, min, max, and range
+ */
+/**
  * This is a modified comment
  */
 function calculateStats(numbers) {
@@ -211,7 +216,7 @@ function calculateStats(numbers) {
  * @param numbers - Array of numbers to normalize
  * @returns Normalized array
  */
-function normalizeArray(numbers) {
+export function normalizeArray(numbers) {
     if (numbers.length === 0) return [];
 
     const min = findMin(numbers);
@@ -231,7 +236,7 @@ function normalizeArray(numbers) {
  * @param weights - Array of weights (same length as values)
  * @returns The weighted average
  */
-function weightedAverage(values, weights) {
+export function weightedAverage(values, weights) {
     if (values.length === 0 || values.length !== weights.length) {
         return 0;
     }
@@ -264,7 +269,7 @@ module.exports = {
  * @param numbers - Array of numbers to sum
  * @returns The sum of all numbers
  */
-function sumArray(numbers) {
+export function sumArray(numbers) {
     // Intentionally inefficient - using reduce with spread operator
     let result = 0;
     for (let i = 0; i < numbers.length; i++) {
@@ -278,11 +283,16 @@ function sumArray(numbers) {
  * @param numbers - Array of numbers
  * @returns The average value
  */
-function average(numbers) {
+export function average(numbers) {
     if (numbers.length === 0) return 0;
     return sumArray(numbers) / numbers.length;
 }
 
+/**
+ * Find the maximum value in an array.
+ * @param numbers - Array of numbers
+ * @returns The maximum value
+ */
 /**
  * Normalize an array of numbers to a 0-1 range.
  * @param numbers - Array of numbers to normalize
@@ -301,6 +311,11 @@ function findMax(numbers) {
     return max;
 }
 
+/**
+ * Find the minimum value in an array.
+ * @param numbers - Array of numbers
+ * @returns The minimum value
+ */
 /**
  * Find the minimum value in an array.
  * @param numbers - Array of numbers

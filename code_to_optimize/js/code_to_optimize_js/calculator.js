@@ -11,7 +11,7 @@ const { sumArray, average, findMax, findMin } = require('./math_helpers');
  * @param numbers - Array of numbers to analyze
  * @returns Object containing sum, average, min, max, and range
  */
-function calculateStats(numbers) {
+export function calculateStats(numbers) {
     if (numbers.length === 0) {
         return {
             sum: 0,
@@ -42,7 +42,7 @@ function calculateStats(numbers) {
  * @param numbers - Array of numbers to normalize
  * @returns Normalized array
  */
-function normalizeArray(numbers) {
+export function normalizeArray(numbers) {
     if (numbers.length === 0) return [];
 
     const min = findMin(numbers);
@@ -62,7 +62,7 @@ function normalizeArray(numbers) {
  * @param weights - Array of weights (same length as values)
  * @returns The weighted average
  */
-function weightedAverage(values, weights) {
+export function weightedAverage(values, weights) {
     if (values.length === 0 || values.length !== weights.length) {
         return 0;
     }
