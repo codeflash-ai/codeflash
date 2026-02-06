@@ -262,10 +262,9 @@ export function add(a: number, b: number): number {
 
         js_file = tmp_path / "utils.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
-module.exports = { add };
 """)
 
         functions = find_all_functions_in_file(js_file)

@@ -57,7 +57,7 @@ export function add(a: number, b: number): number {
 
         js_file = tmp_path / "utils.js"
         js_file.write_text("""
-function add(a, b) {
+export function add(a, b) {
     return a + b;
 }
 """)
@@ -210,12 +210,10 @@ class TestFunctionOptimizerForJavaScript:
         # Create source file
         src_file = project / "utils.js"
         src_file.write_text("""
-function fibonacci(n) {
+export function fibonacci(n) {
     if (n <= 1) return n;
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
-
-module.exports = { fibonacci };
 """)
 
         # Create test file
@@ -473,11 +471,9 @@ function helper() {
     return 42;
 }
 
-function main() {
+export function main() {
     return helper() * 2;
 }
-
-module.exports = { main };
 """)
 
         functions = find_all_functions_in_file(src_file)
