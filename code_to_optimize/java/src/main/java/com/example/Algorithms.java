@@ -9,7 +9,7 @@ import java.util.List;
 public class Algorithms {
 
     /**
-     * Calculate Fibonacci number using recursive approach.
+     * Calculate Fibonacci number using fast doubling algorithm (O(log n)).
      *
      * @param n The position in Fibonacci sequence (0-indexed)
      * @return The nth Fibonacci number
@@ -18,7 +18,28 @@ public class Algorithms {
         if (n <= 1) {
             return n;
         }
-        return fibonacci(n - 1) + fibonacci(n - 2);
+        // Fast doubling O(log n) computation to reduce time and memory usage.
+        long a = 0L; // F(0)
+        long b = 1L; // F(1)
+
+        int highestBit = 31 - Integer.numberOfLeadingZeros(n);
+        for (int i = highestBit; i >= 0; i--) {
+            // Apply doubling formulas:
+            // F(2k) = F(k) * (2*F(k+1) - F(k))
+            // F(2k+1) = F(k+1)^2 + F(k)^2
+            long twoB = b << 1;
+            long d = a * (twoB - a); // F(2k)
+            long e = a * a + b * b;  // F(2k+1)
+
+            if (((n >>> i) & 1) == 0) {
+                a = d;
+                b = e;
+            } else {
+                a = e;
+                b = d + e;
+            }
+        }
+        return a;
     }
 
     /**
