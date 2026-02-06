@@ -15,9 +15,14 @@ codeflash/
 ├── api/                    # AI service communication
 ├── code_utils/             # Code parsing, git utilities
 ├── models/                 # Pydantic models and types
+├── languages/              # Multi-language support (Python, JavaScript/TypeScript)
+├── setup/                  # Config schema, auto-detection, first-run experience
+├── picklepatch/            # Serialization/deserialization utilities
 ├── tracing/                # Function call tracing
+├── tracer.py               # Root-level tracer entry point for profiling
 ├── lsp/                    # IDE integration (Language Server Protocol)
 ├── telemetry/              # Sentry, PostHog
 ├── either.py               # Functional Result type for error handling
-└── result/                 # Result types and handling
+├── result/                 # Result types and handling
+└── version.py              # Version information
 ```
