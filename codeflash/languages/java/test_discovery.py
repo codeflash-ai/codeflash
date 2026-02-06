@@ -68,8 +68,14 @@ def discover_tests(
             test_methods = discover_test_methods(test_file, analyzer)
             source = test_file.read_text(encoding="utf-8")
 
+            # Pre-compute per-file context once, reuse for all test methods in this file
+            source_bytes, tree, static_import_map = _compute_file_context(source, analyzer)
+            field_type_cache: dict[str | None, dict[str, str]] = {}
+
             for test_method in test_methods:
-                matched_functions = _match_test_to_functions(test_method, source, function_map, analyzer)
+                matched_functions = _match_test_method_with_context(
+                    test_method, source_bytes, tree, static_import_map, field_type_cache, function_map, analyzer
+                )
 
                 for func_name in matched_functions:
                     result[func_name].append(
@@ -82,6 +88,55 @@ def discover_tests(
             logger.warning("Failed to analyze test file %s: %s", test_file, e)
 
     return dict(result)
+
+
+def _compute_file_context(test_source: str, analyzer: JavaAnalyzer) -> tuple:
+    """Pre-compute per-file analysis data: parse tree and static imports.
+
+    Returns (source_bytes, tree, static_import_map).
+    """
+    source_bytes = test_source.encode("utf8")
+    tree = analyzer.parse(source_bytes)
+    static_import_map = _build_static_import_map(tree.root_node, source_bytes, analyzer)
+    return source_bytes, tree, static_import_map
+
+
+def _match_test_method_with_context(
+    test_method: FunctionToOptimize,
+    source_bytes: bytes,
+    tree: object,
+    static_import_map: dict[str, str],
+    field_type_cache: dict[str | None, dict[str, str]],
+    function_map: dict[str, FunctionToOptimize],
+    analyzer: JavaAnalyzer,
+) -> list[str]:
+    """Match a test method using pre-computed per-file context.
+
+    This avoids re-parsing and re-building file-level data for every test method
+    in the same file. The field_type_cache is populated lazily per class name.
+    """
+    class_name = test_method.class_name
+    if class_name not in field_type_cache:
+        field_type_cache[class_name] = _build_field_type_map(tree.root_node, source_bytes, analyzer, class_name)
+    field_types = field_type_cache[class_name]
+
+    local_types = _build_local_type_map(
+        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer
+    )
+    # Locals shadow fields
+    type_map = {**field_types, **local_types}
+
+    resolved_calls = _resolve_method_calls_in_range(
+        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer, type_map,
+        static_import_map,
+    )
+
+    matched: list[str] = []
+    for call in resolved_calls:
+        if call in function_map and call not in matched:
+            matched.append(call)
+
+    return matched
 
 
 def _match_test_to_functions(
@@ -108,31 +163,11 @@ def _match_test_to_functions(
         List of function qualified names that this test exercises.
 
     """
-    source_bytes = test_source.encode("utf8")
-    tree = analyzer.parse(source_bytes)
-
-    # Build type resolution context
-    field_types = _build_field_type_map(tree.root_node, source_bytes, analyzer, test_method.class_name)
-    local_types = _build_local_type_map(
-        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer
+    source_bytes, tree, static_import_map = _compute_file_context(test_source, analyzer)
+    field_type_cache: dict[str | None, dict[str, str]] = {}
+    return _match_test_method_with_context(
+        test_method, source_bytes, tree, static_import_map, field_type_cache, function_map, analyzer
     )
-    # Locals shadow fields
-    type_map = {**field_types, **local_types}
-
-    static_import_map = _build_static_import_map(tree.root_node, source_bytes, analyzer)
-
-    # Resolve method calls to ClassName.methodName
-    resolved_calls = _resolve_method_calls_in_range(
-        tree.root_node, source_bytes, test_method.starting_line, test_method.ending_line, analyzer, type_map,
-        static_import_map,
-    )
-
-    matched: list[str] = []
-    for call in resolved_calls:
-        if call in function_map and call not in matched:
-            matched.append(call)
-
-    return matched
 
 
 # ---------------------------------------------------------------------------
