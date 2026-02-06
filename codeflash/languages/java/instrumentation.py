@@ -503,24 +503,25 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
     result = []
     i = 0
     iteration_counter = 0
+    n = len(lines)
 
-    while i < len(lines):
+    while i < n:
         line = lines[i]
-        stripped = line.strip()
+        lstripped = line.lstrip()
 
         # Look for @Test annotation
-        if stripped.startswith("@Test"):
+        if lstripped.startswith("@Test"):
             result.append(line)
             i += 1
 
             # Collect any additional annotations
-            while i < len(lines) and lines[i].strip().startswith("@"):
+            while i < n and lines[i].lstrip().startswith("@"):
                 result.append(lines[i])
                 i += 1
 
             # Now find the method signature and opening brace
             method_lines = []
-            while i < len(lines):
+            while i < n:
                 method_lines.append(lines[i])
                 if "{" in lines[i]:
                     break
@@ -561,25 +562,19 @@ def _add_timing_instrumentation(source: str, class_name: str, func_name: str) ->
 
             # Collect method body until we find matching closing brace
             brace_depth = 1
-            body_lines = []
 
-            while i < len(lines) and brace_depth > 0:
+            while i < n and brace_depth > 0:
                 body_line = lines[i]
                 # Count braces (simple approach - doesn't handle strings/comments perfectly)
-                for ch in body_line:
-                    if ch == "{":
-                        brace_depth += 1
-                    elif ch == "}":
-                        brace_depth -= 1
+                open_count = body_line.count("{")
+                close_count = body_line.count("}")
+                brace_depth += open_count - close_count
+
 
                 if brace_depth > 0:
-                    body_lines.append(body_line)
+                    result.append("        " + body_line)  # 8 extra spaces for inner loop + try
                     i += 1
                 else:
-                    # This line contains the closing brace, but we've hit depth 0
-                    # Add indented body lines (inside try block, inside for loop)
-                    for bl in body_lines:
-                        result.append("        " + bl)  # 8 extra spaces for inner loop + try
 
                     # Add finally block and close inner loop
                     method_close_indent = " " * base_indent  # Same level as method signature
