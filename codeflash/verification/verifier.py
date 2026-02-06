@@ -82,7 +82,10 @@ def generate_tests(
             )
 
             # Convert module system if needed (e.g., CommonJS -> ESM for ESM projects)
-            generated_test_source = ensure_module_system_compatibility(generated_test_source, project_module_system)
+            # Skip conversion if ts-jest is installed (handles interop natively)
+            generated_test_source = ensure_module_system_compatibility(
+                generated_test_source, project_module_system, test_cfg.tests_project_rootdir
+            )
 
             # Ensure vitest imports are present when using vitest framework
             generated_test_source = ensure_vitest_imports(generated_test_source, test_cfg.test_framework)
@@ -97,7 +100,7 @@ def generate_tests(
                 test_code=generated_test_source, function_to_optimize=function_to_optimize, mode=TestingMode.PERFORMANCE
             )
 
-            logger.debug(f"Instrumented JS/TS tests locally for {func_name}")
+            logger.debug(f"Instrumented JS/TS tests locally for {function_to_optimize.function_name}")
         elif is_java():
             from codeflash.languages.java.instrumentation import instrument_generated_java_test
 
@@ -106,10 +109,7 @@ def generate_tests(
 
             # Instrument for behavior verification (renames class)
             instrumented_behavior_test_source = instrument_generated_java_test(
-                test_code=generated_test_source,
-                function_name=func_name,
-                qualified_name=qualified_name,
-                mode="behavior",
+                test_code=generated_test_source, function_name=func_name, qualified_name=qualified_name, mode="behavior"
             )
 
             # Instrument for performance measurement (adds timing markers)

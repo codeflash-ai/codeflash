@@ -12,19 +12,17 @@ from typing import TYPE_CHECKING
 
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import FunctionFilterCriteria
-from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode, get_java_analyzer
+from codeflash.languages.java.parser import get_java_analyzer
 from codeflash.models.function_types import FunctionParent
 
 if TYPE_CHECKING:
-    pass
+    from codeflash.languages.java.parser import JavaAnalyzer, JavaMethodNode
 
 logger = logging.getLogger(__name__)
 
 
 def discover_functions(
-    file_path: Path,
-    filter_criteria: FunctionFilterCriteria | None = None,
-    analyzer: JavaAnalyzer | None = None,
+    file_path: Path, filter_criteria: FunctionFilterCriteria | None = None, analyzer: JavaAnalyzer | None = None
 ) -> list[FunctionToOptimize]:
     """Find all optimizable functions/methods in a Java file.
 
@@ -115,10 +113,7 @@ def discover_functions_from_source(
 
 
 def _should_include_method(
-    method: JavaMethodNode,
-    criteria: FunctionFilterCriteria,
-    source: str,
-    analyzer: JavaAnalyzer,
+    method: JavaMethodNode, criteria: FunctionFilterCriteria, source: str, analyzer: JavaAnalyzer
 ) -> bool:
     """Check if a method should be included based on filter criteria.
 
@@ -176,10 +171,7 @@ def _should_include_method(
     return True
 
 
-def discover_test_methods(
-    file_path: Path,
-    analyzer: JavaAnalyzer | None = None,
-) -> list[FunctionToOptimize]:
+def discover_test_methods(file_path: Path, analyzer: JavaAnalyzer | None = None) -> list[FunctionToOptimize]:
     """Find all JUnit test methods in a Java test file.
 
     Looks for methods annotated with @Test, @ParameterizedTest, @RepeatedTest, etc.
@@ -232,7 +224,7 @@ def _walk_tree_for_test_methods(
         for child in node.children:
             if child.type == "modifiers":
                 for mod_child in child.children:
-                    if mod_child.type == "marker_annotation" or mod_child.type == "annotation":
+                    if mod_child.type in {"marker_annotation", "annotation"}:
                         annotation_text = analyzer.get_node_text(mod_child, source_bytes)
                         # Check for JUnit 5 test annotations
                         if any(
@@ -278,10 +270,7 @@ def _walk_tree_for_test_methods(
 
 
 def get_method_by_name(
-    file_path: Path,
-    method_name: str,
-    class_name: str | None = None,
-    analyzer: JavaAnalyzer | None = None,
+    file_path: Path, method_name: str, class_name: str | None = None, analyzer: JavaAnalyzer | None = None
 ) -> FunctionToOptimize | None:
     """Find a specific method by name in a Java file.
 
@@ -306,9 +295,7 @@ def get_method_by_name(
 
 
 def get_class_methods(
-    file_path: Path,
-    class_name: str,
-    analyzer: JavaAnalyzer | None = None,
+    file_path: Path, class_name: str, analyzer: JavaAnalyzer | None = None
 ) -> list[FunctionToOptimize]:
     """Get all methods in a specific class.
 

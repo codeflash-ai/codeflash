@@ -746,7 +746,11 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
         return CodeStringsMarkdown(code_strings=[])
 
     imported_names: dict[str, str] = {}
-    external_bases: list[tuple[str, str]] = []
+    # Use a set to deduplicate external base entries to avoid repeated expensive checks/imports.
+    external_bases_set: set[tuple[str, str]] = set()
+    # Local cache to avoid repeated _is_project_module calls for the same module_name.
+    is_project_cache: dict[str, bool] = {}
+
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             for alias in node.names:
@@ -763,21 +767,31 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
 
                 if base_name and base_name in imported_names:
                     module_name = imported_names[base_name]
-                    if not _is_project_module(module_name, project_root_path):
-                        external_bases.append((base_name, module_name))
+                    # Check cache first to avoid repeated expensive checks.
+                    cached = is_project_cache.get(module_name)
+                    if cached is None:
+                        is_project = _is_project_module(module_name, project_root_path)
+                        is_project_cache[module_name] = is_project
+                    else:
+                        is_project = cached
 
-    if not external_bases:
+                    if not is_project:
+                        external_bases_set.add((base_name, module_name))
+
+    if not external_bases_set:
         return CodeStringsMarkdown(code_strings=[])
 
     code_strings: list[CodeString] = []
-    extracted: set[tuple[str, str]] = set()
+    # Cache imported modules to avoid repeated importlib.import_module calls.
+    imported_module_cache: dict[str, object] = {}
 
-    for base_name, module_name in external_bases:
-        if (module_name, base_name) in extracted:
-            continue
-
+    for base_name, module_name in external_bases_set:
         try:
-            module = importlib.import_module(module_name)
+            module = imported_module_cache.get(module_name)
+            if module is None:
+                module = importlib.import_module(module_name)
+                imported_module_cache[module_name] = module
+
             base_class = getattr(module, base_name, None)
             if base_class is None:
                 continue
@@ -799,7 +813,6 @@ def get_external_base_class_inits(code_context: CodeStringsMarkdown, project_roo
 
             class_source = f"class {base_name}:\n" + textwrap.indent(init_source, "    ")
             code_strings.append(CodeString(code=class_source, file_path=class_file))
-            extracted.add((module_name, base_name))
 
         except (ImportError, ModuleNotFoundError, AttributeError):
             logger.debug(f"Failed to extract __init__ for {module_name}.{base_name}")
@@ -854,12 +867,13 @@ def extract_imports_for_class(module_tree: ast.Module, class_node: ast.ClassDef,
                 needed_names.add(decorator.func.value.id)
 
     # Get type annotation names from class body (for dataclass fields)
-    for item in ast.walk(class_node):
+    for item in class_node.body:
         if isinstance(item, ast.AnnAssign) and item.annotation:
             collect_names_from_annotation(item.annotation, needed_names)
         # Also check for field() calls which are common in dataclasses
-        if isinstance(item, ast.Call) and isinstance(item.func, ast.Name):
-            needed_names.add(item.func.id)
+        elif isinstance(item, ast.Assign) and isinstance(item.value, ast.Call):
+            if isinstance(item.value.func, ast.Name):
+                needed_names.add(item.value.func.id)
 
     # Find imports that provide these names
     import_lines: list[str] = []

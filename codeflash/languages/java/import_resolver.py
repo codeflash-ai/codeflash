@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from codeflash.languages.java.build_tools import find_source_root, find_test_root, get_project_info
-from codeflash.languages.java.parser import JavaAnalyzer, JavaImportInfo, get_java_analyzer
+from codeflash.languages.java.parser import get_java_analyzer
 
 if TYPE_CHECKING:
-    pass
+    from pathlib import Path
+
+    from codeflash.languages.java.parser import JavaAnalyzer, JavaImportInfo
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +36,7 @@ class JavaImportResolver:
     """Resolves Java imports to file paths within a project."""
 
     # Standard Java packages that are always external
-    STANDARD_PACKAGES = frozenset(
-        [
-            "java",
-            "javax",
-            "sun",
-            "com.sun",
-            "jdk",
-            "org.w3c",
-            "org.xml",
-            "org.ietf",
-        ]
-    )
+    STANDARD_PACKAGES = frozenset(["java", "javax", "sun", "com.sun", "jdk", "org.w3c", "org.xml", "org.ietf"])
 
     # Common third-party package prefixes
     COMMON_EXTERNAL_PREFIXES = frozenset(
@@ -66,7 +56,7 @@ class JavaImportResolver:
         ]
     )
 
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path) -> None:
         """Initialize the import resolver.
 
         Args:
@@ -156,10 +146,7 @@ class JavaImportResolver:
 
     def _is_standard_library(self, import_path: str) -> bool:
         """Check if an import is from the Java standard library."""
-        for prefix in self.STANDARD_PACKAGES:
-            if import_path.startswith(prefix + ".") or import_path == prefix:
-                return True
-        return False
+        return any(import_path.startswith(prefix + ".") or import_path == prefix for prefix in self.STANDARD_PACKAGES)
 
     def _is_external_library(self, import_path: str) -> bool:
         """Check if an import is from a known external library."""
@@ -249,9 +236,7 @@ class JavaImportResolver:
 
         return None
 
-    def get_imports_from_file(
-        self, file_path: Path, analyzer: JavaAnalyzer | None = None
-    ) -> list[ResolvedImport]:
+    def get_imports_from_file(self, file_path: Path, analyzer: JavaAnalyzer | None = None) -> list[ResolvedImport]:
         """Get and resolve all imports from a Java file.
 
         Args:
@@ -272,9 +257,7 @@ class JavaImportResolver:
             logger.warning("Failed to get imports from %s: %s", file_path, e)
             return []
 
-    def get_project_imports(
-        self, file_path: Path, analyzer: JavaAnalyzer | None = None
-    ) -> list[ResolvedImport]:
+    def get_project_imports(self, file_path: Path, analyzer: JavaAnalyzer | None = None) -> list[ResolvedImport]:
         """Get only the imports that resolve to files within the project.
 
         Args:
@@ -308,10 +291,7 @@ def resolve_imports_for_file(
 
 
 def find_helper_files(
-    file_path: Path,
-    project_root: Path,
-    max_depth: int = 2,
-    analyzer: JavaAnalyzer | None = None,
+    file_path: Path, project_root: Path, max_depth: int = 2, analyzer: JavaAnalyzer | None = None
 ) -> dict[Path, list[str]]:
     """Find helper files imported by a Java file, recursively.
 

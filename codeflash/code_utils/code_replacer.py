@@ -711,18 +711,12 @@ def _add_java_class_members(
         if not new_fields and not new_methods:
             return original_source
 
-        logger.debug(
-            f"Adding {len(new_fields)} new fields and {len(new_methods)} helper methods to class {class_name}"
-        )
+        logger.debug(f"Adding {len(new_fields)} new fields and {len(new_methods)} helper methods to class {class_name}")
 
         # Import the insertion function from replacement module
         from codeflash.languages.java.replacement import _insert_class_members
 
-        result = _insert_class_members(
-            original_source, class_name, new_fields, new_methods, analyzer
-        )
-
-        return result
+        return _insert_class_members(original_source, class_name, new_fields, new_methods, analyzer)
 
     except Exception as e:
         logger.debug(f"Error adding Java class members: {e}")
@@ -959,15 +953,21 @@ def get_optimized_code_for_module(relative_path: Path, optimized_code: CodeStrin
             for file_path_str, code in file_to_code_context.items():
                 if file_path_str:
                     # Extract filename without creating Path object repeatedly
-                    if file_path_str.endswith(target_filename) and (len(file_path_str) == len(target_filename) or file_path_str[-len(target_filename)-1] in ('/', '\\')):
+                    if file_path_str.endswith(target_filename) and (
+                        len(file_path_str) == len(target_filename)
+                        or file_path_str[-len(target_filename) - 1] in ("/", "\\")
+                    ):
                         module_optimized_code = code
                         logger.debug(f"Matched {file_path_str} to {relative_path} by filename")
                         break
 
-
             if module_optimized_code is None:
-                # Also try matching if there's only one code file
-                if len(file_to_code_context) == 1:
+                # Also try matching if there's only one code file, but ONLY for non-Python
+                # languages where path matching is less strict. For Python, we require
+                # exact path matching to avoid applying code meant for one file to another.
+                # This prevents bugs like PR #1309 where a function was duplicated because
+                # optimized code for formatter.py was incorrectly applied to support.py.
+                if len(file_to_code_context) == 1 and not is_python():
                     only_key = next(iter(file_to_code_context.keys()))
                     module_optimized_code = file_to_code_context[only_key]
                     logger.debug(f"Using only code block {only_key} for {relative_path}")
