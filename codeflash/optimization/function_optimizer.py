@@ -2108,11 +2108,7 @@ class FunctionOptimizer:
             formatted_generated_test = format_generated_code(concolic_test_str, self.args.formatter_cmds)
             generated_tests_str += f"```{code_lang}\n{formatted_generated_test}\n```\n\n"
 
-<<<<<<< fix/js-jest30-loop-runner
         existing_tests, replay_tests, _concolic_tests = existing_tests_source_for(
-=======
-        existing_tests, replay_tests, _ = existing_tests_source_for(
->>>>>>> main
             self.function_to_optimize.qualified_name_with_modules_from_root(self.project_root),
             function_to_all_tests,
             test_cfg=self.test_cfg,
